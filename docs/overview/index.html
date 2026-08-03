@@ -1,0 +1,146 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Koe — 仕様・設計オーバービュー</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<header class="hero">
+  <p class="kicker">vcin / プロダクト名</p>
+  <h1>Koe <span class="hero-sub">— 完全ローカルの macOS 音声入力</span></h1>
+  <p class="lead">話した内容が、いま作業しているアプリにふさわしい完成文になって挿入される。<br>音声もテキストも一切ネットワークに出さない。</p>
+  <div class="chips">
+    <span class="chip">自分専用の最強ツール</span>
+    <span class="chip">macOS 26+ / Apple Silicon</span>
+    <span class="chip">Swift ネイティブ</span>
+    <span class="chip">日英自動判定・混在OK</span>
+    <span class="chip chip-accent">LLM 整形が最重要機能</span>
+  </div>
+  <p class="doc-links">詳細: <a href="../spec.md">spec.md（要件）</a> / <a href="../design.md">design.md（設計）</a> — 本ページは人間向けダイジェスト</p>
+</header>
+
+<nav id="toc">
+  <a href="#why">なぜ作る</a>
+  <a href="#flow">動作フロー</a>
+  <a href="#features">主要機能</a>
+  <a href="#arch">アーキテクチャ</a>
+  <a href="#decisions">設計判断</a>
+  <a href="#roadmap">ロードマップ</a>
+  <a href="#risks">リスク</a>
+</nav>
+
+<main>
+
+<section id="why">
+  <h2>なぜ作る — 空白地帯を突く</h2>
+  <p>既存プレイヤーは多いが、<strong>「完全ローカル × 賢い LLM 整形 × 日本語」を満たすものが存在しない</strong>。</p>
+  <table>
+    <thead><tr><th>既存アプリ</th><th>致命的な穴</th></tr></thead>
+    <tbody>
+      <tr><td>superwhisper</td><td>$249 買切・設定が複雑・大モデルは遅い</td></tr>
+      <tr><td>Wispr Flow</td><td>完全クラウド。画面スクショ送信が発覚し炎上</td></tr>
+      <tr><td>Aqua Voice</td><td>開発者向け精度は最高峰だがクラウド専用</td></tr>
+      <tr><td>VoiceInk / Handy (OSS)</td><td>整形が弱い or ゼロ。ポリッシュ不足</td></tr>
+      <tr><td>macOS 標準</td><td>精度低・整形なし・専門用語に弱い</td></tr>
+    </tbody>
+  </table>
+  <div class="callout">
+    <strong>Koe の賭け所:</strong> ① ローカル LLM による日本語整形（フィラー・同音異義語・文体変換）② 技術用語・日英混在に強い口述 ③ オンデバイス文脈認識（アプリ別モード）④ ローカルで学習する辞書自動提案
+  </div>
+</section>
+
+<section id="flow">
+  <h2>動作フロー</h2>
+  <div class="pipeline">
+    <div class="step"><b>ホットキー</b><small>短押し=トグル<br>長押し=PTT</small></div>
+    <div class="arrow">→</div>
+    <div class="step"><b>録音 + ストリーミング STT</b><small>SpeechAnalyzer / WhisperKit<br>HUD に逐次表示</small></div>
+    <div class="arrow">→</div>
+    <div class="step step-save"><b>生テキスト永続化 ★</b><small>ここで発話は失われなくなる</small></div>
+    <div class="arrow">→</div>
+    <div class="step step-accent"><b>LLM 整形</b><small>モード別プロンプト + 語彙注入<br>MLX / Foundation Models</small></div>
+    <div class="arrow">→</div>
+    <div class="step"><b>一括挿入</b><small>ペースト方式で<br>カーソル位置へ</small></div>
+  </div>
+  <p class="note">整形失敗 → 生テキストを挿入。挿入失敗 → クリップボードに保持して通知。<strong>どの失敗経路でも発話内容は復元可能</strong>（最重要の不変条件）。停止→挿入の目標: p50 ≤ 1.5 秒。</p>
+</section>
+
+<section id="features">
+  <h2>主要機能</h2>
+  <div class="grid">
+    <div class="card"><h3>アプリ別モード自動切替</h3><p>前面アプリの bundle ID でモードを自動選択。ターミナル→AI 指示文、Slack→カジュアル、メール→です・ます。プロンプトは自由編集、手動固定も可。</p></div>
+    <div class="card"><h3>LLM 整形</h3><p>フィラー除去・句読点・言い直し整理・同音異義語の文脈選択・文体変換。整形は「変換」であり「応答」ではない（出力検証つき）。</p></div>
+    <div class="card"><h3>カスタム語彙 + 自動提案</h3><p>固有名詞・技術用語の誤認識を辞書で矯正。さらに履歴をローカル LLM が分析し、頻出語や矯正パターンを根拠付きで提案 →<strong>人間が承認して登録</strong>。</p></div>
+    <div class="card"><h3>履歴 = 監査記録</h3><p>生テキスト・整形結果・適用プロンプトのスナップショット・モデル名・段階別レイテンシを永続保存。全文検索・再コピー。語彙学習と性能観測の基盤を兼ねる。</p></div>
+    <div class="card"><h3>ゼロセットアップで開始</h3><p>SpeechAnalyzer + Apple Foundation Models の組なら追加ダウンロード不要で即使える。品質を上げたければ WhisperKit / MLX モデルを後から導入。</p></div>
+    <div class="card"><h3>プライバシー = 構造で保証</h3><p>ネットワークに触れるのはモデルダウンロード用の 1 モジュールのみ。音声・テキスト・語彙・履歴は送信しない。クラウド接続は BYOK 含め非搭載。</p></div>
+  </div>
+  <p class="note">非目標: 音声コマンド（アプリ操作）、iPhone 連携・他 OS。v2 候補: 会議録音・ファイル文字起こし。</p>
+</section>
+
+<section id="arch">
+  <h2>アーキテクチャ</h2>
+  <div class="layers">
+    <div class="layer"><b>UI</b><span>メニューバー / HUD (NSPanel) / 設定 / 履歴 — SwiftUI + AppKit</span></div>
+    <div class="layer layer-core"><b>Domain</b><span>DictationSession 状態機械・ModeResolver・Vocabulary・FormattingPolicy（AppKit 非依存）</span></div>
+    <div class="layer"><b>Engines</b><span>SttEngine: SpeechAnalyzer / WhisperKit ・ LlmEngine: MLX / Foundation Models（protocol で差し替え）</span></div>
+    <div class="layer"><b>System</b><span>HotkeyMonitor (CGEventTap)・AudioCapture・TextInserter (ペースト+復元)・ModelStore (唯一のネットワーク境界)</span></div>
+    <div class="layer"><b>Persistence / Analysis</b><span>SQLite (GRDB) + FTS5 ・ 語彙提案バックグラウンドジョブ</span></div>
+  </div>
+  <p class="note">状態機械: idle → recording → finalizingStt →（★永続化）→ formatting → inserting → completed。キャンセル・整形フォールバック・クリップボード退避も正規の遷移として扱う。</p>
+</section>
+
+<section id="decisions">
+  <h2>主要な設計判断</h2>
+  <table>
+    <thead><tr><th>判断</th><th>理由</th></tr></thead>
+    <tbody>
+      <tr><td>完全ローカル・BYOK も無し</td><td>プライバシーが価値の核。クラウド分岐はネットワーク境界の検証可能性を壊す</td></tr>
+      <tr><td>macOS 26+ 専用</td><td>SpeechAnalyzer + Foundation Models で「追加 DL なし」の初期体験。自分専用なので互換負債を負わない</td></tr>
+      <tr><td>整形完了後に一括挿入</td><td>即挿入→置換は挿入先との相性問題が既知。レイテンシはストリーミング STT + 小型 LLM で吸収</td></tr>
+      <tr><td>STT / LLM とも 2 エンジン</td><td>「ゼロセットアップ」と「品質の天井」の両立。protocol 境界で追加コストは低い</td></tr>
+      <tr><td>語彙矯正は LLM 整形段が主</td><td>STT レベルのバイアスはエンジン依存で不安定。LLM 段なら全エンジンに効く</td></tr>
+      <tr><td>ペースト方式で挿入</td><td>キーストローク合成は日本語 IME と衝突。クリップボードは退避→復元</td></tr>
+      <tr><td>語彙の自動「登録」はしない</td><td>提案 + 人間承認のみ。LLM の確率的抽出を無審査で辞書に入れると劣化がサイレント混入</td></tr>
+    </tbody>
+  </table>
+</section>
+
+<section id="roadmap">
+  <h2>ロードマップ</h2>
+  <ol class="roadmap">
+    <li><b>M0</b> スパイク: SpeechAnalyzer 日本語品質 / Foundation Models 整形品質 / MLX 4B 級実測 / ⌘V 挿入互換性 / 言語自動判定</li>
+    <li><b>M1</b> 歩くスケルトン: PTT → SpeechAnalyzer → 固定プロンプト整形 → ペースト挿入 + 履歴記録。<b>ここから毎日ドッグフーディング</b></li>
+    <li><b>M2</b> 状態機械完成: ハイブリッド起動・HUD・全フォールバック経路</li>
+    <li><b>M3</b> モード: アプリ別自動切替・ビルトインモード・編集 UI</li>
+    <li><b>M4</b> 語彙(手動) + 履歴 UI（検索・再コピー）</li>
+    <li><b>M5</b> エンジン拡充: WhisperKit / MLX・モデル管理 UI</li>
+    <li><b>M6</b> 語彙自動提案</li>
+  </ol>
+</section>
+
+<section id="risks">
+  <h2>主要リスク</h2>
+  <table>
+    <thead><tr><th>リスク</th><th>備え</th></tr></thead>
+    <tbody>
+      <tr><td>SpeechAnalyzer の日本語品質不足</td><td>M0 で早期判定。WhisperKit デフォルト化に切替できる構造</td></tr>
+      <tr><td>4B 級 LLM の整形品質不足</td><td>モデル比較 + few-shot 強化。最悪 8B 級 + アイドルアンロード</td></tr>
+      <tr><td>⌘V が効かないアプリ</td><td>主要アプリで実測。AXUIElement 挿入をフォールバック検討</td></tr>
+      <tr><td>LLM が整形でなく「応答」する</td><td>few-shot + 出力検証（長さ比・空検知）で生テキストにフォールバック</td></tr>
+    </tbody>
+  </table>
+</section>
+
+</main>
+
+<footer>
+  <p>Koe — Draft v1 / 2026-08-03 ・ 正本: <a href="../spec.md">spec.md</a> ・ <a href="../design.md">design.md</a></p>
+</footer>
+
+<script src="script.js"></script>
+</body>
+</html>
