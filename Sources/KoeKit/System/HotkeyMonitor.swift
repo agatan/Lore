@@ -23,6 +23,12 @@ private func koeEventTapCallback(
 ///
 /// 押下・離上の生イベントだけを流し、トグル / push-to-talk の解釈は
 /// `HotkeyGestureInterpreter`(純粋ドメイン)に任せる。
+///
+/// **コールバックの中で重い処理をしてはいけない。**
+/// イベントタップのコールバックが規定時間内に返らないと OS がタップを無効化し、
+/// 以降のキーが前面アプリへ素通しする。⌥ 単体のような修飾キーなら素通しは無害だが、
+/// ⌥D のように文字を生む割り当てだと、その文字(∂)が入力されてしまう。
+/// そのため通知は run loop の次のターンへ回し、ここでは消費するかどうかだけを決める(C-57)。
 @MainActor
 public final class HotkeyMonitor {
     public enum Failure: LocalizedError {
@@ -37,13 +43,17 @@ public final class HotkeyMonitor {
         }
     }
 
-    /// 押下・離上イベント。
+    /// 押下・離上イベント。run loop の次のターンで呼ばれる。
     public var onEvent: ((HotkeyPhysicalEvent) -> Void)?
-    /// 録音中の Esc。true を返すとイベントを飲み込む。
-    public var onEscape: (() -> Bool)?
+    /// Esc を飲み込むべきか。**この場合だけは同期で判定する**(消費するかどうかを
+    /// その場で決めなければならないため)。安価な状態参照だけにして、実際の中止処理は
+    /// 実装側が次のターンへ回す。
+    public var shouldSwallowEscape: (() -> Bool)?
 
     public private(set) var binding: HotkeyBinding = .default
     public private(set) var isRunning = false
+    /// 監視を一時停止しているか。設定画面でホットキーを記録している間は止める。
+    public private(set) var isSuspended = false
 
     private var tap: CFMachPort?
     private var runLoopSource: CFRunLoopSource?
@@ -98,24 +108,45 @@ public final class HotkeyMonitor {
         pressStart = nil
     }
 
+    /// 一時停止・再開。
+    ///
+    /// ホットキーを記録している間は止める。止めないと、記録のために押したキーが
+    /// **いま設定されているホットキーに一致して録音が始まってしまう**。
+    /// タップ自体は生かしたまま素通しにするので、権限の再取得は起きない。
+    /// 素通ししたキーは、記録中は前面(Koe 自身)のローカルモニタが受け取って消費する。
+    public func setSuspended(_ suspended: Bool) {
+        isSuspended = suspended
+        pressStart = nil
+    }
+
     /// 権限が付与された直後などに呼び直す。
     public func restart() {
         stop()
         try? start()
     }
 
-    fileprivate func handle(type: CGEventType, event: CGEvent) -> Unmanaged<CGEvent>? {
+    /// テストから消費判定を検証するため internal。
+    func handle(type: CGEventType, event: CGEvent) -> Unmanaged<CGEvent>? {
         let passthrough = Unmanaged.passUnretained(event)
 
         switch type {
         case .tapDisabledByTimeout, .tapDisabledByUserInput:
+            // 無効化されている間のキーは前面アプリへ抜けている。
+            // 原因を追えるようにログへ残す(コールバックが遅いと必ずここへ来る)。
+            KoeLog.hotkey.error(
+                "イベントタップが無効化されました(\(type == .tapDisabledByTimeout ? "timeout" : "userInput", privacy: .public))。再有効化します"
+            )
             if let tap { CGEvent.tapEnable(tap: tap, enable: true) }
+            return passthrough
+
+        // 記録中は何も解釈せず、何も消費しない。
+        case _ where isSuspended:
             return passthrough
 
         case .keyDown:
             let code = UInt16(event.getIntegerValueField(.keyboardEventKeycode))
             // 録音中の Esc は破棄キャンセル。前面アプリに漏らさない(FR-1.4)。
-            if code == 0x35, onEscape?() == true {
+            if code == 0x35, shouldSwallowEscape?() == true {
                 return nil
             }
             guard case .key(let bound, let modifiers) = binding, code == bound else { return passthrough }
@@ -149,12 +180,21 @@ public final class HotkeyMonitor {
 
     private func beginPress() {
         pressStart = ContinuousClock.now
-        onEvent?(.pressed)
+        notify(.pressed)
     }
 
     private func endPress() {
         let held: Duration = pressStart.map { ContinuousClock.now - $0 } ?? .zero
         pressStart = nil
-        onEvent?(.released(heldFor: held))
+        notify(.released(heldFor: held))
+    }
+
+    /// 通知を run loop の次のターンへ回す。
+    ///
+    /// タップのコールバックを即座に返すためで、`DispatchQueue.main.async` を選ぶのは
+    /// FIFO が保証されるから。押下と離上の順序が入れ替わるとトグル / PTT の判定が壊れる。
+    private func notify(_ event: HotkeyPhysicalEvent) {
+        let handler = onEvent
+        DispatchQueue.main.async { handler?(event) }
     }
 }

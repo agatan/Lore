@@ -30,6 +30,7 @@ public final class KoeDatabase: Sendable {
 
     public var history: HistoryStore { HistoryStore(queue: queue) }
     public var modes: ModeStore { ModeStore(queue: queue) }
+    public var sharedRules: SharedRulesStore { SharedRulesStore(queue: queue) }
     public var vocabulary: VocabularyStore { VocabularyStore(queue: queue) }
     public var meta: MetaStore { MetaStore(queue: queue) }
 
@@ -129,6 +130,13 @@ public final class KoeDatabase: Sendable {
                   value TEXT NOT NULL
                 );
                 """)
+        }
+
+        // 語彙のメモ欄を廃止(C-43)。辞書はモデルへのヒントだけを持つ。
+        migrator.registerMigration("v2-drop-vocabulary-note") { db in
+            try db.alter(table: "vocabulary") { table in
+                table.drop(column: "note")
+            }
         }
         return migrator
     }

@@ -329,11 +329,10 @@ public struct SessionDraft: Sendable {
 
     /// 整形をスキップして生テキストを使う(FR-3.6 / FR-3.7)。
     ///
-    /// - Parameter fallbackText: 語彙矯正だけを適用したテキスト。生テキストと違うときは、
-    ///   実際に挿入した内容として記録する(`llm_engine = none` なので LLM 整形と混ざらない)。
+    /// `formattedText` は付けない。Koe は生テキストへ手を加えないので、
+    /// スキップ時に挿入されるのは `rawTranscript` そのもの(C-43)。
     public mutating func markFormattingSkipped(
         reason: String,
-        fallbackText: String? = nil,
         llmLatencyMs: Int?
     ) -> SessionRecord? {
         guard var record else { return nil }
@@ -341,9 +340,6 @@ public struct SessionDraft: Sendable {
         record.llmModel = nil
         record.llmLatencyMs = llmLatencyMs
         record.error = reason
-        if let fallbackText, fallbackText != record.rawTranscript {
-            record.formattedText = fallbackText
-        }
         formattingSkipReason = reason
         self.record = record
         phase = .inserting

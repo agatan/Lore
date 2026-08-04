@@ -39,6 +39,18 @@ public enum MainSection: String, CaseIterable, Identifiable, Hashable, Sendable 
     static var settingsSections: [MainSection] {
         [.general, .modes, .vocabulary, .models, .privacy]
     }
+
+    /// 本文の横幅の上限。`nil` = ウィンドウの幅を使い切る。
+    ///
+    /// 1 カラムの設定は行が長すぎると読みにくいので絞る。ただしモードは
+    /// 「一覧 + 編集」の 2 カラムなので、同じ上限をかけると編集側が極端に狭くなる
+    /// (プロンプト欄が数語で折り返す)。段組みの数が違うものに同じ幅を当てない。
+    var contentMaxWidth: CGFloat? {
+        switch self {
+        case .modes: nil
+        default: 660
+        }
+    }
 }
 
 public struct MainWindowView: View {
@@ -119,11 +131,18 @@ public struct MainWindowView: View {
         switch env.mainSection {
         case .history:
             HistoryBrowserView(env: env)
-        case .general, .modes, .vocabulary, .models, .privacy:
+        case .modes:
+            // 「一覧 + 編集」の 2 カラムなので、ペイン全体をスクロールさせない。
+            // 外側にスクロールを置くと高さが無限に提案され、子が縦を使い切れなくなる。
+            // スクロールはカラムごとに持たせる。
+            ModesSettingsView(env: env)
+                .padding(22)
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        case .general, .vocabulary, .models, .privacy:
             ScrollView {
                 settingsPane
                     .padding(22)
-                    .frame(maxWidth: 660, alignment: .leading)
+                    .frame(maxWidth: env.mainSection.contentMaxWidth ?? .infinity, alignment: .leading)
             }
         }
     }

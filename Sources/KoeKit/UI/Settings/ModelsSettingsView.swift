@@ -1,53 +1,62 @@
 import SwiftUI
 
-/// 聞き取りと仕上げに使うモデルを選ぶ(FR-9)。
+/// 使っているモデルの状態と実測の速さ(FR-9)。
 ///
-/// 「エンジンを選んでからモデルを選ぶ」二段構えは実装の都合なので出さない。
-/// 選択肢を 1 段に並べ、正確さ・速さの目安と、あなたの環境での実測時間で選べるようにする。
+/// Koe は OS 内蔵のモデルだけを使うので、**ここに選択肢は無い**。
+/// 出すのは「いま何が使われていて、使える状態か、どれくらい待つか」だけにする。
 struct ModelsSettingsView: View {
     var env: AppEnvironment
 
     private var settings: AppSettings { env.settings }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 22) {
+        LazyVStack(alignment: .leading, spacing: 20) {
             NoticeBanner(
-                title: "ダウンロード以外で通信しません",
-                message: "モデルの取得だけがネットワークを使います。話した内容や履歴が外に出ることはありません。",
+                title: "この Mac の中だけで動きます",
+                message: "聞き取りも文章の仕上げも macOS に内蔵されたモデルで行います。追加のダウンロードはありません。話した内容が外に出ることもありません。",
                 tint: KoeTheme.accent,
                 actionTitle: nil,
                 action: nil
             )
 
-            section(
+            SettingsCard(
                 title: "聞き取り",
-                caption: "話した声を文字にします。",
-                choices: env.engines.transcriptionChoices,
-                selectedID: TranscriptionCatalog.choice(
-                    engine: settings.sttEngineID,
-                    modelID: settings.whisperModelID
-                )?.id,
-                measured: env.measuredLatencies.transcription,
-                select: { choice in Task { await env.selectTranscription(choice) } }
-            )
+                footnote: "話した声を文字にします。日本語の音声モデルは macOS が管理します。"
+            ) {
+                engineRow(
+                    name: "Apple 音声認識 (SpeechAnalyzer)",
+                    availability: env.engines.sttAvailability,
+                    measured: env.measuredLatencies.transcription[
+                        HistoryStore.key(EngineIdentifier.speechAnalyzer.rawValue, "システム音声モデル")
+                    ],
+                    canInstall: true
+                )
+                if let error = env.speechAssetError {
+                    Text(error)
+                        .font(.system(size: 11))
+                        .foregroundStyle(KoeTheme.recording)
+                }
+            }
 
-            section(
+            SettingsCard(
                 title: "文章の仕上げ",
-                caption: "文字起こしを読める文章に整えます。うまくいかないときは、整えずにそのまま挿入します。",
-                choices: env.engines.formattingChoices,
-                selectedID: FormattingCatalog.choice(
-                    engine: settings.llmEngineID,
-                    modelID: settings.mlxModelID
-                )?.id,
-                measured: env.measuredLatencies.formatting,
-                select: { choice in Task { await env.selectFormatting(choice) } }
-            )
+                footnote: "文字起こしを読める文章に整えます。うまくいかないときは、整えずにそのまま挿入します。"
+            ) {
+                engineRow(
+                    name: "Apple Foundation Models",
+                    availability: env.engines.llmAvailability,
+                    measured: env.measuredLatencies.formatting[
+                        HistoryStore.key(EngineIdentifier.foundationModels.rawValue, "Apple Foundation Models")
+                    ],
+                    canInstall: false
+                )
+            }
 
             SettingsCard(
                 title: "待ち時間の上限",
                 footnote: "ここを過ぎたら仕上げを打ち切り、文字起こしをそのまま挿入します。"
             ) {
-                LabeledContent("仕上げを待つ上限") {
+                SettingsRow(title: "仕上げを待つ上限") {
                     HStack(spacing: 10) {
                         Slider(
                             value: Binding(
@@ -66,215 +75,87 @@ struct ModelsSettingsView: View {
                     }
                 }
             }
-
-            if env.modelDiskUsage > 0 {
-                SettingsCard(title: "ダウンロード済み", footnote: "~/Library/Application Support/Koe/models に保存されます。") {
-                    HStack {
-                        Text(ByteCountFormatter.string(fromByteCount: env.modelDiskUsage, countStyle: .file))
-                            .font(.system(size: 13, weight: .semibold, design: .rounded))
-                        Spacer()
-                        Button("すべて削除", role: .destructive) {
-                            Task { await env.deleteDownloadedModels() }
-                        }
-                        .buttonStyle(.bordered)
-                        .controlSize(.small)
-                    }
-                }
-            }
         }
         .task { await env.reloadMeasuredLatencies() }
     }
 
     @ViewBuilder
-    private func section(
-        title: String,
-        caption: String,
-        choices: [ModelChoice],
-        selectedID: ModelChoice.ID?,
-        measured: [String: LatencyStats],
-        select: @escaping (ModelChoice) -> Void
+    private func engineRow(
+        name: String,
+        availability: EngineAvailability,
+        measured: LatencyStats?,
+        canInstall: Bool
     ) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text(title)
-                .font(.system(size: 13, weight: .semibold))
-            Text(caption)
-                .font(.system(size: 11.5))
-                .foregroundStyle(.secondary)
-
-            VStack(spacing: 8) {
-                ForEach(choices) { choice in
-                    ModelChoiceCard(
-                        choice: choice,
-                        isSelected: choice.id == selectedID,
-                        availability: env.engines.availability(for: choice),
-                        measured: measured[choice.latencyKey(modelName: Self.measuredModelName(for: choice))],
-                        downloadProgress: env.downloadingChoiceID == choice.id ? env.modelDownloadProgress : nil,
-                        onSelect: { select(choice) },
-                        onDownload: { Task { await env.download(choice) } }
-                    )
-                }
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(alignment: .firstTextBaseline, spacing: 8) {
+                Text(name)
+                    .font(.system(size: 13, weight: .medium))
+                Spacer(minLength: 12)
+                statusView(availability, canInstall: canInstall)
             }
-
-            Text("正確さと速さの帯は目安です。「実測」はあなたの履歴から集計した実際の時間です。")
-                .font(.system(size: 10.5))
-                .foregroundStyle(.tertiary)
-
-            if let error = env.modelDownloadError {
-                Text(error)
-                    .font(.system(size: 11))
-                    .foregroundStyle(KoeTheme.recording)
-            }
-        }
-    }
-
-    /// 履歴にはエンジンが返す表示名で記録されているため、実測を引くキーも同じ名前で作る。
-    static func measuredModelName(for choice: ModelChoice) -> String? {
-        switch choice.engine {
-        case .speechAnalyzer: "システム音声モデル"
-        case .foundationModels: "Apple Foundation Models"
-        default: choice.name
-        }
-    }
-}
-
-/// 1 つの選択肢のカード。正確さ・速さの目安と実測時間を並べる。
-private struct ModelChoiceCard: View {
-    var choice: ModelChoice
-    var isSelected: Bool
-    var availability: EngineAvailability
-    var measured: LatencyStats?
-    var downloadProgress: Double?
-    var onSelect: () -> Void
-    var onDownload: () -> Void
-
-    @State private var isHovering = false
-
-    private var isUsable: Bool {
-        if case .unavailable = availability { return false }
-        return true
-    }
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 9) {
-            header
-            Text(choice.summary)
-                .font(.system(size: 11.5))
-                .foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
-                .padding(.leading, 21)
-            meters
-                .padding(.leading, 21)
-        }
-        .padding(12)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background {
-            RoundedRectangle(cornerRadius: KoeTheme.cardCornerRadius, style: .continuous)
-                .fill(isSelected ? KoeTheme.accent.opacity(0.09) : Color.secondary.opacity(isHovering ? 0.09 : 0.05))
-        }
-        .overlay {
-            RoundedRectangle(cornerRadius: KoeTheme.cardCornerRadius, style: .continuous)
-                .strokeBorder(isSelected ? KoeTheme.accent.opacity(0.5) : .clear, lineWidth: 1)
-        }
-        .opacity(isUsable ? 1 : 0.55)
-        .contentShape(.rect)
-        .onTapGesture { if isUsable { onSelect() } }
-        .onHover { isHovering = $0 }
-    }
-
-    private var header: some View {
-        HStack(alignment: .firstTextBaseline, spacing: 8) {
-            Image(systemName: isSelected ? "checkmark.circle.fill" : "circle")
-                .font(.system(size: 13))
-                .foregroundStyle(isSelected ? KoeTheme.accent : Color.secondary.opacity(0.5))
-
-            Text(choice.name)
-                .font(.system(size: 13, weight: isSelected ? .semibold : .medium))
-
-            if !choice.requiresDownload {
-                Text("ダウンロード不要")
-                    .font(.system(size: 10))
-                    .foregroundStyle(.secondary)
-                    .padding(.horizontal, 5)
-                    .padding(.vertical, 1.5)
-                    .background { Capsule().fill(.secondary.opacity(0.14)) }
-            }
-
-            Spacer()
-            trailing
-        }
-    }
-
-    private var meters: some View {
-        HStack(alignment: .top, spacing: 26) {
-            RatingMeter(label: "正確さ", value: choice.rating.accuracy, tint: KoeTheme.accent)
-            RatingMeter(label: "速さ", value: choice.rating.speed, tint: KoeTheme.accentSecondary)
             if let measured, measured.count > 0 {
-                VStack(alignment: .leading, spacing: 3) {
-                    Text("実測")
-                        .font(.system(size: 9.5, weight: .medium))
-                        .foregroundStyle(.secondary)
-                    Text(Self.secondsText(measured.p50Ms))
-                        .font(.system(size: 13, weight: .semibold, design: .rounded))
-                        .monospacedDigit()
-                        .foregroundStyle(KoeTheme.accent)
-                    Text("\(measured.count) 回の中央値")
-                        .font(.system(size: 9))
-                        .foregroundStyle(.tertiary)
+                HStack(alignment: .top, spacing: 20) {
+                    ForEach(Self.speedLines(measured), id: \.self) { line in
+                        Text(line)
+                            .font(.system(size: 10.5))
+                            .foregroundStyle(.secondary)
+                    }
                 }
+            } else {
+                Text("使うと、ここに実測の速さが出ます")
+                    .font(.system(size: 10.5))
+                    .foregroundStyle(.tertiary)
             }
         }
     }
 
     @ViewBuilder
-    private var trailing: some View {
-        if let downloadProgress {
-            ProgressView(value: downloadProgress)
-                .frame(width: 110)
+    private func statusView(_ availability: EngineAvailability, canInstall: Bool) -> some View {
+        if canInstall, let progress = env.speechAssetProgress {
+            ProgressView(value: progress).frame(width: 110)
         } else {
             switch availability {
             case .ready:
-                if let size = choice.downloadSizeText {
-                    Label("ダウンロード済み \(size)", systemImage: "checkmark.circle")
+                Label("使えます", systemImage: "checkmark.circle")
+                    .font(.system(size: 10.5))
+                    .foregroundStyle(KoeTheme.success)
+            case .needsDownload(let reason):
+                HStack(spacing: 8) {
+                    Text(reason)
                         .font(.system(size: 10.5))
-                        .foregroundStyle(.tertiary)
+                        .foregroundStyle(KoeTheme.warning)
+                    if canInstall {
+                        Button("取得") { Task { await env.installSpeechAssets() } }
+                            .buttonStyle(.bordered)
+                            .controlSize(.small)
+                    }
                 }
-            case .needsDownload:
-                Button("ダウンロード", action: onDownload)
-                    .buttonStyle(.bordered)
-                    .controlSize(.small)
             case .unavailable(let reason):
                 Text(reason)
                     .font(.system(size: 10.5))
-                    .foregroundStyle(KoeTheme.warning)
+                    .foregroundStyle(KoeTheme.recording)
                     .multilineTextAlignment(.trailing)
-                    .frame(maxWidth: 220)
+                    .frame(maxWidth: 260)
             }
         }
+    }
+
+    /// 待ち時間は「音声の長さの何倍か」で見せる。秒数だけでは発話の長さ次第で意味が変わる。
+    static func speedLines(_ stats: LatencyStats) -> [String] {
+        guard let factor = stats.realtimeFactor else {
+            return ["実測 \(secondsText(stats.p50Ms))", "\(stats.count) 回の中央値"]
+        }
+        let text = factor < 1
+            ? String(format: "%.2f 倍", factor)
+            : String(format: "%.1f 倍", factor)
+        return [
+            "音声の長さの \(text)",
+            "音声 10 秒 → \(secondsText(Int(factor * 10_000)))",
+            "\(stats.realtimeFactorCount) 回の中央値",
+        ]
     }
 
     static func secondsText(_ ms: Int) -> String {
         ms >= 1_000 ? String(format: "%.1f 秒", Double(ms) / 1_000) : "\(ms) ミリ秒"
-    }
-}
-
-/// 5 段階の目安メーター。
-private struct RatingMeter: View {
-    var label: String
-    var value: Int
-    var tint: Color
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Text(label)
-                .font(.system(size: 9.5, weight: .medium))
-                .foregroundStyle(.secondary)
-            HStack(spacing: 2.5) {
-                ForEach(1...5, id: \.self) { step in
-                    RoundedRectangle(cornerRadius: 1.5, style: .continuous)
-                        .fill(step <= value ? tint : Color.secondary.opacity(0.2))
-                        .frame(width: 12, height: 5)
-                }
-            }
-        }
     }
 }

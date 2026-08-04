@@ -97,6 +97,13 @@ public protocol LlmEngine: Sendable {
     var identifier: EngineIdentifier { get }
     var modelName: String? { get }
 
+    /// 1 回の呼び出しで渡せる入力(system + user)の目安(文字数)。
+    ///
+    /// 口述の整形は入力が短いので気にしなくてよいが、履歴分析のように
+    /// **入力量を呼び出し側が決める**処理は、この予算に収まるよう自分で分割する責任がある。
+    /// エンジンごとに桁が違う値なので、既定実装は置かない(黙って超過させない)。
+    var inputCharacterBudget: Int { get }
+
     func availability() async -> EngineAvailability
     /// 整形を実行する。タイムアウト超過は throw して呼び出し側のフォールバックに委ねる。
     func complete(prompt: FormattingPrompt, timeout: Duration) async throws -> String

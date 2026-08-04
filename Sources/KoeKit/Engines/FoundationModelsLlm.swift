@@ -9,6 +9,12 @@ public final class FoundationModelsLlm: LlmEngine {
 
     public var modelName: String? { "Apple Foundation Models" }
 
+    /// システムモデルのコンテキスト窓は 4,096 トークンで、instructions・prompt・応答が
+    /// **その 1 枠を共有する**。日本語はおおよそ 1 文字 ≒ 1 トークンなので、
+    /// 応答と内部トークンの分を残した保守的な入力枠をここで宣言する。
+    static let contextWindowTokens = 4_096
+    public var inputCharacterBudget: Int { 2_200 }
+
     public func availability() async -> EngineAvailability {
         switch SystemLanguageModel.default.availability {
         case .available:
@@ -34,10 +40,10 @@ public final class FoundationModelsLlm: LlmEngine {
         let model = SystemLanguageModel(useCase: .general, guardrails: .permissiveContentTransformations)
         let session = LanguageModelSession(model: model, instructions: prompt.system)
 
-        // 再現性(NFR-4)のため greedy 固定。出力長は入力から見積もる。
+        // 再現性(NFR-4)のため greedy 固定。出力長はプロンプトの申告から見積もる。
         let options = GenerationOptions(
             sampling: .greedy,
-            maximumResponseTokens: Self.responseTokenBudget(for: prompt.user)
+            maximumResponseTokens: Self.responseTokenBudget(for: prompt)
         )
 
         return try await withEngineTimeout(timeout) {
@@ -50,9 +56,16 @@ public final class FoundationModelsLlm: LlmEngine {
         // システム側がモデルのライフサイクルを管理するため、こちらから解放するものはない。
     }
 
-    static func responseTokenBudget(for input: String) -> Int {
-        // 日本語はおおよそ 1 文字 ≒ 1 トークン。整形で伸びる余地を見て 2 倍 + 下限。
-        min(4_096, max(256, input.count * 2))
+    /// 応答に許すトークン数。
+    ///
+    /// 日本語はおおよそ 1 文字 ≒ 1 トークン。整形なら入力の 2 倍を見込むが、
+    /// **コンテキスト窓は入力と応答で共有する**ので、入力が食った分を必ず差し引く。
+    /// 差し引かないと「入力 2,000 字 + 応答枠 4,000」のように窓を超え、
+    /// モデルが入力を読む前に失敗する。
+    static func responseTokenBudget(for prompt: FormattingPrompt) -> Int {
+        let expected = prompt.expectedOutputCharacters ?? prompt.user.count * 2
+        let consumed = prompt.system.count + prompt.user.count
+        return max(128, min(expected, contextWindowTokens - consumed))
     }
 }
 

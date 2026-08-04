@@ -114,10 +114,19 @@ struct FormattingPolicyTests {
         VocabularyEntry(surface: "無効", enabled: false),
     ]
 
-    @Test("system プロンプトに基本ルール・語彙・モード指示が入る")
+    @Test("system プロンプトに共通ルール・語彙・モード指示が入る")
     func promptComposition() {
         let prompt = FormattingPolicy.systemPrompt(mode: mode, vocabulary: vocabulary)
-        #expect(prompt.contains("フィラー"))
+
+        // 言いよどみを閉じた列挙で書くと、実際の発話に出る語が漏れて残る
+        // (「そのー」だけを挙げていると「その」が消えない)。
+        // 日本語の考え中の語が名指しされていることを固定する。
+        for word in ["えーと", "その", "なんか", "なんていうの", "こう", "まあ"] {
+            #expect(prompt.contains(word), "言いよどみとして「\(word)」が挙がっていない")
+        }
+        // 同じ語句の繰り返しをまとめる指示。抽象的な「重複を残さない」では効かない。
+        #expect(prompt.contains("1 回にする"))
+
         #expect(prompt.contains("レセコン"))
         #expect(prompt.contains("レセ困"))
         #expect(prompt.contains("指示文として明瞭に整形する"))
@@ -166,39 +175,6 @@ struct FormattingPolicyTests {
         #expect(FormattingPolicy.sanitize("「こんにちは」") == "こんにちは")
         // 途中に鉤括弧がある場合は剥がさない
         #expect(FormattingPolicy.sanitize("「A」と「B」") == "「A」と「B」")
-    }
-
-    @Test("誤認識パターンは LLM の前に決定的に置換される")
-    func appliesVocabularyCorrections() {
-        let result = FormattingPolicy.applyVocabularyCorrections(
-            to: "レセ困の締め処理とレ背コンの設定を見ます",
-            vocabulary: vocabulary
-        )
-        #expect(result.text == "レセコンの締め処理とレセコンの設定を見ます")
-        #expect(result.applied.count == 2)
-        #expect(result.didChange)
-    }
-
-    @Test("無効な語彙と該当しない語では置換しない")
-    func skipsCorrectionsWhenNotApplicable() {
-        let disabled = [
-            VocabularyEntry(surface: "レセコン", misrecognitions: ["レセ困"], enabled: false)
-        ]
-        #expect(FormattingPolicy.applyVocabularyCorrections(to: "レセ困です", vocabulary: disabled).text == "レセ困です")
-
-        let untouched = FormattingPolicy.applyVocabularyCorrections(to: "普通の文です", vocabulary: vocabulary)
-        #expect(untouched.text == "普通の文です")
-        #expect(!untouched.didChange)
-    }
-
-    @Test("長い誤認識パターンを先に当てる")
-    func prefersLongerPatterns() {
-        let entries = [
-            VocabularyEntry(surface: "Henry", misrecognitions: ["変理"]),
-            VocabularyEntry(surface: "Henry レセコン", misrecognitions: ["変理のレセ困"]),
-        ]
-        let result = FormattingPolicy.applyVocabularyCorrections(to: "変理のレセ困を見ます", vocabulary: entries)
-        #expect(result.text == "Henry レセコンを見ます")
     }
 
     @Test("コードフェンスは応答の兆候として却下する")
@@ -480,72 +456,63 @@ struct ContentOverlapTests {
     }
 }
 
-// MARK: - 語彙の機械置換の安全性
+// MARK: - 語彙の渡し方
 
-@Suite("語彙の機械置換")
-struct VocabularyReplacementTests {
-    @Test("語の途中に埋まっている出現は置換しない")
-    func doesNotBreakLongerWords() {
-        let entries = [VocabularyEntry(surface: "AI", misrecognitions: ["アイ"])]
-        // 「アイデア」の中の「アイ」を潰してはいけない
-        let result = FormattingPolicy.applyVocabularyCorrections(
-            to: "アイデアをまとめておきます",
-            vocabulary: entries
-        )
-        #expect(result.text == "アイデアをまとめておきます")
-        #expect(!result.didChange)
-    }
+/// 語彙は**モデルへのヒント**であって置換規則ではない(C-43)。
+/// Koe 自身が文字列を書き換えないことと、代わりに STT と整形の両方へ確実に届くことを固定する。
+@Suite("語彙はモデルへのヒントとして渡る")
+struct VocabularyHintTests {
+    let entries = [
+        VocabularyEntry(surface: "レセコン", reading: "レセコン", misrecognitions: ["レセ困", "レ背コン"]),
+        VocabularyEntry(surface: "Ruby", reading: "るびー", misrecognitions: ["る"]),
+        VocabularyEntry(surface: "無効", misrecognitions: ["夢Ф"], enabled: false),
+    ]
 
-    @Test("語として現れたときは置換する")
-    func replacesStandaloneWord() {
-        let entries = [VocabularyEntry(surface: "レセコン", misrecognitions: ["レセ困"])]
-        let result = FormattingPolicy.applyVocabularyCorrections(
-            to: "レセ困の締め処理を明日やります",
-            vocabulary: entries
-        )
-        #expect(result.text == "レセコンの締め処理を明日やります")
-        #expect(result.didChange)
-    }
-
-    @Test("英単語の部分一致でも壊さない")
-    func doesNotBreakLatinSubstrings() {
-        let entries = [VocabularyEntry(surface: "Go", misrecognitions: ["go"])]
-        let result = FormattingPolicy.applyVocabularyCorrections(
-            to: "I forgot the google doc",
-            vocabulary: entries
-        )
-        // forgot / google の中の go は触らない
-        #expect(result.text == "I forgot the google doc")
-    }
-
-    @Test("1 文字のパターンは機械置換に使わない")
-    func ignoresSingleCharacterPatterns() {
-        let entries = [VocabularyEntry(surface: "Ruby", misrecognitions: ["る"])]
-        let result = FormattingPolicy.applyVocabularyCorrections(
-            to: "るびーで書いてあるから見ておく",
-            vocabulary: entries
-        )
-        #expect(result.text == "るびーで書いてあるから見ておく")
-        #expect(!result.didChange)
-    }
-
-    @Test("置換できなかった語も LLM 側の語彙表には残る")
-    func unreplaceablePatternsStayInPrompt() {
-        let entries = [VocabularyEntry(surface: "Ruby", reading: "るびー", misrecognitions: ["る"])]
+    @Test("整形プロンプトの語彙表に表記と誤認識が載る")
+    func vocabularyReachesFormattingPrompt() {
         let prompt = FormattingPolicy.systemPrompt(mode: BuiltinModes.defaultMode, vocabulary: entries)
+        #expect(prompt.contains("レセコン"))
+        #expect(prompt.contains("レセ困"))
+        // 1 文字でも除外しない。機械置換をやめたので「短すぎて危険」な語は無くなった。
         #expect(prompt.contains("Ruby"))
         #expect(prompt.contains("る"))
+        // 無効にした語は渡さない。
+        #expect(!prompt.contains("夢Ф"))
     }
 
-    @Test("複数箇所に現れたら全部置換する")
-    func replacesEveryStandaloneOccurrence() {
-        let entries = [VocabularyEntry(surface: "レセコン", misrecognitions: ["レセ困"])]
-        let result = FormattingPolicy.applyVocabularyCorrections(
-            to: "レセ困を見て、そのあとレセ困の設定も直す",
-            vocabulary: entries
+    @Test("STT のバイアスには表記と読みが渡る")
+    func vocabularyReachesSttBias() {
+        let strings = FormattingPolicy.contextualStrings(entries)
+        #expect(strings.contains("レセコン"))
+        #expect(strings.contains("るびー"))
+        #expect(!strings.contains("無効"))
+
+        let hint = FormattingPolicy.vocabularyHint(entries)
+        #expect(hint?.contains("Ruby") == true)
+        #expect(hint?.contains("無効") == false)
+    }
+
+    @Test("整形をスキップしたら生テキストがそのまま結果になる")
+    func skippedFormattingKeepsRawTranscript() {
+        let context = SessionContext(
+            appBundleID: nil,
+            appName: nil,
+            mode: BuiltinModes.defaultMode,
+            systemPrompt: "system",
+            vocabularyCount: 1,
+            sttEngine: .speechAnalyzer,
+            sttModel: nil,
+            llmEngine: .foundationModels,
+            llmModel: nil,
+            trigger: .toggle
         )
-        #expect(!result.text.contains("レセ困"))
-        #expect(result.text.components(separatedBy: "レセコン").count == 3)
+        var draft = SessionDraft(context: context)
+        _ = draft.finalizeTranscript("レセ困の設定", language: .ja, sttLatencyMs: 10, audioDurationMs: 2_000)
+        let record = draft.markFormattingSkipped(reason: "タイムアウト", llmLatencyMs: 100)
+
+        // Koe は矯正しないので、raw がそのまま挿入される。
+        #expect(record?.formattedText == nil)
+        #expect(record?.resultText == "レセ困の設定")
     }
 }
 

@@ -9,38 +9,21 @@ APP := build/Koe.app
 CONTENTS := $(APP)/Contents
 BUNDLE_ID := dev.agatan.Koe
 
-# MLX の Metal シェーダは SwiftPM の CLI ビルドではコンパイルできない(mlx-swift の制約)。
-# Metal ツールチェーンがあれば xcodebuild を使い、無ければ swift build で組む
-# (その場合 MLX エンジンは選べない。UI 上でその理由を表示する)。
-HAS_METAL := $(shell xcrun metal --version >/dev/null 2>&1 && echo yes)
-
 # 署名 identity。「Koe Dev」があればそれを使う(make dev-cert で作れる)。
 # 自己署名は信頼されない扱い(CSSMERR_TP_NOT_TRUSTED)なので find-identity に -v は付けない。
 # ad-hoc 署名だとリビルドごとに identity が変わり、アクセシビリティの許可が毎回無効になる。
 DEV_IDENTITY := $(shell security find-identity -p codesigning 2>/dev/null | grep -o "Koe Dev" | head -1)
 CODESIGN_ID := $(if $(DEV_IDENTITY),Koe Dev,-)
-XCCONFIG := $(shell [ "$(CONFIG)" = "release" ] && echo Release || echo Debug)
-XCBUILD_DIR := .xcbuild/Build/Products/$(XCCONFIG)
-SPM_BUILD_DIR := .build/$(CONFIG)
-BUILD_DIR := $(if $(HAS_METAL),$(XCBUILD_DIR),$(SPM_BUILD_DIR))
+BUILD_DIR := .build/$(CONFIG)
 
-.PHONY: all build app run stop test clean install icon metal-toolchain dev-cert reset-permissions
+.PHONY: all build app run stop test clean install icon dev-cert reset-permissions
 
 all: app
 
+# 推論は OS 内蔵モデルだけなので、依存はデータベース 1 つ。
+# xcodebuild も Metal ツールチェーンも要らず、SwiftPM だけでビルドできる。
 build:
-ifeq ($(HAS_METAL),yes)
-	xcodebuild -scheme Koe -destination 'platform=OS X' \
-		-derivedDataPath .xcbuild -configuration $(XCCONFIG) build | \
-		grep -E "error:|warning:|BUILD" || true
-else
-	@echo "note: Metal ツールチェーンが無いため MLX 無しでビルドします (make metal-toolchain)"
 	swift build -c $(CONFIG) --product Koe
-endif
-
-## MLX を使うために Metal ツールチェーンを入れる (数 GB のダウンロード)
-metal-toolchain:
-	xcodebuild -downloadComponent MetalToolchain
 
 ## Koe.app を組み立てて署名する
 app: build

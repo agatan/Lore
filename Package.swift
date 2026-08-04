@@ -8,19 +8,16 @@ let package = Package(
         .executable(name: "Koe", targets: ["Koe"]),
         .library(name: "KoeKit", targets: ["KoeKit"]),
     ],
+    // 推論は OS 内蔵のモデルだけを使う(設計 D-1 / C-52)。
+    // 追加のモデルを持たないので、依存はデータベースだけになる。
     dependencies: [
         .package(url: "https://github.com/groue/GRDB.swift.git", from: "7.9.0"),
-        .package(url: "https://github.com/argmaxinc/WhisperKit.git", from: "0.14.0"),
-        .package(url: "https://github.com/ml-explore/mlx-swift-examples.git", from: "2.25.0"),
     ],
     targets: [
         .target(
             name: "KoeKit",
             dependencies: [
                 .product(name: "GRDB", package: "GRDB.swift"),
-                .product(name: "WhisperKit", package: "WhisperKit"),
-                .product(name: "MLXLLM", package: "mlx-swift-examples"),
-                .product(name: "MLXLMCommon", package: "mlx-swift-examples"),
             ]
         ),
         .executableTarget(

@@ -130,13 +130,12 @@ public struct VocabularyStore: Sendable {
     private static func upsert(_ entry: VocabularyEntry, db: Database) throws {
         try db.execute(
             sql: """
-                INSERT INTO vocabulary (id, surface, reading, misrecognitions, note, source, enabled, created_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                INSERT INTO vocabulary (id, surface, reading, misrecognitions, source, enabled, created_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT(id) DO UPDATE SET
                   surface = excluded.surface,
                   reading = excluded.reading,
                   misrecognitions = excluded.misrecognitions,
-                  note = excluded.note,
                   source = excluded.source,
                   enabled = excluded.enabled,
                   created_at = excluded.created_at
@@ -146,7 +145,6 @@ public struct VocabularyStore: Sendable {
                 entry.surface,
                 entry.reading,
                 try PersistenceCoding.encode(entry.misrecognitions),
-                entry.note,
                 entry.source.rawValue,
                 entry.enabled,
                 PersistenceCoding.encode(date: entry.createdAt),
@@ -164,7 +162,6 @@ public struct VocabularyStore: Sendable {
             surface: row["surface"],
             reading: row["reading"],
             misrecognitions: try PersistenceCoding.decode([String].self, from: row["misrecognitions"]),
-            note: row["note"],
             source: source,
             enabled: row["enabled"],
             createdAt: try PersistenceCoding.decodeDate(row["created_at"])

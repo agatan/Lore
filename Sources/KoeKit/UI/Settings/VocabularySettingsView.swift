@@ -87,7 +87,7 @@ struct VocabularySettingsView: View {
     private var entriesCard: some View {
         SettingsCard(
             title: "辞書 (\(env.vocabulary.count))",
-            footnote: "聞き取りと仕上げの両方で使われ、表記を統一します。「よくある誤認識」を書いておくと、その表記を自動で直します。"
+            footnote: "聞き取りと仕上げの両方でモデルに渡され、表記を統一します。「よくある誤認識」は、仕上げのときに直す手がかりとして使われます。"
         ) {
             HStack {
                 Text("表記・読み・よくある誤認識を登録します")
@@ -251,10 +251,6 @@ private struct VocabularyEditorSheet: View {
     @Environment(\.dismiss) private var dismiss
     @State private var misrecognitionsText = ""
 
-    private var hasShortPattern: Bool {
-        parsedMisrecognitions.contains { $0.count < FormattingPolicy.minimumReplaceablePatternLength }
-    }
-
     private var parsedMisrecognitions: [String] {
         misrecognitionsText
             .components(separatedBy: CharacterSet(charactersIn: ",\n、"))
@@ -275,18 +271,6 @@ private struct VocabularyEditorSheet: View {
                 ))
                 TextField("よくある誤認識 (改行またはカンマ区切り)", text: $misrecognitionsText, axis: .vertical)
                     .lineLimit(2...4)
-                if hasShortPattern {
-                    Label(
-                        "1 文字のパターンは、他の語を壊す恐れがあるため機械置換には使いません(整形時の指示としてのみ使われます)",
-                        systemImage: "info.circle"
-                    )
-                    .font(.system(size: 10.5))
-                    .foregroundStyle(.secondary)
-                }
-                TextField("メモ (任意)", text: Binding(
-                    get: { entry.note ?? "" },
-                    set: { entry.note = $0.isEmpty ? nil : $0 }
-                ))
             }
             .formStyle(.grouped)
 

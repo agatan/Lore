@@ -34,6 +34,21 @@ public final class SoundPlayer {
 
     public init() {}
 
+    /// 効果音の生成と**出力経路の初期化**を先に済ませる。起動時に一度呼ぶ。
+    ///
+    /// 重いのは波形の合成(実測 9ms)ではなく最初の `NSSound.play()` で、
+    /// CoreAudio の初期化に 180ms ほどかかる。無音で一度鳴らして先に払っておく。
+    /// これをしないと、最初の録音の立ち上がりがその分だけ遅れる(FR-1.1)。
+    public func prewarm() {
+        for cue in Cue.allCases where cache[cue] == nil {
+            cache[cue] = NSSound(data: ToneSynth.wav(for: cue))
+        }
+        guard let silent = cache[.start] else { return }
+        silent.volume = 0
+        silent.play()
+        silent.stop()
+    }
+
     public func play(_ cue: Cue) {
         guard isEnabled, volume > 0 else { return }
         let sound = cache[cue] ?? NSSound(data: ToneSynth.wav(for: cue))

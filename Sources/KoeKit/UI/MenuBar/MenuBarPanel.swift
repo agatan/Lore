@@ -273,8 +273,7 @@ struct MenuBarPanel: View {
         if let error = env.bootError {
             notices.append(Notice(id: "db", title: "履歴 DB を開けません", message: error, actionTitle: nil, action: nil))
         }
-        if let availability = env.engines.sttAvailability[env.settings.sttEngineID],
-           let message = availability.message {
+        if let message = env.engines.sttAvailability.message {
             notices.append(Notice(
                 id: "stt",
                 title: "聞き取りの準備が必要",
@@ -283,8 +282,7 @@ struct MenuBarPanel: View {
                 action: { open(.models) }
             ))
         }
-        if let availability = env.engines.llmAvailability[env.settings.llmEngineID],
-           let message = availability.message {
+        if let message = env.engines.llmAvailability.message {
             notices.append(Notice(
                 id: "llm",
                 title: "文章の仕上げができません",

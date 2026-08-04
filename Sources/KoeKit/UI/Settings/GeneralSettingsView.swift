@@ -2,25 +2,31 @@ import SwiftUI
 
 struct GeneralSettingsView: View {
     var env: AppEnvironment
-    @State private var launchAtLogin = false
 
     private var settings: AppSettings { env.settings }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 20) {
+        // Lazy にするのは表示までの時間を縮めるため。
+        // VStack だと画面外のカードまで先に組むので、AppKit 由来のコントロール
+        // (Toggle / Picker / Slider)の生成コストを全部払ってから初回描画が始まる。
+        // このペインはコントロール数が最も多く、実測でその差が最も大きい。
+        LazyVStack(alignment: .leading, spacing: 20) {
             if !env.isAccessibilityGranted || !env.isMicrophoneGranted {
                 permissionSection
             }
 
             SettingsCard(title: "ホットキー", footnote: "短押しでトグル録音、長押しで push-to-talk。閾値より長く押していれば離した瞬間に停止します。軽く叩いたつもりでも 300ms 前後かかるため、トグルが効きにくいときは閾値を上げてください。") {
-                LabeledContent("録音キー") {
-                    HotkeyRecorderView(binding: Binding(
-                        get: { settings.hotkey },
-                        set: { env.updateHotkey($0) }
-                    ))
+                SettingsRow(title: "録音キー") {
+                    HotkeyRecorderView(
+                        binding: Binding(
+                            get: { settings.hotkey },
+                            set: { env.updateHotkey($0) }
+                        ),
+                        setCaptureMode: { env.setHotkeyCaptureMode($0) }
+                    )
                 }
                 Divider()
-                LabeledContent("長押し判定") {
+                SettingsRow(title: "長押し判定") {
                     HStack(spacing: 10) {
                         Slider(
                             value: Binding(
@@ -46,25 +52,25 @@ struct GeneralSettingsView: View {
             }
 
             SettingsCard(title: "表示と音") {
-                Toggle("録音中に HUD を表示する", isOn: Binding(
+                SettingsToggle(title: "録音中に HUD を表示する", isOn: Binding(
                     get: { settings.hudEnabled },
                     set: { settings.hudEnabled = $0 }
                 ))
-                Toggle("メニューバーに入力レベルを表示する", isOn: Binding(
+                SettingsToggle(title: "メニューバーに入力レベルを表示する", isOn: Binding(
                     get: { settings.showLevelMeterInMenuBar },
                     set: { settings.showLevelMeterInMenuBar = $0 }
                 ))
-                Toggle("起動時に履歴ウィンドウを開く", isOn: Binding(
+                SettingsToggle(title: "起動時に履歴ウィンドウを開く", isOn: Binding(
                     get: { settings.openHistoryAtLaunch },
                     set: { settings.openHistoryAtLaunch = $0 }
                 ))
                 Divider()
-                Toggle("効果音を鳴らす", isOn: Binding(
+                SettingsToggle(title: "効果音を鳴らす", isOn: Binding(
                     get: { settings.soundsEnabled },
                     set: { settings.soundsEnabled = $0 }
                 ))
                 if settings.soundsEnabled {
-                    LabeledContent("音量") {
+                    SettingsRow(title: "音量") {
                         Slider(
                             value: Binding(
                                 get: { settings.soundVolume },
@@ -78,17 +84,21 @@ struct GeneralSettingsView: View {
             }
 
             SettingsCard(title: "履歴", footnote: "履歴は、語彙の自動提案と「ふだんどれくらいで入るか」の集計にも使われます。") {
-                Picker("保持期間", selection: Binding(
-                    get: { settings.historyRetentionDays },
-                    set: { settings.historyRetentionDays = $0; Task { await env.purgeExpiredHistory() } }
-                )) {
-                    Text("無期限").tag(0)
-                    Text("30 日").tag(30)
-                    Text("90 日").tag(90)
-                    Text("1 年").tag(365)
+                SettingsRow(title: "保持期間") {
+                    Picker("", selection: Binding(
+                        get: { settings.historyRetentionDays },
+                        set: { settings.historyRetentionDays = $0; Task { await env.purgeExpiredHistory() } }
+                    )) {
+                        Text("無期限").tag(0)
+                        Text("30 日").tag(30)
+                        Text("90 日").tag(90)
+                        Text("1 年").tag(365)
+                    }
+                    .labelsHidden()
+                    .pickerStyle(.segmented)
+                    .fixedSize()
                 }
-                .pickerStyle(.segmented)
-                LabeledContent("保存件数") {
+                SettingsRow(title: "保存件数") {
                     Text("\(env.historyCount) 件")
                         .font(.system(size: 11))
                         .foregroundStyle(.secondary)
@@ -96,33 +106,38 @@ struct GeneralSettingsView: View {
             }
 
             SettingsCard(title: "常駐", footnote: "しばらく使わないときにメモリを空けます。空けたあとの 1 回目だけ、少し待ち時間が増えます。") {
-                Toggle("ログイン時に起動する", isOn: $launchAtLogin)
-                    .onChange(of: launchAtLogin) { _, newValue in
-                        do {
-                            try LoginItem.setEnabled(newValue)
-                        } catch {
-                            launchAtLogin = LoginItem.isEnabled
-                        }
-                    }
-                if LoginItem.needsApproval {
-                    Text("システム設定 > 一般 > ログイン項目 で承認が必要です")
-                        .font(.system(size: 11))
-                        .foregroundStyle(KoeTheme.warning)
-                }
+                // 状態は AppEnvironment のキャッシュを読む。
+                // ここで SMAppService に問い合わせると、同期 XPC が描画を止める。
+                SettingsToggle(
+                    title: "ログイン時に起動する",
+                    caption: env.loginItemState == .requiresApproval
+                        ? "システム設定 > 一般 > ログイン項目 で承認が必要です" : nil,
+                    isOn: Binding(
+                        get: { env.loginItemState.isEnabled },
+                        set: { newValue in Task { await env.setLoginItem(enabled: newValue) } }
+                    )
+                )
                 Divider()
-                Picker("使わないときメモリを空ける", selection: Binding(
-                    get: { settings.modelIdleUnloadMinutes },
-                    set: { settings.modelIdleUnloadMinutes = $0 }
-                )) {
-                    Text("しない").tag(0)
-                    Text("5 分").tag(5)
-                    Text("10 分").tag(10)
-                    Text("30 分").tag(30)
+                SettingsRow(title: "使わないときメモリを空ける") {
+                    Picker("", selection: Binding(
+                        get: { settings.modelIdleUnloadMinutes },
+                        set: { settings.modelIdleUnloadMinutes = $0 }
+                    )) {
+                        Text("しない").tag(0)
+                        Text("5 分").tag(5)
+                        Text("10 分").tag(10)
+                        Text("30 分").tag(30)
+                    }
+                    .labelsHidden()
+                    .pickerStyle(.segmented)
+                    .fixedSize()
                 }
-                .pickerStyle(.segmented)
             }
         }
-        .task { launchAtLogin = LoginItem.isEnabled }
+        // macOS の設定はスイッチが標準の見た目で、チェックボックスより生成も軽い。
+        .toggleStyle(.switch)
+        // 描画をブロックしない。値が来たら Observation が差分だけ更新する。
+        .task { await env.refreshLoginItem() }
     }
 
     private var permissionSection: some View {

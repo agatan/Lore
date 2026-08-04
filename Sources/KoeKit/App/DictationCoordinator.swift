@@ -15,6 +15,7 @@ public final class DictationCoordinator {
         /// DB のオープンは非同期なので、保存先は都度取得する(起動直後でも状態機械は組み立てられる)。
         public var historyStore: @MainActor () -> HistoryStore?
         public var modes: @MainActor () -> [Mode]
+        public var sharedRules: @MainActor () -> String
         public var vocabulary: @MainActor () -> [VocabularyEntry]
         public var onRecordChanged: @MainActor (SessionRecord) -> Void
 
@@ -23,6 +24,7 @@ public final class DictationCoordinator {
             engines: EngineRegistry,
             historyStore: @MainActor @escaping () -> HistoryStore?,
             modes: @MainActor @escaping () -> [Mode],
+            sharedRules: @MainActor @escaping () -> String = { BuiltinSharedRules.text },
             vocabulary: @MainActor @escaping () -> [VocabularyEntry],
             onRecordChanged: @MainActor @escaping (SessionRecord) -> Void
         ) {
@@ -30,6 +32,7 @@ public final class DictationCoordinator {
             self.engines = engines
             self.historyStore = historyStore
             self.modes = modes
+            self.sharedRules = sharedRules
             self.vocabulary = vocabulary
             self.onRecordChanged = onRecordChanged
         }
@@ -38,9 +41,12 @@ public final class DictationCoordinator {
     /// HUD 用の波形バッファ長。
     static let levelHistoryLength = 64
     static let hudLingerDuration: Duration = .seconds(2)
-    /// 停止後、STT の確定をここまで待つ。超えたら打ち切って途中のテキストを使う。
-    /// エンジンが応答しないときに「認識中」から永遠に戻らないための保険。
-    static let finalizationTimeout: Duration = .seconds(60)
+    /// 停止後、STT の確定を待つ上限。エンジンが応答しないときに
+    /// 「認識中」から永遠に戻らないための保険。
+    ///
+    /// SpeechAnalyzer は録音中に逐次確定していくので、停止後に残るのは末尾だけ。
+    /// 録音長に比例させる必要はない。打ち切っても暫定テキストで先へ進める。
+    static let finalizationTimeout: Duration = .seconds(30)
 
     // MARK: 観測される状態
 
@@ -92,6 +98,11 @@ public final class DictationCoordinator {
     public init(dependencies: Dependencies) {
         self.deps = dependencies
         refreshResolvedMode()
+    }
+
+    /// 効果音の出力経路を温める。起動時に一度呼ぶ(押下時に 180ms 払わないため)。
+    public func prewarmSounds() {
+        sounds.prewarm()
     }
 
     // MARK: 入力
@@ -155,11 +166,14 @@ public final class DictationCoordinator {
         let mode = ModeResolver.resolve(bundleID: target.bundleID, modes: modes, overrideID: pinnedModeID)
             ?? BuiltinModes.defaultMode
         let vocabulary = deps.vocabulary().filter(\.enabled)
-        let systemPrompt = FormattingPolicy.systemPrompt(mode: mode, vocabulary: vocabulary)
+        let systemPrompt = FormattingPolicy.systemPrompt(
+            sharedRules: deps.sharedRules(),
+            mode: mode,
+            vocabulary: vocabulary
+        )
 
-        let sttID = deps.settings.sttEngineID
-        let sttEngine = deps.engines.sttEngine(sttID)
-        let llmEngine = deps.engines.llmEngine(deps.settings.llmEngineID)
+        let sttEngine = deps.engines.stt
+        let llmEngine = deps.engines.llm
 
         let context = SessionContext(
             appBundleID: target.bundleID,
@@ -169,8 +183,8 @@ public final class DictationCoordinator {
             vocabularyCount: vocabulary.count,
             sttEngine: sttEngine.identifier,
             sttModel: sttEngine.modelName,
-            llmEngine: llmEngine?.identifier,
-            llmModel: llmEngine?.modelName,
+            llmEngine: llmEngine.identifier,
+            llmModel: llmEngine.modelName,
             trigger: trigger
         )
 
@@ -241,7 +255,7 @@ public final class DictationCoordinator {
             try await complete(
                 transcript: salvaged,
                 language: LanguageDetector.detect(salvaged),
-                llm: deps.engines.llmEngine(deps.settings.llmEngineID),
+                llm: deps.engines.llm,
                 alreadyHandled: true
             )
         } catch {
@@ -273,7 +287,7 @@ public final class DictationCoordinator {
 
     private func runSession(
         engine: any SttEngine,
-        llm: (any LlmEngine)?,
+        llm: any LlmEngine,
         hints: SttHints,
         vocabulary: [VocabularyEntry]
     ) async {
@@ -284,7 +298,7 @@ public final class DictationCoordinator {
                 finish(phase: .finished(.failed(AudioCapture.Failure.microphoneDenied.localizedDescription)), detail: nil)
                 return
             }
-            let format = try await deps.engines.captureFormat(for: engine.identifier, hints: hints)
+            let format = try await deps.engines.captureFormat(hints: hints)
             // 初回だけ prepare を待つため、その間に離してしまうケースを弾く。
             guard isRecording else {
                 finish(phase: .finished(.failed("録音の準備が間に合いませんでした")), detail: nil)
@@ -330,7 +344,7 @@ public final class DictationCoordinator {
     private func complete(
         transcript: String,
         language: RecognizedLanguage,
-        llm: (any LlmEngine)?,
+        llm: any LlmEngine,
         alreadyHandled: Bool = false
     ) async throws {
         if !alreadyHandled {
@@ -357,29 +371,23 @@ public final class DictationCoordinator {
 
         phase = .formatting
 
-        // 語彙の誤認識は LLM より先に、決定的に直す。整形が失敗してもこの矯正だけは残る。
-        let corrected = FormattingPolicy.applyVocabularyCorrections(
-            to: transcript,
-            vocabulary: deps.vocabulary()
-        )
-        let fallbackText = corrected.text
-
-        if let llm {
+        // 語彙は STT のバイアスと整形プロンプトの語彙表として効かせる。
+        // Koe 自身は文字列を書き換えないので、整形できなかったときは生テキストがそのまま出る(C-43)。
+        do {
             let started = ContinuousClock.now
             let prompt = FormattingPrompt(
                 system: draft.context.systemPrompt,
-                user: FormattingPolicy.userPrompt(transcript: corrected.text)
+                user: FormattingPolicy.userPrompt(transcript: transcript)
             )
             do {
                 let output = try await llm.complete(prompt: prompt, timeout: deps.settings.formattingTimeout)
                 let latency = elapsedMs(since: started)
-                switch FormattingPolicy.validate(output: output, input: corrected.text) {
+                switch FormattingPolicy.validate(output: output, input: transcript) {
                 case .success(let formatted):
                     record = draft.markFormatted(formatted, llmLatencyMs: latency) ?? record
                 case .failure(let rejection):
                     record = draft.markFormattingSkipped(
                         reason: rejection.message,
-                        fallbackText: fallbackText,
                         llmLatencyMs: latency
                     ) ?? record
                     statusDetail = "整形をスキップしました(\(rejection.message))"
@@ -389,18 +397,10 @@ public final class DictationCoordinator {
                 let reason = error.localizedDescription
                 record = draft.markFormattingSkipped(
                     reason: reason,
-                    fallbackText: fallbackText,
                     llmLatencyMs: latency
                 ) ?? record
                 statusDetail = "整形をスキップしました(\(reason))"
             }
-        } else {
-            record = draft.markFormattingSkipped(
-                reason: "整形エンジンが利用できません",
-                fallbackText: fallbackText,
-                llmLatencyMs: nil
-            ) ?? record
-            statusDetail = "整形をスキップしました"
         }
         self.draft = draft
         persist(record)

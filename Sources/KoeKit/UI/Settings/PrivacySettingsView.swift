@@ -7,7 +7,8 @@ struct PrivacySettingsView: View {
     @State private var showDeleteConfirm = false
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 20) {
+        // 画面外のカードを先に組まない(GeneralSettingsView と同じ理由)。
+        LazyVStack(alignment: .leading, spacing: 20) {
             VStack(alignment: .leading, spacing: 10) {
                 HStack(spacing: 8) {
                     Image(systemName: "hand.raised.fill")

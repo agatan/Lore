@@ -23,6 +23,8 @@ public final class AppEnvironment {
 
     public private(set) var database: KoeDatabase?
     public private(set) var modes: [Mode] = []
+    /// 全モードの前に置かれる共通ルール。編集できる(C-53)。
+    public private(set) var sharedRules = BuiltinSharedRules.text
     public private(set) var vocabulary: [VocabularyEntry] = []
     public private(set) var pendingSuggestions: [VocabularySuggestion] = []
     public private(set) var history: [SessionRecord] = []
@@ -32,6 +34,8 @@ public final class AppEnvironment {
     public private(set) var bootError: String?
     public private(set) var isAccessibilityGranted = false
     public private(set) var isMicrophoneGranted = false
+    /// ログイン項目の状態。問い合わせが同期 XPC なので、UI は必ずこのキャッシュを読む。
+    public private(set) var loginItemState: LoginItem.State = .unknown
     public private(set) var hotkeyError: String?
     public private(set) var analysisState: AnalysisState = .idle
     public private(set) var lastAnalysisAt: Date?
@@ -39,13 +43,10 @@ public final class AppEnvironment {
     /// メインウィンドウで開いているセクション。メニューからの遷移でも使う。
     public var mainSection: MainSection = .history
 
-    /// モデル取得の進捗(0...1)。nil = 実行中でない。
-    public private(set) var modelDownloadProgress: Double?
-    public private(set) var modelDownloadError: String?
-    public private(set) var modelDiskUsage: Int64 = 0
-    /// いまダウンロード中の選択肢。カードに進捗を出すために持つ。
-    public private(set) var downloadingChoiceID: ModelChoice.ID?
-    /// エンジン・モデル別の実測レイテンシ。
+    /// 音声モデル取得の進捗(0...1)。nil = 実行中でない。
+    public private(set) var speechAssetProgress: Double?
+    public private(set) var speechAssetError: String?
+    /// エンジン別の実測レイテンシ。
     public private(set) var measuredLatencies = MeasuredLatencies()
 
     private var permissionWatcher: Task<Void, Never>?
@@ -60,6 +61,7 @@ public final class AppEnvironment {
                 engines: engines,
                 historyStore: { [weak self] in self?.database?.history },
                 modes: { [weak self] in self?.modes ?? BuiltinModes.all },
+                sharedRules: { [weak self] in self?.sharedRules ?? BuiltinSharedRules.text },
                 vocabulary: { [weak self] in self?.vocabulary ?? [] },
                 onRecordChanged: { [weak self] record in self?.mergeIntoHistory(record) }
             )
@@ -76,7 +78,9 @@ public final class AppEnvironment {
             let database = try await KoeDatabase.openDefault()
             self.database = database
             try await database.modes.seedBuiltinsIfNeeded()
+            try await database.sharedRules.seedOrMigrate()
             await reloadModes()
+            await reloadSharedRules()
             await reloadVocabulary()
             await reloadHistory()
             await purgeExpiredHistory()
@@ -89,6 +93,10 @@ public final class AppEnvironment {
         startHotkeyMonitor()
         startPermissionWatcher()
 
+        // 起動中に済ませておく。設定を開いた瞬間に問い合わせると、その待ちが表示の遅れになる。
+        Task { await refreshLoginItem() }
+        coordinator.prewarmSounds()
+
         await applyEngineChange()
         scheduleBackgroundAnalysis()
     }
@@ -100,9 +108,11 @@ public final class AppEnvironment {
         hotkeys.onEvent = { [weak self] event in
             self?.coordinator.handle(hotkey: event)
         }
-        hotkeys.onEscape = { [weak self] in
+        // 消費するかどうかだけを同期で答え、中止処理は次のターンへ回す
+        // (イベントタップのコールバックを遅くしない、C-57)。
+        hotkeys.shouldSwallowEscape = { [weak self] in
             guard let self, coordinator.isBusy else { return false }
-            coordinator.cancel()
+            DispatchQueue.main.async { [weak self] in self?.coordinator.cancel() }
             return true
         }
     }
@@ -120,6 +130,11 @@ public final class AppEnvironment {
             hotkeyError = error.localizedDescription
             KoeLog.hotkey.error("ホットキー監視を開始できません: \(error.localizedDescription, privacy: .public)")
         }
+    }
+
+    /// ホットキーを記録している間はグローバル監視を止める(録音が始まらないように)。
+    public func setHotkeyCaptureMode(_ capturing: Bool) {
+        hotkeys.setSuspended(capturing)
     }
 
     public func updateHotkey(_ binding: HotkeyBinding) {
@@ -146,6 +161,22 @@ public final class AppEnvironment {
 
     public func requestAccessibility() {
         Permissions.requestAccessibility()
+    }
+
+    // MARK: ログイン項目
+
+    public func refreshLoginItem() async {
+        loginItemState = await LoginItem.currentState()
+    }
+
+    public func setLoginItem(enabled: Bool) async {
+        do {
+            loginItemState = try await LoginItem.setEnabled(enabled)
+        } catch {
+            // 反映できなかったので、実際の状態を読み直して UI を現実に合わせる。
+            KoeLog.ui.error("ログイン項目の変更に失敗: \(error.localizedDescription, privacy: .public)")
+            await refreshLoginItem()
+        }
     }
 
     /// 権限は「システム設定で後から付与」されるため、未付与のときだけ様子を見る。
@@ -185,6 +216,34 @@ public final class AppEnvironment {
             KoeLog.persistence.error("モードの読み込みに失敗: \(error.localizedDescription, privacy: .public)")
         }
     }
+
+    // MARK: 共通ルール
+
+    public func reloadSharedRules() async {
+        guard let database else { return }
+        do {
+            sharedRules = try await database.sharedRules.current()
+        } catch {
+            KoeLog.persistence.error("共通ルールの読み込みに失敗: \(error.localizedDescription, privacy: .public)")
+        }
+    }
+
+    public func saveSharedRules(_ text: String) async {
+        guard let database else { return }
+        try? await database.sharedRules.save(text)
+        await reloadSharedRules()
+    }
+
+    public func resetSharedRules() async {
+        guard let database else { return }
+        _ = try? await database.sharedRules.reset()
+        await reloadSharedRules()
+    }
+
+    /// 同梱内容から変更されているか。
+    public var isSharedRulesEdited: Bool { sharedRules != BuiltinSharedRules.text }
+
+    // MARK: モード
 
     public func save(mode: Mode) async {
         guard let database else { return }
@@ -299,7 +358,8 @@ public final class AppEnvironment {
     // MARK: 語彙自動提案
 
     public func runAnalysis(force: Bool) async {
-        guard let database, let llm = engines.llmEngine(settings.llmEngineID) else { return }
+        guard let database else { return }
+        let llm = engines.llm
         guard analysisState != .running else { return }
         analysisState = .running
         let job = VocabularySuggestionJob(
@@ -310,11 +370,7 @@ public final class AppEnvironment {
         )
         do {
             let result = try await job.run(force: force)
-            if let reason = result.skippedReason {
-                analysisState = .finished(reason)
-            } else {
-                analysisState = .finished("\(result.inspectedSessions) 件を分析し、\(result.created) 件の候補を追加しました")
-            }
+            analysisState = .finished(Self.message(for: result))
             let now = Date()
             try? await database.meta.setDate(now, forKey: Self.lastAnalysisRunKey)
             lastAnalysisAt = now
@@ -323,6 +379,17 @@ public final class AppEnvironment {
             analysisState = .failed(error.localizedDescription)
             KoeLog.analysis.error("語彙分析に失敗: \(error.localizedDescription, privacy: .public)")
         }
+    }
+
+    /// 分析結果の一行報告。部分的な失敗を「成功」に丸めない。
+    static func message(for result: VocabularySuggestionJob.Result) -> String {
+        if let reason = result.skippedReason { return reason }
+        var message = "\(result.inspectedSessions) 件を分析し、\(result.created) 件の候補を追加しました"
+        if result.isPartial {
+            message += "(\(result.batches) 回のうち \(result.failedBatches) 回が失敗したため、"
+                + "残りは次回もう一度分析します)"
+        }
+        return message
     }
 
     /// アイドル時にバックグラウンドで回す(FR-6.4)。起動直後は避ける。
@@ -342,38 +409,20 @@ public final class AppEnvironment {
 
     // MARK: モデル
 
-    /// 聞き取りに使うモデルを選ぶ。
-    public func selectTranscription(_ choice: ModelChoice) async {
-        settings.sttEngineID = choice.engine
-        if let modelID = choice.modelID { settings.whisperModelID = modelID }
-        await applyEngineChange()
-    }
-
-    /// 仕上げに使うモデルを選ぶ。
-    public func selectFormatting(_ choice: ModelChoice) async {
-        settings.llmEngineID = choice.engine
-        if let modelID = choice.modelID { settings.mlxModelID = modelID }
-        await applyEngineChange()
-    }
-
-    /// 選択肢のモデルを取得する。選んでから取得するので、取得後すぐ使える状態になる。
-    public func download(_ choice: ModelChoice) async {
-        if TranscriptionCatalog.all.contains(where: { $0.id == choice.id }) {
-            await selectTranscription(choice)
-        } else {
-            await selectFormatting(choice)
-        }
-        downloadingChoiceID = choice.id
-        defer { downloadingChoiceID = nil }
-
-        await download { [engines, settings] progress in
-            switch choice.engine {
-            case .whisperKit, .speechAnalyzer:
-                try await engines.sttEngine(settings.sttEngineID).install(progress: progress)
-            default:
-                guard let engine = engines.llmEngine(settings.llmEngineID) else { return }
-                try await engine.install(progress: progress)
+    /// 日本語の音声モデルを取得する。OS の資産だが、取得は明示操作で行う。
+    public func installSpeechAssets() async {
+        guard speechAssetProgress == nil else { return }
+        speechAssetProgress = 0
+        speechAssetError = nil
+        do {
+            try await engines.installSpeechAssets { progress in
+                Task { @MainActor [weak self] in self?.speechAssetProgress = progress }
             }
+            speechAssetProgress = nil
+        } catch {
+            speechAssetProgress = nil
+            speechAssetError = error.localizedDescription
+            KoeLog.engine.error("音声モデルの取得に失敗: \(error.localizedDescription, privacy: .public)")
         }
     }
 
@@ -382,34 +431,9 @@ public final class AppEnvironment {
         measuredLatencies = (try? await database.history.measuredLatencies(limit: 300)) ?? MeasuredLatencies()
     }
 
-    private func download(_ operation: (@escaping @Sendable (Double) -> Void) async throws -> Void) async {
-        guard modelDownloadProgress == nil else { return }
-        modelDownloadProgress = 0
-        modelDownloadError = nil
-        do {
-            try await operation { progress in
-                Task { @MainActor [weak self] in self?.modelDownloadProgress = progress }
-            }
-            modelDownloadProgress = nil
-            await applyEngineChange()
-        } catch {
-            modelDownloadProgress = nil
-            modelDownloadError = error.localizedDescription
-            KoeLog.engine.error("モデル取得に失敗: \(error.localizedDescription, privacy: .public)")
-        }
-    }
-
     public func applyEngineChange() async {
-        engines.updateModelSelection(whisper: settings.whisperModelID, mlx: settings.mlxModelID)
         await engines.refreshAvailability()
-        await engines.prewarm(sttID: settings.sttEngineID, hints: currentHints())
-        modelDiskUsage = ModelStore.diskUsage()
-    }
-
-    public func deleteDownloadedModels() async {
-        try? ModelStore.delete(directory: ModelStore.rootDirectory)
-        await engines.unloadAll()
-        await applyEngineChange()
+        await engines.prewarm(hints: currentHints())
     }
 
     func currentHints() -> SttHints {

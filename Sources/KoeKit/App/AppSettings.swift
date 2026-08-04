@@ -17,10 +17,6 @@ public final class AppSettings {
         public var hudEnabled: Bool = true
         /// 0 = 無期限。
         public var historyRetentionDays: Int = 0
-        public var sttEngineID: String = EngineIdentifier.speechAnalyzer.rawValue
-        public var llmEngineID: String = EngineIdentifier.foundationModels.rawValue
-        public var whisperModelID: String = WhisperModelCatalog.defaultModelID
-        public var mlxModelID: String = MlxModelCatalog.defaultModelID
         public var formattingTimeoutMs: Int = 6_000
         /// 0 = アンロードしない。
         public var modelIdleUnloadMinutes: Int = 10
@@ -41,10 +37,6 @@ public final class AppSettings {
             soundVolume = try container.decodeIfPresent(Double.self, forKey: .soundVolume) ?? fallback.soundVolume
             hudEnabled = try container.decodeIfPresent(Bool.self, forKey: .hudEnabled) ?? fallback.hudEnabled
             historyRetentionDays = try container.decodeIfPresent(Int.self, forKey: .historyRetentionDays) ?? fallback.historyRetentionDays
-            sttEngineID = try container.decodeIfPresent(String.self, forKey: .sttEngineID) ?? fallback.sttEngineID
-            llmEngineID = try container.decodeIfPresent(String.self, forKey: .llmEngineID) ?? fallback.llmEngineID
-            whisperModelID = try container.decodeIfPresent(String.self, forKey: .whisperModelID) ?? fallback.whisperModelID
-            mlxModelID = try container.decodeIfPresent(String.self, forKey: .mlxModelID) ?? fallback.mlxModelID
             formattingTimeoutMs = try container.decodeIfPresent(Int.self, forKey: .formattingTimeoutMs) ?? fallback.formattingTimeoutMs
             modelIdleUnloadMinutes = try container.decodeIfPresent(Int.self, forKey: .modelIdleUnloadMinutes) ?? fallback.modelIdleUnloadMinutes
             vocabularyAnalysisEnabled = try container.decodeIfPresent(Bool.self, forKey: .vocabularyAnalysisEnabled) ?? fallback.vocabularyAnalysisEnabled
@@ -114,26 +106,6 @@ public final class AppSettings {
     public var historyRetentionDays: Int {
         get { storage.historyRetentionDays }
         set { storage.historyRetentionDays = max(0, newValue); persist() }
-    }
-
-    public var sttEngineID: EngineIdentifier {
-        get { EngineIdentifier(storage.sttEngineID) }
-        set { storage.sttEngineID = newValue.rawValue; persist() }
-    }
-
-    public var llmEngineID: EngineIdentifier {
-        get { EngineIdentifier(storage.llmEngineID) }
-        set { storage.llmEngineID = newValue.rawValue; persist() }
-    }
-
-    public var whisperModelID: String {
-        get { storage.whisperModelID }
-        set { storage.whisperModelID = newValue; persist() }
-    }
-
-    public var mlxModelID: String {
-        get { storage.mlxModelID }
-        set { storage.mlxModelID = newValue; persist() }
     }
 
     public var formattingTimeout: Duration {

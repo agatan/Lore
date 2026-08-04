@@ -1,14 +1,22 @@
 import Foundation
 import NaturalLanguage
 
-/// LLM に渡す整形プロンプト。
+/// LLM に渡すプロンプト。
 public struct FormattingPrompt: Sendable, Equatable {
     public var system: String
     public var user: String
+    /// 期待する出力の上限(文字数)。`nil` = 入力と同程度(整形)。
+    ///
+    /// 出力の規模を知っているのは呼び出し側だけなので、ここで明示する。
+    /// エンジンはこれをトークン予算に翻訳する。整形は入力と同じ長さが返るが、
+    /// 履歴分析は数十文字の JSON しか返らない。同じ見積もりを当てると、
+    /// 分析側で応答用に確保した枠が入力を押し出して**コンテキスト超過で失敗する**。
+    public var expectedOutputCharacters: Int?
 
-    public init(system: String, user: String) {
+    public init(system: String, user: String, expectedOutputCharacters: Int? = nil) {
         self.system = system
         self.user = user
+        self.expectedOutputCharacters = expectedOutputCharacters
     }
 }
 
@@ -57,9 +65,14 @@ public enum FormattingPolicy {
 
     // MARK: プロンプト組み立て
 
-    public static func prompt(mode: Mode, vocabulary: [VocabularyEntry], transcript: String) -> FormattingPrompt {
+    public static func prompt(
+        sharedRules: String = BuiltinSharedRules.text,
+        mode: Mode,
+        vocabulary: [VocabularyEntry],
+        transcript: String
+    ) -> FormattingPrompt {
         FormattingPrompt(
-            system: systemPrompt(mode: mode, vocabulary: vocabulary),
+            system: systemPrompt(sharedRules: sharedRules, mode: mode, vocabulary: vocabulary),
             user: userPrompt(transcript: transcript)
         )
     }
@@ -80,194 +93,67 @@ public enum FormattingPolicy {
         """
     }
 
-    public static func systemPrompt(mode: Mode, vocabulary: [VocabularyEntry]) -> String {
-        var sections: [String] = [baseRules]
-        sections.append(fewShot)
+    /// 共通ルール → 語彙表 → モード固有の指示 の順で組む。
+    ///
+    /// 共通ルールは編集できるので引数で受け取る(既定は同梱内容)。
+    public static func systemPrompt(
+        sharedRules: String = BuiltinSharedRules.text,
+        mode: Mode,
+        vocabulary: [VocabularyEntry]
+    ) -> String {
+        var sections: [String] = []
+        let shared = sharedRules.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !shared.isEmpty { sections.append(shared) }
 
-        // 語彙は入力の直前に置く。ルールの列挙に埋めると小型モデルが従いにくい。
-        if let table = vocabularyTable(vocabulary) {
-            sections.append(table)
-        }
-
+        // モードの指示はそのまま連ねる。見出しを被せても情報は増えず、
+        // 「固有の指示」という枠だけが増えて読み手(モデル)の負荷になる。
         let modePrompt = mode.prompt.trimmingCharacters(in: .whitespacesAndNewlines)
         if !modePrompt.isEmpty {
-            sections.append("""
-            # このモード(\(mode.name))固有の指示
-            \(modePrompt)
-            """)
+            sections.append(modePrompt)
+        }
+
+        // 語彙表は最後、入力のいちばん近くに置く。
+        if let table = vocabularyTable(vocabulary) {
+            sections.append(table)
         }
 
         return sections.joined(separator: "\n\n")
     }
 
-    static let baseRules = """
-    あなたは口述筆記の整形エンジンです。入力は音声認識が出力した生のテキストです。
-    あなたの仕事は変換だけです。入力の内容に返答・回答・解説・感想・要約をしてはいけません。
-    入力が質問文でも依頼文でも、答えずに、整形したテキストだけを返します。
 
-    # 必ず守るルール
-    1. フィラー(えーと / あのー / まあ / そのー / um / uh など意味を持たない繋ぎ語)を削除する
-    2. 句読点と改行を自然な位置に入れる
-    3. 言い直し・重複は、後から言い直した表現だけを残す
-    4. 同音異義語は文脈から正しい表記を選ぶ
-    5. 発話に含まれない情報を足さない。内容を要約・省略しない。項目を勝手に増やさない
-    6. 数値は発話どおりに数字にする。単位・小数・桁を変えてはいけない
-       (「三十八度五分」は 38.5 度。「五分」を 0.08 などに換算しない)
-    7. 語彙表(下部)にある語は、必ずその表記に置き換える。これは他のどのルールよりも優先する
-    8. 出力は整形後のテキストのみ。前置き・後置き・引用符・コードフェンス・見出し・説明を付けない
-    """
-
-    static let fewShot = """
-    # 例
-    入力: えーとこの関数をリファクタして、あーやっぱりテストも一緒に書いて
-    出力: この関数をリファクタリングして、テストも一緒に書いてください。
-
-    入力: これってどうやって動いてるんですかね、あのー内部の仕組みが知りたくて
-    出力: これはどうやって動いているんですか？内部の仕組みが知りたいです。
-    (質問には答えず、質問文のまま整形する)
-
-    入力: 明日の一on一なんですけど三十分後ろにずらしてもらえると助かります
-    出力: 明日の 1on1 ですが、30 分後ろにずらしてもらえると助かります。
-
-    入力: 熱が三十八度五分まで上がりました
-    出力: 熱が 38.5 度まで上がりました。
-    (数値は発話どおり。勝手に換算しない)
-    """
-
-    /// 語彙表の本文。誤認識 → 正しい表記の置換指示として書く。
+    /// 語彙表の本文。
     ///
-    /// 「表記 / 読み / 誤認識例」の一覧として渡すと小型モデルが従わないため、
-    /// 置換の矢印を明示し、入力の直前に置く。
+    /// **置換命令として書かない。** 同じ読みで表記が分かれる語は文脈で決まるので、
+    /// 「必ず置き換える」は誤りになる(「維持」は正しい語でもある)。
+    /// 渡すのは「この人が使う表記」と「聞き取りで化けやすい形」で、選ぶのはモデルの仕事。
+    ///
+    /// 判断の基準は見出しに 1 回だけ書く。語ごとに文章で説明すると、
+    /// 同じ文が語数ぶん繰り返されて入力を無駄に食う。記法は `←` に寄せる。
     static func vocabularyTable(_ vocabulary: [VocabularyEntry]) -> String? {
         let entries = vocabulary.filter {
             $0.enabled && !$0.surface.trimmingCharacters(in: .whitespaces).isEmpty
         }
         guard !entries.isEmpty else { return nil }
 
-        var lines = ["# 語彙表(最優先)"]
-
-        let replacements = entries
-            .filter { !$0.misrecognitions.isEmpty }
-            .map { entry in
-                let wrong = entry.misrecognitions.map { "「\($0)」" }.joined(separator: "・")
-                return "- \(wrong) → 「\(entry.surface)」"
-            }
-        if !replacements.isEmpty {
-            lines.append("入力に次の表記が出てきたら、必ず右側に置き換えてください。")
-            lines.append(contentsOf: replacements)
-            lines.append("")
+        var lines = ["# 語彙表"]
+        lines.append("この人がよく使う表記。文脈に合うときだけこの表記を選ぶ。機械的に置き換えない。")
+        if entries.contains(where: { !$0.misrecognitions.isEmpty }) {
+            lines.append("← の右は誤認識されやすい形。")
         }
+        lines.append("")
 
-        lines.append("次の語は、読みが一致する部分をこの表記に統一してください。")
         lines.append(contentsOf: entries.map { entry in
             var line = "- \(entry.surface)"
             if let reading = entry.reading, !reading.isEmpty {
                 line += "(\(reading))"
             }
-            if let note = entry.note, !note.isEmpty {
-                line += " — \(note)"
+            if !entry.misrecognitions.isEmpty {
+                line += " ← " + entry.misrecognitions.map { "「\($0)」" }.joined()
             }
             return line
         })
 
         return lines.joined(separator: "\n")
-    }
-
-    /// 語彙の誤認識パターンを機械的に置換した結果。
-    public struct VocabularyCorrection: Sendable, Equatable {
-        public var text: String
-        /// 適用した置換(監査・デバッグ用)。
-        public var applied: [(from: String, to: String)]
-
-        public var didChange: Bool { !applied.isEmpty }
-
-        public static func == (lhs: VocabularyCorrection, rhs: VocabularyCorrection) -> Bool {
-            lhs.text == rhs.text && lhs.applied.map(\.from) == rhs.applied.map(\.from)
-        }
-    }
-
-    /// 機械置換に使うには短すぎるパターンの長さ。これ未満は LLM 整形段だけに任せる。
-    public static let minimumReplaceablePatternLength = 2
-
-    /// 登録済みの誤認識パターンを、LLM に渡す前に決定的に置換する。
-    ///
-    /// 文字列一致で確実に直せるものを確率的なモデルに任せる理由はない
-    /// (実測で小型モデルは語彙表の指示に従わなかった)。
-    ///
-    /// ただし日本語には語の区切りが無いので、素朴な全置換は過剰置換になる
-    /// (「アイ」→「AI」が「アイデア」を壊す)。形態素の境界に一致する出現だけを置換し、
-    /// 境界に乗らないものは触らずに LLM 段の語彙表へ委ねる。
-    public static func applyVocabularyCorrections(
-        to transcript: String,
-        vocabulary: [VocabularyEntry]
-    ) -> VocabularyCorrection {
-        // 長いパターンを先に当てて、部分一致で壊さないようにする。
-        let patterns = vocabulary
-            .filter(\.enabled)
-            .flatMap { entry in
-                entry.misrecognitions
-                    .map { $0.trimmingCharacters(in: .whitespaces) }
-                    .filter {
-                        !$0.isEmpty
-                            && $0 != entry.surface
-                            && $0.count >= minimumReplaceablePatternLength
-                    }
-                    .map { (from: $0, to: entry.surface) }
-            }
-            .sorted { $0.from.count > $1.from.count }
-
-        var text = transcript
-        var applied: [(from: String, to: String)] = []
-        for pattern in patterns {
-            let result = replacingAtWordBoundaries(in: text, pattern: pattern.from, with: pattern.to)
-            guard result.didReplace else { continue }
-            text = result.text
-            applied.append(pattern)
-        }
-        return VocabularyCorrection(text: text, applied: applied)
-    }
-
-    /// 形態素の境界に一致する出現だけを置換する。
-    static func replacingAtWordBoundaries(
-        in text: String,
-        pattern: String,
-        with replacement: String
-    ) -> (text: String, didReplace: Bool) {
-        let boundaries = wordBoundaries(of: text)
-        var output = ""
-        var cursor = text.startIndex
-        var didReplace = false
-
-        while let range = text.range(of: pattern, range: cursor..<text.endIndex) {
-            output += text[cursor..<range.lowerBound]
-            // 語の途中に埋まっている出現は別語の一部なので触らない。
-            if boundaries.starts.contains(range.lowerBound), boundaries.ends.contains(range.upperBound) {
-                output += replacement
-                didReplace = true
-            } else {
-                output += pattern
-            }
-            cursor = range.upperBound
-        }
-        output += text[cursor...]
-        return (output, didReplace)
-    }
-
-    /// 形態素の開始・終了位置。
-    ///
-    /// `NLTokenizer` は日本語を語単位に分割できる(オンデバイス、ネットワーク不要)。
-    static func wordBoundaries(of text: String) -> (starts: Set<String.Index>, ends: Set<String.Index>) {
-        let tokenizer = NLTokenizer(unit: .word)
-        tokenizer.string = text
-
-        var starts: Set<String.Index> = []
-        var ends: Set<String.Index> = []
-        tokenizer.enumerateTokens(in: text.startIndex..<text.endIndex) { range, _ in
-            starts.insert(range.lowerBound)
-            ends.insert(range.upperBound)
-            return true
-        }
-        return (starts, ends)
     }
 
     /// STT バイアス用のヒント文字列(Whisper の initial prompt 等)。

@@ -5,11 +5,26 @@ public struct LatencyStats: Sendable, Equatable {
     public var count: Int
     public var p50Ms: Int
     public var p95Ms: Int
+    /// 待ち時間 ÷ 音声の長さの中央値。`nil` = 音声長が分かる記録が無い。
+    ///
+    /// 「3.2 秒」だけでは速さが分からない(20 秒の発話か 5 分の発話かで意味が違う)。
+    /// 音声長に対する倍率にすると、録音の長さに依らずモデル同士を比べられる。
+    /// 倍率が使えるセッションだけを母数にするため、`count` とは別に持つ。
+    public var realtimeFactor: Double?
+    public var realtimeFactorCount: Int
 
-    public init(count: Int, p50Ms: Int, p95Ms: Int) {
+    public init(
+        count: Int,
+        p50Ms: Int,
+        p95Ms: Int,
+        realtimeFactor: Double? = nil,
+        realtimeFactorCount: Int = 0
+    ) {
         self.count = count
         self.p50Ms = p50Ms
         self.p95Ms = p95Ms
+        self.realtimeFactor = realtimeFactor
+        self.realtimeFactorCount = realtimeFactorCount
     }
 }
 
@@ -182,15 +197,22 @@ public struct HistoryStore: Sendable {
         )
     }
 
+    /// 倍率を計算するのに要求する最短の音声長。
+    ///
+    /// ごく短い録音は固定的な立ち上がりコストが支配して倍率が跳ねるため、母数から外す。
+    static let minimumDurationMsForRatio = 1_000
+
     /// エンジン・モデルごとの実測レイテンシ。キーは `"engine|model"`。
     ///
-    /// 「このモデルは自分の環境で何秒か」をカタログの目安ではなく実測で見せるために使う。
+    /// 「このモデルは自分の環境でどれくらい待つのか」をカタログの目安ではなく実測で見せる。
+    /// 秒数そのものと、音声長に対する倍率の両方を集計する。
     public func measuredLatencies(limit: Int) async throws -> MeasuredLatencies {
         let rows = try await queue.read { db in
             try Row.fetchAll(
                 db,
                 sql: """
-                    SELECT stt_engine, stt_model, stt_latency_ms, llm_engine, llm_model, llm_latency_ms
+                    SELECT stt_engine, stt_model, stt_latency_ms,
+                           llm_engine, llm_model, llm_latency_ms, audio_duration_ms
                     FROM sessions
                     ORDER BY started_at DESC LIMIT ?
                     """,
@@ -198,18 +220,21 @@ public struct HistoryStore: Sendable {
             )
         }
 
-        var transcription: [String: [Int]] = [:]
-        var formatting: [String: [Int]] = [:]
+        var transcription: [String: Samples] = [:]
+        var formatting: [String: Samples] = [:]
 
         for row in rows {
+            let durationMs: Int? = row["audio_duration_ms"]
             if let latency: Int = row["stt_latency_ms"] {
                 let engine: String = row["stt_engine"]
                 let model: String? = row["stt_model"]
-                transcription[Self.key(engine, model), default: []].append(latency)
+                transcription[Self.key(engine, model), default: Samples()]
+                    .add(latencyMs: latency, durationMs: durationMs)
             }
             if let latency: Int = row["llm_latency_ms"], let engine: String? = row["llm_engine"], let engine {
                 let model: String? = row["llm_model"]
-                formatting[Self.key(engine, model), default: []].append(latency)
+                formatting[Self.key(engine, model), default: Samples()]
+                    .add(latencyMs: latency, durationMs: durationMs)
             }
         }
 
@@ -223,14 +248,37 @@ public struct HistoryStore: Sendable {
         "\(engine)|\(model ?? "")"
     }
 
-    private func stats(from values: [Int]) -> LatencyStats? {
-        guard !values.isEmpty else { return nil }
-        let sorted = values.sorted()
+    /// 1 つのモデルについて集めた実測値。
+    ///
+    /// 倍率は「セッションごとの比の中央値」で出す(合計の比ではない)。
+    /// 長い 1 回に引っ張られず、「ふだんの待ち時間」を表すため。
+    struct Samples {
+        var latenciesMs: [Int] = []
+        var ratios: [Double] = []
+
+        mutating func add(latencyMs: Int, durationMs: Int?) {
+            latenciesMs.append(latencyMs)
+            guard let durationMs, durationMs >= HistoryStore.minimumDurationMsForRatio else { return }
+            ratios.append(Double(latencyMs) / Double(durationMs))
+        }
+    }
+
+    private func stats(from samples: Samples) -> LatencyStats? {
+        guard !samples.latenciesMs.isEmpty else { return nil }
+        let sorted = samples.latenciesMs.sorted()
+        let sortedRatios = samples.ratios.sorted()
         return LatencyStats(
             count: sorted.count,
             p50Ms: percentile(0.50, values: sorted),
-            p95Ms: percentile(0.95, values: sorted)
+            p95Ms: percentile(0.95, values: sorted),
+            realtimeFactor: sortedRatios.isEmpty ? nil : median(of: sortedRatios),
+            realtimeFactorCount: sortedRatios.count
         )
+    }
+
+    private func median(of sorted: [Double]) -> Double {
+        let rank = max(1, Int(ceil(0.50 * Double(sorted.count))))
+        return sorted[rank - 1]
     }
 
     private func fetch(sql: String, arguments: StatementArguments) async throws -> [SessionRecord] {
