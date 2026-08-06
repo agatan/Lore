@@ -14,19 +14,17 @@ public final class SpeechAnalyzerStt: SttEngine {
     public var modelName: String? { "システム音声モデル" }
 
     public func availability(languagePreference: LanguagePreference) async -> EngineAvailability {
-        guard SpeechTranscriber.isAvailable else {
-            return .unavailable("この Mac では SpeechAnalyzer を利用できません")
-        }
-        let locale = Self.locale(for: languagePreference)
         do {
-            let transcriber = try await State.transcriber(for: locale)
-            switch try await State.assetState(for: transcriber, locale: locale) {
+            let locale = try await State.supportedLocale(for: Self.locale(for: languagePreference))
+            switch try await State.assetState(for: locale) {
             case .installed:
                 return .ready
             case .downloading:
                 return .needsDownload("音声モデルのダウンロード中です")
             case .needsInstall:
                 return .needsDownload("音声モデル(\(locale.localizedDisplayName))の取得が必要です")
+            case .notReserved:
+                return .unavailable(Self.notReservedMessage(locale))
             case .unsupported:
                 return .unavailable("\(locale.identifier) は SpeechAnalyzer 非対応です")
             case .unknown:
@@ -49,8 +47,9 @@ public final class SpeechAnalyzerStt: SttEngine {
     }
 
     public func install(locale: Locale, progress: @escaping @Sendable (Double) -> Void) async throws {
-        let transcriber = try await State.transcriber(for: locale)
-        _ = try await State.assetState(for: transcriber, locale: locale)
+        let supported = try await State.supportedLocale(for: locale)
+        let transcriber = State.transcriber(locale: supported)
+        _ = try await State.assetState(for: supported)
         guard let request = try await AssetInventory.assetInstallationRequest(supporting: [transcriber]) else {
             progress(1)
             return
@@ -175,13 +174,26 @@ public final class SpeechAnalyzerStt: SttEngine {
         preference.fixedLocale ?? Locale(identifier: "ja-JP")
     }
 
-    /// アセットの状態(`AssetInventory.Status` の Sendable な写し)。
-    enum AssetState: Sendable {
+    /// 聞き取りモデルがいま使えるかどうか。
+    ///
+    /// `AssetInventory.Status` は Sendable でないため写しを持つ。同時に、
+    /// `.supported` に潰されている「ディスクに無い」と「予約が効いていない」を分ける。
+    /// 前者はユーザーがダウンロードすれば直り、後者はダウンロードしても直らない。
+    enum AssetState: Sendable, Equatable {
         case installed
         case downloading
+        /// アセットがディスクに無い。取得すれば使えるようになる。
         case needsInstall
+        /// アセットはディスクにあるが、このプロセスへの割り当てが取れない。
+        case notReserved
         case unsupported
         case unknown
+    }
+
+    /// 割り当てが取れなかったときの説明。**取得を促してはいけない**(取得済みなので直らない)。
+    static func notReservedMessage(_ locale: Locale) -> String {
+        "音声モデル(\(locale.localizedDisplayName))は取得済みですが、"
+        + "macOS が使えるようにしませんでした。もう一度お試しください"
     }
 
     /// Speech framework への問い合わせをまとめた層。**状態は持たない**。
@@ -197,18 +209,20 @@ public final class SpeechAnalyzerStt: SttEngine {
         /// framework 内部(`prepareModulesIfNeeded` → `setWorkers`)で trap する。
         /// 予約と状態確認を通ったものだけを返す。
         static func readyTranscriber(for locale: Locale) async throws -> SpeechTranscriber {
-            let transcriber = try await transcriber(for: locale)
-            switch try await assetState(for: transcriber, locale: locale) {
+            let supported = try await supportedLocale(for: locale)
+            switch try await assetState(for: supported) {
             case .installed:
-                return transcriber
+                return transcriber(locale: supported)
             case .downloading:
                 throw EngineError.notReady("音声モデルのダウンロード中です。完了後に再試行してください")
             case .needsInstall:
                 throw EngineError.notReady(
-                    "音声モデル(\(locale.localizedDisplayName))が未取得です。設定 > モデル から取得してください"
+                    "音声モデル(\(supported.localizedDisplayName))が未取得です。設定 > モデル から取得してください"
                 )
+            case .notReserved:
+                throw EngineError.notReady(SpeechAnalyzerStt.notReservedMessage(supported))
             case .unsupported:
-                throw EngineError.notReady("\(locale.identifier) は SpeechAnalyzer 非対応です")
+                throw EngineError.notReady("\(supported.identifier) は SpeechAnalyzer 非対応です")
             case .unknown:
                 throw EngineError.notReady("音声モデルの状態を判定できません")
             }
@@ -216,15 +230,41 @@ public final class SpeechAnalyzerStt: SttEngine {
 
         /// 予約してからアセット状態を返す。
         ///
-        /// `AssetInventory.Status` は Sendable でないため、自前の表現に変換する。
-        static func assetState(for transcriber: SpeechTranscriber, locale: Locale) async throws -> AssetState {
+        /// `locale` は `supportedLocale(for:)` が返した正規形であることが前提。
+        /// `AssetInventory.release(reservedLocale:)` は正規形以外では黙って何もしない。
+        static func assetState(for locale: Locale) async throws -> AssetState {
             try await reserve(locale)
-            switch await AssetInventory.status(forModules: [transcriber]) {
-            case .installed: return .installed
-            case .downloading: return .downloading
-            case .supported: return .needsInstall
-            case .unsupported: return .unsupported
-            @unknown default: return .unknown
+            let state = await status(of: locale)
+            guard state == .needsInstall, await isInstalledOnDisk(locale) else { return state }
+
+            // ディスクにあるのに `.supported` なのだから、足りないのは予約だけ。
+            // 予約は取り直せる(`reserve` 単体では「予約済み」と見なされて素通りする)。
+            KoeLog.engine.error("音声モデルの割り当てが失効していたため取り直します")
+            await AssetInventory.release(reservedLocale: locale)
+            try await reserve(locale)
+            let retried = await status(of: locale)
+            if retried != .installed {
+                KoeLog.engine.error(
+                    "音声モデルの割り当てを取り直せませんでした status=\(String(describing: retried), privacy: .public)"
+                )
+                return .notReserved
+            }
+            return .installed
+        }
+
+        /// アセットがこの Mac のディスクに入っているか。**予約とは独立に答えられる**ので、
+        /// 「未取得」と言い切ってよいかの判定はこちらを根拠にする。
+        private static func isInstalledOnDisk(_ locale: Locale) async -> Bool {
+            await SpeechTranscriber.installedLocales.contains { $0.identifier == locale.identifier }
+        }
+
+        private static func status(of locale: Locale) async -> AssetState {
+            switch await AssetInventory.status(forModules: [transcriber(locale: locale)]) {
+            case .installed: .installed
+            case .downloading: .downloading
+            case .supported: .needsInstall
+            case .unsupported: .unsupported
+            @unknown default: .unknown
             }
         }
 
@@ -240,19 +280,25 @@ public final class SpeechAnalyzerStt: SttEngine {
             }
         }
 
-        /// `SpeechTranscriber` は**セッションごとに作り直す**。同じインスタンスを 2 つ目の
-        /// `SpeechAnalyzer` に渡すと `setWorkers(for:reusingFrom:)` で trap する(C-16)。
-        /// `results` も 1 回しか列挙できない。モデル自体は `modelRetention: .lingering` で
-        /// 温存されるため、作り直しのコストは実用上問題にならない。
-        static func transcriber(for locale: Locale) async throws -> SpeechTranscriber {
+        /// 予約・状態確認・解析のすべてでこの値を使う。ロケールの表記が混ざると
+        /// `release(reservedLocale:)` が黙って何もしない(正規形 `ja_JP` しか受け付けない)。
+        static func supportedLocale(for locale: Locale) async throws -> Locale {
             guard SpeechTranscriber.isAvailable else {
                 throw EngineError.notReady("この Mac では SpeechAnalyzer を利用できません")
             }
             guard let supported = await SpeechTranscriber.supportedLocale(equivalentTo: locale) else {
                 throw EngineError.notReady("\(locale.identifier) は SpeechAnalyzer 非対応です")
             }
-            return SpeechTranscriber(
-                locale: supported,
+            return supported
+        }
+
+        /// `SpeechTranscriber` は**セッションごとに作り直す**。同じインスタンスを 2 つ目の
+        /// `SpeechAnalyzer` に渡すと `setWorkers(for:reusingFrom:)` で trap する(C-16)。
+        /// `results` も 1 回しか列挙できない。モデル自体は `modelRetention: .lingering` で
+        /// 温存されるため、作り直しのコストは実用上問題にならない。
+        static func transcriber(locale: Locale) -> SpeechTranscriber {
+            SpeechTranscriber(
+                locale: locale,
                 transcriptionOptions: [],
                 reportingOptions: [.volatileResults],
                 attributeOptions: []

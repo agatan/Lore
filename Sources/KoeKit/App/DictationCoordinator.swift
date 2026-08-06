@@ -442,6 +442,7 @@ public final class DictationCoordinator {
 
     private func fail(_ error: any Error) async {
         let message = error.localizedDescription
+        KoeLog.session.error("セッションが失敗: \(message, privacy: .public)")
         if var draft {
             let record = draft.markFailed(message)
             self.draft = draft

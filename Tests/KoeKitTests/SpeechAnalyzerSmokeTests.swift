@@ -11,7 +11,8 @@ import Testing
 /// `AssetInventory.reserve(locale:)` を忘れると framework 内部で trap して
 /// プロセスごと落ちるため、この経路を通すだけで回帰を検出できる。
 /// アセットが未取得の環境では「正常に失敗する」ことを確認する。
-@Suite("SpeechAnalyzer スモーク")
+/// 予約はプロセス共有の状態なので、これを触るテストは直列に流す。
+@Suite("SpeechAnalyzer スモーク", .serialized)
 struct SpeechAnalyzerSmokeTests {
     @Test("アセットが揃っていなくても trap せず、連続 2 回でも一周できる")
     func doesNotTrapAcrossRepeatedSessions() async throws {
@@ -56,6 +57,38 @@ struct SpeechAnalyzerSmokeTests {
 
         #expect(format != nil)
         #expect(await engine.availability(languagePreference: .auto).isReady)
+    }
+
+    /// 予約が外れているだけの状態を「未取得」と言ってはいけない(C-15c)。
+    ///
+    /// `AssetInventory.status` は「予約済み **かつ** インストール済み」でしか `.installed` を
+    /// 返さないので、予約が外れた状態はディスクに無いのと同じ `.supported` に潰れる。
+    /// 取り違えると、取得済みのモデルに対して「設定 > モデル から取得してください」と
+    /// 案内してしまう。ダウンロードしても直らないので、利用者は自力で戻せない。
+    @Test("予約が外れていても、取得済みなら使えると答える")
+    func recoversFromReleasedReservation() async throws {
+        let engine = SpeechAnalyzerStt()
+        // アセットが無い環境では「予約だけが無い」状態を作れないので、この不変条件は検証できない。
+        guard await engine.availability(languagePreference: .ja).isReady else { return }
+
+        let locale = try #require(
+            await SpeechTranscriber.supportedLocale(equivalentTo: Locale(identifier: "ja-JP"))
+        )
+        #expect(await AssetInventory.release(reservedLocale: locale), "予約を外せなかった")
+
+        let availability = await engine.availability(languagePreference: .ja)
+        #expect(availability.isReady, "予約を取り直せば使えるはず: \(availability.message ?? "(理由なし)")")
+        #expect(try await engine.prepare(hints: .init(languagePreference: .ja)) != nil)
+    }
+
+    /// 割り当てが取れないことと未取得は別の話なので、案内も別でなければならない。
+    @Test("割り当てが取れないときは取得を促さない")
+    func notReservedMessageDoesNotSuggestDownload() {
+        let message = SpeechAnalyzerStt.notReservedMessage(Locale(identifier: "ja_JP"))
+        #expect(message.contains("日本語"))
+        #expect(message.contains("取得済み"))
+        #expect(!message.contains("未取得"))
+        #expect(!message.contains("設定 > モデル"))
     }
 
     private func runOneSession(engine: SpeechAnalyzerStt, format: AVAudioFormat) async -> Bool {
