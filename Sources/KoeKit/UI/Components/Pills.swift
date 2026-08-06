@@ -16,14 +16,9 @@ struct Pill: View {
                 .font(.system(size: 10.5, weight: .medium))
         }
         .foregroundStyle(tint)
-        .padding(.horizontal, 7)
-        .padding(.vertical, 2.5)
-        .background {
-            Capsule().fill(tint.opacity(0.14))
-        }
-        .overlay {
-            Capsule().strokeBorder(tint.opacity(0.22), lineWidth: 0.5)
-        }
+        .padding(.horizontal, 8)
+        .padding(.vertical, 3)
+        .glassEffect(.regular.tint(tint.opacity(0.22)), in: Capsule())
     }
 }
 
@@ -71,10 +66,12 @@ struct MenuRow<Label: View>: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(.horizontal, 10)
                 .padding(.vertical, 6)
-                .background {
-                    RoundedRectangle(cornerRadius: 7, style: .continuous)
-                        .fill(isHovering ? Color.primary.opacity(0.08) : .clear)
-                }
+                // ホバーしていないときは `.identity`(効果なし)。同じ modifier を
+                // 出し入れせず強さだけ変えることで、行の大きさが動かない。
+                .glassEffect(
+                    isHovering ? .regular.interactive() : .identity,
+                    in: RoundedRectangle(cornerRadius: 8, style: .continuous)
+                )
                 .contentShape(.rect)
         }
         .buttonStyle(.plain)
@@ -82,10 +79,28 @@ struct MenuRow<Label: View>: View {
     }
 }
 
+/// 「浮いている面」の共通表現。カード・バナー・パネルはすべてこれを通す。
+///
+/// 面の役割は 2 つだけに保つ: **浮いているものはガラス**(`raisedGlass`)、
+/// **へこんでいるものは塗り**(`sunkenSurface`)。画面ごとに素材を選び始めると、
+/// 一部だけガラスが乗ったような中途半端な見た目になる。
+struct RaisedGlass: ViewModifier {
+    var cornerRadius: CGFloat = KoeTheme.panelCornerRadius
+    /// 意味のある色(警告・成功など)を薄く透かす。既定は無色。
+    var tint: Color?
+
+    func body(content: Content) -> some View {
+        content.glassEffect(
+            tint.map { Glass.regular.tint($0.opacity(0.18)) } ?? .regular,
+            in: RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+        )
+    }
+}
+
 /// 一覧や入力欄のような「へこんだ面」の共通表現。
 ///
-/// 設定画面で内側の面が必要なところは必ずここを通す。面の出し方を画面ごとに書くと
-/// 素材が食い違い、一部だけガラスが乗ったような中途半端な見た目になる。
+/// ガラスは浮いているものにだけ使う。へこんだ面にガラスを乗せると
+/// 前後関係が読めなくなるので、ここは塗りのままにする。
 struct SunkenSurface: ViewModifier {
     var cornerRadius: CGFloat = KoeTheme.cardCornerRadius
 
@@ -101,6 +116,10 @@ struct SunkenSurface: ViewModifier {
 extension View {
     func sunkenSurface(cornerRadius: CGFloat = KoeTheme.cardCornerRadius) -> some View {
         modifier(SunkenSurface(cornerRadius: cornerRadius))
+    }
+
+    func raisedGlass(cornerRadius: CGFloat = KoeTheme.panelCornerRadius, tint: Color? = nil) -> some View {
+        modifier(RaisedGlass(cornerRadius: cornerRadius, tint: tint))
     }
 }
 
@@ -167,14 +186,7 @@ struct SettingsCard<Content: View>: View {
             }
             .padding(14)
             .frame(maxWidth: .infinity, maxHeight: fillsVertically ? .infinity : nil, alignment: .leading)
-            .background {
-                RoundedRectangle(cornerRadius: KoeTheme.panelCornerRadius, style: .continuous)
-                    .fill(.quaternary.opacity(0.35))
-            }
-            .overlay {
-                RoundedRectangle(cornerRadius: KoeTheme.panelCornerRadius, style: .continuous)
-                    .strokeBorder(.separator.opacity(0.5), lineWidth: 0.5)
-            }
+            .raisedGlass()
             if let footnote {
                 Text(footnote)
                     .font(.system(size: 11))
@@ -212,10 +224,7 @@ struct NoticeBanner: View {
                     .font(.system(size: 11, weight: .medium))
             }
         }
-        .padding(10)
-        .background {
-            RoundedRectangle(cornerRadius: KoeTheme.cardCornerRadius, style: .continuous)
-                .fill(tint.opacity(0.12))
-        }
+        .padding(12)
+        .raisedGlass(cornerRadius: KoeTheme.cardCornerRadius, tint: tint)
     }
 }

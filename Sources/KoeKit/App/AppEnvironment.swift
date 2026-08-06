@@ -46,6 +46,12 @@ public final class AppEnvironment {
     /// 音声モデル取得の進捗(0...1)。nil = 実行中でない。
     public private(set) var speechAssetProgress: Double?
     public private(set) var speechAssetError: String?
+    /// Groq に API キーが登録済みか。キーそのものは UI にも状態にも持たない(NFR-2)。
+    public private(set) var hasGroqApiKey = false
+    /// 設定画面のモデル選択に出す候補。Groq に問い合わせたときだけ埋まる。
+    public private(set) var groqModels: [String] = []
+    public private(set) var groqStatus: String?
+    public private(set) var isCheckingGroq = false
     /// エンジン別の実測レイテンシ。
     public private(set) var measuredLatencies = MeasuredLatencies()
 
@@ -432,8 +438,58 @@ public final class AppEnvironment {
     }
 
     public func applyEngineChange() async {
+        engines.apply(backend: settings.formattingBackend, groqModel: settings.groqModel)
+        do {
+            hasGroqApiKey = try SecretStore.read(.groqApiKey)?.isEmpty == false
+        } catch {
+            hasGroqApiKey = false
+            groqStatus = error.localizedDescription
+            KoeLog.engine.error("API キーの確認に失敗: \(error.localizedDescription, privacy: .public)")
+        }
         await engines.refreshAvailability()
         await engines.prewarm(hints: currentHints())
+    }
+
+    // MARK: Groq
+
+    /// API キーを Keychain に保存する(空文字なら削除)。値は保持しない。
+    public func setGroqApiKey(_ key: String) async {
+        groqStatus = nil
+        do {
+            try SecretStore.write(key, for: .groqApiKey)
+        } catch {
+            groqStatus = error.localizedDescription
+            KoeLog.engine.error("API キーの保存に失敗: \(error.localizedDescription, privacy: .public)")
+            return
+        }
+        groqModels = []
+        await applyEngineChange()
+    }
+
+    /// キーとモデルが実際に通るかを 1 往復して確かめる。
+    ///
+    /// 整形は失敗しても生テキストにフォールバックするので、設定ミスは
+    /// 「なんとなく仕上がらない」形でしか表に出ない。ここで明示的に確かめられるようにする。
+    public func checkGroqConnection() async {
+        guard !isCheckingGroq else { return }
+        isCheckingGroq = true
+        groqStatus = nil
+        defer { isCheckingGroq = false }
+
+        do {
+            groqModels = try await engines.groq.availableModels()
+            let reply = try await engines.groq.complete(
+                prompt: FormattingPrompt(system: "入力をそのまま返してください。", user: "疎通確認"),
+                timeout: .seconds(20)
+            )
+            groqStatus = reply.isEmpty
+                ? "接続できましたが、応答が空でした"
+                : "\(settings.groqModel) に接続できました"
+        } catch {
+            groqStatus = error.localizedDescription
+            KoeLog.engine.error("Groq の疎通確認に失敗: \(error.localizedDescription, privacy: .public)")
+        }
+        await engines.refreshAvailability()
     }
 
     func currentHints() -> SttHints {

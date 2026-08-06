@@ -4,29 +4,53 @@ import Observation
 
 /// 推論エンジンの保持と準備。
 ///
-/// Koe は **OS 内蔵のモデルだけ**を使う(設計 C-52)。選択肢は無く、
-/// 聞き取りは SpeechAnalyzer、仕上げは Foundation Models で固定する。
-/// 差し替えの余地を残さないぶん、ここは「準備して渡す」だけの薄い層になる。
+/// 聞き取りは OS 内蔵の SpeechAnalyzer で固定(設計 C-52)。
+/// 仕上げだけは選べる: 既定はオンデバイスの Foundation Models、
+/// ユーザーが明示的に選んだときだけ Groq API(`FormattingBackend`)。
+/// **選択肢はこの 1 箇所に閉じ込める**。どちらが動いているかを知りたい側は
+/// `backend` と `llm` を見れば済み、分岐がパイプラインに漏れない。
 ///
-/// それでも protocol 境界(`SttEngine` / `LlmEngine`)は残す。
-/// パイプラインが `SpeechAnalyzer` の型に直接依存しないことで、
-/// テストで差し替えられ、`DictationCoordinator` の状態機械を単体で検証できる。
+/// protocol 境界(`SttEngine` / `LlmEngine`)を保つのはテストのためでもある。
+/// パイプラインが具象エンジンに依存しないので、`DictationCoordinator` の
+/// 状態機械を単体で検証できる。
 @MainActor
 @Observable
 public final class EngineRegistry {
     @ObservationIgnored public let stt: any SttEngine
-    @ObservationIgnored public let llm: any LlmEngine
+    @ObservationIgnored private let onDeviceLlm: any LlmEngine
+    @ObservationIgnored public let groq: GroqLlm
     /// prepare() で判明した希望フォーマットのキャッシュ。録音開始を待たせないために持つ。
     @ObservationIgnored private var preparedFormat: AVAudioFormat?
 
     /// 聞き取りの利用可否。日本語の音声モデルが未取得のことがあるので UI に出す。
     public private(set) var sttAvailability: EngineAvailability = .ready
-    /// 仕上げの利用可否。Apple Intelligence が無効だと使えない。
+    /// いま選ばれている仕上げの利用可否。
     public private(set) var llmAvailability: EngineAvailability = .ready
+    /// 仕上げをどこで動かすか。設定から `apply(...)` で流し込む。
+    public private(set) var backend: FormattingBackend = .onDevice
 
-    public init(stt: any SttEngine = SpeechAnalyzerStt(), llm: any LlmEngine = FoundationModelsLlm()) {
+    public init(
+        stt: any SttEngine = SpeechAnalyzerStt(),
+        llm: any LlmEngine = FoundationModelsLlm(),
+        groq: GroqLlm = GroqLlm()
+    ) {
         self.stt = stt
-        self.llm = llm
+        self.onDeviceLlm = llm
+        self.groq = groq
+    }
+
+    /// いま整形に使うエンジン。セッション開始時にここから 1 つ取り、
+    /// 途中で設定が変わってもそのセッションは最後まで同じエンジンで通す。
+    public var llm: any LlmEngine {
+        switch backend {
+        case .onDevice: onDeviceLlm
+        case .groq: groq
+        }
+    }
+
+    public func apply(backend: FormattingBackend, groqModel: String) {
+        self.backend = backend
+        groq.apply(model: groqModel)
     }
 
     // MARK: 準備

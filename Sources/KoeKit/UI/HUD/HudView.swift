@@ -47,7 +47,11 @@ struct HudView: View {
         .padding(.horizontal, 18)
         .padding(.vertical, 15)
         .frame(width: 420, alignment: .leading)
-        .glassEffect(.regular, in: .rect(cornerRadius: 22))
+        // いまの状態の色をガラスに透かす。文字を増やさずに状態が伝わる。
+        .glassEffect(
+            .regular.tint(tint.opacity(0.18)),
+            in: RoundedRectangle(cornerRadius: KoeTheme.hudCornerRadius, style: .continuous)
+        )
         .animation(.spring(response: 0.32, dampingFraction: 0.85), value: phase)
         .animation(.easeInOut(duration: 0.16), value: transcript.isEmpty)
         .onHover { isHovering = $0 }
@@ -73,6 +77,17 @@ struct HudView: View {
                     .monospacedDigit()
                     .foregroundStyle(.secondary)
                     .contentTransition(.numericText())
+
+                // どのマイクで録れているか。主役ではないので最小の重さで置く。
+                if let device = coordinator.inputDeviceName {
+                    Label(device, systemImage: "mic")
+                        .font(.system(size: 10))
+                        .foregroundStyle(.tertiary)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                        .layoutPriority(-1)
+                        .help("録音に使っている入力デバイス")
+                }
             }
 
             Spacer(minLength: 8)
@@ -94,12 +109,12 @@ struct HudView: View {
                     Text("esc")
                         .font(.system(size: 9.5, weight: .semibold, design: .rounded))
                         .foregroundStyle(isHovering ? .primary : .secondary)
-                        .padding(.horizontal, 5)
-                        .padding(.vertical, 1.5)
-                        .background {
-                            RoundedRectangle(cornerRadius: 4, style: .continuous)
-                                .fill(.primary.opacity(isHovering ? 0.14 : 0.07))
-                        }
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 2)
+                        .glassEffect(
+                            .regular.interactive(),
+                            in: RoundedRectangle(cornerRadius: 5, style: .continuous)
+                        )
                 }
                 .buttonStyle(.plain)
                 .help("録音を破棄して中止します")
@@ -163,7 +178,8 @@ private func previewCoordinator(
     mode: Mode?,
     levels: [Float]? = nil,
     elapsed: Duration = .zero,
-    detail: String? = nil
+    detail: String? = nil,
+    inputDeviceName: String? = nil
 ) -> DictationCoordinator {
     let coordinator = DictationCoordinator(
         dependencies: .init(
@@ -181,7 +197,8 @@ private func previewCoordinator(
         mode: mode,
         levels: levels,
         elapsed: elapsed,
-        detail: detail
+        detail: detail,
+        inputDeviceName: inputDeviceName
     )
     return coordinator
 }
@@ -203,7 +220,8 @@ private var sampleLevels: [Float] {
             transcript: "えーとこの関数をリファクタして、あーやっぱりテストも一緒に",
             mode: BuiltinModes.aiAgent,
             levels: sampleLevels,
-            elapsed: .seconds(7)
+            elapsed: .seconds(7),
+            inputDeviceName: "MacBook Pro のマイク"
         ),
         onCancel: {}
     )

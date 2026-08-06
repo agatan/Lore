@@ -12,6 +12,7 @@ public struct EngineIdentifier: RawRepresentable, Codable, Sendable, Hashable, E
     public static let whisperKit = EngineIdentifier("whisper_kit")
     public static let foundationModels = EngineIdentifier("foundation_models")
     public static let mlx = EngineIdentifier("mlx")
+    public static let groq = EngineIdentifier("groq")
     /// 整形なし(生テキストをそのまま使った)ことを表す。
     public static let none = EngineIdentifier("none")
 
@@ -21,6 +22,7 @@ public struct EngineIdentifier: RawRepresentable, Codable, Sendable, Hashable, E
         case .whisperKit: "WhisperKit"
         case .foundationModels: "Foundation Models"
         case .mlx: "MLX"
+        case .groq: "Groq"
         case .none: "整形なし"
         default: rawValue
         }

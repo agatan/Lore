@@ -122,7 +122,8 @@ public struct MainWindowView: View {
                 .contentShape(.rect)
             }
             .buttonStyle(.plain)
-            .background(.quaternary.opacity(0.4))
+            .raisedGlass(cornerRadius: KoeTheme.cardCornerRadius, tint: KoeTheme.warning)
+            .padding(8)
         }
     }
 

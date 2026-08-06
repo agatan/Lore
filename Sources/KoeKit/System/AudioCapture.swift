@@ -34,6 +34,8 @@ public final class AudioCapture {
     private var captureSampleRate: Double = 16_000
 
     public private(set) var isRunning = false
+    /// いま録音に使っている入力デバイス名。実際に束ねたデバイスから引く(HUD 表示用)。
+    public private(set) var inputDeviceName: String?
     /// 直近の録音で受け取ったチャンク数と最大入力レベル。入力が来ているかの診断用。
     public private(set) var lastChunkCount = 0
     public private(set) var lastPeakLevel: Float = 0
@@ -102,6 +104,8 @@ public final class AudioCapture {
         self.chunkContinuation = chunkContinuation
         self.levelContinuation = levelContinuation
         self.resampler = resampler
+        // 起動後に読む。デバイスが確定するのは engine.start() の後。
+        inputDeviceName = AudioDevices.currentInputName()
         isRunning = true
 
         return Streams(chunks: chunks, levels: levels)

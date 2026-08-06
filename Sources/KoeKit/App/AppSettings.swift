@@ -23,6 +23,10 @@ public final class AppSettings {
         public var vocabularyAnalysisEnabled: Bool = true
         public var showLevelMeterInMenuBar: Bool = true
         public var openHistoryAtLaunch: Bool = true
+        /// 文章の仕上げをどこで動かすか。既定はオンデバイス(外に出さない)。
+        public var formattingBackend: FormattingBackend = .onDevice
+        /// Groq を選んだときに叩くモデル ID。API キーは Keychain(`SecretStore`)に置く。
+        public var groqModel: String = GroqLlm.defaultModel
         /// 長押し閾値の既定値変更を一度だけ反映するための印。
         public var holdThresholdMigrated: Bool = false
 
@@ -42,6 +46,12 @@ public final class AppSettings {
             vocabularyAnalysisEnabled = try container.decodeIfPresent(Bool.self, forKey: .vocabularyAnalysisEnabled) ?? fallback.vocabularyAnalysisEnabled
             showLevelMeterInMenuBar = try container.decodeIfPresent(Bool.self, forKey: .showLevelMeterInMenuBar) ?? fallback.showLevelMeterInMenuBar
             openHistoryAtLaunch = try container.decodeIfPresent(Bool.self, forKey: .openHistoryAtLaunch) ?? fallback.openHistoryAtLaunch
+            // 選択肢が消えた版へ戻したときに、**設定ファイル全体が捨てられない**ようにする。
+            // ここで throw すると `AppSettings.init` の `try?` が丸ごと初期値へ倒し、
+            // API キー以外の設定(ホットキー・モード・タイムアウト)が全部消える。
+            formattingBackend = (try? container.decodeIfPresent(FormattingBackend.self, forKey: .formattingBackend))
+                .flatMap { $0 } ?? fallback.formattingBackend
+            groqModel = try container.decodeIfPresent(String.self, forKey: .groqModel) ?? fallback.groqModel
             holdThresholdMigrated = try container.decodeIfPresent(Bool.self, forKey: .holdThresholdMigrated) ?? false
 
             // 旧既定値(300ms)のままなら新既定値へ寄せる。自分で別の値にしている人は触らない。
@@ -135,5 +145,19 @@ public final class AppSettings {
     public var openHistoryAtLaunch: Bool {
         get { storage.openHistoryAtLaunch }
         set { storage.openHistoryAtLaunch = newValue; persist() }
+    }
+
+    public var formattingBackend: FormattingBackend {
+        get { storage.formattingBackend }
+        set { storage.formattingBackend = newValue; persist() }
+    }
+
+    public var groqModel: String {
+        get { storage.groqModel }
+        set {
+            let trimmed = newValue.trimmingCharacters(in: .whitespacesAndNewlines)
+            storage.groqModel = trimmed.isEmpty ? GroqLlm.defaultModel : trimmed
+            persist()
+        }
     }
 }

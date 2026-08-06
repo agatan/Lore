@@ -11,30 +11,37 @@ struct PrivacySettingsView: View {
         LazyVStack(alignment: .leading, spacing: 20) {
             VStack(alignment: .leading, spacing: 10) {
                 HStack(spacing: 8) {
-                    Image(systemName: "hand.raised.fill")
-                        .foregroundStyle(KoeTheme.voiceGradient)
-                    Text("すべてこの Mac の中で処理されます")
+                    Image(systemName: sendsOffDevice ? "arrow.up.forward.app.fill" : "hand.raised.fill")
+                        .foregroundStyle(sendsOffDevice ? AnyShapeStyle(KoeTheme.warning) : AnyShapeStyle(KoeTheme.voiceGradient))
+                    Text(sendsOffDevice ? "仕上げだけ外部に送っています" : "すべてこの Mac の中で処理されます")
                         .font(.system(size: 15, weight: .semibold))
                 }
-                Text("""
-                Koe はクラウドの音声認識や文章生成サービスに接続しません。API キーを設定する機能もありません。\
-                この Mac の中だけで完結することを価値の中心に置いて作っています。
-                """)
-                .font(.system(size: 12))
-                .foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
+                Text(sendsOffDevice ? Self.offDeviceSummary : Self.onDeviceSummary)
+                    .font(.system(size: 12))
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
             }
 
             SettingsCard(title: "外に出ないもの") {
-                ForEach(Self.neverLeaves, id: \.self) { item in
+                ForEach(neverLeaves, id: \.self) { item in
                     Label(item, systemImage: "checkmark.shield")
                         .font(.system(size: 11.5))
                         .foregroundStyle(.secondary)
                 }
                 Divider()
-                Label("通信するのはモデルのダウンロードのみ", systemImage: "network")
+                if sendsOffDevice {
+                    Label(
+                        "仕上げに使うため、聞き取った文字と指示文だけ Groq に送ります",
+                        systemImage: "arrow.up.forward"
+                    )
                     .font(.system(size: 11.5))
-                    .foregroundStyle(KoeTheme.accent)
+                    .foregroundStyle(KoeTheme.warning)
+                    .fixedSize(horizontal: false, vertical: true)
+                } else {
+                    Label("通信するのはモデルのダウンロードのみ", systemImage: "network")
+                        .font(.system(size: 11.5))
+                        .foregroundStyle(KoeTheme.accent)
+                }
             }
 
             SettingsCard(title: "前面アプリの扱い") {
@@ -92,11 +99,34 @@ struct PrivacySettingsView: View {
         }
     }
 
-    private static let neverLeaves = [
-        "録音した音声",
-        "聞き取った文字と仕上げた文章",
-        "カスタム語彙",
-        "履歴と、そのとき使った指示文",
-        "前面アプリの情報",
-    ]
+    /// 仕上げを外部に出しているかどうかで説明が変わる。判断の出どころは
+    /// `FormattingBackend` 1 箇所だけにして、画面ごとに言うことがずれないようにする。
+    private var sendsOffDevice: Bool {
+        env.settings.formattingBackend.sendsTranscriptOffDevice
+    }
+
+    private static let onDeviceSummary = """
+    Koe はクラウドの音声認識や文章生成サービスに接続しません。\
+    この Mac の中だけで完結することを価値の中心に置いて作っています。
+    """
+
+    private static let offDeviceSummary = """
+    設定 > モデル で仕上げに Groq を選んでいます。聞き取りはこの Mac の中で完結しますが、\
+    仕上げのために聞き取った文字と指示文が Groq の API に送られます。録音した音声そのものは送りません。\
+    外に出したくない場合は、仕上げを「この Mac の中」に戻してください。
+    """
+
+    /// 仕上げがオンデバイスのときに、この Mac から出ないもの。
+    private var neverLeaves: [String] {
+        var items = [
+            "録音した音声",
+            "カスタム語彙",
+            "履歴と、そのとき使った指示文",
+            "前面アプリの情報",
+        ]
+        if !sendsOffDevice {
+            items.insert("聞き取った文字と仕上げた文章", at: 1)
+        }
+        return items
+    }
 }

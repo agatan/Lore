@@ -13,6 +13,16 @@ struct MenuBarPanel: View {
     private var coordinator: DictationCoordinator { env.coordinator }
 
     var body: some View {
+        // 近接したガラス同士を溶け合わせる。個別に効果を掛けるより境目が減る。
+        GlassEffectContainer(spacing: 14) {
+            panel
+        }
+        .padding(14)
+        .frame(width: 330)
+        .task { coordinator.refreshPreview() }
+    }
+
+    private var panel: some View {
         VStack(alignment: .leading, spacing: 12) {
             header
             recordSection
@@ -35,9 +45,6 @@ struct MenuBarPanel: View {
             Divider().opacity(0.6)
             footer
         }
-        .padding(14)
-        .frame(width: 330)
-        .task { coordinator.refreshPreview() }
     }
 
     // MARK: 見出し
@@ -168,10 +175,7 @@ struct MenuBarPanel: View {
                     .lineLimit(3)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(9)
-                    .background {
-                        RoundedRectangle(cornerRadius: KoeTheme.cardCornerRadius, style: .continuous)
-                            .fill(.quaternary.opacity(0.4))
-                    }
+                    .sunkenSurface()
 
                 HStack(spacing: 8) {
                     Button {

@@ -1,5 +1,6 @@
 import AVFAudio
 import Foundation
+import Speech
 import Testing
 
 @testable import KoeKit
@@ -36,6 +37,25 @@ struct SpeechAnalyzerSmokeTests {
             let sawFinal = await runOneSession(engine: engine, format: format)
             #expect(sawFinal, "セッション \(session) が確定イベントを返さなかった")
         }
+    }
+
+    /// アイドル解放(`unload`)を挟んでも続けて録音できること。
+    ///
+    /// `AssetInventory.status` は「**予約済み かつ** インストール済み」でしか `.installed` を
+    /// 返さない。予約はプロセスに紐づくので、アプリ側で予約済みを覚え込むと、予約が失われた
+    /// ときに再予約を飛ばして「未取得」と誤判定する(C-15b)。
+    @Test("アイドル解放を挟んでも準備し直せる")
+    func staysUsableAcrossUnload() async throws {
+        let engine = SpeechAnalyzerStt()
+        // アセットが無い環境では準備自体が通らないので、この不変条件は検証できない。
+        guard await engine.availability(languagePreference: .auto).isReady else { return }
+
+        _ = try await engine.prepare(hints: .init())
+        await engine.unload()
+        let format = try await engine.prepare(hints: .init())
+
+        #expect(format != nil)
+        #expect(await engine.availability(languagePreference: .auto).isReady)
     }
 
     private func runOneSession(engine: SpeechAnalyzerStt, format: AVAudioFormat) async -> Bool {

@@ -9,8 +9,6 @@ import Speech
 public final class SpeechAnalyzerStt: SttEngine {
     public let identifier = EngineIdentifier.speechAnalyzer
 
-    private let state = State()
-
     public init() {}
 
     public var modelName: String? { "システム音声モデル" }
@@ -21,8 +19,8 @@ public final class SpeechAnalyzerStt: SttEngine {
         }
         let locale = Self.locale(for: languagePreference)
         do {
-            let transcriber = try await state.transcriber(for: locale)
-            switch try await state.assetState(for: transcriber, locale: locale) {
+            let transcriber = try await State.transcriber(for: locale)
+            switch try await State.assetState(for: transcriber, locale: locale) {
             case .installed:
                 return .ready
             case .downloading:
@@ -42,7 +40,7 @@ public final class SpeechAnalyzerStt: SttEngine {
     public func prepare(hints: SttHints) async throws -> AVAudioFormat? {
         let locale = Self.locale(for: hints.languagePreference)
         // 起動時の prewarm でロケールを予約しておく(予約なしで解析を始めると trap する)。
-        let transcriber = try await state.readyTranscriber(for: locale)
+        let transcriber = try await State.readyTranscriber(for: locale)
         return await SpeechAnalyzer.bestAvailableAudioFormat(compatibleWith: [transcriber])
     }
 
@@ -51,8 +49,8 @@ public final class SpeechAnalyzerStt: SttEngine {
     }
 
     public func install(locale: Locale, progress: @escaping @Sendable (Double) -> Void) async throws {
-        let transcriber = try await state.transcriber(for: locale)
-        _ = try await state.assetState(for: transcriber, locale: locale)
+        let transcriber = try await State.transcriber(for: locale)
+        _ = try await State.assetState(for: transcriber, locale: locale)
         guard let request = try await AssetInventory.assetInstallationRequest(supporting: [transcriber]) else {
             progress(1)
             return
@@ -65,8 +63,12 @@ public final class SpeechAnalyzerStt: SttEngine {
         progress(1)
     }
 
+    /// 手放すのは**メモリに載ったモデルだけ**(NFR-5)。
+    ///
+    /// ロケールの予約には触らない。予約はメモリではなく Speech デーモン側の生きた状態で、
+    /// 解放すると `AssetInventory.status` はアセットがディスクにあっても `.supported`
+    /// (= 未取得) に戻る。次の録音を止めるだけで、得るものが無い。
     public func unload() async {
-        await state.reset()
         await SpeechModels.endRetention()
     }
 
@@ -96,7 +98,7 @@ public final class SpeechAnalyzerStt: SttEngine {
         let locale = Self.locale(for: hints.languagePreference)
         // アセットが揃っていない状態で start すると Speech framework の中で trap する。
         // ここで弾いて、通常の失敗としてフォールバック経路に流す。
-        let transcriber = try await state.readyTranscriber(for: locale)
+        let transcriber = try await State.readyTranscriber(for: locale)
 
         let context = AnalysisContext()
         if !hints.contextualStrings.isEmpty {
@@ -182,22 +184,19 @@ public final class SpeechAnalyzerStt: SttEngine {
         case unknown
     }
 
-    /// ロケールの予約状態だけを持つ。
+    /// Speech framework への問い合わせをまとめた層。**状態は持たない**。
     ///
-    /// `SpeechTranscriber` は**セッションごとに作り直す**。同じインスタンスを 2 つ目の
-    /// `SpeechAnalyzer` に渡すと `setWorkers(for:reusingFrom:)` で trap する(2 回目の録音で必ず落ちた)。
-    /// `results` も 1 回しか列挙できない。モデル自体は `modelRetention: .lingering` で温存されるため、
-    /// 作り直しのコストは実用上問題にならない。
-    private actor State {
-        private var reserved: Set<String> = []
-
+    /// ロケールの予約はプロセスに紐づく生きた状態で、こちらが握っているつもりでも
+    /// 失われうる。アプリ側で「予約済み」を覚えると、失われたときに再予約を飛ばして
+    /// 永久に未取得と判定してしまうため、キャッシュせず毎回問い合わせる。
+    private enum State {
         /// 解析を始められる状態の transcriber。
         ///
         /// `AssetInventory.reserve(locale:)` を呼ぶまで、ロケールのアセットが入っていても
         /// `status` は `.supported` のままで、その状態で `SpeechAnalyzer.start` を呼ぶと
         /// framework 内部(`prepareModulesIfNeeded` → `setWorkers`)で trap する。
         /// 予約と状態確認を通ったものだけを返す。
-        func readyTranscriber(for locale: Locale) async throws -> SpeechTranscriber {
+        static func readyTranscriber(for locale: Locale) async throws -> SpeechTranscriber {
             let transcriber = try await transcriber(for: locale)
             switch try await assetState(for: transcriber, locale: locale) {
             case .installed:
@@ -215,11 +214,11 @@ public final class SpeechAnalyzerStt: SttEngine {
             }
         }
 
-        /// 予約してからアセット状態を返す。予約は冪等。
+        /// 予約してからアセット状態を返す。
         ///
-        /// `AssetInventory.Status` は Sendable でないため、アクタ境界を越えない自前の表現に変換する。
-        func assetState(for transcriber: SpeechTranscriber, locale: Locale) async throws -> AssetState {
-            try await reserveIfNeeded(locale)
+        /// `AssetInventory.Status` は Sendable でないため、自前の表現に変換する。
+        static func assetState(for transcriber: SpeechTranscriber, locale: Locale) async throws -> AssetState {
+            try await reserve(locale)
             switch await AssetInventory.status(forModules: [transcriber]) {
             case .installed: return .installed
             case .downloading: return .downloading
@@ -229,12 +228,10 @@ public final class SpeechAnalyzerStt: SttEngine {
             }
         }
 
-        private func reserveIfNeeded(_ locale: Locale) async throws {
-            let key = locale.identifier(.bcp47)
-            guard !reserved.contains(key) else { return }
+        /// 状態を見る前に必ず呼ぶ。冪等で、予約済みなら 1ms 未満で返る(実測 0.2ms)。
+        private static func reserve(_ locale: Locale) async throws {
             do {
                 _ = try await AssetInventory.reserve(locale: locale)
-                reserved.insert(key)
             } catch {
                 throw EngineError.notReady(
                     "音声モデルの割り当てに失敗しました(\(error.localizedDescription))。"
@@ -243,7 +240,11 @@ public final class SpeechAnalyzerStt: SttEngine {
             }
         }
 
-        func transcriber(for locale: Locale) async throws -> SpeechTranscriber {
+        /// `SpeechTranscriber` は**セッションごとに作り直す**。同じインスタンスを 2 つ目の
+        /// `SpeechAnalyzer` に渡すと `setWorkers(for:reusingFrom:)` で trap する(C-16)。
+        /// `results` も 1 回しか列挙できない。モデル自体は `modelRetention: .lingering` で
+        /// 温存されるため、作り直しのコストは実用上問題にならない。
+        static func transcriber(for locale: Locale) async throws -> SpeechTranscriber {
             guard SpeechTranscriber.isAvailable else {
                 throw EngineError.notReady("この Mac では SpeechAnalyzer を利用できません")
             }
@@ -256,13 +257,6 @@ public final class SpeechAnalyzerStt: SttEngine {
                 reportingOptions: [.volatileResults],
                 attributeOptions: []
             )
-        }
-
-        func reset() async {
-            for key in reserved {
-                _ = await AssetInventory.release(reservedLocale: Locale(identifier: key))
-            }
-            reserved.removeAll()
         }
     }
 }

@@ -40,7 +40,14 @@ public final class DictationCoordinator {
 
     /// HUD 用の波形バッファ長。
     static let levelHistoryLength = 64
-    static let hudLingerDuration: Duration = .seconds(2)
+
+    /// 挿入まで通ったときの居残り時間。
+    ///
+    /// 結果は挿入先のアプリに出ているので、HUD に確認の役目は無い。
+    /// フェードアウト(0.2 秒)が始まるきっかけを作るだけの長さにする。
+    static let hudSuccessLingerDuration: Duration = .milliseconds(120)
+    /// 読んでもらう必要がある終わり方(失敗・クリップボード退避・整形スキップ)の居残り時間。
+    static let hudNoticeLingerDuration: Duration = .seconds(2)
     /// 停止後、STT の確定を待つ上限。エンジンが応答しないときに
     /// 「認識中」から永遠に戻らないための保険。
     ///
@@ -56,6 +63,8 @@ public final class DictationCoordinator {
     public private(set) var levelHistory: [Float] = Array(repeating: 0, count: levelHistoryLength)
     public private(set) var activeMode: Mode?
     public private(set) var recordingElapsed: Duration = .zero
+    /// 録音に使っている入力デバイス名。録音が始まって実際に束ねてから入る。
+    public private(set) var inputDeviceName: String?
     public private(set) var lastRecord: SessionRecord?
     /// HUD・メニューに出す補足(整形スキップ理由など)。
     public private(set) var statusDetail: String?
@@ -158,6 +167,8 @@ public final class DictationCoordinator {
         levelHistory = Array(repeating: 0, count: Self.levelHistoryLength)
         inputLevel = 0
         recordingElapsed = .zero
+        // 前回のデバイス名を残さない。次の録音で実際に束ねたものだけを出す。
+        inputDeviceName = nil
 
         let target = frontmost.target
         targetApp = frontmost.current
@@ -305,6 +316,7 @@ public final class DictationCoordinator {
                 return
             }
             let streams = try audio.start(format: format)
+            inputDeviceName = audio.inputDeviceName
             startLevelPump(streams.levels)
 
             var finalText: String?
@@ -495,16 +507,30 @@ public final class DictationCoordinator {
         }
     }
 
-    /// 完了表示を少し残してから消す(FR-8.3)。
+    /// 終了表示を少し残してから消す(FR-8.3)。
+    ///
+    /// 残す長さは終わり方で決める。うまく挿入できたなら読むものは無いので即座に引く。
     private func scheduleLinger() {
         lingerTask?.cancel()
+        let linger = Self.lingerDuration(for: phase, detail: statusDetail)
         lingerTask = Task { [weak self] in
-            try? await Task.sleep(for: Self.hudLingerDuration)
+            try? await Task.sleep(for: linger)
             guard let self, !Task.isCancelled else { return }
             if case .finished = phase {
                 phase = .idle
                 liveTranscript = ""
             }
+        }
+    }
+
+    static func lingerDuration(for phase: SessionPhase, detail: String?) -> Duration {
+        guard case .finished(let outcome) = phase else { return hudSuccessLingerDuration }
+        switch outcome {
+        case .completed, .cancelled:
+            // 注記が残っているなら読む時間が要る(整形スキップなど)。
+            return detail == nil ? hudSuccessLingerDuration : hudNoticeLingerDuration
+        case .formattingSkipped, .clipboardOnly, .failed:
+            return hudNoticeLingerDuration
         }
     }
 
@@ -561,13 +587,15 @@ public final class DictationCoordinator {
         mode: Mode? = nil,
         levels: [Float]? = nil,
         elapsed: Duration = .zero,
-        detail: String? = nil
+        detail: String? = nil,
+        inputDeviceName: String? = nil
     ) {
         self.phase = phase
         liveTranscript = transcript
         activeMode = mode
         recordingElapsed = elapsed
         statusDetail = detail
+        self.inputDeviceName = inputDeviceName
         if let levels { levelHistory = levels }
         inputLevel = levels?.last ?? 0
     }
