@@ -24,7 +24,7 @@ public final class SpeechAnalyzerStt: SttEngine {
             case .needsInstall:
                 return .needsDownload("音声モデル(\(locale.localizedDisplayName))の取得が必要です")
             case .notReserved:
-                return .unavailable(Self.notReservedMessage(locale))
+                return .unavailable(Self.needsRestartMessage(locale))
             case .unsupported:
                 return .unavailable("\(locale.identifier) は SpeechAnalyzer 非対応です")
             case .unknown:
@@ -66,7 +66,7 @@ public final class SpeechAnalyzerStt: SttEngine {
     ///
     /// ロケールの予約には触らない。予約はメモリではなく Speech デーモン側の生きた状態で、
     /// 解放すると `AssetInventory.status` はアセットがディスクにあっても `.supported`
-    /// (= 未取得) に戻る。次の録音を止めるだけで、得るものが無い。
+    /// に戻る。次の録音を止めるだけで、得るものが無い。
     public func unload() async {
         await SpeechModels.endRetention()
     }
@@ -190,10 +190,12 @@ public final class SpeechAnalyzerStt: SttEngine {
         case unknown
     }
 
-    /// 割り当てが取れなかったときの説明。**取得を促してはいけない**(取得済みなので直らない)。
-    static func notReservedMessage(_ locale: Locale) -> String {
-        "音声モデル(\(locale.localizedDisplayName))は取得済みですが、"
-        + "macOS が使えるようにしませんでした。もう一度お試しください"
+    /// 予約が取れなくなったときの説明。
+    ///
+    /// **取得も再試行も促してはいけない**。アセットは取得済みで、このプロセスの
+    /// `AssetInventory` はもう何をしても戻らない(C-15d)。打つ手は起動し直すことだけ。
+    static func needsRestartMessage(_ locale: Locale) -> String {
+        "音声モデル(\(locale.localizedDisplayName))を使えなくなりました。Koe を再起動してください"
     }
 
     /// Speech framework への問い合わせをまとめた層。**状態は持たない**。
@@ -220,7 +222,7 @@ public final class SpeechAnalyzerStt: SttEngine {
                     "音声モデル(\(supported.localizedDisplayName))が未取得です。設定 > モデル から取得してください"
                 )
             case .notReserved:
-                throw EngineError.notReady(SpeechAnalyzerStt.notReservedMessage(supported))
+                throw EngineError.needsAppRestart(SpeechAnalyzerStt.needsRestartMessage(supported))
             case .unsupported:
                 throw EngineError.notReady("\(supported.identifier) は SpeechAnalyzer 非対応です")
             case .unknown:
@@ -231,31 +233,39 @@ public final class SpeechAnalyzerStt: SttEngine {
         /// 予約してからアセット状態を返す。
         ///
         /// `locale` は `supportedLocale(for:)` が返した正規形であることが前提。
-        /// `AssetInventory.release(reservedLocale:)` は正規形以外では黙って何もしない。
         static func assetState(for locale: Locale) async throws -> AssetState {
             try await reserve(locale)
             let state = await status(of: locale)
-            guard state == .needsInstall, await isInstalledOnDisk(locale) else { return state }
+            guard state != .installed else { return .installed }
 
-            // ディスクにあるのに `.supported` なのだから、足りないのは予約だけ。
-            // 予約は取り直せる(`reserve` 単体では「予約済み」と見なされて素通りする)。
-            KoeLog.engine.error("音声モデルの割り当てが失効していたため取り直します")
-            await AssetInventory.release(reservedLocale: locale)
-            try await reserve(locale)
-            let retried = await status(of: locale)
-            if retried != .installed {
-                KoeLog.engine.error(
-                    "音声モデルの割り当てを取り直せませんでした status=\(String(describing: retried), privacy: .public)"
-                )
-                return .notReserved
-            }
-            return .installed
+            // `.supported` には「ディスクに無い」と「予約が効いていない」が潰れている。
+            // どちらなのかは在庫を直接見て切り分ける。取り違えると、取得済みのモデルに
+            // 対してダウンロードを促す(押しても直らない)。
+            guard await isInstalledOnDisk(locale), await !isReserved(locale) else { return state }
+            await logLostInventory(locale)
+            return .notReserved
         }
 
         /// アセットがこの Mac のディスクに入っているか。**予約とは独立に答えられる**ので、
         /// 「未取得」と言い切ってよいかの判定はこちらを根拠にする。
         private static func isInstalledOnDisk(_ locale: Locale) async -> Bool {
             await SpeechTranscriber.installedLocales.contains { $0.identifier == locale.identifier }
+        }
+
+        /// 予約が本当に効いているか。
+        ///
+        /// `reserve` の戻り値は「**新たに**予約したか」なので判定に使えない。予約済みでも、
+        /// 在庫 API が死んでいて何も起きなかったときも、等しく `false` を返す。
+        private static func isReserved(_ locale: Locale) async -> Bool {
+            await AssetInventory.reservedLocales.contains { $0.identifier == locale.identifier }
+        }
+
+        /// 断る理由をそのまま残す。ここが無いと OS ログからの逆算になる。
+        private static func logLostInventory(_ locale: Locale) async {
+            let reserved = await AssetInventory.reservedLocales.map(\.identifier).joined(separator: ",")
+            KoeLog.engine.error(
+                "音声モデルの在庫 API が死んでいます(取得済みだが予約できない) locale=\(locale.identifier, privacy: .public) reserved=[\(reserved, privacy: .public)]"
+            )
         }
 
         private static func status(of locale: Locale) async -> AssetState {

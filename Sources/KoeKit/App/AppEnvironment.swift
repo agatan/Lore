@@ -55,6 +55,8 @@ public final class AppEnvironment {
     /// エンジン別の実測レイテンシ。
     public private(set) var measuredLatencies = MeasuredLatencies()
 
+    /// このプロセスが生きている長さ。起動し直すべきかの判断に使う。
+    private let launchedAt = ContinuousClock.now
     private var permissionWatcher: Task<Void, Never>?
     private var analysisTask: Task<Void, Never>?
     static let analysisIntervalHours = 20.0
@@ -69,10 +71,27 @@ public final class AppEnvironment {
                 modes: { [weak self] in self?.modes ?? BuiltinModes.all },
                 sharedRules: { [weak self] in self?.sharedRules ?? BuiltinSharedRules.text },
                 vocabulary: { [weak self] in self?.vocabulary ?? [] },
-                onRecordChanged: { [weak self] record in self?.mergeIntoHistory(record) }
+                onRecordChanged: { [weak self] record in self?.mergeIntoHistory(record) },
+                onNeedsAppRestart: { [weak self] in self?.relaunchForLostSpeechInventory() }
             )
         )
         wireHotkeys()
+    }
+
+    /// 音声モデルの在庫 API が死んだので、プロセスを作り直す(C-15d)。
+    ///
+    /// 起動直後に起きているなら作り直しても同じ結果になるだけなので、その場合は
+    /// 文言だけ出して手を出さない。ここが再起動ループを止める歯止めになる。
+    private func relaunchForLostSpeechInventory() {
+        guard ContinuousClock.now - launchedAt > AppRelauncher.minimumUptime else {
+            KoeLog.engine.error("起動直後に音声モデルを使えないため、起動し直しは見送ります")
+            return
+        }
+        Task {
+            // 理由を読める長さだけ HUD を残してから消える。
+            try? await Task.sleep(for: DictationCoordinator.hudNoticeLingerDuration)
+            AppRelauncher.relaunch()
+        }
     }
 
     // MARK: 起動

@@ -18,6 +18,9 @@ public final class DictationCoordinator {
         public var sharedRules: @MainActor () -> String
         public var vocabulary: @MainActor () -> [VocabularyEntry]
         public var onRecordChanged: @MainActor (SessionRecord) -> Void
+        /// このプロセスでは直せない失敗の通知(`EngineError.needsAppRestart`)。
+        /// 状態機械は「もう先へ進めない」ことだけを知り、畳み方はアプリ側が決める。
+        public var onNeedsAppRestart: @MainActor () -> Void
 
         public init(
             settings: AppSettings,
@@ -26,7 +29,8 @@ public final class DictationCoordinator {
             modes: @MainActor @escaping () -> [Mode],
             sharedRules: @MainActor @escaping () -> String = { BuiltinSharedRules.text },
             vocabulary: @MainActor @escaping () -> [VocabularyEntry],
-            onRecordChanged: @MainActor @escaping (SessionRecord) -> Void
+            onRecordChanged: @MainActor @escaping (SessionRecord) -> Void,
+            onNeedsAppRestart: @MainActor @escaping () -> Void = {}
         ) {
             self.settings = settings
             self.engines = engines
@@ -35,6 +39,7 @@ public final class DictationCoordinator {
             self.sharedRules = sharedRules
             self.vocabulary = vocabulary
             self.onRecordChanged = onRecordChanged
+            self.onNeedsAppRestart = onNeedsAppRestart
         }
     }
 
@@ -450,6 +455,9 @@ public final class DictationCoordinator {
         }
         sounds.play(.failure)
         finish(phase: .finished(.failed(message)), detail: message)
+
+        // 次の録音も同じ理由で必ず失敗するので、待たずに畳む。
+        if case EngineError.needsAppRestart = error { deps.onNeedsAppRestart() }
     }
 
     private func finish(phase newPhase: SessionPhase, detail: String?) {

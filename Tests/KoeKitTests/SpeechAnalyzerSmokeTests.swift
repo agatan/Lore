@@ -81,14 +81,15 @@ struct SpeechAnalyzerSmokeTests {
         #expect(try await engine.prepare(hints: .init(languagePreference: .ja)) != nil)
     }
 
-    /// 割り当てが取れないことと未取得は別の話なので、案内も別でなければならない。
-    @Test("割り当てが取れないときは取得を促さない")
-    func notReservedMessageDoesNotSuggestDownload() {
-        let message = SpeechAnalyzerStt.notReservedMessage(Locale(identifier: "ja_JP"))
+    /// 予約が取れない状態は、取得でも再試行でも直らない(C-15d)。案内は再起動一択。
+    @Test("予約が取れないときは取得も再試行も促さない")
+    func needsRestartMessageOnlyAsksForRestart() {
+        let message = SpeechAnalyzerStt.needsRestartMessage(Locale(identifier: "ja_JP"))
         #expect(message.contains("日本語"))
-        #expect(message.contains("取得済み"))
+        #expect(message.contains("再起動"))
         #expect(!message.contains("未取得"))
         #expect(!message.contains("設定 > モデル"))
+        #expect(!message.contains("もう一度"))
     }
 
     private func runOneSession(engine: SpeechAnalyzerStt, format: AVAudioFormat) async -> Bool {

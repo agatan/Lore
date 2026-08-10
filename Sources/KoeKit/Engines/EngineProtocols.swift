@@ -121,13 +121,15 @@ extension LlmEngine {
 public enum EngineError: LocalizedError, Sendable {
     case timedOut
     case notReady(String)
+    /// このプロセスでは回復できない。アプリを起動し直すしか手が無い(C-15d)。
+    case needsAppRestart(String)
     case cancelled
     case failed(String)
 
     public var errorDescription: String? {
         switch self {
         case .timedOut: "処理がタイムアウトしました"
-        case .notReady(let text): text
+        case .notReady(let text), .needsAppRestart(let text): text
         case .cancelled: "キャンセルされました"
         case .failed(let text): text
         }
