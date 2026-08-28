@@ -31,6 +31,7 @@ app: build
 	@mkdir -p "$(CONTENTS)/MacOS" "$(CONTENTS)/Resources"
 	@cp "$(BUILD_DIR)/Koe" "$(CONTENTS)/MacOS/Koe"
 	@cp Resources/Info.plist "$(CONTENTS)/Info.plist"
+	@cp THIRD_PARTY_NOTICES "$(CONTENTS)/Resources/THIRD_PARTY_NOTICES.txt"
 	@printf 'APPL????' > "$(CONTENTS)/PkgInfo"
 	@if [ -f Resources/AppIcon.icns ]; then cp Resources/AppIcon.icns "$(CONTENTS)/Resources/"; fi
 	@for b in $(BUILD_DIR)/*.bundle; do \

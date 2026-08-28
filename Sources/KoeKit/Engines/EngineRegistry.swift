@@ -48,6 +48,11 @@ public final class EngineRegistry {
         }
     }
 
+    /// 履歴を読む語彙分析は、外部送信の選択とは独立して常にオンデバイスで行う。
+    /// `llm` を使うと Groq 選択時に過去の履歴まで送信され、UI の「仕上げだけ」という
+    /// 説明とプライバシー境界が崩れる。
+    var analysisLlm: any LlmEngine { onDeviceLlm }
+
     public func apply(backend: FormattingBackend, groqModel: String) {
         self.backend = backend
         groq.apply(model: groqModel)

@@ -60,7 +60,7 @@ echo "キーチェーンのパスワードを入力してください(署名時�
 echo "  プロンプトに (deprecated) と出ますが、security コマンドの入力方式の話なので問題ありません。"
 echo "  空 Enter でスキップしても構いません(その場合は初回の署名時に「常に許可」を選んでください)。"
 if ! security set-key-partition-list \
-	-S apple-tool:,apple:,codesign: -s "$KEYCHAIN" >/dev/null 2>&1; then
+	-S apple-tool:,apple:,codesign: -s -l "$NAME" "$KEYCHAIN" >/dev/null 2>&1; then
 	echo "note: 抑止できませんでした。署名時のダイアログでは「常に許可」を選んでください"
 fi
 echo

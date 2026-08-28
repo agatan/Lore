@@ -384,7 +384,7 @@ public final class AppEnvironment {
 
     public func runAnalysis(force: Bool) async {
         guard let database else { return }
-        let llm = engines.llm
+        let llm = engines.analysisLlm
         guard analysisState != .running else { return }
         analysisState = .running
         let job = VocabularySuggestionJob(

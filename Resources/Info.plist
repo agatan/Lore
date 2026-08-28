@@ -29,9 +29,9 @@
 	<key>NSHighResolutionCapable</key>
 	<true/>
 	<key>NSHumanReadableCopyright</key>
-	<string>Koe — 完全ローカルの音声入力</string>
+	<string>Copyright © 2026 agatan</string>
 	<key>NSMicrophoneUsageDescription</key>
-	<string>話した内容を文字にするためにマイクを使います。音声・文字起こしはこの Mac の中だけで処理され、ネットワークには送信されません。</string>
+	<string>話した内容を文字にするためにマイクを使います。録音した音声は保存・送信しません。Groq を選んだ場合に限り、文字起こしと指示文を文章の仕上げのために送信します。</string>
 	<key>NSSpeechRecognitionUsageDescription</key>
 	<string>オンデバイスの音声認識で文字起こしを行います。音声がこの Mac の外に出ることはありません。</string>
 </dict>

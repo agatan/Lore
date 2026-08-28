@@ -34,6 +34,17 @@ struct FormattingBackendTests {
     }
 
     @MainActor
+    @Test("語彙分析は Groq 選択中もオンデバイス")
+    func vocabularyAnalysisNeverLeavesTheMac() {
+        let registry = EngineRegistry()
+
+        registry.apply(backend: .groq, groqModel: "test-model")
+
+        #expect(registry.llm.identifier == .groq)
+        #expect(registry.analysisLlm.identifier == .foundationModels)
+    }
+
+    @MainActor
     @Test("空のモデル ID は既定値に丸める")
     func blankModelFallsBack() {
         let settings = AppSettings(defaults: UserDefaults(suiteName: #function)!)

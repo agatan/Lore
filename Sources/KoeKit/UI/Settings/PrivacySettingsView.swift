@@ -120,12 +120,12 @@ struct PrivacySettingsView: View {
     private var neverLeaves: [String] {
         var items = [
             "録音した音声",
-            "カスタム語彙",
-            "履歴と、そのとき使った指示文",
+            "保存済みの過去履歴",
             "前面アプリの情報",
         ]
         if !sendsOffDevice {
             items.insert("聞き取った文字と仕上げた文章", at: 1)
+            items.insert("共通ルール・モードの指示・カスタム語彙", at: 2)
         }
         return items
     }

@@ -1,16 +1,17 @@
 # Koe
 
-macOS 専用・完全ローカルの音声入力アプリ。話した内容が、いま作業しているアプリにふさわしい完成文になって挿入される。
+macOS 専用の音声入力アプリです。話した内容を文字にし、いま作業しているアプリに合う文章へ整えて挿入します。
+
+音声認識と既定の文章整形は Mac 上で動作します。利用者が明示的に Groq を選んだ場合に限り、文章の仕上げのために文字起こしと指示文を Groq API へ送信します。録音した音声は保存・送信しません。詳しくは [データ取り扱い](PRIVACY.md) を参照してください。
 
 - 要件: [docs/spec.md](docs/spec.md)
 - 設計: [docs/design.md](docs/design.md)
-- 概要(人間向け): [docs/overview/index.html](docs/overview/index.html)
-
-音声・文字起こし・整形テキスト・語彙・履歴は**一切ネットワークに出ない**。通信するのはモデルのダウンロードだけで、その処理は [ModelStore](Sources/KoeKit/System/ModelStore.swift) に隔離してある。
+- 概要: [docs/overview/index.html](docs/overview/index.html)
 
 ## 必要環境
 
-- macOS 26 (Tahoe) 以降 / Apple Silicon
+- macOS 26 (Tahoe) 以降
+- Apple Silicon
 - Xcode 26 以降
 
 ## ビルドと起動
@@ -19,74 +20,65 @@ macOS 専用・完全ローカルの音声入力アプリ。話した内容が�
 make run
 ```
 
-`Koe.app` を組み立てて起動する。権限(マイク・アクセシビリティ)は .app に対して付与されるため、開発中も素の実行ファイルではなく必ず .app で起動する。
+権限は `.app` に対して付与されるため、開発中も実行ファイルを直接起動せず `make run` を使います。
 
 | コマンド | 内容 |
 |---|---|
-| `make run` | ビルド → `build/Koe.app` を組み立て → 起動 |
-| `make app` | 組み立てまで |
-| `make test` | ユニットテスト |
+| `make run` | ビルドして `Koe.app` を起動 |
+| `make app` | `Koe.app` の組み立てまで実行 |
+| `make test` | ユニットテストを実行 |
 | `make install` | Release ビルドを `/Applications` へ配置 |
 | `make stop` | 起動中の Koe を終了 |
 
-### MLX を使う場合
-
-整形エンジンに MLX(Qwen3-4B など)を選ぶには Metal シェーダのコンパイルが必要で、これは SwiftPM の CLI ビルドではできない(mlx-swift の上流制約)。Metal ツールチェーンを入れると `make` が自動的に `xcodebuild` 経由のビルドに切り替わる。
-
-```bash
-make metal-toolchain
-```
-
-入れていない場合、MLX は設定画面で理由付きの「使用不可」として表示され、選んでも呼び出される前に弾かれる(既定の Apple Foundation Models はそのまま使える)。
-
 ### 初回に必要な許可
 
-1. **マイク** — 初回の録音時にダイアログが出る
-2. **アクセシビリティ** — ホットキーの監視とテキスト挿入に必要。システム設定 > プライバシーとセキュリティ > アクセシビリティ で `Koe.app` を許可する
+1. **マイク** — 音声認識に使用します。
+2. **アクセシビリティ** — ホットキーの監視とテキスト挿入に使用します。
 
 ### アクセシビリティの許可が毎回外れるとき
 
-ad-hoc 署名（`codesign -s -`）は identity が cdhash 自身なので、リビルドするたびに別アプリ扱いになり、許可が無効になる。固定の自己署名証明書を一度作れば解決する。
+ad-hoc 署名ではリビルドのたびに別アプリとして扱われます。固定の自己署名証明書を一度作ると、開発中の許可を維持できます。
 
 ```bash
 make dev-cert
 ```
 
-以降 `make app` / `make install` はこの identity で署名するため、リビルドしても許可が残る。許可が壊れて有効にできなくなった場合は登録をリセットする。
+許可が壊れた場合は、次のコマンドでこのアプリの登録だけをリセットできます。
 
 ```bash
 make reset-permissions
 ```
 
-同じ bundle ID のコピーが複数あると TCC が混乱するため、`make install` は `build/Koe.app` を残さない。開発中も `/Applications/Koe.app` の 1 つだけを使うのが安全。
-
 ## 使い方
 
-- **右 ⌥ を短く押す** → 録音開始(トグル)。もう一度押すと停止して整形・挿入
-- **右 ⌥ を押しっぱなし** → push-to-talk。離した瞬間に停止して整形・挿入
-- **録音中に esc** → 破棄。挿入はしないが、認識済みテキストは履歴に残る
+- **右 ⌥ を短く押す** — 録音を開始・停止します。
+- **右 ⌥ を押し続ける** — push-to-talk として動作します。
+- **録音中に Esc** — 挿入を取り消します。認識済みの文字があれば履歴に残します。
 
-ホットキー・長押し閾値は設定画面で変更できる。
+ホットキーと長押し閾値は設定画面で変更できます。
+
+## 文章の仕上げ
+
+- **この Mac の中で仕上げる** — 既定値です。Apple Foundation Models を使用し、文字起こしを外部送信しません。
+- **Groq API で仕上げる** — 利用者が選んだ場合だけ、今回の文字起こし、共通ルール、モード指示、語彙を Groq API へ送ります。API キーは macOS Keychain に保存します。
+
+どちらの方式でも、整形に失敗した場合は生の文字起こしを挿入します。語彙の自動提案は常にオンデバイスで実行し、過去の履歴を Groq へ送りません。
 
 ## 構成
 
-```
+```text
 Sources/KoeKit/
-├── Domain/        純粋なドメイン層(AppKit/AVFoundation 非依存)
-│                  セッション状態機械・モード解決・整形プロンプトと出力検証・語彙
-├── Engines/       差し替え可能な推論エンジン
-│                  SpeechAnalyzer / WhisperKit, Foundation Models / MLX
-├── System/        macOS 統合(ホットキー・音声入力・テキスト挿入・モデル取得)
-├── Persistence/   GRDB(SQLite)。履歴・モード・語彙・メタ情報
-├── Analysis/      履歴からの語彙自動提案
-├── App/           状態機械の駆動・設定・エンジン選択
-└── UI/            SwiftUI(メニューバー・HUD・設定・履歴)
+├── Domain/        セッション状態、モード、整形ルール、語彙
+├── Engines/       SpeechAnalyzer、Foundation Models、Groq
+├── System/        ホットキー、録音、挿入、Keychain、macOS 統合
+├── Persistence/   GRDB / SQLite による履歴・設定データ
+├── Analysis/      オンデバイスの語彙候補分析
+├── App/           状態機械の駆動と依存関係の組み立て
+└── UI/            メニューバー、HUD、設定、履歴
 ```
 
-依存の向きは `UI → App → Domain ← Engines / System / Persistence`。Domain が protocol を定義し、外側が実装を注入する。
+中心となる不変条件は「発話を失わない」ことです。STT 確定後の文字起こしを先に永続化してから整形・挿入へ進み、整形失敗時は生テキストへ、挿入失敗時はクリップボードへ退避します。各履歴には適用したモード、指示文、エンジン、モデル、処理時間を記録します。
 
-### 守っている不変条件
+## License
 
-**発話を失わない。** STT 確定 → 永続化 → 整形 → 挿入の順序を [SessionDraft](Sources/KoeKit/Domain/Session.swift) が型で強制する。`finalizeTranscript` を通るまで永続化可能な `SessionRecord` は存在しないので、整形や挿入を先に実行することが構造的にできない。整形が失敗すれば生テキストを挿入し、挿入が失敗すればクリップボードに残す。
-
-**後から説明できる。** 各セッションに、適用したモード・**プロンプト全文**・エンジン・モデル・各段のレイテンシを記録する。設定を変えても過去の履歴は当時の内容を保持する。
+[MIT License](LICENSE)
