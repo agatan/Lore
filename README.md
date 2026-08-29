@@ -64,15 +64,18 @@ macOSのショートカットAppには「ライフログを開始」「ライフ
 
 より細かい自動化向けに、同じDB・エクスポート定義を使うCLIとstdio MCPサーバーがあります。
 
+Koeの「設定 > 連携」からCLIとAgent Skillをインストールできます。CLIは`~/.local/bin/koe`からKoe.app内の実体へリンクするため、PATHやシェル設定を書き換えず、アプリの更新と同時に更新されます。Agent Skillは`~/.agents/skills/koe`へ配置し、Claudeからも同じ内容を参照します。
+
 ```sh
-make tools
-build/tools/koe export day --date 2026-08-29 --include speech,memos,summary
-build/tools/koe todo list
-build/tools/koe search "レセコン"
-build/tools/koe prompt get summary
+koe export day --date 2026-08-29 --include speech,memos,summary
+koe todo list
+koe search "レセコン"
+koe prompt get summary
 ```
 
-`build/tools/koe-mcp` は標準入出力のMCPサーバーです。`life_log_export`、`life_log_search`、`todo_*`、`prompt_get`、`prompt_set`を公開します。TODOやプロンプトの変更は起動中のKoeにも通知されます。MCPクライアントにはこの実行ファイルの絶対パスをcommandとして登録してください。
+`/Applications/Koe.app/Contents/Helpers/koe-mcp` は標準入出力のMCPサーバーです。`life_log_export`、`life_log_search`、`todo_*`、`prompt_get`、`prompt_set`を公開します。TODOやプロンプトの変更は起動中のKoeにも通知されます。MCPクライアントにはこの実行ファイルの絶対パスをcommandとして登録してください。
+
+開発中にCLIとMCPだけを組み立てる場合は`make tools`を使います。
 
 ## 文章の仕上げ
 

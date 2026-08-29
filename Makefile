@@ -35,10 +35,13 @@ tools:
 	@echo "built build/tools/koe and build/tools/koe-mcp"
 
 ## Koe.app を組み立てて署名する
-app: build
+app: build tools
 	@rm -rf "$(APP)"
-	@mkdir -p "$(CONTENTS)/MacOS" "$(CONTENTS)/Resources"
+	@mkdir -p "$(CONTENTS)/MacOS" "$(CONTENTS)/Helpers" "$(CONTENTS)/Resources/Skills"
 	@cp "$(BUILD_DIR)/Koe" "$(CONTENTS)/MacOS/Koe"
+	@cp build/tools/koe "$(CONTENTS)/Helpers/koe"
+	@cp build/tools/koe-mcp "$(CONTENTS)/Helpers/koe-mcp"
+	@cp -R Resources/Skills/koe "$(CONTENTS)/Resources/Skills/koe"
 	@cp Resources/Info.plist "$(CONTENTS)/Info.plist"
 	@cp THIRD_PARTY_NOTICES "$(CONTENTS)/Resources/THIRD_PARTY_NOTICES.txt"
 	@printf 'APPL????' > "$(CONTENTS)/PkgInfo"
@@ -47,6 +50,10 @@ app: build
 		[ -e "$$b" ] && cp -R "$$b" "$(CONTENTS)/Resources/" || true; \
 	done
 	@zsh Scripts/extract-app-intents.sh "$(BUILD_DIR)" "$(CONTENTS)"
+	@codesign --force --sign "$(CODESIGN_ID)" --identifier $(BUNDLE_ID).cli \
+		--timestamp=none "$(CONTENTS)/Helpers/koe"
+	@codesign --force --sign "$(CODESIGN_ID)" --identifier $(BUNDLE_ID).mcp \
+		--timestamp=none "$(CONTENTS)/Helpers/koe-mcp"
 	@codesign --force --sign "$(CODESIGN_ID)" --identifier $(BUNDLE_ID) \
 		--timestamp=none "$(APP)" 2>/dev/null \
 		|| codesign --force --sign "$(CODESIGN_ID)" --identifier $(BUNDLE_ID) "$(APP)"
