@@ -146,6 +146,35 @@ public struct LifeLogStore: Sendable {
                 """, arguments: [query.replacingOccurrences(of: "\"", with: "\"\""), date(start), date(end)]).map(decodeUtterance)
         }
     }
+
+    /// 日本語の部分一致を主用途にした横断検索。3文字以上はFTS5 trigram、短い語はLIKEを使う。
+    public func search(_ query: String, limit: Int = 100, calendar: Calendar = .current) async throws -> [LifeLogSearchResult] {
+        let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return [] }
+        let rows = try queue.read { db in
+            if trimmed.count >= 3 {
+                let phrase = "\"\(trimmed.replacingOccurrences(of: "\"", with: "\"\""))\""
+                return try Row.fetchAll(db, sql: Self.ftsSearchSQL, arguments: [phrase, phrase, phrase, phrase, max(1, limit)])
+            }
+            let escaped = trimmed
+                .replacingOccurrences(of: "\\", with: "\\\\")
+                .replacingOccurrences(of: "%", with: "\\%")
+                .replacingOccurrences(of: "_", with: "\\_")
+            let pattern = "%\(escaped)%"
+            return try Row.fetchAll(db, sql: Self.likeSearchSQL, arguments: [pattern, pattern, pattern, pattern, pattern, pattern, max(1, limit)])
+        }
+        return try rows.map { row in
+            let occurredAt = try parse(row["occurred_at"])
+            return LifeLogSearchResult(
+                id: "\(row["kind"] as String)-\(row["id"] as String)",
+                kind: LifeLogSearchResult.Kind(rawValue: row["kind"])!,
+                text: row["text"],
+                occurredAt: occurredAt,
+                day: (row["day"] as String?) ?? LifeLogDateKey.string(for: occurredAt, calendar: calendar),
+                todoStatus: (row["status"] as String?).flatMap(LifeLogTodo.Status.init(rawValue:))
+            )
+        }
+    }
     public func utterance(id: String) async throws -> LifeLogUtterance? {
         try await queue.read { db in try Row.fetchOne(db, sql: "SELECT * FROM life_log_utterances WHERE id=?", arguments: [id]).map(decodeUtterance) }
     }
@@ -216,4 +245,28 @@ public struct LifeLogStore: Sendable {
     private func decodeEvent(_ r: Row) throws -> CalendarEventSnapshot { CalendarEventSnapshot(id: r["id"], externalIdentifier: r["external_identifier"], title: r["title"], startsAt: try parse(r["starts_at"]), endsAt: try parse(r["ends_at"]), calendarTitle: r["calendar_title"], isAllDay: r["is_all_day"], participationStatus: CalendarParticipationStatus(rawValue: r["participation_status"]) ?? .unknown) }
     private func decodeTodo(_ r: Row) throws -> LifeLogTodo { LifeLogTodo(id: r["id"], title: r["title"], status: LifeLogTodo.Status(rawValue: r["status"])!, createdAt: try parse(r["created_at"]), dueAt: try (r["due_at"] as String?).map(parse), sourceConversationID: r["source_conversation_id"], sourceUtteranceIDs: try PersistenceCoding.decode([String].self, from: r["source_utterance_ids"]), sourceMemoIDs: try PersistenceCoding.decode([String].self, from: r["source_memo_ids"]), confidence: r["confidence"]) }
     private func decodeSummary(_ r: Row) throws -> DailySummary { DailySummary(day: r["day"], summary: r["summary"], commitments: try PersistenceCoding.decode([String].self, from: r["commitments"]), topics: try PersistenceCoding.decode([String].self, from: r["topics"]), calendarEventCount: r["calendar_event_count"], capturedDurationSeconds: r["captured_duration_seconds"], utteranceCount: r["utterance_count"], summarizedThrough: try parse(r["summarized_through"]), isFinal: r["is_final"]) }
+
+    private static let ftsSearchSQL = """
+        SELECT 'utterance' kind, u.id, u.text, u.started_at occurred_at, NULL day, NULL status
+        FROM life_log_utterances u JOIN life_log_utterances_fts f ON f.rowid=u.rowid WHERE life_log_utterances_fts MATCH ?
+        UNION ALL
+        SELECT 'memo', m.id, m.text, m.created_at, NULL, NULL
+        FROM life_log_memos m JOIN life_log_memos_fts f ON f.rowid=m.rowid WHERE life_log_memos_fts MATCH ?
+        UNION ALL
+        SELECT 'todo', t.id, t.title, t.created_at, NULL, t.status
+        FROM life_log_todos t JOIN life_log_todos_fts f ON f.rowid=t.rowid WHERE life_log_todos_fts MATCH ?
+        UNION ALL
+        SELECT 'summary', s.day, s.summary, s.summarized_through, s.day, NULL
+        FROM daily_summaries s JOIN daily_summaries_fts f ON f.rowid=s.rowid WHERE daily_summaries_fts MATCH ?
+        ORDER BY occurred_at DESC LIMIT ?
+        """
+
+    private static let likeSearchSQL = """
+        SELECT 'utterance' kind, id, text, started_at occurred_at, NULL day, NULL status FROM life_log_utterances WHERE text LIKE ? ESCAPE '\\'
+        UNION ALL SELECT 'memo', id, text, created_at, NULL, NULL FROM life_log_memos WHERE text LIKE ? ESCAPE '\\'
+        UNION ALL SELECT 'todo', id, title, created_at, NULL, status FROM life_log_todos WHERE title LIKE ? ESCAPE '\\'
+        UNION ALL SELECT 'summary', day, summary, summarized_through, day, NULL FROM daily_summaries
+          WHERE summary LIKE ? ESCAPE '\\' OR commitments LIKE ? ESCAPE '\\' OR topics LIKE ? ESCAPE '\\'
+        ORDER BY occurred_at DESC LIMIT ?
+        """
 }

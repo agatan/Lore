@@ -349,6 +349,30 @@ struct LifeLogTests {
         #expect(!text.contains("下書き"))
     }
 
+    @Test("日本語trigram検索は発話・メモ・TODO・要約を横断し短い語にも対応する")
+    func japaneseLifeLogSearch() async throws {
+        let database = try await KoeDatabase.inMemory()
+        let date = Date(timeIntervalSince1970: 1_725_158_400)
+        try await database.lifeLog.save(audioChunk: .init(
+            id: "audio", captureStartedAt: date, captureEndedAt: date, localPath: "/tmp/search.m4a"
+        ))
+        try await database.lifeLog.save(utterance: .init(
+            id: "utterance", startedAt: date, endedAt: date, text: "レセコンの移行を相談した", audioChunkID: "audio"
+        ))
+        try await database.lifeLog.save(memo: .init(id: "memo", createdAt: date, text: "診療報酬の確認"))
+        try await database.lifeLog.save(todo: .init(id: "todo", title: "請求データを確認", createdAt: date))
+        try await database.lifeLog.save(summary: .init(
+            day: LifeLogDateKey.string(for: date), summary: "移行計画を整理した", commitments: ["来週共有"], topics: ["レセプト"],
+            calendarEventCount: 0, capturedDurationSeconds: 1, utteranceCount: 1, summarizedThrough: date, isFinal: false
+        ))
+
+        #expect(try await database.lifeLog.search("レセコン").map(\.kind) == [.utterance])
+        #expect(try await database.lifeLog.search("診療").map(\.kind) == [.memo])
+        #expect(try await database.lifeLog.search("請求").map(\.kind) == [.todo])
+        #expect(try await database.lifeLog.search("移行計画").map(\.kind).contains(.summary))
+        #expect(try await database.lifeLog.search("共有").map(\.kind) == [.summary])
+    }
+
     @Test("ライフログ削除はすべての派生データとsource of truthを同時に消す")
     func deleteAllLifeLogData() async throws {
         let database = try await KoeDatabase.inMemory()

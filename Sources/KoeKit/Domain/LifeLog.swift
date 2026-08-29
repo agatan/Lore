@@ -192,9 +192,49 @@ public struct LifeLogDayActivity: Sendable, Equatable {
     public var isEmpty: Bool { calendarEventCount == 0 && capturedDuration == 0 }
 }
 
+public struct LifeLogSearchResult: Identifiable, Sendable, Equatable {
+    public enum Kind: String, Sendable {
+        case utterance
+        case memo
+        case todo
+        case summary
+
+        public var displayName: String {
+            switch self {
+            case .utterance: "発話"
+            case .memo: "メモ"
+            case .todo: "TODO"
+            case .summary: "要約"
+            }
+        }
+    }
+
+    public var id: String
+    public var kind: Kind
+    public var text: String
+    public var occurredAt: Date
+    public var day: String
+    public var todoStatus: LifeLogTodo.Status?
+
+    public init(id: String, kind: Kind, text: String, occurredAt: Date, day: String, todoStatus: LifeLogTodo.Status? = nil) {
+        self.id = id
+        self.kind = kind
+        self.text = text
+        self.occurredAt = occurredAt
+        self.day = day
+        self.todoStatus = todoStatus
+    }
+}
+
 public enum LifeLogDateKey {
     public static func string(for date: Date, calendar: Calendar = .current) -> String {
         let parts = calendar.dateComponents([.year, .month, .day], from: date)
         return String(format: "%04d-%02d-%02d", parts.year ?? 0, parts.month ?? 0, parts.day ?? 0)
+    }
+
+    public static func date(from value: String, calendar: Calendar = .current) -> Date? {
+        let parts = value.split(separator: "-").compactMap { Int($0) }
+        guard parts.count == 3 else { return nil }
+        return calendar.date(from: DateComponents(year: parts[0], month: parts[1], day: parts[2]))
     }
 }

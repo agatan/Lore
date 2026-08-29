@@ -226,6 +226,49 @@ public final class KoeDatabase: Sendable {
                 table.add(column: "peak_level", .double)
             }
         }
+        migrator.registerMigration("v6-life-log-search") { db in
+            try db.execute(sql: """
+                CREATE VIRTUAL TABLE life_log_memos_fts USING fts5(text, content='life_log_memos', content_rowid='rowid', tokenize='trigram');
+                CREATE TRIGGER life_log_memos_fts_insert AFTER INSERT ON life_log_memos BEGIN
+                  INSERT INTO life_log_memos_fts(rowid, text) VALUES (new.rowid, new.text);
+                END;
+                CREATE TRIGGER life_log_memos_fts_delete AFTER DELETE ON life_log_memos BEGIN
+                  INSERT INTO life_log_memos_fts(life_log_memos_fts, rowid, text) VALUES ('delete', old.rowid, old.text);
+                END;
+                CREATE TRIGGER life_log_memos_fts_update AFTER UPDATE ON life_log_memos BEGIN
+                  INSERT INTO life_log_memos_fts(life_log_memos_fts, rowid, text) VALUES ('delete', old.rowid, old.text);
+                  INSERT INTO life_log_memos_fts(rowid, text) VALUES (new.rowid, new.text);
+                END;
+
+                CREATE VIRTUAL TABLE life_log_todos_fts USING fts5(title, content='life_log_todos', content_rowid='rowid', tokenize='trigram');
+                CREATE TRIGGER life_log_todos_fts_insert AFTER INSERT ON life_log_todos BEGIN
+                  INSERT INTO life_log_todos_fts(rowid, title) VALUES (new.rowid, new.title);
+                END;
+                CREATE TRIGGER life_log_todos_fts_delete AFTER DELETE ON life_log_todos BEGIN
+                  INSERT INTO life_log_todos_fts(life_log_todos_fts, rowid, title) VALUES ('delete', old.rowid, old.title);
+                END;
+                CREATE TRIGGER life_log_todos_fts_update AFTER UPDATE ON life_log_todos BEGIN
+                  INSERT INTO life_log_todos_fts(life_log_todos_fts, rowid, title) VALUES ('delete', old.rowid, old.title);
+                  INSERT INTO life_log_todos_fts(rowid, title) VALUES (new.rowid, new.title);
+                END;
+
+                CREATE VIRTUAL TABLE daily_summaries_fts USING fts5(summary, commitments, topics, content='daily_summaries', content_rowid='rowid', tokenize='trigram');
+                CREATE TRIGGER daily_summaries_fts_insert AFTER INSERT ON daily_summaries BEGIN
+                  INSERT INTO daily_summaries_fts(rowid, summary, commitments, topics) VALUES (new.rowid, new.summary, new.commitments, new.topics);
+                END;
+                CREATE TRIGGER daily_summaries_fts_delete AFTER DELETE ON daily_summaries BEGIN
+                  INSERT INTO daily_summaries_fts(daily_summaries_fts, rowid, summary, commitments, topics) VALUES ('delete', old.rowid, old.summary, old.commitments, old.topics);
+                END;
+                CREATE TRIGGER daily_summaries_fts_update AFTER UPDATE ON daily_summaries BEGIN
+                  INSERT INTO daily_summaries_fts(daily_summaries_fts, rowid, summary, commitments, topics) VALUES ('delete', old.rowid, old.summary, old.commitments, old.topics);
+                  INSERT INTO daily_summaries_fts(rowid, summary, commitments, topics) VALUES (new.rowid, new.summary, new.commitments, new.topics);
+                END;
+
+                INSERT INTO life_log_memos_fts(life_log_memos_fts) VALUES ('rebuild');
+                INSERT INTO life_log_todos_fts(life_log_todos_fts) VALUES ('rebuild');
+                INSERT INTO daily_summaries_fts(daily_summaries_fts) VALUES ('rebuild');
+                """)
+        }
         return migrator
     }
 }

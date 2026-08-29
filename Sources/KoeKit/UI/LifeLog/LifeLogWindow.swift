@@ -6,6 +6,7 @@ public struct LifeLogWindow: View {
     var env: AppEnvironment
     @State private var exportError: String?
     @State private var showsExportSheet = false
+    @State private var showsSearchSheet = false
 
     public init(env: AppEnvironment) { self.env = env }
 
@@ -39,6 +40,9 @@ public struct LifeLogWindow: View {
                 todos: env.lifeLog.todos,
                 onExport: exportSelectedDay
             )
+        }
+        .sheet(isPresented: $showsSearchSheet) {
+            LifeLogSearchSheet(env: env)
         }
     }
 
@@ -99,8 +103,12 @@ public struct LifeLogWindow: View {
     private var timeline: some View {
         VStack(spacing: 0) {
             panelHeader("Timeline", symbol: "calendar.day.timeline.left") {
-                Text(env.lifeLog.selectedDate.formatted(.dateTime.year().month().day()))
-                    .font(.system(size: 11, weight: .medium, design: .rounded)).foregroundStyle(.tertiary)
+                HStack(spacing: 10) {
+                    Button { showsSearchSheet = true } label: { Image(systemName: "magnifyingglass") }
+                        .buttonStyle(.plain).foregroundStyle(.secondary).help("ライフログを検索")
+                    Text(env.lifeLog.selectedDate.formatted(.dateTime.year().month().day()))
+                        .font(.system(size: 11, weight: .medium, design: .rounded)).foregroundStyle(.tertiary)
+                }
             }
             Divider().opacity(0.4)
             ScrollViewReader { proxy in
