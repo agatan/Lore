@@ -205,6 +205,11 @@ public struct LifeLogStore: Sendable {
     public func todos() async throws -> [LifeLogTodo] {
         try await queue.read { db in try Row.fetchAll(db, sql: "SELECT * FROM life_log_todos ORDER BY status, created_at DESC").map(decodeTodo) }
     }
+    public func todo(id: String) async throws -> LifeLogTodo? {
+        try await queue.read { db in
+            try Row.fetchOne(db, sql: "SELECT * FROM life_log_todos WHERE id=?", arguments: [id]).map(decodeTodo)
+        }
+    }
     public func save(todo value: LifeLogTodo) async throws {
         try await queue.write { db in try db.execute(sql: """
             INSERT INTO life_log_todos VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)

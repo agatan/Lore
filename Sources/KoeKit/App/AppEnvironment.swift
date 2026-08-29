@@ -70,6 +70,7 @@ public final class AppEnvironment {
     private var permissionWatcher: Task<Void, Never>?
     private var analysisTask: Task<Void, Never>?
     @ObservationIgnored private var powerObservers: [any NSObjectProtocol] = []
+    @ObservationIgnored private var automationObservers: [any NSObjectProtocol] = []
     static let analysisIntervalHours = 20.0
     static let lastAnalysisRunKey = "vocab_analysis_last_run"
 
@@ -89,6 +90,22 @@ public final class AppEnvironment {
         )
         wireHotkeys()
         wirePowerNotifications()
+        wireAutomationNotifications()
+    }
+
+    private func wireAutomationNotifications() {
+        let center = DistributedNotificationCenter.default()
+        automationObservers.append(center.addObserver(forName: KoeAutomationNotification.dataChanged, object: nil, queue: .main) {
+            [weak self] _ in
+            Task { @MainActor [weak self] in
+                await self?.lifeLog.reload()
+                if let date = self?.lifeLog.selectedDate { await self?.lifeLog.loadActivity(containing: date) }
+            }
+        })
+        automationObservers.append(center.addObserver(forName: KoeAutomationNotification.settingsChanged, object: nil, queue: .main) {
+            [weak self] _ in
+            Task { @MainActor [weak self] in self?.settings.reload() }
+        })
     }
 
     private func wirePowerNotifications() {

@@ -16,7 +16,7 @@ DEV_IDENTITY := $(shell security find-identity -p codesigning 2>/dev/null | grep
 CODESIGN_ID := $(if $(DEV_IDENTITY),Koe Dev,-)
 BUILD_DIR = .build/$(CONFIG)
 
-.PHONY: all build app run stop test clean install icon dev-cert reset-permissions
+.PHONY: all build tools app run stop test clean install icon dev-cert reset-permissions
 
 all: app
 
@@ -24,6 +24,15 @@ all: app
 # xcodebuild も Metal ツールチェーンも要らず、SwiftPM だけでビルドできる。
 build:
 	swift build -c $(CONFIG) --product Koe
+
+## Shortcutsより細かい自動化向けのCLIとstdio MCPサーバー
+tools:
+	swift build -c $(CONFIG) --product koe-cli
+	swift build -c $(CONFIG) --product koe-mcp
+	@mkdir -p build/tools
+	@cp "$(BUILD_DIR)/koe-cli" build/tools/koe
+	@cp "$(BUILD_DIR)/koe-mcp" build/tools/koe-mcp
+	@echo "built build/tools/koe and build/tools/koe-mcp"
 
 ## Koe.app を組み立てて署名する
 app: build

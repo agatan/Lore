@@ -12,6 +12,8 @@ let package = Package(
     platforms: [.macOS("26.0")],
     products: [
         .executable(name: "Koe", targets: ["Koe"]),
+        .executable(name: "koe-cli", targets: ["KoeCLI"]),
+        .executable(name: "koe-mcp", targets: ["KoeMCP"]),
         .library(name: "KoeKit", targets: ["KoeKit"]),
     ],
     // 音声認識と既定の整形はOS内蔵モデルを使う。クラウド／ローカルLLMはURLSessionで接続する。
@@ -34,6 +36,8 @@ let package = Package(
                 "-Xfrontend", appIntentsProtocols,
             ])]
         ),
+        .executableTarget(name: "KoeCLI", dependencies: ["KoeKit"]),
+        .executableTarget(name: "KoeMCP", dependencies: ["KoeKit"]),
         .testTarget(
             name: "KoeKitTests",
             dependencies: ["KoeKit"]

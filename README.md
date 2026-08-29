@@ -56,7 +56,23 @@ make reset-permissions
 - **録音中に Esc** — 挿入を取り消します。認識済みの文字があれば履歴に残します。
 
 音声入力のホットキーと長押し閾値に加え、ライフログの記録開始・停止とミニウィンドウ表示切り替えのホットキーも設定画面で変更できます。
-macOSのショートカットAppには「ライフログを開始」「ライフログを終了」に加え、「今日のライフログをコピー」「今日のライフログをファイルにする」アクションを公開します。後者は予定・発話・メモを時系列で区別できるテキストにし、LLMやRaycastなど次の処理へ渡せます。
+macOSのショートカットAppには「ライフログを開始」「ライフログを終了」に加え、日別ライフログと未実施TODOをコピー／ファイル化するアクションを公開します。予定・発話・メモを時系列で区別できるテキストにし、LLMやRaycastなど次の処理へ渡せます。
+
+日別の書き出しでは日付と、予定・発話・メモ・要約・その日に作成した未実施TODOを個別に選べます。「未実施TODOをすべてコピー／ファイルにする」は日別とは独立したアクションです。
+
+## CLI / MCP
+
+より細かい自動化向けに、同じDB・エクスポート定義を使うCLIとstdio MCPサーバーがあります。
+
+```sh
+make tools
+build/tools/koe export day --date 2026-08-29 --include speech,memos,summary
+build/tools/koe todo list
+build/tools/koe search "レセコン"
+build/tools/koe prompt get summary
+```
+
+`build/tools/koe-mcp` は標準入出力のMCPサーバーです。`life_log_export`、`life_log_search`、`todo_*`、`prompt_get`、`prompt_set`を公開します。TODOやプロンプトの変更は起動中のKoeにも通知されます。MCPクライアントにはこの実行ファイルの絶対パスをcommandとして登録してください。
 
 ## 文章の仕上げ
 

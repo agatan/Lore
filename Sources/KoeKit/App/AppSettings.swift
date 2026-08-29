@@ -250,4 +250,14 @@ public final class AppSettings {
         storage = Storage()
         persist()
     }
+
+    /// CLI/MCPが同じ設定ドメインを書き換えた後、起動中のUIへ反映する。
+    public func reload() {
+        guard let data = defaults.data(forKey: Self.defaultsKey) else { return }
+        do {
+            storage = try JSONDecoder().decode(Storage.self, from: data)
+        } catch {
+            KoeLog.persistence.error("外部変更された設定を読み込めません: \(error.localizedDescription, privacy: .public)")
+        }
+    }
 }

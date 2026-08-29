@@ -373,6 +373,27 @@ struct LifeLogTests {
         #expect(try await database.lifeLog.search("共有").map(\.kind) == [.summary])
     }
 
+    @MainActor
+    @Test("自動化サービスはTODO操作とプロンプト変更を共通境界で扱う")
+    func automationServiceMutations() async throws {
+        let database = try await KoeDatabase.inMemory()
+        let suite = #function
+        let defaults = try #require(UserDefaults(suiteName: suite))
+        defaults.removePersistentDomain(forName: suite)
+        let settings = AppSettings(defaults: defaults)
+        let service = KoeAutomationService(database: database, settings: settings)
+
+        let added = try await service.addTodo(title: "自動化を確認")
+        #expect(try await service.todos(status: .open).map(\.id) == [added.id])
+        let completed = try await service.updateTodo(id: added.id, status: .completed)
+        #expect(completed.status == .completed)
+        try await service.deleteTodo(id: added.id)
+        #expect(try await service.todos().isEmpty)
+
+        try service.setPrompt("新しい要約プロンプト", kind: .summary)
+        #expect(service.prompt(.summary) == "新しい要約プロンプト")
+    }
+
     @Test("ライフログ削除はすべての派生データとsource of truthを同時に消す")
     func deleteAllLifeLogData() async throws {
         let database = try await KoeDatabase.inMemory()
