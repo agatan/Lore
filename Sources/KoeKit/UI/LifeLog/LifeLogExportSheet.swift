@@ -25,6 +25,7 @@ struct LifeLogExportSheet: View {
                 VStack(alignment: .leading, spacing: 4) {
                     Text("この日を書き出す")
                         .font(.system(size: 18, weight: .semibold, design: .rounded))
+                        .accessibilityIdentifier("export.sheet")
                     Text(date.formatted(.dateTime.year().month().day().weekday(.wide)))
                         .font(.system(size: 11.5, design: .rounded))
                         .foregroundStyle(.secondary)
@@ -33,6 +34,7 @@ struct LifeLogExportSheet: View {
                 Button { dismiss() } label: { Image(systemName: "xmark") }
                     .buttonStyle(.plain)
                     .foregroundStyle(.secondary)
+                    .accessibilityIdentifier("export.close")
             }
 
             VStack(alignment: .leading, spacing: 9) {
@@ -40,11 +42,11 @@ struct LifeLogExportSheet: View {
                     .font(.system(size: 11, weight: .semibold, design: .rounded))
                     .foregroundStyle(.secondary)
                 LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 8), count: 3), spacing: 8) {
-                    exportToggle("予定", count: day.calendarEvents.count, isOn: $options.includesCalendarEvents)
-                    exportToggle("発話", count: day.utterances.count + day.dictations.count, isOn: $options.includesUtterances)
-                    exportToggle("メモ", count: day.memos.count, isOn: $options.includesMemos)
-                    exportToggle("要約", count: day.summary == nil ? 0 : 1, isOn: $options.includesSummary)
-                    exportToggle("この日のTODO", count: dayTodoCount, isOn: $options.includesTodosForDay)
+                    exportToggle("予定", id: "calendar", count: day.calendarEvents.count, isOn: $options.includesCalendarEvents)
+                    exportToggle("発話", id: "speech", count: day.utterances.count + day.dictations.count, isOn: $options.includesUtterances)
+                    exportToggle("メモ", id: "memo", count: day.memos.count, isOn: $options.includesMemos)
+                    exportToggle("要約", id: "summary", count: day.summary == nil ? 0 : 1, isOn: $options.includesSummary)
+                    exportToggle("この日のTODO", id: "todo", count: dayTodoCount, isOn: $options.includesTodosForDay)
                 }
             }
 
@@ -65,6 +67,7 @@ struct LifeLogExportSheet: View {
                         .textSelection(.enabled)
                         .frame(maxWidth: .infinity, alignment: .topLeading)
                         .padding(12)
+                        .accessibilityIdentifier("export.preview")
                 }
                 .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 14))
                 .overlay {
@@ -109,7 +112,7 @@ struct LifeLogExportSheet: View {
         }.count
     }
 
-    private func exportToggle(_ title: String, count: Int, isOn: Binding<Bool>) -> some View {
+    private func exportToggle(_ title: String, id: String, count: Int, isOn: Binding<Bool>) -> some View {
         Button {
             isOn.wrappedValue.toggle()
         } label: {
@@ -137,5 +140,6 @@ struct LifeLogExportSheet: View {
         }
         .accessibilityLabel("\(title)を含める")
         .accessibilityValue(isOn.wrappedValue ? "オン" : "オフ")
+        .accessibilityIdentifier("export.include.\(id)")
     }
 }

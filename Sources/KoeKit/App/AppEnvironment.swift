@@ -153,7 +153,9 @@ public final class AppEnvironment {
 #if DEBUG
             if Self.usesScreenshotDemoData {
                 database = try await KoeDatabase.inMemory()
-                try await ScreenshotDemoData.seed(database: database)
+                if !Self.usesEmptyUITestData {
+                    try await ScreenshotDemoData.seed(database: database)
+                }
             } else {
                 database = try await KoeDatabase.openDefault()
             }
@@ -203,7 +205,15 @@ public final class AppEnvironment {
 
     static var usesScreenshotDemoData: Bool {
 #if DEBUG
-        ProcessInfo.processInfo.arguments.contains("--koe-screenshot-demo")
+        ProcessInfo.processInfo.arguments.contains("--koe-screenshot-demo") || usesEmptyUITestData
+#else
+        false
+#endif
+    }
+
+    static var usesEmptyUITestData: Bool {
+#if DEBUG
+        ProcessInfo.processInfo.arguments.contains("--koe-ui-test-empty")
 #else
         false
 #endif

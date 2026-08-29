@@ -247,6 +247,7 @@ public struct LifeLogWindow: View {
             .buttonStyle(.bordered)
             .controlSize(.large)
             .help("予定・発話・メモをLLM向けテキストで書き出す")
+            .accessibilityIdentifier("life-log.export-day")
         }
         .alert("書き出せませんでした", isPresented: Binding(
             get: { exportError != nil },
@@ -273,6 +274,7 @@ public struct LifeLogWindow: View {
                     }
                     .buttonStyle(.plain)
                     .help("すべてのTODO")
+                    .accessibilityIdentifier("life-log.open-all-todos")
                     Menu {
                         Button("未実施TODOをコピー", systemImage: "doc.on.clipboard") {
                             exportOpenTodos(to: .clipboard)

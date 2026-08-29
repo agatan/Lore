@@ -16,7 +16,7 @@ DEV_IDENTITY := $(shell security find-identity -p codesigning 2>/dev/null | grep
 CODESIGN_ID := $(if $(DEV_IDENTITY),Koe Dev,-)
 BUILD_DIR = .build/$(CONFIG)
 
-.PHONY: all build tools app run stop test clean install icon dev-cert reset-permissions
+.PHONY: all build tools app run stop test ui-test clean install icon dev-cert reset-permissions
 
 all: app
 
@@ -72,6 +72,12 @@ stop:
 
 test:
 	swift test
+
+## 署名済みアプリを実際に操作する主要CUJのUI E2E
+ui-test: stop app
+	@mkdir -p .build/ui-e2e
+	@xcrun swiftc -parse-as-library Scripts/KoeUIE2E.swift -o .build/ui-e2e/KoeUIE2E
+	@.build/ui-e2e/KoeUIE2E "$(abspath $(APP))"
 
 clean:
 	rm -rf .build build

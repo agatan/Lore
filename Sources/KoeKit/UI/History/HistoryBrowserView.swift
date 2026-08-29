@@ -29,6 +29,7 @@ struct HistoryBrowserView: View {
             Task { await env.reloadHistory(query: newValue) }
         }
         .task { await env.reloadHistory() }
+        .accessibilityIdentifier("history.root")
     }
 
     private var list: some View {

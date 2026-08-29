@@ -27,8 +27,11 @@ make run
 | `make run` | ビルドして `Koe.app` を起動 |
 | `make app` | `Koe.app` の組み立てまで実行 |
 | `make test` | ユニットテストを実行 |
+| `make ui-test` | 主要CUJを実アプリで操作するUI E2Eを実行 |
 | `make install` | Release ビルドを `/Applications` へ配置 |
 | `make stop` | 起動中の Koe を終了 |
+
+テスト対象のCUJと実行条件は [テスト方針](docs/testing.md) にまとめています。
 
 ### 初回に必要な許可
 
