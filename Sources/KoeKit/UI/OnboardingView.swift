@@ -4,52 +4,82 @@ struct OnboardingView: View {
     var env: AppEnvironment
 
     var body: some View {
-        VStack(spacing: 28) {
-            VStack(spacing: 10) {
+        VStack(spacing: 18) {
+            VStack(spacing: 9) {
                 Image(systemName: "waveform.badge.mic")
-                    .font(.system(size: 42, weight: .light))
+                    .font(.system(size: 38, weight: .light))
                     .foregroundStyle(KoeTheme.voiceGradient)
-                Text("声を、そのまま使える形に")
+                Text("話して過ごす毎日を、あなたの資産に。")
                     .font(.system(size: 24, weight: .semibold, design: .rounded))
-                Text("音声入力と、一日の発話を振り返るライフログ。\n処理の中心はこのMacの中です。")
+                Text("Koeは、日々話したことや、ふと残したメモをAIで整理します。\n振り返り、TODO、日記が、いつもの一日から自然に積み上がります。")
                     .multilineTextAlignment(.center)
                     .font(.system(size: 13))
                     .foregroundStyle(.secondary)
             }
 
-            HStack(spacing: 12) {
-                permissionCard(
-                    symbol: "mic.fill",
-                    title: "聞き取る",
-                    detail: "通常の音声入力は\n音声を保存しません",
-                    granted: env.isMicrophoneGranted,
-                    action: { Task { await env.requestMicrophone() } }
+            LazyVGrid(columns: [GridItem(.flexible(), spacing: 10), GridItem(.flexible())], spacing: 10) {
+                valueCard(
+                    symbol: "lightbulb.max",
+                    title: "気づきを、流さない",
+                    detail: "会話で生まれた考えを、そのまま一日の記録へ。"
                 )
-                permissionCard(
-                    symbol: "cursorarrow.motionlines",
-                    title: "どこでも入力",
-                    detail: "ホットキーと\n文字の貼り付けに使用",
-                    granted: env.isAccessibilityGranted,
-                    action: {
-                        env.requestAccessibility()
-                        Permissions.openAccessibilitySettings()
-                    }
+                valueCard(
+                    symbol: "checkmark.circle",
+                    title: "やるべきことを、取りこぼさない",
+                    detail: "約束や次の行動を、確認できるTODO候補へ。"
                 )
-                permissionCard(
-                    symbol: "calendar",
-                    title: "予定を重ねる",
-                    detail: "カレンダーは任意、\n閲覧だけに使用",
-                    granted: !env.lifeLog.availableCalendars.isEmpty,
-                    action: { Task { await env.lifeLog.loadCalendars() } }
+                valueCard(
+                    symbol: "arrow.trianglehead.2.clockwise.rotate.90",
+                    title: "振り返るほど、次がよくなる",
+                    detail: "発話・メモ・予定から、一日の流れを短時間で把握。"
+                )
+                valueCard(
+                    symbol: "book.closed",
+                    title: "気づけば、日記になっている",
+                    detail: "書き起こさなくても、その日の出来事が積み上がる。"
                 )
             }
 
-            Label(
-                "ライフログを始めるときだけ、復旧用の音声をMac内へ保存する確認が表示されます。",
-                systemImage: "externaldrive.badge.checkmark"
-            )
-            .font(.system(size: 11.5))
-            .foregroundStyle(.secondary)
+            HStack(spacing: 12) {
+                Image(systemName: "text.cursor")
+                    .font(.system(size: 17, weight: .medium))
+                    .foregroundStyle(KoeTheme.accent)
+                    .frame(width: 28, height: 28)
+                    .background(KoeTheme.accent.opacity(0.10), in: Circle())
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("思いついたら、その場で書ける")
+                        .font(.system(size: 12.5, weight: .semibold, design: .rounded))
+                    Text("ホットキーを押して話せば、整えた文章をいま使っているアプリへ入力できます。")
+                        .font(.system(size: 10.5))
+                        .foregroundStyle(.secondary)
+                }
+                Spacer()
+            }
+            .padding(.horizontal, 14)
+            .padding(.vertical, 10)
+            .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 15))
+
+            VStack(spacing: 10) {
+                Text("はじめる準備")
+                    .font(.system(size: 11, weight: .semibold, design: .rounded))
+                    .foregroundStyle(.secondary)
+                HStack(spacing: 8) {
+                    permissionButton(symbol: "mic.fill", title: "マイク", granted: env.isMicrophoneGranted) {
+                        Task { await env.requestMicrophone() }
+                    }
+                    permissionButton(symbol: "cursorarrow.motionlines", title: "入力操作", granted: env.isAccessibilityGranted) {
+                        env.requestAccessibility()
+                        Permissions.openAccessibilitySettings()
+                    }
+                    permissionButton(symbol: "calendar", title: "カレンダー（任意）", granted: !env.lifeLog.availableCalendars.isEmpty) {
+                        Task { await env.lifeLog.loadCalendars() }
+                    }
+                }
+                Text("通常の音声入力は音声を保存しません。ライフログ開始時だけ、復旧用音声をMac内へ保存する前に確認します。")
+                    .font(.system(size: 10.5))
+                    .foregroundStyle(.tertiary)
+                    .multilineTextAlignment(.center)
+            }
 
             Button("Koeを始める") {
                 env.settings.onboardingCompleted = true
@@ -58,8 +88,8 @@ struct OnboardingView: View {
             .controlSize(.large)
             .keyboardShortcut(.defaultAction)
         }
-        .padding(34)
-        .frame(width: 650, height: 510)
+        .padding(30)
+        .frame(width: 760, height: 680)
         .background {
             LinearGradient(
                 colors: [KoeTheme.accent.opacity(0.10), KoeTheme.accentSecondary.opacity(0.05), .clear],
@@ -71,38 +101,45 @@ struct OnboardingView: View {
         .task { env.refreshPermissions() }
     }
 
-    private func permissionCard(
+    private func valueCard(
         symbol: String,
         title: String,
-        detail: String,
-        granted: Bool,
-        action: @escaping () -> Void
+        detail: String
     ) -> some View {
-        Button(action: action) {
-            VStack(alignment: .leading, spacing: 13) {
-                HStack {
-                    Image(systemName: symbol)
-                        .font(.system(size: 19, weight: .medium))
-                        .foregroundStyle(KoeTheme.accent)
-                    Spacer()
-                    Image(systemName: granted ? "checkmark.circle.fill" : "arrow.up.right.circle")
-                        .foregroundStyle(granted ? KoeTheme.success : Color.secondary.opacity(0.45))
-                }
+        HStack(alignment: .top, spacing: 11) {
+            Image(systemName: symbol)
+                .font(.system(size: 16, weight: .medium))
+                .foregroundStyle(KoeTheme.accent)
+                .frame(width: 23)
+            VStack(alignment: .leading, spacing: 5) {
                 Text(title)
-                    .font(.system(size: 14, weight: .semibold, design: .rounded))
+                    .font(.system(size: 12.5, weight: .semibold, design: .rounded))
                 Text(detail)
-                    .font(.system(size: 11.5))
+                    .font(.system(size: 10.5))
                     .foregroundStyle(.secondary)
-                    .multilineTextAlignment(.leading)
-            }
-            .padding(16)
-            .frame(maxWidth: .infinity, minHeight: 142, alignment: .topLeading)
-            .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 20, style: .continuous))
-            .overlay {
-                RoundedRectangle(cornerRadius: 20, style: .continuous)
-                    .stroke(.white.opacity(0.16), lineWidth: 0.7)
+                    .fixedSize(horizontal: false, vertical: true)
             }
         }
-        .buttonStyle(.plain)
+        .padding(13)
+        .frame(maxWidth: .infinity, minHeight: 76, alignment: .topLeading)
+        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 17, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 17, style: .continuous)
+                .stroke(.white.opacity(0.16), lineWidth: 0.7)
+        }
+    }
+
+    private func permissionButton(symbol: String, title: String, granted: Bool, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            HStack(spacing: 7) {
+                Image(systemName: symbol)
+                Text(title)
+                Image(systemName: granted ? "checkmark.circle.fill" : "arrow.up.right.circle")
+                    .foregroundStyle(granted ? KoeTheme.success : Color.secondary)
+            }
+            .font(.system(size: 11.5, weight: .medium))
+        }
+        .buttonStyle(.bordered)
+        .buttonBorderShape(.capsule)
     }
 }

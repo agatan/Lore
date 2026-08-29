@@ -139,22 +139,22 @@ struct LifeLogMiniWindow: View {
     }
 
     private func memoRow(_ memo: LifeLogMemo) -> some View {
-        HStack(alignment: .bottom, spacing: 7) {
-            Spacer(minLength: 54)
-            VStack(alignment: .trailing, spacing: 4) {
-                Text(memo.text)
-                    .font(.system(size: 12.5))
-                    .textSelection(.enabled)
-                    .padding(.horizontal, 11)
-                    .padding(.vertical, 8)
-                    .background(KoeTheme.accent.opacity(0.17), in: RoundedRectangle(cornerRadius: 15))
-                Text(memo.createdAt.formatted(date: .omitted, time: .shortened))
-                    .font(.system(size: 9.5, weight: .medium, design: .monospaced))
-                    .foregroundStyle(.tertiary)
-            }
+        HStack(alignment: .top, spacing: 10) {
+            Text(memo.createdAt.formatted(date: .omitted, time: .shortened))
+                .font(.system(size: 10, weight: .medium, design: .monospaced))
+                .foregroundStyle(.tertiary)
+                .frame(width: 45, alignment: .leading)
+            Image(systemName: "note.text")
+                .font(.system(size: 10.5, weight: .semibold))
+                .foregroundStyle(KoeTheme.accent)
+                .frame(width: 14)
+            Text(memo.text)
+                .font(.system(size: 12.5))
+                .textSelection(.enabled)
+            Spacer(minLength: 0)
         }
         .padding(.horizontal, 12)
-        .padding(.vertical, 6)
+        .padding(.vertical, 9)
         .id("m-\(memo.id)")
     }
 

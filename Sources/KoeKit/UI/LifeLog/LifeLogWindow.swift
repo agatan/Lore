@@ -219,8 +219,11 @@ public struct LifeLogWindow: View {
                 Text(value.createdAt.formatted(date: .omitted, time: .shortened))
                     .font(.system(size: 10.5, weight: .medium, design: .monospaced))
                     .foregroundStyle(.tertiary).frame(width: 64, alignment: .leading)
-                Image(systemName: "text.bubble.fill")
-                    .font(.system(size: 10)).foregroundStyle(KoeTheme.accent)
+                Image(systemName: "note.text")
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(KoeTheme.accent)
+                    .frame(width: 16)
+                    .help("メモ")
                 Text(value.text).font(.system(size: 13)).textSelection(.enabled)
                 Spacer(minLength: 0)
                 Button { Task { await env.lifeLog.deleteMemo(id: value.id) } } label: {
@@ -229,7 +232,6 @@ public struct LifeLogWindow: View {
                 .buttonStyle(.plain).foregroundStyle(.tertiary).help("メモを削除")
             }
             .padding(.horizontal, 16).padding(.vertical, 11)
-            .background(KoeTheme.accent.opacity(0.045))
         }
     }
 

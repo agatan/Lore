@@ -16,11 +16,11 @@ struct LifeLogExportSheet: View {
     var onExport: (LifeLogTextExporter.Options, LifeLogExportDestination) -> Bool
 
     @Environment(\.dismiss) private var dismiss
-    @State private var destination: LifeLogExportDestination = .clipboard
     @State private var options = LifeLogTextExporter.Options()
+    @State private var didCopy = false
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 20) {
+        VStack(alignment: .leading, spacing: 16) {
             HStack(alignment: .top) {
                 VStack(alignment: .leading, spacing: 4) {
                     Text("この日を書き出す")
@@ -35,34 +35,58 @@ struct LifeLogExportSheet: View {
                     .foregroundStyle(.secondary)
             }
 
-            Picker("書き出し先", selection: $destination) {
-                ForEach(LifeLogExportDestination.allCases) { value in
-                    Label(value.title, systemImage: value.symbol).tag(value)
+            VStack(alignment: .leading, spacing: 9) {
+                Text("含めるもの")
+                    .font(.system(size: 11, weight: .semibold, design: .rounded))
+                    .foregroundStyle(.secondary)
+                LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 8), count: 3), spacing: 8) {
+                    exportToggle("予定", symbol: "calendar", count: day.calendarEvents.count, isOn: $options.includesCalendarEvents)
+                    exportToggle("発話", symbol: "waveform", count: day.utterances.count, isOn: $options.includesUtterances)
+                    exportToggle("メモ", symbol: "note.text", count: day.memos.count, isOn: $options.includesMemos)
+                    exportToggle("要約", symbol: "sparkles", count: day.summary == nil ? 0 : 1, isOn: $options.includesSummary)
+                    exportToggle("この日のTODO", symbol: "checkmark.circle", count: dayTodoCount, isOn: $options.includesTodosForDay)
                 }
             }
-            .pickerStyle(.segmented)
 
-            VStack(spacing: 0) {
-                exportToggle("予定", symbol: "calendar", count: day.calendarEvents.count, isOn: $options.includesCalendarEvents)
-                Divider().padding(.leading, 38)
-                exportToggle("発話", symbol: "waveform", count: day.utterances.count, isOn: $options.includesUtterances)
-                Divider().padding(.leading, 38)
-                exportToggle("メモ", symbol: "text.bubble", count: day.memos.count, isOn: $options.includesMemos)
-                Divider().padding(.leading, 38)
-                exportToggle("要約", symbol: "sparkles", count: day.summary == nil ? 0 : 1, isOn: $options.includesSummary)
-                Divider().padding(.leading, 38)
-                exportToggle("この日に作成・完了したTODO", symbol: "checkmark.circle", count: dayTodoCount, isOn: $options.includesTodosForDay)
+            VStack(alignment: .leading, spacing: 8) {
+                HStack {
+                    Text("プレビュー")
+                        .font(.system(size: 11, weight: .semibold, design: .rounded))
+                        .foregroundStyle(.secondary)
+                    Spacer()
+                    Text("LLM向けテキスト")
+                        .font(.system(size: 10, design: .rounded))
+                        .foregroundStyle(.tertiary)
+                }
+                ScrollView([.vertical, .horizontal]) {
+                    Text(preview)
+                        .font(.system(size: 10.5, design: .monospaced))
+                        .foregroundStyle(.secondary)
+                        .textSelection(.enabled)
+                        .frame(maxWidth: .infinity, alignment: .topLeading)
+                        .padding(12)
+                }
+                .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 14))
+                .overlay {
+                    RoundedRectangle(cornerRadius: 14)
+                        .stroke(.white.opacity(0.10), lineWidth: 0.7)
+                }
             }
-            .padding(.horizontal, 12)
-            .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 14))
+            .frame(minHeight: 260)
 
             HStack {
-                Text("予定・発話・メモは時刻順に並びます")
-                    .font(.system(size: 10.5))
-                    .foregroundStyle(.tertiary)
+                Button {
+                    if onExport(options, .clipboard) { didCopy = true }
+                } label: {
+                    Label(didCopy ? "コピーしました" : "コピー", systemImage: didCopy ? "checkmark" : "doc.on.doc")
+                }
+                .buttonStyle(.bordered)
+                .disabled(!options.hasSelection)
                 Spacer()
-                Button(destination == .clipboard ? "コピー" : "保存…") {
-                    if onExport(options, destination) { dismiss() }
+                Button {
+                    if onExport(options, .file) { dismiss() }
+                } label: {
+                    Label("テキストファイルを書き出す…", systemImage: "doc.badge.arrow.up")
                 }
                 .buttonStyle(.borderedProminent)
                 .tint(KoeTheme.accent)
@@ -70,7 +94,12 @@ struct LifeLogExportSheet: View {
             }
         }
         .padding(22)
-        .frame(width: 480)
+        .frame(width: 660, height: 680)
+        .onChange(of: options) { _, _ in didCopy = false }
+    }
+
+    private var preview: String {
+        LifeLogTextExporter.render(date: date, day: day, todos: todos, options: options)
     }
 
     private var dayTodoCount: Int {
@@ -82,20 +111,23 @@ struct LifeLogExportSheet: View {
 
     private func exportToggle(_ title: String, symbol: String, count: Int, isOn: Binding<Bool>) -> some View {
         Toggle(isOn: isOn) {
-            HStack(spacing: 9) {
+            HStack(spacing: 7) {
                 Image(systemName: symbol)
                     .foregroundStyle(KoeTheme.accent)
-                    .frame(width: 18)
+                    .frame(width: 16)
                 Text(title)
-                    .font(.system(size: 12.5, weight: .medium))
+                    .font(.system(size: 11.5, weight: .medium))
                 Spacer()
                 Text("\(count)")
-                    .font(.system(size: 10.5, weight: .medium, design: .rounded))
+                    .font(.system(size: 10, weight: .medium, design: .rounded))
                     .foregroundStyle(.tertiary)
                     .monospacedDigit()
             }
+            .padding(.horizontal, 9)
+            .frame(maxWidth: .infinity, minHeight: 34)
         }
-        .toggleStyle(.switch)
-        .padding(.vertical, 10)
+        .toggleStyle(.button)
+        .buttonStyle(.bordered)
+        .tint(KoeTheme.accent)
     }
 }
