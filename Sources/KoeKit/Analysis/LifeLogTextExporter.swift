@@ -7,24 +7,24 @@ public enum LifeLogTextExporter {
         public var includesUtterances: Bool
         public var includesMemos: Bool
         public var includesSummary: Bool
-        public var includesOpenTodosCreatedOnDay: Bool
+        public var includesTodosForDay: Bool
 
         public init(
             includesCalendarEvents: Bool = true,
             includesUtterances: Bool = true,
             includesMemos: Bool = true,
             includesSummary: Bool = true,
-            includesOpenTodosCreatedOnDay: Bool = true
+            includesTodosForDay: Bool = true
         ) {
             self.includesCalendarEvents = includesCalendarEvents
             self.includesUtterances = includesUtterances
             self.includesMemos = includesMemos
             self.includesSummary = includesSummary
-            self.includesOpenTodosCreatedOnDay = includesOpenTodosCreatedOnDay
+            self.includesTodosForDay = includesTodosForDay
         }
 
         public var hasSelection: Bool {
-            includesCalendarEvents || includesUtterances || includesMemos || includesSummary || includesOpenTodosCreatedOnDay
+            includesCalendarEvents || includesUtterances || includesMemos || includesSummary || includesTodosForDay
         }
     }
 
@@ -61,13 +61,23 @@ public enum LifeLogTextExporter {
             }
         }
 
-        let dayTodos = todos.filter {
+        let createdTodos = todos.filter {
             $0.status == .open && calendar.isDate($0.createdAt, inSameDayAs: date)
         }
-        if options.includesOpenTodosCreatedOnDay, !dayTodos.isEmpty {
-            lines.append("")
-            lines.append("## OPEN TODO CREATED ON THIS DAY")
-            lines.append(contentsOf: dayTodos.map { todoLine($0, calendar: calendar) })
+        let completedTodos = todos.filter {
+            $0.status == .completed && $0.completedAt.map { calendar.isDate($0, inSameDayAs: date) } == true
+        }
+        if options.includesTodosForDay {
+            if !createdTodos.isEmpty {
+                lines.append("")
+                lines.append("## OPEN TODO CREATED ON THIS DAY")
+                lines.append(contentsOf: createdTodos.map { todoLine($0, calendar: calendar) })
+            }
+            if !completedTodos.isEmpty {
+                lines.append("")
+                lines.append("## TODO COMPLETED ON THIS DAY")
+                lines.append(contentsOf: completedTodos.map { completedTodoLine($0, calendar: calendar) })
+            }
         }
 
         lines.append("")
@@ -107,6 +117,12 @@ public enum LifeLogTextExporter {
         let created = "\(LifeLogDateKey.string(for: value.createdAt, calendar: calendar))T\(time(value.createdAt, calendar: calendar))"
         let due = value.dueAt.map { " due=\(LifeLogDateKey.string(for: $0, calendar: calendar))" } ?? ""
         return "[TODO status=open created=\(created)\(due)] \(value.title)"
+    }
+
+    private static func completedTodoLine(_ value: LifeLogTodo, calendar: Calendar) -> String {
+        let created = "\(LifeLogDateKey.string(for: value.createdAt, calendar: calendar))T\(time(value.createdAt, calendar: calendar))"
+        let completed = value.completedAt.map { "\(LifeLogDateKey.string(for: $0, calendar: calendar))T\(time($0, calendar: calendar))" } ?? "unknown"
+        return "[TODO status=completed created=\(created) completed=\(completed)] \(value.title)"
     }
 
     private static func time(_ date: Date, calendar: Calendar) -> String {

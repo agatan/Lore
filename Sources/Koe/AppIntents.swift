@@ -36,7 +36,7 @@ struct CopyTodayLifeLogIntent: AppIntent {
     @Parameter(title: "発話", default: true) var includesUtterances: Bool
     @Parameter(title: "メモ", default: true) var includesMemos: Bool
     @Parameter(title: "要約", default: true) var includesSummary: Bool
-    @Parameter(title: "この日に作った未実施TODO", default: true) var includesOpenTodosCreatedOnDay: Bool
+    @Parameter(title: "この日に作成・完了したTODO", default: true) var includesTodosForDay: Bool
 
     func perform() async throws -> some IntentResult & ProvidesDialog {
         let text = try await LifeLogIntentAction.exportText(for: date ?? Date(), options: options)
@@ -51,7 +51,7 @@ struct CopyTodayLifeLogIntent: AppIntent {
     private var options: LifeLogTextExporter.Options {
         .init(includesCalendarEvents: includesCalendarEvents, includesUtterances: includesUtterances,
               includesMemos: includesMemos, includesSummary: includesSummary,
-              includesOpenTodosCreatedOnDay: includesOpenTodosCreatedOnDay)
+              includesTodosForDay: includesTodosForDay)
     }
 }
 
@@ -66,7 +66,7 @@ struct ExportTodayLifeLogIntent: AppIntent {
     @Parameter(title: "発話", default: true) var includesUtterances: Bool
     @Parameter(title: "メモ", default: true) var includesMemos: Bool
     @Parameter(title: "要約", default: true) var includesSummary: Bool
-    @Parameter(title: "この日に作った未実施TODO", default: true) var includesOpenTodosCreatedOnDay: Bool
+    @Parameter(title: "この日に作成・完了したTODO", default: true) var includesTodosForDay: Bool
 
     func perform() async throws -> some IntentResult & ReturnsValue<IntentFile> {
         let date = date ?? Date()
@@ -82,7 +82,7 @@ struct ExportTodayLifeLogIntent: AppIntent {
     private var options: LifeLogTextExporter.Options {
         .init(includesCalendarEvents: includesCalendarEvents, includesUtterances: includesUtterances,
               includesMemos: includesMemos, includesSummary: includesSummary,
-              includesOpenTodosCreatedOnDay: includesOpenTodosCreatedOnDay)
+              includesTodosForDay: includesTodosForDay)
     }
 }
 

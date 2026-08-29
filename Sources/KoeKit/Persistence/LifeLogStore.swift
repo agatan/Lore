@@ -212,11 +212,12 @@ public struct LifeLogStore: Sendable {
     }
     public func save(todo value: LifeLogTodo) async throws {
         try await queue.write { db in try db.execute(sql: """
-            INSERT INTO life_log_todos VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-            ON CONFLICT(id) DO UPDATE SET title=excluded.title,status=excluded.status,due_at=excluded.due_at
+            INSERT INTO life_log_todos (id,title,status,created_at,due_at,source_conversation_id,source_utterance_ids,confidence,source_memo_ids,completed_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(id) DO UPDATE SET title=excluded.title,status=excluded.status,due_at=excluded.due_at,completed_at=excluded.completed_at
             """, arguments: [value.id, value.title, value.status.rawValue, date(value.createdAt), value.dueAt.map(date),
                                value.sourceConversationID, try PersistenceCoding.encode(value.sourceUtteranceIDs), value.confidence,
-                               try PersistenceCoding.encode(value.sourceMemoIDs)]) }
+                               try PersistenceCoding.encode(value.sourceMemoIDs), value.completedAt.map(date)]) }
     }
     public func deleteTodo(id: String) async throws { try await queue.write { db in try db.execute(sql: "DELETE FROM life_log_todos WHERE id=?", arguments: [id]) } }
     /// Summaryと同じ派生処理の成果物を原子的に置き換える。確定済みTODOには触れない。
@@ -224,10 +225,10 @@ public struct LifeLogStore: Sendable {
         try await queue.write { db in
             try db.execute(sql: "DELETE FROM life_log_todos WHERE status='draft'")
             for draft in drafts {
-                try db.execute(sql: "INSERT INTO life_log_todos VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)", arguments: [
+                try db.execute(sql: "INSERT INTO life_log_todos (id,title,status,created_at,due_at,source_conversation_id,source_utterance_ids,confidence,source_memo_ids,completed_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", arguments: [
                     draft.id, draft.title, draft.status.rawValue, date(draft.createdAt), draft.dueAt.map(date),
                     draft.sourceConversationID, try PersistenceCoding.encode(draft.sourceUtteranceIDs), draft.confidence,
-                    try PersistenceCoding.encode(draft.sourceMemoIDs)
+                    try PersistenceCoding.encode(draft.sourceMemoIDs), draft.completedAt.map(date)
                 ])
             }
             try db.execute(sql: "INSERT OR REPLACE INTO daily_summaries VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)", arguments: [
@@ -248,7 +249,7 @@ public struct LifeLogStore: Sendable {
     private func decodeMemo(_ r: Row) throws -> LifeLogMemo { LifeLogMemo(id: r["id"], createdAt: try parse(r["created_at"]), text: r["text"]) }
     private func decodeConversation(_ r: Row) throws -> LifeLogConversation { LifeLogConversation(id: r["id"], startedAt: try parse(r["started_at"]), endedAt: try parse(r["ended_at"]), calendarEventID: r["calendar_event_id"]) }
     private func decodeEvent(_ r: Row) throws -> CalendarEventSnapshot { CalendarEventSnapshot(id: r["id"], externalIdentifier: r["external_identifier"], title: r["title"], startsAt: try parse(r["starts_at"]), endsAt: try parse(r["ends_at"]), calendarTitle: r["calendar_title"], isAllDay: r["is_all_day"], participationStatus: CalendarParticipationStatus(rawValue: r["participation_status"]) ?? .unknown) }
-    private func decodeTodo(_ r: Row) throws -> LifeLogTodo { LifeLogTodo(id: r["id"], title: r["title"], status: LifeLogTodo.Status(rawValue: r["status"])!, createdAt: try parse(r["created_at"]), dueAt: try (r["due_at"] as String?).map(parse), sourceConversationID: r["source_conversation_id"], sourceUtteranceIDs: try PersistenceCoding.decode([String].self, from: r["source_utterance_ids"]), sourceMemoIDs: try PersistenceCoding.decode([String].self, from: r["source_memo_ids"]), confidence: r["confidence"]) }
+    private func decodeTodo(_ r: Row) throws -> LifeLogTodo { LifeLogTodo(id: r["id"], title: r["title"], status: LifeLogTodo.Status(rawValue: r["status"])!, createdAt: try parse(r["created_at"]), completedAt: try (r["completed_at"] as String?).map(parse), dueAt: try (r["due_at"] as String?).map(parse), sourceConversationID: r["source_conversation_id"], sourceUtteranceIDs: try PersistenceCoding.decode([String].self, from: r["source_utterance_ids"]), sourceMemoIDs: try PersistenceCoding.decode([String].self, from: r["source_memo_ids"]), confidence: r["confidence"]) }
     private func decodeSummary(_ r: Row) throws -> DailySummary { DailySummary(day: r["day"], summary: r["summary"], commitments: try PersistenceCoding.decode([String].self, from: r["commitments"]), topics: try PersistenceCoding.decode([String].self, from: r["topics"]), calendarEventCount: r["calendar_event_count"], capturedDurationSeconds: r["captured_duration_seconds"], utteranceCount: r["utterance_count"], summarizedThrough: try parse(r["summarized_through"]), isFinal: r["is_final"]) }
 
     private static let ftsSearchSQL = """

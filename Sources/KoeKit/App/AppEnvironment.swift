@@ -145,7 +145,17 @@ public final class AppEnvironment {
         refreshPermissions()
 
         do {
-            let database = try await KoeDatabase.openDefault()
+            let database: KoeDatabase
+#if DEBUG
+            if Self.usesScreenshotDemoData {
+                database = try await KoeDatabase.inMemory()
+                try await ScreenshotDemoData.seed(database: database)
+            } else {
+                database = try await KoeDatabase.openDefault()
+            }
+#else
+            database = try await KoeDatabase.openDefault()
+#endif
             self.database = database
             await lifeLog.configure(
                 database: database,
@@ -181,8 +191,26 @@ public final class AppEnvironment {
         coordinator.prewarmSounds()
         // SpeechAnalyzerの準備が終わる前に常時録音のAVAudioEngineを起動すると、
         // macOSの音声基盤内で初期化が競合してtrapする。
-        if database != nil, settings.lifeLogCaptureEnabled { setLifeLogCaptureEnabled(true) }
+        if database != nil, settings.lifeLogCaptureEnabled, !Self.usesScreenshotDemoData {
+            setLifeLogCaptureEnabled(true)
+        }
         scheduleBackgroundAnalysis()
+    }
+
+    static var usesScreenshotDemoData: Bool {
+#if DEBUG
+        ProcessInfo.processInfo.arguments.contains("--koe-screenshot-demo")
+#else
+        false
+#endif
+    }
+
+    static var forcesOnboardingForScreenshot: Bool {
+#if DEBUG
+        ProcessInfo.processInfo.arguments.contains("--koe-screenshot-onboarding")
+#else
+        false
+#endif
     }
 
     /// UI、global hotkey、App Intentが共有するライフログ記録の状態遷移。

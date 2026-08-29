@@ -121,6 +121,7 @@ public struct LifeLogTodo: Identifiable, Codable, Sendable, Hashable {
     public var title: String
     public var status: Status
     public var createdAt: Date
+    public var completedAt: Date?
     public var dueAt: Date?
     public var sourceConversationID: String?
     public var sourceUtteranceIDs: [String]
@@ -128,11 +129,19 @@ public struct LifeLogTodo: Identifiable, Codable, Sendable, Hashable {
     public var confidence: Double?
 
     public init(id: String = UUID().uuidString, title: String, status: Status = .open,
-                createdAt: Date = Date(), dueAt: Date? = nil, sourceConversationID: String? = nil,
+                createdAt: Date = Date(), completedAt: Date? = nil, dueAt: Date? = nil, sourceConversationID: String? = nil,
                 sourceUtteranceIDs: [String] = [], sourceMemoIDs: [String] = [], confidence: Double? = nil) {
-        self.id = id; self.title = title; self.status = status; self.createdAt = createdAt; self.dueAt = dueAt
+        self.id = id; self.title = title; self.status = status; self.createdAt = createdAt
+        self.completedAt = status == .completed ? (completedAt ?? createdAt) : nil
+        self.dueAt = dueAt
         self.sourceConversationID = sourceConversationID; self.sourceUtteranceIDs = sourceUtteranceIDs
         self.sourceMemoIDs = sourceMemoIDs; self.confidence = confidence
+    }
+
+    /// 完了日時と状態を常に一緒に遷移させる。
+    public mutating func transition(to status: Status, at date: Date = Date()) {
+        self.status = status
+        completedAt = status == .completed ? date : nil
     }
 }
 

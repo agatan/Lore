@@ -45,6 +45,14 @@ public struct KoeApp: App {
                 .accentColor(env.settings.accentPalette.color)
         }
         .defaultSize(width: 460, height: 620)
+
+        Window("すべてのTODO", id: KoeWindow.lifeLogTodos) {
+            LifeLogTodoManagerWindow(env: env)
+                .koeWindow()
+                .tint(env.settings.accentPalette.color)
+                .accentColor(env.settings.accentPalette.color)
+        }
+        .defaultSize(width: 680, height: 640)
     }
 }
 
@@ -73,6 +81,7 @@ public enum KoeWindow {
     public static let main = "koe.main"
     public static let settings = "koe.settings"
     public static let lifeLogMini = "koe.life-log-mini"
+    public static let lifeLogTodos = "koe.life-log-todos"
 }
 
 /// メニューバーのアイコン + 起動処理。

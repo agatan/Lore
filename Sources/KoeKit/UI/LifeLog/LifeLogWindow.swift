@@ -4,6 +4,7 @@ import UniformTypeIdentifiers
 
 public struct LifeLogWindow: View {
     var env: AppEnvironment
+    @Environment(\.openWindow) private var openWindow
     @State private var exportError: String?
     @State private var showsExportSheet = false
     @State private var showsSearchSheet = false
@@ -258,6 +259,15 @@ public struct LifeLogWindow: View {
                 HStack(spacing: 8) {
                     let count = env.lifeLog.todos.filter { $0.status == .open }.count
                     if count > 0 { Pill(text: "\(count)", tint: KoeTheme.accent) }
+                    Button {
+                        openWindow(id: KoeWindow.lifeLogTodos)
+                        NSApp.activate()
+                    } label: {
+                        Image(systemName: "rectangle.stack")
+                            .foregroundStyle(.secondary)
+                    }
+                    .buttonStyle(.plain)
+                    .help("すべてのTODO")
                     Menu {
                         Button("未実施TODOをコピー", systemImage: "doc.on.clipboard") {
                             exportOpenTodos(to: .clipboard)
@@ -275,14 +285,14 @@ public struct LifeLogWindow: View {
                 }
             }
             Divider().opacity(0.4)
-            if env.lifeLog.todos.isEmpty {
+            if visibleTodos.isEmpty {
                 VStack(spacing: 10) {
                     Image(systemName: "checkmark").font(.system(size: 25, weight: .light))
                     Text("Clear").font(.system(size: 11.5, weight: .medium, design: .rounded))
                 }
                 .foregroundStyle(.secondary.opacity(0.4)).frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
-                List(env.lifeLog.todos) { todo in
+                List(visibleTodos) { todo in
                     HStack(alignment: .top) {
                         if todo.status == .draft {
                             Image(systemName: "sparkles").foregroundStyle(.secondary)
@@ -314,6 +324,10 @@ public struct LifeLogWindow: View {
             }
         }
         .raisedGlass(cornerRadius: 22)
+    }
+
+    private var visibleTodos: [LifeLogTodo] {
+        env.lifeLog.todos.filter { $0.status != .completed }
     }
 
     private var insightsPanel: some View {
@@ -369,13 +383,13 @@ public struct LifeLogWindow: View {
 
     private func toggle(_ todo: LifeLogTodo) {
         var changed = todo
-        changed.status = todo.status == .open ? .completed : .open
+        changed.transition(to: todo.status == .open ? .completed : .open)
         Task { await env.lifeLog.update(todo: changed) }
     }
 
     private func confirm(_ todo: LifeLogTodo) {
         var changed = todo
-        changed.status = .open
+        changed.transition(to: .open)
         Task { await env.lifeLog.update(todo: changed) }
     }
 

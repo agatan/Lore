@@ -45,7 +45,7 @@ public struct MainWindowView: View {
             }
             .task { env.refreshPermissions() }
             .sheet(isPresented: Binding(
-                get: { !env.settings.onboardingCompleted },
+                get: { !env.settings.onboardingCompleted || AppEnvironment.forcesOnboardingForScreenshot },
                 set: { _ in }
             )) {
                 OnboardingView(env: env)

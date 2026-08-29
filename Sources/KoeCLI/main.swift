@@ -108,7 +108,7 @@ struct KoeCLI {
             includesUtterances: names.contains("speech"),
             includesMemos: names.contains("memos"),
             includesSummary: names.contains("summary"),
-            includesOpenTodosCreatedOnDay: names.contains("todos")
+            includesTodosForDay: names.contains("todos")
         )
     }
 

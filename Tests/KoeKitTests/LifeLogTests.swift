@@ -299,7 +299,7 @@ struct LifeLogTests {
         #expect(text.contains("[TODO status=open created=2026-08-29T09:04:00] RFCを書く"))
     }
 
-    @Test("日別exportは項目ごとの選択と当日作成の未実施TODOだけを尊重する")
+    @Test("日別exportは項目ごとの選択と当日作成・完了TODOを尊重する")
     func textExportHonorsSelectionAndTodoBoundary() throws {
         var calendar = Calendar(identifier: .gregorian)
         calendar.timeZone = try #require(TimeZone(secondsFromGMT: 0))
@@ -322,7 +322,7 @@ struct LifeLogTests {
             includesUtterances: true,
             includesMemos: false,
             includesSummary: true,
-            includesOpenTodosCreatedOnDay: true
+            includesTodosForDay: true
         )
 
         let text = LifeLogTextExporter.render(date: date, day: day, todos: todos, options: options, calendar: calendar)
@@ -332,7 +332,8 @@ struct LifeLogTests {
         #expect(text.contains("対象"))
         #expect(!text.contains("[CALENDAR"))
         #expect(!text.contains("[MEMO"))
-        #expect(!text.contains("完了"))
+        #expect(text.contains("[TODO status=completed"))
+        #expect(text.contains("完了"))
         #expect(!text.contains("下書き"))
         #expect(!text.contains("別日"))
     }
@@ -387,6 +388,11 @@ struct LifeLogTests {
         #expect(try await service.todos(status: .open).map(\.id) == [added.id])
         let completed = try await service.updateTodo(id: added.id, status: .completed)
         #expect(completed.status == .completed)
+        #expect(completed.completedAt != nil)
+        #expect(try await database.lifeLog.todo(id: added.id)?.completedAt != nil)
+        let reopened = try await service.updateTodo(id: added.id, status: .open)
+        #expect(reopened.status == .open)
+        #expect(reopened.completedAt == nil)
         try await service.deleteTodo(id: added.id)
         #expect(try await service.todos().isEmpty)
 

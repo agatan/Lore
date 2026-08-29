@@ -51,7 +51,7 @@ struct LifeLogExportSheet: View {
                 Divider().padding(.leading, 38)
                 exportToggle("要約", symbol: "sparkles", count: day.summary == nil ? 0 : 1, isOn: $options.includesSummary)
                 Divider().padding(.leading, 38)
-                exportToggle("この日に作った未実施TODO", symbol: "checkmark.circle", count: openTodoCount, isOn: $options.includesOpenTodosCreatedOnDay)
+                exportToggle("この日に作成・完了したTODO", symbol: "checkmark.circle", count: dayTodoCount, isOn: $options.includesTodosForDay)
             }
             .padding(.horizontal, 12)
             .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 14))
@@ -73,8 +73,11 @@ struct LifeLogExportSheet: View {
         .frame(width: 480)
     }
 
-    private var openTodoCount: Int {
-        todos.filter { $0.status == .open && Calendar.current.isDate($0.createdAt, inSameDayAs: date) }.count
+    private var dayTodoCount: Int {
+        todos.filter {
+            ($0.status == .open && Calendar.current.isDate($0.createdAt, inSameDayAs: date))
+                || ($0.status == .completed && $0.completedAt.map { Calendar.current.isDate($0, inSameDayAs: date) } == true)
+        }.count
     }
 
     private func exportToggle(_ title: String, symbol: String, count: Int, isOn: Binding<Bool>) -> some View {

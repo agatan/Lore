@@ -269,6 +269,13 @@ public final class KoeDatabase: Sendable {
                 INSERT INTO daily_summaries_fts(daily_summaries_fts) VALUES ('rebuild');
                 """)
         }
+        migrator.registerMigration("v7-todo-completion-time") { db in
+            try db.alter(table: "life_log_todos") { table in
+                table.add(column: "completed_at", .text)
+            }
+            // 過去の完了操作時刻は復元できないため、履歴上の最小限の近似として作成日時を使う。
+            try db.execute(sql: "UPDATE life_log_todos SET completed_at=created_at WHERE status='completed'")
+        }
         return migrator
     }
 }

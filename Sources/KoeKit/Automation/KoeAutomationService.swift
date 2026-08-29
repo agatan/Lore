@@ -63,7 +63,7 @@ public final class KoeAutomationService {
             guard !value.isEmpty else { throw AutomationError.emptyTodoTitle }
             todo.title = value
         }
-        if let status { todo.status = status }
+        if let status { todo.transition(to: status) }
         if let dueAt { todo.dueAt = dueAt }
         try await database.lifeLog.save(todo: todo)
         notify(KoeAutomationNotification.dataChanged)
