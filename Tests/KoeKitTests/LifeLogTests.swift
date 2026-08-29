@@ -422,6 +422,30 @@ struct LifeLogTests {
         #expect(!text.contains("下書き"))
     }
 
+    @Test("日別書き出しのファイル名は対象日を展開する")
+    func lifeLogExportFilenameExpandsDate() throws {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = try #require(TimeZone(secondsFromGMT: 0))
+        let date = try #require(calendar.date(from: DateComponents(year: 2026, month: 8, day: 30)))
+
+        #expect(try LifeLogExportFilename.resolve(
+            template: "lifelog-{{date}}.md",
+            date: date,
+            calendar: calendar
+        ) == "lifelog-20260830.md")
+    }
+
+    @Test("日別書き出しのファイル名からフォルダ外へ出られない")
+    func lifeLogExportFilenameRejectsPathAndUnknownPlaceholder() throws {
+        let date = Date(timeIntervalSince1970: 1_777_777_700)
+        #expect(throws: LifeLogExportFilenameError.pathComponent) {
+            try LifeLogExportFilename.resolve(template: "../lifelog-{{date}}.md", date: date)
+        }
+        #expect(throws: LifeLogExportFilenameError.unknownPlaceholder) {
+            try LifeLogExportFilename.resolve(template: "lifelog-{{day}}.md", date: date)
+        }
+    }
+
     @Test("日本語trigram検索は発話・メモ・TODO・要約を横断し短い語にも対応する")
     func japaneseLifeLogSearch() async throws {
         let database = try await KoeDatabase.inMemory()

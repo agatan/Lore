@@ -9,18 +9,18 @@ struct StartLifeLogIntent: AppIntent {
     static let supportedModes: IntentModes = .background
 
     func perform() async throws -> some IntentResult {
-        try await LifeLogIntentAction.setCaptureEnabled(true)
+        try await LifeLogIntentAction.startCapture()
         return .result()
     }
 }
 
 struct StopLifeLogIntent: AppIntent {
     static let title: LocalizedStringResource = "ライフログを終了"
-    static let description = IntentDescription("Koeのライフログ記録を終了し、一日の要約を更新します。")
+    static let description = IntentDescription("Koeのライフログ記録を終了し、文字起こしと一日の要約が確定するまで待ちます。")
     static let supportedModes: IntentModes = .background
 
     func perform() async throws -> some IntentResult {
-        try await LifeLogIntentAction.setCaptureEnabled(false)
+        try await LifeLogIntentAction.stopCaptureAndWait()
         return .result()
     }
 }
@@ -57,11 +57,15 @@ struct CopyTodayLifeLogIntent: AppIntent {
 
 struct ExportTodayLifeLogIntent: AppIntent {
     static let title: LocalizedStringResource = "ライフログをファイルにする"
-    static let description = IntentDescription("予定・発話・メモを、LLMが読みやすいテキストファイルとして次のショートカット処理へ渡します。")
+    static let description = IntentDescription("日付を省略すると今日のライフログを書き出します。出力先フォルダを指定すると、そのフォルダへ直接保存します。")
     static let supportedModes: IntentModes = .background
 
     @Parameter(title: "日付", description: "省略すると今日", kind: .date)
     var date: Date?
+    @Parameter(title: "出力先フォルダ", description: "省略するとファイルを次のショートカット処理へ渡します。", supportedContentTypes: [.folder])
+    var outputFolder: IntentFile?
+    @Parameter(title: "ファイル名", description: "{{date}} は対象日の yyyyMMdd に置き換わります。", default: "lifelog-{{date}}.md")
+    var filenameTemplate: String
     @Parameter(title: "予定", default: true) var includesCalendarEvents: Bool
     @Parameter(title: "発話", default: true) var includesUtterances: Bool
     @Parameter(title: "メモ", default: true) var includesMemos: Bool
@@ -69,13 +73,24 @@ struct ExportTodayLifeLogIntent: AppIntent {
     @Parameter(title: "この日に作成・完了したTODO", default: true) var includesTodosForDay: Bool
 
     func perform() async throws -> some IntentResult & ReturnsValue<IntentFile> {
-        let date = date ?? Date()
-        let text = try await LifeLogIntentAction.exportText(for: date, options: options)
-        let file = IntentFile(
-            data: Data(text.utf8),
-            filename: "Koe-LifeLog-\(LifeLogDateKey.string(for: date)).txt",
-            type: .plainText
-        )
+        let targetDate = date ?? Date()
+        let text = try await LifeLogIntentAction.exportText(for: targetDate, options: options)
+        let filename = try LifeLogExportFilename.resolve(template: filenameTemplate, date: targetDate)
+        let data = Data(text.utf8)
+        let file: IntentFile
+        if let outputFolder {
+            guard let folderURL = outputFolder.fileURL else { throw LifeLogIntentError.invalidOutputFolder }
+            let hasScopedAccess = folderURL.startAccessingSecurityScopedResource()
+            defer { if hasScopedAccess { folderURL.stopAccessingSecurityScopedResource() } }
+            guard try folderURL.resourceValues(forKeys: [.isDirectoryKey]).isDirectory == true else {
+                throw LifeLogIntentError.invalidOutputFolder
+            }
+            let outputURL = folderURL.appending(path: filename, directoryHint: .notDirectory)
+            try data.write(to: outputURL, options: .atomic)
+            file = IntentFile(fileURL: outputURL, filename: filename, type: .plainText)
+        } else {
+            file = IntentFile(data: data, filename: filename, type: .plainText)
+        }
         return .result(value: file)
     }
 
@@ -115,15 +130,26 @@ struct ExportOpenTodosIntent: AppIntent {
 
 enum LifeLogIntentAction {
     @MainActor
-    static func setCaptureEnabled(_ enabled: Bool) throws {
+    static func startCapture() throws {
         guard let environment = AppEnvironment.current else {
             throw LifeLogIntentError.appNotReady
         }
-        if enabled, !environment.settings.lifeLogAudioStorageConfirmed {
+        if !environment.settings.lifeLogAudioStorageConfirmed {
             environment.setLifeLogCaptureEnabled(true)
             throw LifeLogIntentError.audioStorageConsentRequired
         }
-        environment.setLifeLogCaptureEnabled(enabled)
+        environment.setLifeLogCaptureEnabled(true)
+    }
+
+    @MainActor
+    static func stopCaptureAndWait() async throws {
+        guard let environment = AppEnvironment.current else {
+            throw LifeLogIntentError.appNotReady
+        }
+        environment.setLifeLogCaptureEnabled(false)
+        guard await environment.lifeLog.stopAndWait() else {
+            throw LifeLogIntentError.finalizationTimedOut
+        }
     }
 
     @MainActor
@@ -155,6 +181,8 @@ enum LifeLogIntentError: LocalizedError {
     case audioStorageConsentRequired
     case clipboardWriteFailed
     case emptyExportSelection
+    case invalidOutputFolder
+    case finalizationTimedOut
 
     var errorDescription: String? {
         switch self {
@@ -166,6 +194,10 @@ enum LifeLogIntentError: LocalizedError {
             "クリップボードへ書き込めませんでした。"
         case .emptyExportSelection:
             "書き出す項目を1つ以上選んでください。"
+        case .invalidOutputFolder:
+            "書き出し先のフォルダを選び直してください。"
+        case .finalizationTimedOut:
+            "文字起こしと要約の完了を待てませんでした。保存済み音声は次回起動時に再処理されます。"
         }
     }
 }
