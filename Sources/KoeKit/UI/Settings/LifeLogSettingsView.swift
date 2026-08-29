@@ -43,13 +43,21 @@ struct LifeLogSettingsView: View {
                     .frame(width: 240)
                 }
                 SettingsRow(title: "音声の保持期間") {
-                    Picker("", selection: Binding(get: { settings.lifeLogAudioRetentionDays }, set: { settings.lifeLogAudioRetentionDays = $0 })) {
-                        Text("無期限").tag(0)
+                    Picker("", selection: Binding(get: { settings.lifeLogAudioRetentionDays }, set: {
+                        settings.lifeLogAudioRetentionDays = $0
+                        Task { await env.purgeExpiredLifeLogAudio() }
+                    })) {
                         Text("30日").tag(30)
                         Text("90日").tag(90)
                         Text("1年").tag(365)
+                        Text("無期限").tag(0)
                     }
                     .labelsHidden().pickerStyle(.segmented).fixedSize()
+                }
+                SettingsRow(title: "現在の音声") {
+                    Text(ByteCountFormatter.string(fromByteCount: env.lifeLogAudioBytes, countStyle: .file))
+                        .font(.system(size: 11.5, design: .rounded))
+                        .foregroundStyle(.secondary)
                 }
             }
 
@@ -107,6 +115,7 @@ struct LifeLogSettingsView: View {
             }
         }
         .toggleStyle(.switch)
+        .task { env.refreshLifeLogAudioSize() }
     }
 
     private func promptEditor(_ title: String, text: Binding<String>) -> some View {

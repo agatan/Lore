@@ -266,6 +266,69 @@ struct LifeLogTests {
         let day = try await database.lifeLog.day(start, participatingOnly: true)
         #expect(day.calendarEvents.map(\.participationStatus) == [.none, .accepted])
     }
+
+    @Test("LLM向けexportは予定・発話・メモを時系列で区別する")
+    func textExportPreservesTimelineKinds() throws {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = try #require(TimeZone(secondsFromGMT: 0))
+        let date = try #require(calendar.date(from: DateComponents(year: 2026, month: 8, day: 29, hour: 9)))
+        let utterance = LifeLogUtterance(
+            id: "speech", startedAt: date.addingTimeInterval(120), endedAt: date.addingTimeInterval(150),
+            text: "RFCを今日書きます", audioChunkID: "audio"
+        )
+        let memo = LifeLogMemo(id: "memo", createdAt: date.addingTimeInterval(180), text: "構成を先に決める")
+        let day = LifeLogDay(
+            utterances: [utterance],
+            memos: [memo],
+            conversations: [],
+            calendarEvents: [CalendarEventSnapshot(
+                title: "朝会", startsAt: date, endsAt: date.addingTimeInterval(60),
+                calendarTitle: "Work", participationStatus: .accepted
+            )],
+            summary: nil
+        )
+        let todo = LifeLogTodo(title: "RFCを書く", sourceUtteranceIDs: [utterance.id])
+
+        let text = LifeLogTextExporter.render(date: date, day: day, todos: [todo], calendar: calendar)
+
+        let calendarIndex = try #require(text.range(of: "[CALENDAR 09:00:00-09:01:00"))
+        let speechIndex = try #require(text.range(of: "[SPEECH 09:02:00-09:02:30]"))
+        let memoIndex = try #require(text.range(of: "[MEMO 09:03:00]"))
+        #expect(calendarIndex.lowerBound < speechIndex.lowerBound)
+        #expect(speechIndex.lowerBound < memoIndex.lowerBound)
+        #expect(text.contains("[TODO status=open] RFCを書く"))
+    }
+
+    @Test("ライフログ削除はすべての派生データとsource of truthを同時に消す")
+    func deleteAllLifeLogData() async throws {
+        let database = try await KoeDatabase.inMemory()
+        let start = Date(timeIntervalSince1970: 1_725_158_400)
+        let chunk = LifeLogAudioChunk(
+            id: "audio", captureStartedAt: start, captureEndedAt: start.addingTimeInterval(30),
+            localPath: "/tmp/delete-all-life-log.m4a"
+        )
+        try await database.lifeLog.save(audioChunk: chunk)
+        try await database.lifeLog.save(utterance: LifeLogUtterance(
+            startedAt: start, endedAt: start.addingTimeInterval(10), text: "発話", audioChunkID: chunk.id
+        ))
+        try await database.lifeLog.save(memo: LifeLogMemo(createdAt: start, text: "メモ"))
+        try await database.lifeLog.save(calendarEvents: [CalendarEventSnapshot(
+            title: "予定", startsAt: start, endsAt: start.addingTimeInterval(60), calendarTitle: "Work"
+        )])
+        try await database.lifeLog.save(todo: LifeLogTodo(title: "TODO"))
+        try await database.lifeLog.save(rule: TodoExtractionRule(instruction: "ルール"))
+
+        try await database.lifeLog.deleteAll()
+
+        let day = try await database.lifeLog.day(start)
+        #expect(day.utterances.isEmpty)
+        #expect(day.memos.isEmpty)
+        #expect(day.calendarEvents.isEmpty)
+        #expect(day.summary == nil)
+        #expect(try await database.lifeLog.todos().isEmpty)
+        #expect(try await database.lifeLog.rules().isEmpty)
+        #expect(try await database.lifeLog.pendingAudioChunks().isEmpty)
+    }
 }
 
 private struct StubLifeLogLlm: LlmEngine {

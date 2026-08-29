@@ -29,14 +29,24 @@ enum LifeLogIntentAction {
         guard let environment = AppEnvironment.current else {
             throw LifeLogIntentError.appNotReady
         }
+        if enabled, !environment.settings.lifeLogAudioStorageConfirmed {
+            environment.setLifeLogCaptureEnabled(true)
+            throw LifeLogIntentError.audioStorageConsentRequired
+        }
         environment.setLifeLogCaptureEnabled(enabled)
     }
 }
 
 enum LifeLogIntentError: LocalizedError {
     case appNotReady
+    case audioStorageConsentRequired
 
     var errorDescription: String? {
-        "Koeの起動準備が完了していません。もう一度実行してください。"
+        switch self {
+        case .appNotReady:
+            "Koeの起動準備が完了していません。もう一度実行してください。"
+        case .audioStorageConsentRequired:
+            "Koeを開き、ライフログ音声の保存を一度確認してください。"
+        }
     }
 }

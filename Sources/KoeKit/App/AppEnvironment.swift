@@ -48,7 +48,11 @@ public final class AppEnvironment {
     /// メインウィンドウで開いているセクション。メニューからの遷移でも使う。
     public var mainSection: MainSection = .lifeLog
     public var settingsSection: SettingsSection = .common
+    public var presentsLifeLogAudioConsent = false
+    public private(set) var dataOperationError: String?
+    public private(set) var lifeLogAudioBytes: Int64 = 0
     @ObservationIgnored public var onToggleLifeLogMiniWindow: (() -> Void)?
+    @ObservationIgnored public var onShowMainWindow: (() -> Void)?
 
     /// 音声モデル取得の進捗(0...1)。nil = 実行中でない。
     public private(set) var speechAssetProgress: Double?
@@ -144,6 +148,8 @@ public final class AppEnvironment {
             await reloadVocabulary()
             await reloadHistory()
             await purgeExpiredHistory()
+            await purgeExpiredLifeLogAudio()
+            refreshLifeLogAudioSize()
             lastAnalysisAt = try? await database.meta.date(forKey: Self.lastAnalysisRunKey)
         } catch {
             bootError = error.localizedDescription
@@ -159,14 +165,57 @@ public final class AppEnvironment {
         coordinator.prewarmSounds()
         // SpeechAnalyzerの準備が終わる前に常時録音のAVAudioEngineを起動すると、
         // macOSの音声基盤内で初期化が競合してtrapする。
-        if database != nil, settings.lifeLogCaptureEnabled { lifeLog.setCaptureEnabled(true) }
+        if database != nil, settings.lifeLogCaptureEnabled { setLifeLogCaptureEnabled(true) }
         scheduleBackgroundAnalysis()
     }
 
     /// UI、global hotkey、App Intentが共有するライフログ記録の状態遷移。
     public func setLifeLogCaptureEnabled(_ enabled: Bool) {
+        if enabled, !settings.lifeLogAudioStorageConfirmed {
+            settings.lifeLogCaptureEnabled = false
+            presentsLifeLogAudioConsent = true
+            mainSection = .lifeLog
+            onShowMainWindow?()
+            return
+        }
         settings.lifeLogCaptureEnabled = enabled
         lifeLog.setCaptureEnabled(enabled)
+    }
+
+    public func confirmLifeLogAudioStorageAndStart() {
+        settings.lifeLogAudioStorageConfirmed = true
+        presentsLifeLogAudioConsent = false
+        setLifeLogCaptureEnabled(true)
+    }
+
+    public func cancelLifeLogAudioStorageConsent() {
+        settings.lifeLogCaptureEnabled = false
+        presentsLifeLogAudioConsent = false
+    }
+
+    /// すべての終了動線が共有する保存境界。録音意図を下ろしてから処理中の音声を確定する。
+    public func prepareForTermination() async {
+        hotkeys.stop()
+        lifeLogCaptureHotkeys.stop()
+        lifeLogMiniWindowHotkeys.stop()
+        permissionWatcher?.cancel()
+        analysisTask?.cancel()
+        if coordinator.isRecording { coordinator.stop() }
+        settings.lifeLogCaptureEnabled = false
+
+        async let lifeLogFinished = lifeLog.stopAndWait()
+        let clock = ContinuousClock()
+        let dictationDeadline = clock.now.advanced(by: .seconds(10))
+        while coordinator.isBusy, clock.now < dictationDeadline {
+            do {
+                try await Task.sleep(for: .milliseconds(50))
+            } catch {
+                break
+            }
+        }
+        if await !lifeLogFinished {
+            KoeLog.persistence.error("終了期限までにライフログ処理を完了できませんでした。保存済み音声は次回起動時に再処理します")
+        }
     }
 
     // MARK: ホットキー
@@ -443,8 +492,13 @@ public final class AppEnvironment {
 
     public func deleteAllHistory() async {
         guard let database else { return }
-        try? await database.history.deleteAll()
-        await reloadHistory()
+        dataOperationError = nil
+        do {
+            try await database.history.deleteAll()
+            await reloadHistory()
+        } catch {
+            reportDataOperation(error)
+        }
     }
 
     public func purgeExpiredHistory() async {
@@ -453,6 +507,123 @@ public final class AppEnvironment {
         if removed > 0 {
             KoeLog.persistence.info("保持期間超過の履歴を \(removed, privacy: .public) 件削除しました")
             await reloadHistory()
+        }
+    }
+
+    // MARK: 保存データ
+
+    public func purgeExpiredLifeLogAudio() async {
+        guard let database, settings.lifeLogAudioRetentionDays > 0 else { return }
+        guard let cutoff = Calendar.current.date(
+            byAdding: .day,
+            value: -settings.lifeLogAudioRetentionDays,
+            to: Date()
+        ) else { return }
+        do {
+            for url in try await database.lifeLog.audioFileURLs(endedBefore: cutoff) {
+                if FileManager.default.fileExists(atPath: url.path) {
+                    try FileManager.default.removeItem(at: url)
+                }
+            }
+            refreshLifeLogAudioSize()
+        } catch {
+            reportDataOperation(error)
+        }
+    }
+
+    public func deleteAllLifeLogData() async {
+        guard let database else { return }
+        dataOperationError = nil
+        settings.lifeLogCaptureEnabled = false
+        guard await lifeLog.stopAndWait() else {
+            reportDataOperation(DataOperationError.captureDidNotStop)
+            return
+        }
+        do {
+            try removeLifeLogAudioDirectory()
+            try await database.lifeLog.deleteAll()
+            await lifeLog.reload()
+            await lifeLog.loadActivity(containing: lifeLog.selectedDate)
+            refreshLifeLogAudioSize()
+        } catch {
+            reportDataOperation(error)
+        }
+    }
+
+    public func deleteAllApplicationData() async {
+        guard let database else { return }
+        dataOperationError = nil
+        settings.lifeLogCaptureEnabled = false
+        guard await lifeLog.stopAndWait() else {
+            reportDataOperation(DataOperationError.captureDidNotStop)
+            return
+        }
+        do {
+            try removeLifeLogAudioDirectory()
+            try SecretStore.write(nil, for: .groqApiKey)
+            try await database.deleteAllUserData()
+            settings.resetAll()
+            engines.apply(backend: settings.formattingBackend, groqModel: settings.groqModel)
+            try await database.modes.seedBuiltinsIfNeeded()
+            try await database.sharedRules.seedOrMigrate()
+            await reloadModes()
+            await reloadSharedRules()
+            await reloadVocabulary()
+            await reloadHistory()
+            await lifeLog.reload()
+            await lifeLog.loadActivity(containing: lifeLog.selectedDate)
+            refreshLifeLogAudioSize()
+        } catch {
+            reportDataOperation(error)
+        }
+    }
+
+    public func refreshLifeLogAudioSize() {
+        let root = Self.lifeLogAudioRoot
+        guard let files = FileManager.default.enumerator(
+            at: root,
+            includingPropertiesForKeys: [.isRegularFileKey, .fileSizeKey],
+            options: [.skipsHiddenFiles]
+        ) else {
+            lifeLogAudioBytes = 0
+            return
+        }
+        var total: Int64 = 0
+        for case let url as URL in files {
+            do {
+                let values = try url.resourceValues(forKeys: [.isRegularFileKey, .fileSizeKey])
+                if values.isRegularFile == true {
+                    total += Int64(values.fileSize ?? 0)
+                }
+            } catch {
+                KoeLog.persistence.error("音声ファイル容量を確認できません: \(error.localizedDescription, privacy: .public)")
+            }
+        }
+        lifeLogAudioBytes = total
+    }
+
+    private static var lifeLogAudioRoot: URL {
+        FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+            .appendingPathComponent("Koe/LifeLog", isDirectory: true)
+    }
+
+    private func removeLifeLogAudioDirectory() throws {
+        let root = Self.lifeLogAudioRoot
+        if FileManager.default.fileExists(atPath: root.path) {
+            try FileManager.default.removeItem(at: root)
+        }
+    }
+
+    private func reportDataOperation(_ error: Error) {
+        dataOperationError = error.localizedDescription
+        KoeLog.persistence.error("保存データの操作に失敗: \(error.localizedDescription, privacy: .public)")
+    }
+
+    private enum DataOperationError: LocalizedError {
+        case captureDidNotStop
+
+        var errorDescription: String? {
+            "録音の保存処理が終わらなかったため、データを削除しませんでした。もう一度お試しください。"
         }
     }
 

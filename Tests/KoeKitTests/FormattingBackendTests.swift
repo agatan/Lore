@@ -14,9 +14,15 @@ struct FormattingBackendTests {
     @MainActor
     @Test("既定はオンデバイス")
     func defaultsToOnDevice() {
-        let settings = AppSettings(defaults: UserDefaults(suiteName: #function)!)
+        let suite = #function
+        let defaults = UserDefaults(suiteName: suite)!
+        defaults.removePersistentDomain(forName: suite)
+        let settings = AppSettings(defaults: defaults)
         #expect(settings.formattingBackend == .onDevice)
         #expect(settings.groqModel == GroqLlm.defaultModel)
+        #expect(settings.lifeLogAudioRetentionDays == 30)
+        #expect(!settings.onboardingCompleted)
+        #expect(!settings.lifeLogAudioStorageConfirmed)
     }
 
     @MainActor

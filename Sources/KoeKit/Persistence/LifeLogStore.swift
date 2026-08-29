@@ -23,6 +23,40 @@ public struct LifeLogStore: Sendable {
         try await queue.read { db in try Row.fetchAll(db, sql: "SELECT * FROM life_log_audio_chunks WHERE transcription_state IN ('captured','failed') OR processing_state != 'extracted' ORDER BY capture_started_at").map(decodeChunk) }
     }
 
+    public func audioFileURLs(endedBefore cutoff: Date? = nil) async throws -> [URL] {
+        try await queue.read { db in
+            let rows: [Row]
+            if let cutoff {
+                rows = try Row.fetchAll(
+                    db,
+                    sql: """
+                        SELECT local_path FROM life_log_audio_chunks
+                        WHERE capture_ended_at < ? AND transcription_state = 'transcribed' AND processing_state = 'extracted'
+                        ORDER BY capture_ended_at
+                        """,
+                    arguments: [date(cutoff)]
+                )
+            } else {
+                rows = try Row.fetchAll(db, sql: "SELECT local_path FROM life_log_audio_chunks ORDER BY capture_ended_at")
+            }
+            return rows.map { URL(fileURLWithPath: $0["local_path"]) }
+        }
+    }
+
+    /// 発話・予定・メモ・TODO・要約を同じ境界で削除する。音声ファイルは呼び出し側が先に消す。
+    public func deleteAll() async throws {
+        try await queue.write { db in
+            try db.execute(sql: "DELETE FROM life_log_utterances")
+            try db.execute(sql: "DELETE FROM life_log_conversations")
+            try db.execute(sql: "DELETE FROM life_log_memos")
+            try db.execute(sql: "DELETE FROM life_log_todos")
+            try db.execute(sql: "DELETE FROM todo_extraction_rules")
+            try db.execute(sql: "DELETE FROM daily_summaries")
+            try db.execute(sql: "DELETE FROM calendar_event_snapshots")
+            try db.execute(sql: "DELETE FROM life_log_audio_chunks")
+        }
+    }
+
     public func save(calendarEvents values: [CalendarEventSnapshot]) async throws {
         try await queue.write { db in
             for value in values {

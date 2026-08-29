@@ -23,6 +23,8 @@ public final class AppSettings {
         public var vocabularyAnalysisEnabled: Bool = true
         public var showLevelMeterInMenuBar: Bool = true
         public var openHistoryAtLaunch: Bool = true
+        /// 初回案内を完了するまで、権限と保存範囲を説明する。
+        public var onboardingCompleted: Bool = false
         /// 文章の仕上げをどこで動かすか。既定はオンデバイス(外に出さない)。
         public var formattingBackend: FormattingBackend = .onDevice
         /// Groq を選んだときに叩くモデル ID。API キーは Keychain(`SecretStore`)に置く。
@@ -31,8 +33,10 @@ public final class AppSettings {
         public var holdThresholdMigrated: Bool = false
         public var lifeLogCaptureEnabled: Bool = false
         public var lifeLogInputDeviceUID: String?
-        /// 0 = 無期限。
-        public var lifeLogAudioRetentionDays: Int = 0
+        /// 音声は発話本文より機微性と容量が大きいので、既定では有限にする。0 = 無期限。
+        public var lifeLogAudioRetentionDays: Int = 30
+        /// ライフログが音声ファイルを保存することへの明示同意。
+        public var lifeLogAudioStorageConfirmed: Bool = false
         public var lifeLogCalendarTitles: [String] = []
         public var lifeLogParticipatingEventsOnly: Bool = true
         public var lifeLogSummaryIntervalMinutes: Int = 60
@@ -57,6 +61,7 @@ public final class AppSettings {
             vocabularyAnalysisEnabled = try container.decodeIfPresent(Bool.self, forKey: .vocabularyAnalysisEnabled) ?? fallback.vocabularyAnalysisEnabled
             showLevelMeterInMenuBar = try container.decodeIfPresent(Bool.self, forKey: .showLevelMeterInMenuBar) ?? fallback.showLevelMeterInMenuBar
             openHistoryAtLaunch = try container.decodeIfPresent(Bool.self, forKey: .openHistoryAtLaunch) ?? fallback.openHistoryAtLaunch
+            onboardingCompleted = try container.decodeIfPresent(Bool.self, forKey: .onboardingCompleted) ?? false
             // 選択肢が消えた版へ戻したときに、**設定ファイル全体が捨てられない**ようにする。
             // ここで throw すると `AppSettings.init` の `try?` が丸ごと初期値へ倒し、
             // API キー以外の設定(ホットキー・モード・タイムアウト)が全部消える。
@@ -66,7 +71,8 @@ public final class AppSettings {
             holdThresholdMigrated = try container.decodeIfPresent(Bool.self, forKey: .holdThresholdMigrated) ?? false
             lifeLogCaptureEnabled = try container.decodeIfPresent(Bool.self, forKey: .lifeLogCaptureEnabled) ?? false
             lifeLogInputDeviceUID = try container.decodeIfPresent(String.self, forKey: .lifeLogInputDeviceUID)
-            lifeLogAudioRetentionDays = try container.decodeIfPresent(Int.self, forKey: .lifeLogAudioRetentionDays) ?? 0
+            lifeLogAudioRetentionDays = try container.decodeIfPresent(Int.self, forKey: .lifeLogAudioRetentionDays) ?? fallback.lifeLogAudioRetentionDays
+            lifeLogAudioStorageConfirmed = try container.decodeIfPresent(Bool.self, forKey: .lifeLogAudioStorageConfirmed) ?? false
             lifeLogCalendarTitles = try container.decodeIfPresent([String].self, forKey: .lifeLogCalendarTitles) ?? []
             lifeLogParticipatingEventsOnly = try container.decodeIfPresent(Bool.self, forKey: .lifeLogParticipatingEventsOnly) ?? true
             lifeLogSummaryIntervalMinutes = try container.decodeIfPresent(Int.self, forKey: .lifeLogSummaryIntervalMinutes) ?? 60
@@ -172,6 +178,11 @@ public final class AppSettings {
         set { storage.openHistoryAtLaunch = newValue; persist() }
     }
 
+    public var onboardingCompleted: Bool {
+        get { storage.onboardingCompleted }
+        set { storage.onboardingCompleted = newValue; persist() }
+    }
+
     public var formattingBackend: FormattingBackend {
         get { storage.formattingBackend }
         set { storage.formattingBackend = newValue; persist() }
@@ -189,10 +200,17 @@ public final class AppSettings {
     public var lifeLogCaptureEnabled: Bool { get { storage.lifeLogCaptureEnabled } set { storage.lifeLogCaptureEnabled = newValue; persist() } }
     public var lifeLogInputDeviceUID: String? { get { storage.lifeLogInputDeviceUID } set { storage.lifeLogInputDeviceUID = newValue; persist() } }
     public var lifeLogAudioRetentionDays: Int { get { storage.lifeLogAudioRetentionDays } set { storage.lifeLogAudioRetentionDays = max(0, newValue); persist() } }
+    public var lifeLogAudioStorageConfirmed: Bool { get { storage.lifeLogAudioStorageConfirmed } set { storage.lifeLogAudioStorageConfirmed = newValue; persist() } }
     public var lifeLogCalendarTitles: [String] { get { storage.lifeLogCalendarTitles } set { storage.lifeLogCalendarTitles = newValue; persist() } }
     public var lifeLogParticipatingEventsOnly: Bool { get { storage.lifeLogParticipatingEventsOnly } set { storage.lifeLogParticipatingEventsOnly = newValue; persist() } }
     public var lifeLogSummaryIntervalMinutes: Int { get { storage.lifeLogSummaryIntervalMinutes } set { storage.lifeLogSummaryIntervalMinutes = max(15, newValue); persist() } }
     public var lifeLogTodoPrompt: String { get { storage.lifeLogTodoPrompt } set { storage.lifeLogTodoPrompt = newValue; persist() } }
     public var lifeLogSummaryPrompt: String { get { storage.lifeLogSummaryPrompt } set { storage.lifeLogSummaryPrompt = newValue; persist() } }
     public var accentPalette: AccentPalette { get { storage.accentPalette } set { storage.accentPalette = newValue; persist() } }
+
+    /// 「Koeの全データを削除」で設定も初期状態へ戻す。
+    public func resetAll() {
+        storage = Storage()
+        persist()
+    }
 }

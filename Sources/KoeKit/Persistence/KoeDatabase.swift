@@ -35,6 +35,25 @@ public final class KoeDatabase: Sendable {
     public var meta: MetaStore { MetaStore(queue: queue) }
     public var lifeLog: LifeLogStore { LifeLogStore(queue: queue) }
 
+    /// 設定(UserDefaults)と秘密(Keychain)以外の利用者データを一つのDB transactionで消す。
+    public func deleteAllUserData() async throws {
+        try await queue.write { db in
+            try db.execute(sql: "DELETE FROM life_log_utterances")
+            try db.execute(sql: "DELETE FROM life_log_conversations")
+            try db.execute(sql: "DELETE FROM life_log_memos")
+            try db.execute(sql: "DELETE FROM life_log_todos")
+            try db.execute(sql: "DELETE FROM todo_extraction_rules")
+            try db.execute(sql: "DELETE FROM daily_summaries")
+            try db.execute(sql: "DELETE FROM calendar_event_snapshots")
+            try db.execute(sql: "DELETE FROM life_log_audio_chunks")
+            try db.execute(sql: "DELETE FROM sessions")
+            try db.execute(sql: "DELETE FROM vocab_suggestions")
+            try db.execute(sql: "DELETE FROM vocabulary")
+            try db.execute(sql: "DELETE FROM modes")
+            try db.execute(sql: "DELETE FROM meta")
+        }
+    }
+
     private static var configuration: Configuration {
         var configuration = Configuration()
         configuration.prepareDatabase { db in

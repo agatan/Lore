@@ -44,6 +44,28 @@ public struct MainWindowView: View {
                 }
             }
             .task { env.refreshPermissions() }
+            .sheet(isPresented: Binding(
+                get: { !env.settings.onboardingCompleted },
+                set: { _ in }
+            )) {
+                OnboardingView(env: env)
+            }
+            .confirmationDialog(
+                "ライフログの音声を保存しますか？",
+                isPresented: Binding(
+                    get: { env.presentsLifeLogAudioConsent },
+                    set: { if !$0 { env.cancelLifeLogAudioStorageConsent() } }
+                )
+            ) {
+                Button("保存して記録を開始") {
+                    env.confirmLifeLogAudioStorageAndStart()
+                }
+                Button("キャンセル", role: .cancel) {
+                    env.cancelLifeLogAudioStorageConsent()
+                }
+            } message: {
+                Text("文字起こしに失敗しても発話を回収できるよう、短い音声チャンクをこのMacだけに保存します。音声をGroqへ送ることはありません。既定では30日後に削除します。")
+            }
     }
 
     @ViewBuilder

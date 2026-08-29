@@ -1,7 +1,10 @@
+import AppKit
 import SwiftUI
+import UniformTypeIdentifiers
 
 public struct LifeLogWindow: View {
     var env: AppEnvironment
+    @State private var exportError: String?
 
     public init(env: AppEnvironment) { self.env = env }
 
@@ -214,6 +217,21 @@ public struct LifeLogWindow: View {
         VStack(spacing: 12) {
             todoPanel.frame(maxHeight: .infinity)
             insightsPanel.frame(height: 238)
+            Button(action: exportSelectedDay) {
+                Label("この日を書き出す", systemImage: "square.and.arrow.up")
+                    .frame(maxWidth: .infinity)
+            }
+            .buttonStyle(.bordered)
+            .controlSize(.large)
+            .help("予定・発話・メモをLLM向けテキストで書き出す")
+        }
+        .alert("書き出せませんでした", isPresented: Binding(
+            get: { exportError != nil },
+            set: { if !$0 { exportError = nil } }
+        )) {
+            Button("閉じる") { exportError = nil }
+        } message: {
+            Text(exportError ?? "不明なエラー")
         }
     }
 
@@ -334,6 +352,24 @@ public struct LifeLogWindow: View {
             changed.title = value
             Task { await env.lifeLog.update(todo: changed) }
         })
+    }
+
+    private func exportSelectedDay() {
+        let panel = NSSavePanel()
+        panel.allowedContentTypes = [.plainText]
+        panel.canCreateDirectories = true
+        panel.nameFieldStringValue = "Koe-LifeLog-\(LifeLogDateKey.string(for: env.lifeLog.selectedDate)).txt"
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        do {
+            let text = LifeLogTextExporter.render(
+                date: env.lifeLog.selectedDate,
+                day: env.lifeLog.day,
+                todos: env.lifeLog.todos
+            )
+            try text.write(to: url, atomically: true, encoding: .utf8)
+        } catch {
+            exportError = error.localizedDescription
+        }
     }
 
 }

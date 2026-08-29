@@ -38,6 +38,7 @@ public final class LifeLogCoordinator {
     private var transcriptionFinished = false
     private var captureFinished = false
     private var isDeriving = false
+    private var isFinalizingSession = false
     private var captureRequested = false
     private var captureRetryAttempt = 0
     private var captureRetryTask: Task<Void, Never>?
@@ -93,6 +94,23 @@ public final class LifeLogCoordinator {
             capture.stop()
             isCapturing = false
         }
+    }
+
+    /// アプリ終了時の境界。音声writer、文字起こし、DB保存、停止時の要約が終わるまで待つ。
+    /// OSや外部エンジンが応答しない場合だけ期限で打ち切り、保存済みチャンクは次回起動時に回収する。
+    public func stopAndWait(timeout: Duration = .seconds(15)) async -> Bool {
+        setCaptureEnabled(false)
+        let clock = ContinuousClock()
+        let deadline = clock.now.advanced(by: timeout)
+        while capture.isRunning || liveTranscriptionTask != nil {
+            guard clock.now < deadline else { return false }
+            do {
+                try await Task.sleep(for: .milliseconds(50))
+            } catch {
+                return false
+            }
+        }
+        return true
     }
 
     private func scheduleDerivedUpdates() {
@@ -301,7 +319,9 @@ public final class LifeLogCoordinator {
     }
 
     private func finishLiveSessionIfReady() async {
-        guard transcriptionFinished, captureFinished, let database else { return }
+        guard transcriptionFinished, captureFinished, !isFinalizingSession, let database else { return }
+        isFinalizingSession = true
+        defer { isFinalizingSession = false }
         let startedAt = liveSessionStartedAt
         let completedAt = liveChunks.last?.captureEndedAt ?? liveSessionStartedAt
         await flushLiveSegments()
@@ -329,7 +349,6 @@ public final class LifeLogCoordinator {
         } catch { fail(error) }
         isTranscribing = false
         liveTranscript = ""
-        liveTranscriptionTask = nil
         liveSessionStartedAt = nil
         liveSessionID = nil
         liveChunks = []
@@ -342,6 +361,8 @@ public final class LifeLogCoordinator {
             }
         }
         await reload()
+        // 終了待ちは、停止時の最終要約と再読込まで含めて完了とみなす。
+        liveTranscriptionTask = nil
     }
 
     public func select(date: Date) async {

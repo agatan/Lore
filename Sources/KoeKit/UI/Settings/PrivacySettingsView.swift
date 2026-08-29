@@ -4,7 +4,7 @@ import SwiftUI
 /// プライバシーの説明とデータの扱い(NFR-2 / FR-7.3)。
 struct PrivacySettingsView: View {
     var env: AppEnvironment
-    @State private var showDeleteConfirm = false
+    @State private var deleteTarget: DeleteTarget?
 
     var body: some View {
         // 画面外のカードを先に組まない(GeneralSettingsView と同じ理由)。
@@ -76,27 +76,75 @@ struct PrivacySettingsView: View {
                 }
             }
 
-            SettingsCard(title: "履歴の削除") {
-                HStack {
+            SettingsCard(title: "データの削除", footnote: "削除した内容は元に戻せません。ライフログの削除には、発話、メモ、予定の控え、要約、TODO、保存音声が含まれます。") {
+                HStack(spacing: 12) {
                     Text("\(env.historyCount) 件の履歴が保存されています")
                         .font(.system(size: 11.5))
                         .foregroundStyle(.secondary)
                     Spacer()
-                    Button("すべて削除…", role: .destructive) {
-                        showDeleteConfirm = true
+                    Button("音声入力履歴…", role: .destructive) {
+                        deleteTarget = .history
                     }
                     .buttonStyle(.bordered)
                     .controlSize(.small)
                 }
+                Divider()
+                HStack(spacing: 12) {
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text("ライフログ")
+                            .font(.system(size: 11.5, weight: .medium))
+                        Text("音声 \(ByteCountFormatter.string(fromByteCount: env.lifeLogAudioBytes, countStyle: .file))")
+                            .font(.system(size: 10.5))
+                            .foregroundStyle(.secondary)
+                    }
+                    Spacer()
+                    Button("ライフログを削除…", role: .destructive) {
+                        deleteTarget = .lifeLog
+                    }
+                    .buttonStyle(.bordered)
+                    .controlSize(.small)
+                }
+                Divider()
+                HStack(spacing: 12) {
+                    Text("設定、語彙、プロンプト、APIキーを含むすべて")
+                        .font(.system(size: 11.5))
+                        .foregroundStyle(.secondary)
+                    Spacer()
+                    Button("Koeを初期化…", role: .destructive) {
+                        deleteTarget = .application
+                    }
+                    .buttonStyle(.bordered)
+                    .controlSize(.small)
+                }
+                if let error = env.dataOperationError {
+                    Label(error, systemImage: "exclamationmark.triangle.fill")
+                        .font(.system(size: 11))
+                        .foregroundStyle(KoeTheme.recording)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
             }
         }
-        .confirmationDialog("履歴をすべて削除しますか？", isPresented: $showDeleteConfirm) {
-            Button("すべて削除", role: .destructive) {
-                Task { await env.deleteAllHistory() }
+        .confirmationDialog(deleteTarget?.title ?? "データを削除しますか？", isPresented: Binding(
+            get: { deleteTarget != nil },
+            set: { if !$0 { deleteTarget = nil } }
+        )) {
+            if let target = deleteTarget {
+                Button(target.actionTitle, role: .destructive) {
+                    deleteTarget = nil
+                    Task {
+                        switch target {
+                        case .history: await env.deleteAllHistory()
+                        case .lifeLog: await env.deleteAllLifeLogData()
+                        case .application: await env.deleteAllApplicationData()
+                        }
+                    }
+                }
             }
+            Button("キャンセル", role: .cancel) { deleteTarget = nil }
         } message: {
-            Text("元に戻せません。語彙の提案に使われた抜粋は別に保存されているため残ります。")
+            Text(deleteTarget?.message ?? "元に戻せません。")
         }
+        .task { env.refreshLifeLogAudioSize() }
     }
 
     /// 仕上げを外部に出しているかどうかで説明が変わる。判断の出どころは
@@ -112,7 +160,7 @@ struct PrivacySettingsView: View {
 
     private static let offDeviceSummary = """
     設定 > モデル で仕上げに Groq を選んでいます。聞き取りはこの Mac の中で完結しますが、\
-    口述の整形では文字起こしと指示文を送ります。ライフログではSummary・TODO生成のため、対象日の発話、予定の時刻と件名、既存Summary、指示文を送ります。録音した音声そのものは送りません。\
+    口述の整形では文字起こしと指示文を送ります。ライフログではSummary・TODO生成のため、対象日の発話、メモ、予定の時刻と件名、指示文を送ります。録音した音声そのものは送りません。\
     外に出したくない場合は、仕上げを「この Mac の中」に戻してください。
     """
 
@@ -128,5 +176,38 @@ struct PrivacySettingsView: View {
             items.insert("共通ルール・モードの指示・カスタム語彙", at: 2)
         }
         return items
+    }
+
+    private enum DeleteTarget {
+        case history
+        case lifeLog
+        case application
+
+        var title: String {
+            switch self {
+            case .history: "音声入力履歴を削除しますか？"
+            case .lifeLog: "ライフログをすべて削除しますか？"
+            case .application: "Koeを初期状態に戻しますか？"
+            }
+        }
+
+        var actionTitle: String {
+            switch self {
+            case .history: "履歴を削除"
+            case .lifeLog: "ライフログを削除"
+            case .application: "すべて削除して初期化"
+            }
+        }
+
+        var message: String {
+            switch self {
+            case .history:
+                "生の文字起こしと整形後の文章を削除します。語彙とライフログは残ります。"
+            case .lifeLog:
+                "発話、メモ、予定の控え、要約、TODO、保存音声を削除します。音声入力履歴と設定は残ります。"
+            case .application:
+                "履歴、ライフログ、保存音声、語彙、プロンプト、設定、Groq APIキーを削除します。元に戻せません。"
+            }
+        }
     }
 }

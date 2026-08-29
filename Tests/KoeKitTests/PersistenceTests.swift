@@ -10,6 +10,29 @@ import Testing
     #expect(try await database.history.count() == 0)
 }
 
+@Test func deletingAllUserDataCoversEveryPersistedDomain() async throws {
+    let database = try await KoeDatabase.inMemory()
+    let start = Date(timeIntervalSince1970: 1_725_158_400)
+    try await database.history.save(makeSession(id: "delete", status: .completed, raw: "削除対象"))
+    try await database.vocabulary.save(VocabularyEntry(id: "delete", surface: "削除語彙"))
+    let chunk = LifeLogAudioChunk(
+        id: "delete", captureStartedAt: start, captureEndedAt: start.addingTimeInterval(30),
+        localPath: "/tmp/delete-all-user-data.m4a"
+    )
+    try await database.lifeLog.save(audioChunk: chunk)
+    try await database.lifeLog.save(utterance: LifeLogUtterance(
+        startedAt: start, endedAt: start.addingTimeInterval(10), text: "削除発話", audioChunkID: chunk.id
+    ))
+
+    try await database.deleteAllUserData()
+
+    #expect(try await database.history.count() == 0)
+    #expect(try await database.vocabulary.all().isEmpty)
+    #expect(try await database.modes.all().isEmpty)
+    #expect(try await database.lifeLog.day(start).utterances.isEmpty)
+    #expect(try await database.lifeLog.pendingAudioChunks().isEmpty)
+}
+
 @Test func sessionUpsertPreservesOneAuditRow() async throws {
     let database = try await KoeDatabase.inMemory()
     var record = makeSession(id: "progress", status: .interrupted, raw: "確定した生テキスト")

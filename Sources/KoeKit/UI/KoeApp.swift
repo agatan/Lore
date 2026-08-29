@@ -3,6 +3,7 @@ import SwiftUI
 
 /// アプリ本体。Dock アイコンを持たないメニューバー常駐アプリ(FR-8.1)。
 public struct KoeApp: App {
+    @NSApplicationDelegateAdaptor(KoeApplicationDelegate.self) private var applicationDelegate
     @State private var env = AppEnvironment()
 
     public init() {}
@@ -93,8 +94,6 @@ private struct MenuBarRoot: View {
         controller.start()
         hud = controller
 
-        await env.boot()
-
         env.onToggleLifeLogMiniWindow = {
             if let window = NSApp.windows.first(where: { $0.identifier?.rawValue == KoeWindow.lifeLogMini }), window.isVisible {
                 window.close()
@@ -103,11 +102,34 @@ private struct MenuBarRoot: View {
                 NSApp.activate()
             }
         }
+        env.onShowMainWindow = {
+            openWindow(id: KoeWindow.main)
+            NSApp.activate()
+        }
+
+        await env.boot()
 
         // 起動直後はKoeのメイン画面を開く。
         if env.settings.openHistoryAtLaunch {
             env.mainSection = .lifeLog
             openWindow(id: KoeWindow.main)
         }
+    }
+}
+
+/// `NSApp.terminate`、Cmd+Q、システム終了を同じ非同期の保存境界へ集約する。
+final class KoeApplicationDelegate: NSObject, NSApplicationDelegate {
+    private var terminationInProgress = false
+
+    func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
+        guard !terminationInProgress else { return .terminateLater }
+        terminationInProgress = true
+        Task { @MainActor in
+            if let environment = AppEnvironment.current {
+                await environment.prepareForTermination()
+            }
+            sender.reply(toApplicationShouldTerminate: true)
+        }
+        return .terminateLater
     }
 }
