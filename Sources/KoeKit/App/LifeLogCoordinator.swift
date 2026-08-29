@@ -594,9 +594,10 @@ public final class LifeLogCoordinator {
         let value = try await store.day(date, participatingOnly: participatingEventsOnly())
         let previous = value.summary
         let additions = value.utterances.filter { $0.endedAt > (previous?.summarizedThrough ?? .distantPast) }
+        let dictationAdditions = value.dictations.filter { $0.endedAt > (previous?.summarizedThrough ?? .distantPast) }
         let memoAdditions = value.memos.filter { $0.createdAt > (previous?.summarizedThrough ?? .distantPast) }
-        let latestAddition = (additions.map(\.endedAt) + memoAdditions.map(\.createdAt)).max()
-        let latest = (value.utterances.map(\.endedAt) + value.memos.map(\.createdAt)).max()
+        let latestAddition = (additions.map(\.endedAt) + dictationAdditions.map(\.endedAt) + memoAdditions.map(\.createdAt)).max()
+        let latest = (value.utterances.map(\.endedAt) + value.dictations.map(\.endedAt) + value.memos.map(\.createdAt)).max()
         guard force || latestAddition != nil else {
             if var previous, !Calendar.current.isDateInToday(date), !previous.isFinal {
                 previous.isFinal = true
@@ -606,7 +607,7 @@ public final class LifeLogCoordinator {
         }
         guard let latest else { return }
         let baseline = previous?.summarizedThrough
-            ?? (value.utterances.map(\.startedAt) + value.memos.map(\.createdAt)).min()
+            ?? (value.utterances.map(\.startedAt) + value.dictations.map(\.startedAt) + value.memos.map(\.createdAt)).min()
             ?? latest
         let interval = TimeInterval(max(15, summaryIntervalMinutes()) * 60)
         guard force || !respectingInterval || !Calendar.current.isDateInToday(date)

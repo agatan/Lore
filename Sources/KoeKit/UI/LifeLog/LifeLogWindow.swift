@@ -84,13 +84,6 @@ public struct LifeLogWindow: View {
                 }
                 if let summary = env.lifeLog.day.summary {
                     Text(summary.summary).font(.system(size: 12.5)).textSelection(.enabled)
-                    if !summary.commitments.isEmpty {
-                        FlowLayout(spacing: 6) {
-                            ForEach(summary.commitments, id: \.self) { value in
-                                Pill(text: value, systemImage: "checkmark", tint: KoeTheme.accent)
-                            }
-                        }
-                    }
                 } else {
                     HStack(spacing: 8) { Image(systemName: "sparkles"); Text("Summary") }
                         .font(.system(size: 11.5, weight: .medium))
@@ -199,12 +192,29 @@ public struct LifeLogWindow: View {
             .id(value.id)
         case .event(let value):
             HStack(spacing: 10) {
-                Text(value.startsAt.formatted(date: .omitted, time: .shortened)).font(.system(size: 10.5, design: .monospaced))
+                Text(timeRange(from: value.startsAt, to: value.endsAt))
+                    .font(.system(size: 10.5, design: .monospaced))
+                    .frame(width: 92, alignment: .leading)
                 Circle().fill(KoeTheme.accentSecondary).frame(width: 5, height: 5)
                 Text(value.title).font(.system(size: 11.5, weight: .semibold))
                 Spacer()
             }
             .padding(.horizontal, 16).padding(.vertical, 10).foregroundStyle(.secondary)
+        case .dictation(let value):
+            HStack(alignment: .top, spacing: 12) {
+                Text(value.startedAt.formatted(date: .omitted, time: .shortened))
+                    .font(.system(size: 10.5, weight: .medium, design: .monospaced))
+                    .foregroundStyle(.tertiary).frame(width: 64, alignment: .leading)
+                Image(systemName: "keyboard.badge.ellipsis")
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(KoeTheme.accent)
+                    .frame(width: 16)
+                    .help("音声入力")
+                Text(value.text).font(.system(size: 13)).textSelection(.enabled)
+                Spacer(minLength: 0)
+            }
+            .padding(.horizontal, 16).padding(.vertical, 11)
+            .background(KoeTheme.accent.opacity(0.04))
         case .memo(let value):
             HStack(alignment: .top, spacing: 12) {
                 Text(value.createdAt.formatted(date: .omitted, time: .shortened))
@@ -363,13 +373,23 @@ public struct LifeLogWindow: View {
         .padding(.horizontal, 14).padding(.vertical, 12)
     }
 
-    private enum ItemKind { case utterance(LifeLogUtterance), memo(LifeLogMemo), event(CalendarEventSnapshot) }
+    private enum ItemKind {
+        case utterance(LifeLogUtterance)
+        case dictation(LifeLogDictation)
+        case memo(LifeLogMemo)
+        case event(CalendarEventSnapshot)
+    }
     private struct TimelineItem { var id: String; var date: Date; var kind: ItemKind }
     private var timelineItems: [TimelineItem] {
         (env.lifeLog.day.utterances.map { TimelineItem(id: "u-\($0.id)", date: $0.startedAt, kind: .utterance($0)) }
+         + env.lifeLog.day.dictations.map { TimelineItem(id: "d-\($0.id)", date: $0.startedAt, kind: .dictation($0)) }
          + env.lifeLog.day.memos.map { TimelineItem(id: "m-\($0.id)", date: $0.createdAt, kind: .memo($0)) }
          + env.lifeLog.day.calendarEvents.filter { !$0.isAllDay }.map { TimelineItem(id: "e-\($0.id)", date: $0.startsAt, kind: .event($0)) })
             .sorted { $0.date < $1.date }
+    }
+
+    private func timeRange(from start: Date, to end: Date) -> String {
+        "\(start.formatted(date: .omitted, time: .shortened))–\(end.formatted(date: .omitted, time: .shortened))"
     }
 
     private func setCaptureEnabled(_ enabled: Bool) {

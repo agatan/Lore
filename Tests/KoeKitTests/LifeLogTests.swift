@@ -339,11 +339,36 @@ struct LifeLogTests {
         let text = LifeLogTextExporter.render(date: date, day: day, todos: [todo], calendar: calendar)
 
         let calendarIndex = try #require(text.range(of: "[CALENDAR 09:00:00-09:01:00"))
-        let speechIndex = try #require(text.range(of: "[SPEECH 09:02:00-09:02:30]"))
+        let speechIndex = try #require(text.range(of: "[SPEECH 09:02:00]"))
         let memoIndex = try #require(text.range(of: "[MEMO 09:03:00]"))
         #expect(calendarIndex.lowerBound < speechIndex.lowerBound)
         #expect(speechIndex.lowerBound < memoIndex.lowerBound)
         #expect(text.contains("[TODO status=open created=2026-08-29T09:04:00] RFCを書く"))
+    }
+
+    @Test("成功した音声入力履歴だけを注釈付きでライフログへ投影する")
+    func dictationHistoryAppearsInLifeLogWithoutCopyingIt() async throws {
+        let database = try await KoeDatabase.inMemory()
+        let startedAt = Date(timeIntervalSince1970: 1_777_777_700)
+        let snapshot = ModeSnapshot(modeName: "標準", modePrompt: "", systemPrompt: "", vocabularyCount: 0, trigger: .manual)
+        try await database.history.save(SessionRecord(
+            id: "voice-input", startedAt: startedAt, endedAt: startedAt.addingTimeInterval(8), status: .completed,
+            modeSnapshot: snapshot, sttEngine: EngineIdentifier("speech-analyzer"),
+            rawTranscript: "明日の資料を送る", formattedText: "明日の資料を送ります。"
+        ))
+        try await database.history.save(SessionRecord(
+            id: "cancelled", startedAt: startedAt.addingTimeInterval(10), status: .cancelled,
+            modeSnapshot: snapshot, sttEngine: EngineIdentifier("speech-analyzer"), rawTranscript: "取り消した入力"
+        ))
+
+        let day = try await database.lifeLog.day(startedAt)
+        #expect(day.dictations.map(\.id) == ["voice-input"])
+        #expect(day.dictations.first?.text == "明日の資料を送る")
+        let export = LifeLogTextExporter.render(date: startedAt, day: day, todos: [])
+        #expect(export.contains("[VOICE_INPUT"))
+        #expect(export.contains("明日の資料を送る"))
+        #expect(!export.contains("取り消した入力"))
+        #expect(LifeLogDerivationService.timelineItems(day: day).contains { $0.contains("[音声入力") })
     }
 
     @Test("日別exportは項目ごとの選択と当日作成・完了TODOを尊重する")

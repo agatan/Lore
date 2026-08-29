@@ -32,6 +32,7 @@ struct LifeLogMiniWindow: View {
                         ForEach(items) { item in
                             switch item.kind {
                             case .utterance(let utterance): utteranceRow(utterance)
+                            case .dictation(let dictation): dictationRow(dictation)
                             case .memo(let memo): memoRow(memo)
                             }
                         }
@@ -108,7 +109,7 @@ struct LifeLogMiniWindow: View {
         }
     }
 
-    private enum ItemKind { case utterance(LifeLogUtterance), memo(LifeLogMemo) }
+    private enum ItemKind { case utterance(LifeLogUtterance), dictation(LifeLogDictation), memo(LifeLogMemo) }
     private struct Item: Identifiable {
         var id: String
         var date: Date
@@ -116,8 +117,31 @@ struct LifeLogMiniWindow: View {
     }
     private var items: [Item] {
         (env.lifeLog.day.utterances.map { Item(id: "u-\($0.id)", date: $0.startedAt, kind: .utterance($0)) }
+         + env.lifeLog.day.dictations.map { Item(id: "d-\($0.id)", date: $0.startedAt, kind: .dictation($0)) }
          + env.lifeLog.day.memos.map { Item(id: "m-\($0.id)", date: $0.createdAt, kind: .memo($0)) })
             .sorted { $0.date < $1.date }
+    }
+
+    private func dictationRow(_ dictation: LifeLogDictation) -> some View {
+        HStack(alignment: .top, spacing: 10) {
+            Text(dictation.startedAt.formatted(date: .omitted, time: .shortened))
+                .font(.system(size: 10, weight: .medium, design: .monospaced))
+                .foregroundStyle(.tertiary)
+                .frame(width: 45, alignment: .leading)
+            Image(systemName: "keyboard.badge.ellipsis")
+                .font(.system(size: 10.5, weight: .semibold))
+                .foregroundStyle(KoeTheme.accent)
+                .frame(width: 14)
+                .help("音声入力")
+            Text(dictation.text)
+                .font(.system(size: 12.5))
+                .textSelection(.enabled)
+            Spacer(minLength: 0)
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 9)
+        .background(KoeTheme.accent.opacity(0.04))
+        .id("d-\(dictation.id)")
     }
 
     private func utteranceRow(_ utterance: LifeLogUtterance) -> some View {

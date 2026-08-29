@@ -49,6 +49,7 @@ public struct LifeLogDerivationService: Sendable {
                           todoPrompt: String = BuiltinLifeLogPrompts.todo) async throws -> LifeLogDerivedSummary {
         let system = prompt + "\n\nTODO抽出:\n" + todoPrompt
             + "\n以下は対象日の全データです。以前の要約を引き継がず、このデータだけから一日全体を要約してください。"
+            + "\n[音声入力]は通常の[発話]と時間が重なる場合があります。同じ内容は二重に数えず、音声入力であることを意図の手がかりとして扱ってください。"
             + "\nTODOは確定せず提案として返してください。JSON以外は出力しないでください。形式: {\"summary\":\"要約\",\"topics\":[\"話題\"],\"todos\":[\"TODO案\"]}"
         let output = try await summarizeAll(Self.timelineItems(day: day), system: system, depth: 0)
         return LifeLogDerivedSummary(
@@ -60,13 +61,14 @@ public struct LifeLogDerivationService: Sendable {
 
     static func timelineItems(day: LifeLogDay) -> [String] {
         let utterances = day.utterances.map {
-            ($0.startedAt, "[発話 \(time($0.startedAt))–\(time($0.endedAt))] \($0.text)")
+            ($0.startedAt, "[発話 \(time($0.startedAt))] \($0.text)")
         }
+        let dictations = day.dictations.map { ($0.startedAt, "[音声入力 \(time($0.startedAt))] \($0.text)") }
         let memos = day.memos.map { ($0.createdAt, "[メモ \(time($0.createdAt))] \($0.text)") }
         let events = day.calendarEvents.map {
             ($0.startsAt, "[予定 \(time($0.startsAt))–\(time($0.endsAt))] \($0.title)")
         }
-        return (utterances + memos + events).sorted { $0.0 < $1.0 }.map(\.1)
+        return (utterances + dictations + memos + events).sorted { $0.0 < $1.0 }.map(\.1)
     }
 
     private func summarizeAll(_ items: [String], system: String, depth: Int) async throws -> SummaryOutput {

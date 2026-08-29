@@ -488,10 +488,12 @@ public final class DictationCoordinator {
             KoeLog.persistence.error("履歴 DB が未初期化のため保存できませんでした")
             return
         }
-        Task.detached(priority: .utility) {
+        Task(priority: .utility) {
             // 保存に失敗しても挿入は止めない。失敗自体はログで見えるようにする。
             do {
                 try await history.save(record)
+                // ライフログは保存済み履歴を投影するため、commit後にも更新を通知する。
+                self.deps.onRecordChanged(record)
             } catch {
                 KoeLog.persistence.error("履歴の保存に失敗: \(error.localizedDescription, privacy: .public)")
             }

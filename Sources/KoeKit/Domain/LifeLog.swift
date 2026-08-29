@@ -91,6 +91,21 @@ public struct LifeLogUtterance: Identifiable, Codable, Sendable, Hashable {
     }
 }
 
+/// 音声入力履歴をライフログ上へ投影した項目。履歴が正本なので二重保存しない。
+public struct LifeLogDictation: Identifiable, Sendable, Hashable {
+    public var id: String
+    public var startedAt: Date
+    public var endedAt: Date
+    public var text: String
+
+    public init(id: String, startedAt: Date, endedAt: Date, text: String) {
+        self.id = id
+        self.startedAt = startedAt
+        self.endedAt = endedAt
+        self.text = text
+    }
+}
+
 /// 利用者がタイムラインへ直接残すテキスト。音声認識結果とは混同しない。
 public struct LifeLogMemo: Identifiable, Codable, Sendable, Hashable {
     public var id: String
@@ -169,15 +184,17 @@ public struct DailySummary: Identifiable, Codable, Sendable, Hashable {
 
 public struct LifeLogDay: Sendable {
     public var utterances: [LifeLogUtterance]
+    public var dictations: [LifeLogDictation]
     public var memos: [LifeLogMemo]
     public var conversations: [LifeLogConversation]
     public var calendarEvents: [CalendarEventSnapshot]
     public var summary: DailySummary?
 
-    public init(utterances: [LifeLogUtterance], memos: [LifeLogMemo] = [],
+    public init(utterances: [LifeLogUtterance], dictations: [LifeLogDictation] = [], memos: [LifeLogMemo] = [],
                 conversations: [LifeLogConversation], calendarEvents: [CalendarEventSnapshot],
                 summary: DailySummary?) {
         self.utterances = utterances
+        self.dictations = dictations
         self.memos = memos
         self.conversations = conversations
         self.calendarEvents = calendarEvents

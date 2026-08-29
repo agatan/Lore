@@ -708,6 +708,9 @@ public final class AppEnvironment {
             history.insert(record, at: 0)
             historyCount += 1
         }
+        if record.status == .completed || record.status == .fallback || record.status == .clipboardOnly {
+            Task { await lifeLog.reload() }
+        }
     }
 
     // MARK: 語彙自動提案

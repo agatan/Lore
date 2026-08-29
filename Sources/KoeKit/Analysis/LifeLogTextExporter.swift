@@ -53,6 +53,7 @@ public enum LifeLogTextExporter {
             lines.append("## TIMELINE")
             let items = (options.includesCalendarEvents ? day.calendarEvents.map { Item(date: $0.startsAt, line: eventLine($0, calendar: calendar)) } : [])
                 + (options.includesUtterances ? day.utterances.map { Item(date: $0.startedAt, line: utteranceLine($0, calendar: calendar)) } : [])
+                + (options.includesUtterances ? day.dictations.map { Item(date: $0.startedAt, line: dictationLine($0, calendar: calendar)) } : [])
                 + (options.includesMemos ? day.memos.map { Item(date: $0.createdAt, line: memoLine($0, calendar: calendar)) } : [])
             if items.isEmpty {
                 lines.append("(empty)")
@@ -106,7 +107,11 @@ public enum LifeLogTextExporter {
     }
 
     private static func utteranceLine(_ value: LifeLogUtterance, calendar: Calendar) -> String {
-        "[SPEECH \(time(value.startedAt, calendar: calendar))-\(time(value.endedAt, calendar: calendar))] \(value.text)"
+        "[SPEECH \(time(value.startedAt, calendar: calendar))] \(value.text)"
+    }
+
+    private static func dictationLine(_ value: LifeLogDictation, calendar: Calendar) -> String {
+        "[VOICE_INPUT \(time(value.startedAt, calendar: calendar))] \(value.text)"
     }
 
     private static func memoLine(_ value: LifeLogMemo, calendar: Calendar) -> String {

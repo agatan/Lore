@@ -40,11 +40,11 @@ struct LifeLogExportSheet: View {
                     .font(.system(size: 11, weight: .semibold, design: .rounded))
                     .foregroundStyle(.secondary)
                 LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 8), count: 3), spacing: 8) {
-                    exportToggle("予定", symbol: "calendar", count: day.calendarEvents.count, isOn: $options.includesCalendarEvents)
-                    exportToggle("発話", symbol: "waveform", count: day.utterances.count, isOn: $options.includesUtterances)
-                    exportToggle("メモ", symbol: "note.text", count: day.memos.count, isOn: $options.includesMemos)
-                    exportToggle("要約", symbol: "sparkles", count: day.summary == nil ? 0 : 1, isOn: $options.includesSummary)
-                    exportToggle("この日のTODO", symbol: "checkmark.circle", count: dayTodoCount, isOn: $options.includesTodosForDay)
+                    exportToggle("予定", count: day.calendarEvents.count, isOn: $options.includesCalendarEvents)
+                    exportToggle("発話", count: day.utterances.count + day.dictations.count, isOn: $options.includesUtterances)
+                    exportToggle("メモ", count: day.memos.count, isOn: $options.includesMemos)
+                    exportToggle("要約", count: day.summary == nil ? 0 : 1, isOn: $options.includesSummary)
+                    exportToggle("この日のTODO", count: dayTodoCount, isOn: $options.includesTodosForDay)
                 }
             }
 
@@ -109,12 +109,14 @@ struct LifeLogExportSheet: View {
         }.count
     }
 
-    private func exportToggle(_ title: String, symbol: String, count: Int, isOn: Binding<Bool>) -> some View {
-        Toggle(isOn: isOn) {
+    private func exportToggle(_ title: String, count: Int, isOn: Binding<Bool>) -> some View {
+        Button {
+            isOn.wrappedValue.toggle()
+        } label: {
             HStack(spacing: 7) {
-                Image(systemName: symbol)
-                    .foregroundStyle(KoeTheme.accent)
-                    .frame(width: 16)
+                Image(systemName: isOn.wrappedValue ? "checkmark.square.fill" : "square")
+                    .font(.system(size: 15, weight: .medium))
+                    .foregroundStyle(isOn.wrappedValue ? KoeTheme.accent : .secondary)
                 Text(title)
                     .font(.system(size: 11.5, weight: .medium))
                 Spacer()
@@ -125,9 +127,15 @@ struct LifeLogExportSheet: View {
             }
             .padding(.horizontal, 9)
             .frame(maxWidth: .infinity, minHeight: 34)
+            .contentShape(Rectangle())
         }
-        .toggleStyle(.button)
-        .buttonStyle(.bordered)
-        .tint(KoeTheme.accent)
+        .buttonStyle(.plain)
+        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 8))
+        .overlay {
+            RoundedRectangle(cornerRadius: 8)
+                .stroke(isOn.wrappedValue ? KoeTheme.accent.opacity(0.45) : Color.secondary.opacity(0.18), lineWidth: 1)
+        }
+        .accessibilityLabel("\(title)を含める")
+        .accessibilityValue(isOn.wrappedValue ? "オン" : "オフ")
     }
 }

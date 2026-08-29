@@ -31,6 +31,18 @@ enum ScreenshotDemoData {
             try await database.lifeLog.save(utterance: LifeLogUtterance(id: "demo-utterance-\(id)", startedAt: startedAt, endedAt: endedAt, text: text, audioChunkID: chunk.id))
         }
 
+        try await database.history.save(SessionRecord(
+            id: "demo-dictation-1",
+            startedAt: time(12, 18),
+            endedAt: time(12, 18).addingTimeInterval(9),
+            status: .completed,
+            appName: "Notes",
+            modeSnapshot: ModeSnapshot(modeName: "標準", modePrompt: "", systemPrompt: "", vocabularyCount: 0, trigger: .manual),
+            sttEngine: EngineIdentifier("speech-analyzer"),
+            rawTranscript: "レビューで確認したい観点を三つに整理する",
+            formattedText: "レビューで確認したい観点を3つに整理する。"
+        ))
+
         try await database.lifeLog.save(memo: LifeLogMemo(id: "demo-memo-1", createdAt: time(11, 6), text: "オンボーディングは3つの価値が順番に伝わる構成にする"))
         try await database.lifeLog.save(memo: LifeLogMemo(id: "demo-memo-2", createdAt: time(15, 20), text: "マニュアルには日別エクスポートの選択画面も載せる"))
 

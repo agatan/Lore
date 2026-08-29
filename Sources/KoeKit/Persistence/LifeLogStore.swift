@@ -96,12 +96,27 @@ public struct LifeLogStore: Sendable {
         return try await queue.read { db in
             let args: StatementArguments = [date(interval.start), date(interval.end)]
             let utterances = try Row.fetchAll(db, sql: "SELECT * FROM life_log_utterances WHERE started_at >= ? AND started_at < ? ORDER BY started_at", arguments: args).map(decodeUtterance)
+            let dictations = try Row.fetchAll(db, sql: """
+                SELECT * FROM sessions
+                WHERE started_at >= ? AND started_at < ?
+                  AND status IN ('completed', 'fallback', 'clipboard_only')
+                  AND trim(raw_transcript) != ''
+                ORDER BY started_at
+                """, arguments: args).map(SessionRow.init(row:)).map { row in
+                    let record = try row.record()
+                    let endedAt = record.endedAt
+                        ?? record.audioDurationMs.map { record.startedAt.addingTimeInterval(Double($0) / 1_000) }
+                        ?? record.startedAt
+                    return LifeLogDictation(id: record.id, startedAt: record.startedAt, endedAt: endedAt,
+                                            text: record.rawTranscript)
+                }
             let memos = try Row.fetchAll(db, sql: "SELECT * FROM life_log_memos WHERE created_at >= ? AND created_at < ? ORDER BY created_at", arguments: args).map(decodeMemo)
             let conversations = try Row.fetchAll(db, sql: "SELECT * FROM life_log_conversations WHERE started_at >= ? AND started_at < ? ORDER BY started_at", arguments: args).map(decodeConversation)
             let participationClause = participatingOnly ? " AND participation_status IN ('none', 'accepted')" : ""
             let events = try Row.fetchAll(db, sql: "SELECT * FROM calendar_event_snapshots WHERE ends_at > ? AND starts_at < ?\(participationClause) ORDER BY starts_at", arguments: args).map(decodeEvent)
             let summary = try Row.fetchOne(db, sql: "SELECT * FROM daily_summaries WHERE day=?", arguments: [LifeLogDateKey.string(for: dateValue, calendar: calendar)]).map(decodeSummary)
-            return LifeLogDay(utterances: utterances, memos: memos, conversations: conversations, calendarEvents: events, summary: summary)
+            return LifeLogDay(utterances: utterances, dictations: dictations, memos: memos,
+                              conversations: conversations, calendarEvents: events, summary: summary)
         }
     }
 
