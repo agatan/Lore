@@ -39,6 +39,9 @@ public final class LifeLogCoordinator {
     private var captureFinished = false
     private var isDeriving = false
     private var isFinalizingSession = false
+    private var isStartingCapture = false
+    private var vocabularyRevision = 0
+    private var restartForVocabulary = false
     private var captureRequested = false
     private var captureRetryAttempt = 0
     private var captureRetryTask: Task<Void, Never>?
@@ -84,6 +87,7 @@ public final class LifeLogCoordinator {
             Task { await startLiveCapture() }
             scheduleDayRollover()
         } else {
+            restartForVocabulary = false
             captureRetryTask?.cancel()
             captureRetryTask = nil
             isRecoveringCapture = false
@@ -140,6 +144,26 @@ public final class LifeLogCoordinator {
         captureRequested || capture.isRunning || liveTranscriptionTask != nil || isFinalizingSession || isDeriving
     }
 
+    /// SpeechAnalyzerのcontextは解析開始時に固定されるため、録音意図を保ったまま
+    /// 現在のstreamを確定し、次のstreamから更新済み語彙へ切り替える。
+    public func vocabularyDidChange() {
+        vocabularyRevision += 1
+        requestVocabularyRestartIfNeeded()
+    }
+
+    private func requestVocabularyRestartIfNeeded() {
+        guard captureRequested else { return }
+        guard capture.isRunning || liveTranscriptionTask != nil else { return }
+        guard !restartForVocabulary else { return }
+        restartForVocabulary = true
+        isRecoveringCapture = true
+        KoeLog.session.info("語彙変更を反映するためライフログ解析streamを切り替えます")
+        if capture.isRunning {
+            capture.stop()
+            isCapturing = false
+        }
+    }
+
     /// スリープ前に音声ファイルとSpeechAnalyzer入力を閉じ、復帰後は同じ記録意図で再開する。
     public func systemWillSleep() {
         isSuspendedForSleep = true
@@ -163,8 +187,11 @@ public final class LifeLogCoordinator {
     }
 
     private func startLiveCapture() async {
-        guard captureRequested, !isSuspendedForSleep, let engines else { return }
+        guard captureRequested, !isSuspendedForSleep, !isStartingCapture, let engines else { return }
+        isStartingCapture = true
+        defer { isStartingCapture = false }
         do {
+            let startingVocabularyRevision = vocabularyRevision
             let enabledVocabulary = vocabulary().filter(\.enabled)
             let hints = SttHints(
                 contextualStrings: FormattingPolicy.contextualStrings(enabledVocabulary),
@@ -187,6 +214,9 @@ public final class LifeLogCoordinator {
             isTranscribing = true
             liveTranscriptionTask = Task { [weak self] in
                 await self?.consumeLiveAudio(stream, hints: hints)
+            }
+            if vocabularyRevision != startingVocabularyRevision {
+                requestVocabularyRestartIfNeeded()
             }
         } catch {
             fail(error)
@@ -374,6 +404,10 @@ public final class LifeLogCoordinator {
         await reload()
         // 終了待ちは、停止時の最終要約と再読込まで含めて完了とみなす。
         liveTranscriptionTask = nil
+        if restartForVocabulary, captureRequested, !isSuspendedForSleep {
+            restartForVocabulary = false
+            await startLiveCapture()
+        }
     }
 
     public func select(date: Date) async {

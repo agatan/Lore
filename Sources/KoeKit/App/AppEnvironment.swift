@@ -514,18 +514,21 @@ public final class AppEnvironment {
         guard let database else { return }
         try? await database.vocabulary.save(entry)
         await reloadVocabulary()
+        lifeLog.vocabularyDidChange()
     }
 
     public func deleteVocabulary(id: String) async {
         guard let database else { return }
         try? await database.vocabulary.delete(id: id)
         await reloadVocabulary()
+        lifeLog.vocabularyDidChange()
     }
 
     public func acceptSuggestion(id: String) async {
         guard let database else { return }
         _ = try? await database.vocabulary.accept(suggestionID: id)
         await reloadVocabulary()
+        lifeLog.vocabularyDidChange()
     }
 
     public func rejectSuggestion(id: String) async {
