@@ -5,9 +5,14 @@ import Testing
 
 @Suite("仕上げバックエンドの選択")
 struct FormattingBackendTests {
-    @Test("外に出るのは Groq を選んだときだけ")
-    func onlyGroqLeavesTheMac() {
+    @Test("ローカルとクラウドの境界を明示する")
+    func separatesLocalAndCloudProviders() {
         #expect(FormattingBackend.onDevice.sendsTranscriptOffDevice == false)
+        #expect(FormattingBackend.ollama.sendsTranscriptOffDevice == false)
+        #expect(FormattingBackend.lmStudio.sendsTranscriptOffDevice == false)
+        #expect(FormattingBackend.openAI.sendsTranscriptOffDevice)
+        #expect(FormattingBackend.anthropic.sendsTranscriptOffDevice)
+        #expect(FormattingBackend.gemini.sendsTranscriptOffDevice)
         #expect(FormattingBackend.groq.sendsTranscriptOffDevice)
     }
 
@@ -30,10 +35,10 @@ struct FormattingBackendTests {
     func registrySwitchesEngine() {
         let registry = EngineRegistry()
 
-        registry.apply(backend: .onDevice, groqModel: "test-model")
+        registry.apply(backend: .onDevice, model: "test-model")
         #expect(registry.llm.identifier == .foundationModels)
 
-        registry.apply(backend: .groq, groqModel: "test-model")
+        registry.apply(backend: .groq, model: "test-model")
         #expect(registry.llm.identifier == .groq)
         // 履歴にどのモデルで整形したかが残るよう、モデル ID がそのまま出る。
         #expect(registry.llm.modelName == "test-model")
@@ -44,7 +49,7 @@ struct FormattingBackendTests {
     func vocabularyAnalysisNeverLeavesTheMac() {
         let registry = EngineRegistry()
 
-        registry.apply(backend: .groq, groqModel: "test-model")
+        registry.apply(backend: .groq, model: "test-model")
 
         #expect(registry.llm.identifier == .groq)
         #expect(registry.analysisLlm.identifier == .foundationModels)

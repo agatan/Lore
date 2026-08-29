@@ -13,6 +13,11 @@ public struct EngineIdentifier: RawRepresentable, Codable, Sendable, Hashable, E
     public static let foundationModels = EngineIdentifier("foundation_models")
     public static let mlx = EngineIdentifier("mlx")
     public static let groq = EngineIdentifier("groq")
+    public static let openAI = EngineIdentifier("openai")
+    public static let anthropic = EngineIdentifier("anthropic")
+    public static let gemini = EngineIdentifier("gemini")
+    public static let ollama = EngineIdentifier("ollama")
+    public static let lmStudio = EngineIdentifier("lm_studio")
     /// 整形なし(生テキストをそのまま使った)ことを表す。
     public static let none = EngineIdentifier("none")
 
@@ -23,6 +28,11 @@ public struct EngineIdentifier: RawRepresentable, Codable, Sendable, Hashable, E
         case .foundationModels: "Foundation Models"
         case .mlx: "MLX"
         case .groq: "Groq"
+        case .openAI: "OpenAI"
+        case .anthropic: "Claude"
+        case .gemini: "Gemini"
+        case .ollama: "Ollama"
+        case .lmStudio: "LM Studio"
         case .none: "整形なし"
         default: rawValue
         }

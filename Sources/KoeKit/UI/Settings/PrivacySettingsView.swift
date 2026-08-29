@@ -13,10 +13,10 @@ struct PrivacySettingsView: View {
                 HStack(spacing: 8) {
                     Image(systemName: sendsOffDevice ? "arrow.up.forward.app.fill" : "hand.raised.fill")
                         .foregroundStyle(sendsOffDevice ? AnyShapeStyle(KoeTheme.warning) : AnyShapeStyle(KoeTheme.voiceGradient))
-                    Text(sendsOffDevice ? "文章処理に Groq を使っています" : "すべてこの Mac の中で処理されます")
+                    Text(sendsOffDevice ? "文章処理に \(providerName) を使っています" : "すべてこの Mac の中で処理されます")
                         .font(.system(size: 15, weight: .semibold))
                 }
-                Text(sendsOffDevice ? Self.offDeviceSummary : Self.onDeviceSummary)
+                Text(sendsOffDevice ? offDeviceSummary : Self.onDeviceSummary)
                     .font(.system(size: 12))
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
@@ -31,7 +31,7 @@ struct PrivacySettingsView: View {
                 Divider()
                 if sendsOffDevice {
                     Label(
-                        "口述の整形とライフログのSummary・TODO生成に必要な文字データをGroqへ送ります",
+                        "口述の整形とライフログの要約・TODO生成に必要な文字データを\(providerName)へ送ります",
                         systemImage: "arrow.up.forward"
                     )
                     .font(.system(size: 11.5))
@@ -158,11 +158,13 @@ struct PrivacySettingsView: View {
     この Mac の中だけで完結することを価値の中心に置いて作っています。
     """
 
-    private static let offDeviceSummary = """
-    設定 > モデル で仕上げに Groq を選んでいます。聞き取りはこの Mac の中で完結しますが、\
+    private var offDeviceSummary: String { """
+    設定 > モデル で文章処理に \(providerName) を選んでいます。聞き取りはこの Mac の中で完結しますが、\
     口述の整形では文字起こしと指示文を送ります。ライフログではSummary・TODO生成のため、対象日の発話、メモ、予定の時刻と件名、指示文を送ります。録音した音声そのものは送りません。\
     外に出したくない場合は、仕上げを「この Mac の中」に戻してください。
-    """
+    """ }
+
+    private var providerName: String { env.settings.formattingBackend.displayName }
 
     /// 仕上げがオンデバイスのときに、この Mac から出ないもの。
     private var neverLeaves: [String] {

@@ -18,8 +18,8 @@ struct ModelsSettingsView: View {
         LazyVStack(alignment: .leading, spacing: 20) {
             if backend.sendsTranscriptOffDevice {
                 NoticeBanner(
-                    title: "仕上げだけ Groq に送っています",
-                    message: "聞き取りはこの Mac の中で完結しますが、仕上げのために文字起こしと指示文(共有ルール・モードの指示・語彙)が Groq の API に送られます。音声そのものは送りません。",
+                    title: "文章だけを \(backend.displayName) に送ります",
+                    message: "音声認識はMac内で完結します。整形・ライフログ要約・TODOのため、文字起こし、予定、メモと指示文を送ります。音声ファイルは送りません。",
                     tint: KoeTheme.warning,
                     actionTitle: nil,
                     action: nil
@@ -27,7 +27,9 @@ struct ModelsSettingsView: View {
             } else {
                 NoticeBanner(
                     title: "この Mac の中だけで動きます",
-                    message: "聞き取りも文章の仕上げも macOS に内蔵されたモデルで行います。追加のダウンロードはありません。話した内容が外に出ることもありません。",
+                    message: backend == .onDevice
+                        ? "音声認識と文章処理をmacOS内蔵モデルで行います。"
+                        : "音声認識と文章処理をこのMac上で行います。ローカルサーバーを起動して使います。",
                     tint: KoeTheme.accent,
                     actionTitle: nil,
                     action: nil
@@ -56,23 +58,27 @@ struct ModelsSettingsView: View {
 
             SettingsCard(
                 title: "文章の仕上げ",
-                footnote: "文字起こしを読める文章に整えます。うまくいかないときは、整えずにそのまま挿入します。"
+                footnote: "音声入力の整形と、ライフログの要約・TODOに共通して使います。"
             ) {
-                SettingsRow(title: "仕上げに使うモデル") {
-                    Picker("", selection: Binding(
-                        get: { settings.formattingBackend },
-                        set: { newValue in
-                            settings.formattingBackend = newValue
-                            Task { await env.applyEngineChange() }
-                        }
-                    )) {
-                        ForEach(FormattingBackend.allCases) { option in
-                            Text(option.displayName).tag(option)
-                        }
+                VStack(alignment: .leading, spacing: 10) {
+                    Text("このMac内")
+                        .font(.system(size: 10.5, weight: .semibold))
+                        .foregroundStyle(.secondary)
+                    HStack(spacing: 8) {
+                        providerButton(.onDevice, icon: "apple.logo")
+                        providerButton(.ollama, icon: "shippingbox")
+                        providerButton(.lmStudio, icon: "desktopcomputer")
                     }
-                    .labelsHidden()
-                    .pickerStyle(.menu)
-                    .frame(width: 230)
+                    Text("クラウド")
+                        .font(.system(size: 10.5, weight: .semibold))
+                        .foregroundStyle(.secondary)
+                        .padding(.top, 4)
+                    HStack(spacing: 8) {
+                        providerButton(.openAI, icon: "sparkles")
+                        providerButton(.anthropic, icon: "text.bubble")
+                        providerButton(.gemini, icon: "diamond")
+                        providerButton(.groq, icon: "bolt")
+                    }
                 }
 
                 Divider()
@@ -84,9 +90,9 @@ struct ModelsSettingsView: View {
                     canInstall: false
                 )
 
-                if backend == .groq {
+                if backend != .onDevice {
                     Divider()
-                    groqSettings
+                    providerSettings
                 }
             }
 
@@ -114,63 +120,78 @@ struct ModelsSettingsView: View {
                 }
             }
         }
-        .task { await env.reloadMeasuredLatencies() }
+        .task {
+            await env.reloadMeasuredLatencies()
+            await env.applyEngineChange()
+        }
     }
 
     private var activeModelName: String {
-        switch backend {
-        case .onDevice: "Apple Foundation Models"
-        case .groq: "Groq / \(settings.groqModel)"
-        }
+        backend == .onDevice ? "Apple Foundation Models" : "\(backend.displayName) / \(settings.model(for: backend))"
     }
 
     private var activeLatencyKey: String {
-        switch backend {
-        case .onDevice:
-            HistoryStore.key(EngineIdentifier.foundationModels.rawValue, "Apple Foundation Models")
-        case .groq:
-            HistoryStore.key(EngineIdentifier.groq.rawValue, settings.groqModel)
-        }
+        HistoryStore.key(env.engines.llm.identifier.rawValue, settings.model(for: backend))
     }
 
-    /// API キーとモデルの設定。キーは Keychain に入れ、保存後は画面に残さない。
     @ViewBuilder
-    private var groqSettings: some View {
-        SettingsRow(
-            title: "API キー",
-            caption: env.hasGroqApiKey ? "キーチェーンに登録済みです" : "console.groq.com で発行したキー"
-        ) {
-            HStack(spacing: 8) {
-                SecureField("gsk_...", text: $apiKeyDraft)
-                    .textFieldStyle(.roundedBorder)
-                    .frame(width: 180)
-                    .onSubmit { save() }
-                Button("保存") { save() }
-                    .controlSize(.small)
-                    .disabled(apiKeyDraft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-                if env.hasGroqApiKey {
-                    Button("削除") {
-                        apiKeyDraft = ""
-                        Task { await env.setGroqApiKey("") }
+    private func providerButton(_ option: FormattingBackend, icon: String) -> some View {
+        Button {
+            settings.formattingBackend = option
+            apiKeyDraft = ""
+            Task { await env.applyEngineChange(resetConnectionState: true) }
+        } label: {
+            VStack(spacing: 6) {
+                Image(systemName: icon).font(.system(size: 14, weight: .medium))
+                Text(option.displayName).font(.system(size: 10.5, weight: .medium)).lineLimit(1)
+            }
+            .frame(maxWidth: .infinity, minHeight: 48)
+            .foregroundStyle(backend == option ? Color.white : Color.primary)
+            .background(backend == option ? KoeTheme.accent : Color.primary.opacity(0.055), in: RoundedRectangle(cornerRadius: 10))
+        }
+        .buttonStyle(.plain)
+    }
+
+    /// 選択中の接続先だけを見せる。キーはKeychainに入れ、保存後は画面に残さない。
+    @ViewBuilder
+    private var providerSettings: some View {
+        if backend.sendsTranscriptOffDevice {
+            SettingsRow(
+                title: "API キー",
+                caption: env.hasLlmApiKey ? "キーチェーンに登録済み" : "Koeはキーの内容を表示しません"
+            ) {
+                HStack(spacing: 8) {
+                    SecureField("API key", text: $apiKeyDraft)
+                        .textFieldStyle(.roundedBorder)
+                        .frame(width: 180)
+                        .onSubmit { save() }
+                    Button("保存") { save() }
+                        .controlSize(.small)
+                        .disabled(apiKeyDraft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                    if env.hasLlmApiKey {
+                        Button("削除") {
+                            apiKeyDraft = ""
+                            Task { await env.setLlmApiKey("") }
+                        }
+                        .controlSize(.small)
                     }
-                    .controlSize(.small)
                 }
             }
         }
 
-        SettingsRow(title: "モデル", caption: "「確認」を押すと選べる一覧を取り直します") {
+        SettingsRow(title: "モデル", caption: localServerCaption) {
             HStack(spacing: 8) {
-                if env.groqModels.isEmpty {
+                if env.llmModels.isEmpty {
                     TextField("", text: Binding(
-                        get: { settings.groqModel },
-                        set: { settings.groqModel = $0; Task { await env.applyEngineChange() } }
+                        get: { settings.model(for: backend) },
+                        set: { settings.setModel($0, for: backend); Task { await env.applyEngineChange(checkCredentials: false) } }
                     ))
                     .textFieldStyle(.roundedBorder)
                     .frame(width: 230)
                 } else {
                     Picker("", selection: Binding(
-                        get: { settings.groqModel },
-                        set: { settings.groqModel = $0; Task { await env.applyEngineChange() } }
+                        get: { settings.model(for: backend) },
+                        set: { settings.setModel($0, for: backend); Task { await env.applyEngineChange(checkCredentials: false) } }
                     )) {
                         ForEach(modelChoices, id: \.self) { Text($0).tag($0) }
                     }
@@ -181,13 +202,13 @@ struct ModelsSettingsView: View {
         }
 
         HStack(spacing: 10) {
-            Button(env.isCheckingGroq ? "確認中…" : "接続を確認") {
-                Task { await env.checkGroqConnection() }
+            Button(env.isCheckingLlm ? "確認中…" : "接続を確認") {
+                Task { await env.checkLlmConnection() }
             }
             .controlSize(.small)
-            .disabled(env.isCheckingGroq || !env.hasGroqApiKey)
+            .disabled(env.isCheckingLlm || (backend.sendsTranscriptOffDevice && !env.hasLlmApiKey))
 
-            if let status = env.groqStatus {
+            if let status = env.llmStatus {
                 Text(status)
                     .font(.system(size: 10.5))
                     .foregroundStyle(env.engines.llmAvailability.isReady ? KoeTheme.success : KoeTheme.recording)
@@ -198,15 +219,22 @@ struct ModelsSettingsView: View {
 
     /// 一覧に無いモデルを設定していても選択が消えないようにする。
     private var modelChoices: [String] {
-        env.groqModels.contains(settings.groqModel)
-            ? env.groqModels
-            : [settings.groqModel] + env.groqModels
+        let selected = settings.model(for: backend)
+        return env.llmModels.contains(selected) ? env.llmModels : [selected] + env.llmModels
+    }
+
+    private var localServerCaption: String {
+        switch backend {
+        case .ollama: "Ollamaを起動してから確認 · localhost:11434"
+        case .lmStudio: "DeveloperでServerを開始 · localhost:1234"
+        default: "接続確認で利用可能なモデルを取得"
+        }
     }
 
     private func save() {
         let key = apiKeyDraft
         apiKeyDraft = ""
-        Task { await env.setGroqApiKey(key) }
+        Task { await env.setLlmApiKey(key) }
     }
 
     @ViewBuilder

@@ -20,7 +20,7 @@ BUILD_DIR = .build/$(CONFIG)
 
 all: app
 
-# 推論は OS 内蔵モデルだけなので、依存はデータベース 1 つ。
+# 既定の推論はOS内蔵。クラウド／ローカルLLMもURLSessionだけで接続する。
 # xcodebuild も Metal ツールチェーンも要らず、SwiftPM だけでビルドできる。
 build:
 	swift build -c $(CONFIG) --product Koe

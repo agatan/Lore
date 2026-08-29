@@ -27,8 +27,13 @@ public final class AppSettings {
         public var onboardingCompleted: Bool = false
         /// 文章の仕上げをどこで動かすか。既定はオンデバイス(外に出さない)。
         public var formattingBackend: FormattingBackend = .onDevice
+        public var openAIModel: String = "gpt-5.4-mini"
+        public var anthropicModel: String = "claude-sonnet-5"
+        public var geminiModel: String = "gemini-3.6-flash"
         /// Groq を選んだときに叩くモデル ID。API キーは Keychain(`SecretStore`)に置く。
         public var groqModel: String = GroqLlm.defaultModel
+        public var ollamaModel: String = "gpt-oss:20b"
+        public var lmStudioModel: String = "openai/gpt-oss-20b"
         /// 長押し閾値の既定値変更を一度だけ反映するための印。
         public var holdThresholdMigrated: Bool = false
         public var lifeLogCaptureEnabled: Bool = false
@@ -67,7 +72,12 @@ public final class AppSettings {
             // API キー以外の設定(ホットキー・モード・タイムアウト)が全部消える。
             formattingBackend = (try? container.decodeIfPresent(FormattingBackend.self, forKey: .formattingBackend))
                 .flatMap { $0 } ?? fallback.formattingBackend
+            openAIModel = try container.decodeIfPresent(String.self, forKey: .openAIModel) ?? fallback.openAIModel
+            anthropicModel = try container.decodeIfPresent(String.self, forKey: .anthropicModel) ?? fallback.anthropicModel
+            geminiModel = try container.decodeIfPresent(String.self, forKey: .geminiModel) ?? fallback.geminiModel
             groqModel = try container.decodeIfPresent(String.self, forKey: .groqModel) ?? fallback.groqModel
+            ollamaModel = try container.decodeIfPresent(String.self, forKey: .ollamaModel) ?? fallback.ollamaModel
+            lmStudioModel = try container.decodeIfPresent(String.self, forKey: .lmStudioModel) ?? fallback.lmStudioModel
             holdThresholdMigrated = try container.decodeIfPresent(Bool.self, forKey: .holdThresholdMigrated) ?? false
             lifeLogCaptureEnabled = try container.decodeIfPresent(Bool.self, forKey: .lifeLogCaptureEnabled) ?? false
             lifeLogInputDeviceUID = try container.decodeIfPresent(String.self, forKey: .lifeLogInputDeviceUID)
@@ -195,6 +205,33 @@ public final class AppSettings {
             storage.groqModel = trimmed.isEmpty ? GroqLlm.defaultModel : trimmed
             persist()
         }
+    }
+
+    public func model(for backend: FormattingBackend) -> String {
+        switch backend {
+        case .onDevice: "Apple Foundation Models"
+        case .openAI: storage.openAIModel
+        case .anthropic: storage.anthropicModel
+        case .gemini: storage.geminiModel
+        case .groq: storage.groqModel
+        case .ollama: storage.ollamaModel
+        case .lmStudio: storage.lmStudioModel
+        }
+    }
+
+    public func setModel(_ value: String, for backend: FormattingBackend) {
+        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+        switch backend {
+        case .onDevice: return
+        case .openAI: storage.openAIModel = trimmed
+        case .anthropic: storage.anthropicModel = trimmed
+        case .gemini: storage.geminiModel = trimmed
+        case .groq: storage.groqModel = trimmed
+        case .ollama: storage.ollamaModel = trimmed
+        case .lmStudio: storage.lmStudioModel = trimmed
+        }
+        persist()
     }
 
     public var lifeLogCaptureEnabled: Bool { get { storage.lifeLogCaptureEnabled } set { storage.lifeLogCaptureEnabled = newValue; persist() } }

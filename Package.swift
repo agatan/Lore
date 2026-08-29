@@ -14,7 +14,7 @@ let package = Package(
         .executable(name: "Koe", targets: ["Koe"]),
         .library(name: "KoeKit", targets: ["KoeKit"]),
     ],
-    // 音声認識と既定の整形は OS 内蔵モデルを使い、外部依存はデータベースだけになる。
+    // 音声認識と既定の整形はOS内蔵モデルを使う。クラウド／ローカルLLMはURLSessionで接続する。
     dependencies: [
         .package(url: "https://github.com/groue/GRDB.swift.git", from: "7.9.0"),
     ],

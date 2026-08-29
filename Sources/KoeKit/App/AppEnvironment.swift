@@ -57,12 +57,11 @@ public final class AppEnvironment {
     /// 音声モデル取得の進捗(0...1)。nil = 実行中でない。
     public private(set) var speechAssetProgress: Double?
     public private(set) var speechAssetError: String?
-    /// Groq に API キーが登録済みか。キーそのものは UI にも状態にも持たない(NFR-2)。
-    public private(set) var hasGroqApiKey = false
-    /// 設定画面のモデル選択に出す候補。Groq に問い合わせたときだけ埋まる。
-    public private(set) var groqModels: [String] = []
-    public private(set) var groqStatus: String?
-    public private(set) var isCheckingGroq = false
+    /// 選択中のクラウドにAPIキーが登録済みか。キーそのものは状態に持たない(NFR-2)。
+    public private(set) var hasLlmApiKey = false
+    public private(set) var llmModels: [String] = []
+    public private(set) var llmStatus: String?
+    public private(set) var isCheckingLlm = false
     /// エンジン別の実測レイテンシ。
     public private(set) var measuredLatencies = MeasuredLatencies()
 
@@ -560,10 +559,10 @@ public final class AppEnvironment {
         }
         do {
             try removeLifeLogAudioDirectory()
-            try SecretStore.write(nil, for: .groqApiKey)
+            try SecretStore.deleteAll()
             try await database.deleteAllUserData()
             settings.resetAll()
-            engines.apply(backend: settings.formattingBackend, groqModel: settings.groqModel)
+            engines.apply(backend: settings.formattingBackend, model: settings.model(for: settings.formattingBackend))
             try await database.modes.seedBuiltinsIfNeeded()
             try await database.sharedRules.seedOrMigrate()
             await reloadModes()
@@ -713,33 +712,44 @@ public final class AppEnvironment {
         measuredLatencies = (try? await database.history.measuredLatencies(limit: 300)) ?? MeasuredLatencies()
     }
 
-    public func applyEngineChange(checkCredentials: Bool = true) async {
-        engines.apply(backend: settings.formattingBackend, groqModel: settings.groqModel)
+    public func applyEngineChange(checkCredentials: Bool = true, resetConnectionState: Bool = false) async {
+        let backend = settings.formattingBackend
+        engines.apply(backend: backend, model: settings.model(for: backend))
+        if resetConnectionState {
+            llmModels = []
+            llmStatus = nil
+        }
         if checkCredentials {
             do {
-                hasGroqApiKey = try SecretStore.read(.groqApiKey)?.isEmpty == false
+                hasLlmApiKey = if let key = secretKey(for: backend) {
+                    try SecretStore.read(key)?.isEmpty == false
+                } else {
+                    true
+                }
             } catch {
-                hasGroqApiKey = false
-                groqStatus = error.localizedDescription
+                hasLlmApiKey = false
+                llmStatus = error.localizedDescription
                 KoeLog.engine.error("API キーの確認に失敗: \(error.localizedDescription, privacy: .public)")
             }
         }
         await engines.refreshAvailability(checkLlm: checkCredentials || settings.formattingBackend == .onDevice)
     }
 
-    // MARK: Groq
+    // MARK: 文章処理エンジン
 
     /// API キーを Keychain に保存する(空文字なら削除)。値は保持しない。
-    public func setGroqApiKey(_ key: String) async {
-        groqStatus = nil
+    public func setLlmApiKey(_ key: String) async {
+        let backend = settings.formattingBackend
+        guard let secretKey = secretKey(for: backend) else { return }
+        llmStatus = nil
         do {
-            try SecretStore.write(key, for: .groqApiKey)
+            try SecretStore.write(key, for: secretKey)
         } catch {
-            groqStatus = error.localizedDescription
+            llmStatus = error.localizedDescription
             KoeLog.engine.error("API キーの保存に失敗: \(error.localizedDescription, privacy: .public)")
             return
         }
-        groqModels = []
+        llmModels = []
         await applyEngineChange()
     }
 
@@ -747,26 +757,37 @@ public final class AppEnvironment {
     ///
     /// 整形は失敗しても生テキストにフォールバックするので、設定ミスは
     /// 「なんとなく仕上がらない」形でしか表に出ない。ここで明示的に確かめられるようにする。
-    public func checkGroqConnection() async {
-        guard !isCheckingGroq else { return }
-        isCheckingGroq = true
-        groqStatus = nil
-        defer { isCheckingGroq = false }
+    public func checkLlmConnection() async {
+        guard !isCheckingLlm else { return }
+        isCheckingLlm = true
+        llmStatus = nil
+        defer { isCheckingLlm = false }
 
         do {
-            groqModels = try await engines.groq.availableModels()
-            let reply = try await engines.groq.complete(
+            let backend = settings.formattingBackend
+            llmModels = try await engines.availableModels(for: backend)
+            let reply = try await engines.llm.complete(
                 prompt: FormattingPrompt(system: "入力をそのまま返してください。", user: "疎通確認"),
                 timeout: .seconds(20)
             )
-            groqStatus = reply.isEmpty
+            llmStatus = reply.isEmpty
                 ? "接続できましたが、応答が空でした"
-                : "\(settings.groqModel) に接続できました"
+                : "\(settings.model(for: backend)) に接続できました"
         } catch {
-            groqStatus = error.localizedDescription
-            KoeLog.engine.error("Groq の疎通確認に失敗: \(error.localizedDescription, privacy: .public)")
+            llmStatus = error.localizedDescription
+            KoeLog.engine.error("LLM の疎通確認に失敗: \(error.localizedDescription, privacy: .public)")
         }
         await engines.refreshAvailability()
+    }
+
+    private func secretKey(for backend: FormattingBackend) -> SecretStore.Key? {
+        switch backend {
+        case .openAI: .openAIApiKey
+        case .anthropic: .anthropicApiKey
+        case .gemini: .geminiApiKey
+        case .groq: .groqApiKey
+        case .onDevice, .ollama, .lmStudio: nil
+        }
     }
 
     func currentHints() -> SttHints {

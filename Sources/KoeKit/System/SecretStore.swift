@@ -7,8 +7,11 @@ import Synchronization
 /// 設定 JSON(UserDefaults)にも履歴 DB にも書かない。平文で残る場所を増やさないため、
 /// 秘密の出入口はここ 1 つに閉じる。値そのものはログにも UI にも出さない(NFR-2)。
 public enum SecretStore {
-    public enum Key: String, Hashable, Sendable {
+    public enum Key: String, Hashable, Sendable, CaseIterable {
         case groqApiKey = "groq.apiKey"
+        case openAIApiKey = "openai.apiKey"
+        case anthropicApiKey = "anthropic.apiKey"
+        case geminiApiKey = "gemini.apiKey"
     }
 
     static let service = "dev.agatan.Koe"
@@ -100,6 +103,12 @@ public enum SecretStore {
             }
         default:
             throw SecretStoreError(status: status, operation: "保存")
+        }
+    }
+
+    public static func deleteAll() throws {
+        for key in Key.allCases {
+            try write(nil, for: key)
         }
     }
 
