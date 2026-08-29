@@ -38,6 +38,40 @@ struct LifeLogTests {
         #expect(try await database.lifeLog.todos().first?.sourceUtteranceIDs == [utterance.id])
     }
 
+    @Test("TODOの追加ルールは派生プロンプトへ混ぜない")
+    @MainActor
+    func legacyExtractionRulesDoNotAffectDerivation() async throws {
+        let database = try await KoeDatabase.inMemory()
+        let startedAt = Date().addingTimeInterval(-60)
+        let chunk = LifeLogAudioChunk(
+            id: "audio-rule-test",
+            captureStartedAt: startedAt,
+            captureEndedAt: startedAt.addingTimeInterval(30),
+            localPath: "/tmp/rule-test.m4a"
+        )
+        try await database.lifeLog.save(audioChunk: chunk)
+        try await database.lifeLog.save(utterance: LifeLogUtterance(
+            startedAt: startedAt,
+            endedAt: startedAt.addingTimeInterval(30),
+            text: "資料を送る",
+            audioChunkID: chunk.id
+        ))
+        try await database.lifeLog.save(rule: TodoExtractionRule(instruction: "LEGACY_RULE_MUST_NOT_BE_USED"))
+
+        let llm = RecordingLifeLogLlm()
+        let coordinator = LifeLogCoordinator()
+        try await coordinator.updateSummary(
+            for: startedAt,
+            respectingInterval: false,
+            force: true,
+            store: database.lifeLog,
+            derivation: LifeLogDerivationService(llm: llm)
+        )
+
+        #expect(!llm.recordedPrompts.map(\.system).joined().contains("LEGACY_RULE_MUST_NOT_BE_USED"))
+        #expect(!llm.recordedPrompts.map(\.user).joined().contains("LEGACY_RULE_MUST_NOT_BE_USED"))
+    }
+
     @Test("日付をまたぐ録音の停止時は両日を再要約対象にする")
     @MainActor
     func stopAcrossMidnightIncludesEveryDay() throws {

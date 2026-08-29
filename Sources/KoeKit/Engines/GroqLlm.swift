@@ -108,7 +108,7 @@ public final class GroqLlm: LlmEngine {
 
     private func apiKey() throws -> String {
         guard let key = try apiKeySource(), !key.isEmpty else {
-            throw EngineError.notReady("Groq の API キーが未設定です。設定 > モデル で登録してください")
+            throw EngineError.notReady("Groq の API キーが未設定です。利用するAI設定で登録してください")
         }
         return key
     }

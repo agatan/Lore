@@ -12,6 +12,10 @@ public enum SecretStore {
         case openAIApiKey = "openai.apiKey"
         case anthropicApiKey = "anthropic.apiKey"
         case geminiApiKey = "gemini.apiKey"
+        case lifeLogGroqApiKey = "lifeLog.groq.apiKey"
+        case lifeLogOpenAIApiKey = "lifeLog.openai.apiKey"
+        case lifeLogAnthropicApiKey = "lifeLog.anthropic.apiKey"
+        case lifeLogGeminiApiKey = "lifeLog.gemini.apiKey"
     }
 
     static let service = "dev.agatan.Koe"

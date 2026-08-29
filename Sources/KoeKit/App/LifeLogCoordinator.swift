@@ -165,7 +165,12 @@ public final class LifeLogCoordinator {
     private func startLiveCapture() async {
         guard captureRequested, !isSuspendedForSleep, let engines else { return }
         do {
-            let hints = SttHints(contextualStrings: vocabulary().filter(\.enabled).map(\.surface), languagePreference: .auto)
+            let enabledVocabulary = vocabulary().filter(\.enabled)
+            let hints = SttHints(
+                contextualStrings: FormattingPolicy.contextualStrings(enabledVocabulary),
+                vocabularyPrompt: FormattingPolicy.vocabularyHint(enabledVocabulary),
+                languagePreference: .auto
+            )
             let format = try await engines.stt.prepare(hints: hints) ?? AudioFormats.canonical
             let startedAt = Date()
             let stream = try capture.start(format: format)
@@ -483,7 +488,12 @@ public final class LifeLogCoordinator {
                 isTranscribing = true
                 liveTranscript = ""
                 defer { isTranscribing = false }
-                let hints = SttHints(contextualStrings: vocabulary().filter(\.enabled).map(\.surface), languagePreference: .auto)
+                let enabledVocabulary = vocabulary().filter(\.enabled)
+                let hints = SttHints(
+                    contextualStrings: FormattingPolicy.contextualStrings(enabledVocabulary),
+                    vocabularyPrompt: FormattingPolicy.vocabularyHint(enabledVocabulary),
+                    languagePreference: .auto
+                )
                 let format = try await engines.stt.prepare(hints: hints) ?? AudioFormats.canonical
                 let audio = try audioStream(url: URL(fileURLWithPath: chunk.localPath), targetFormat: format)
                 var transcript = ""
@@ -573,7 +583,7 @@ public final class LifeLogCoordinator {
         defer { isDeriving = false }
         do {
             try await updateSummary(for: date, respectingInterval: respectingInterval, force: force, store: database.lifeLog,
-                                    derivation: LifeLogDerivationService(llm: engines.llm))
+                                    derivation: LifeLogDerivationService(llm: engines.lifeLogLlm))
             await reload()
         } catch { fail(error) }
     }
@@ -601,9 +611,7 @@ public final class LifeLogCoordinator {
         let interval = TimeInterval(max(15, summaryIntervalMinutes()) * 60)
         guard force || !respectingInterval || !Calendar.current.isDateInToday(date)
                 || latest.timeIntervalSince(baseline) >= interval else { return }
-        let rules = try await store.rules().map(\.instruction).joined(separator: "\n")
-        let todoInstructions = [todoPrompt(), rules].filter { !$0.isEmpty }.joined(separator: "\n")
-        let derived = try await derivation.summarize(day: value, prompt: summaryPrompt(), todoPrompt: todoInstructions)
+        let derived = try await derivation.summarize(day: value, prompt: summaryPrompt(), todoPrompt: todoPrompt())
         let commitments = try await store.todos().filter { $0.status != .draft }.map(\.title)
         let duration = value.utterances.reduce(0) { $0 + max(0, Int($1.endedAt.timeIntervalSince($1.startedAt))) }
         let summary = DailySummary(day: LifeLogDateKey.string(for: date), summary: derived.text,

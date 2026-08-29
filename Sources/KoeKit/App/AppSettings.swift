@@ -1,6 +1,11 @@
 import Foundation
 import Observation
 
+public enum LlmPurpose: String, Sendable, CaseIterable {
+    case dictation
+    case lifeLog
+}
+
 /// ユーザー設定。UserDefaults(plist) に 1 つの JSON として保存する(FR-10.2)。
 ///
 /// 全フィールドを 1 つの `Storage` に集約しているので、観測は `storage` の変更 1 点で成立し、
@@ -27,6 +32,8 @@ public final class AppSettings {
         public var onboardingCompleted: Bool = false
         /// 文章の仕上げをどこで動かすか。既定はオンデバイス(外に出さない)。
         public var formattingBackend: FormattingBackend = .onDevice
+        /// ライフログの要約・TODO生成は音声入力の整形と独立して選ぶ。
+        public var lifeLogFormattingBackend: FormattingBackend = .onDevice
         public var openAIModel: String = "gpt-5.4-mini"
         public var anthropicModel: String = "claude-sonnet-5"
         public var geminiModel: String = "gemini-3.6-flash"
@@ -34,6 +41,12 @@ public final class AppSettings {
         public var groqModel: String = GroqLlm.defaultModel
         public var ollamaModel: String = "gpt-oss:20b"
         public var lmStudioModel: String = "openai/gpt-oss-20b"
+        public var lifeLogOpenAIModel: String = "gpt-5.4-mini"
+        public var lifeLogAnthropicModel: String = "claude-sonnet-5"
+        public var lifeLogGeminiModel: String = "gemini-3.6-flash"
+        public var lifeLogGroqModel: String = GroqLlm.defaultModel
+        public var lifeLogOllamaModel: String = "gpt-oss:20b"
+        public var lifeLogLmStudioModel: String = "openai/gpt-oss-20b"
         /// 長押し閾値の既定値変更を一度だけ反映するための印。
         public var holdThresholdMigrated: Bool = false
         public var lifeLogCaptureEnabled: Bool = false
@@ -47,6 +60,7 @@ public final class AppSettings {
         public var lifeLogSummaryIntervalMinutes: Int = 60
         public var lifeLogTodoPrompt: String = BuiltinLifeLogPrompts.todo
         public var lifeLogSummaryPrompt: String = BuiltinLifeLogPrompts.summary
+        public var lifeLogMiniWindowAlwaysOnTop: Bool = false
         public var accentPalette: AccentPalette = .ocean
 
         init() {}
@@ -72,12 +86,21 @@ public final class AppSettings {
             // API キー以外の設定(ホットキー・モード・タイムアウト)が全部消える。
             formattingBackend = (try? container.decodeIfPresent(FormattingBackend.self, forKey: .formattingBackend))
                 .flatMap { $0 } ?? fallback.formattingBackend
+            // 分離前の利用者は、従来選んでいた接続先を両用途へ引き継ぐ。
+            lifeLogFormattingBackend = (try? container.decodeIfPresent(FormattingBackend.self, forKey: .lifeLogFormattingBackend))
+                .flatMap { $0 } ?? formattingBackend
             openAIModel = try container.decodeIfPresent(String.self, forKey: .openAIModel) ?? fallback.openAIModel
             anthropicModel = try container.decodeIfPresent(String.self, forKey: .anthropicModel) ?? fallback.anthropicModel
             geminiModel = try container.decodeIfPresent(String.self, forKey: .geminiModel) ?? fallback.geminiModel
             groqModel = try container.decodeIfPresent(String.self, forKey: .groqModel) ?? fallback.groqModel
             ollamaModel = try container.decodeIfPresent(String.self, forKey: .ollamaModel) ?? fallback.ollamaModel
             lmStudioModel = try container.decodeIfPresent(String.self, forKey: .lmStudioModel) ?? fallback.lmStudioModel
+            lifeLogOpenAIModel = try container.decodeIfPresent(String.self, forKey: .lifeLogOpenAIModel) ?? openAIModel
+            lifeLogAnthropicModel = try container.decodeIfPresent(String.self, forKey: .lifeLogAnthropicModel) ?? anthropicModel
+            lifeLogGeminiModel = try container.decodeIfPresent(String.self, forKey: .lifeLogGeminiModel) ?? geminiModel
+            lifeLogGroqModel = try container.decodeIfPresent(String.self, forKey: .lifeLogGroqModel) ?? groqModel
+            lifeLogOllamaModel = try container.decodeIfPresent(String.self, forKey: .lifeLogOllamaModel) ?? ollamaModel
+            lifeLogLmStudioModel = try container.decodeIfPresent(String.self, forKey: .lifeLogLmStudioModel) ?? lmStudioModel
             holdThresholdMigrated = try container.decodeIfPresent(Bool.self, forKey: .holdThresholdMigrated) ?? false
             lifeLogCaptureEnabled = try container.decodeIfPresent(Bool.self, forKey: .lifeLogCaptureEnabled) ?? false
             lifeLogInputDeviceUID = try container.decodeIfPresent(String.self, forKey: .lifeLogInputDeviceUID)
@@ -88,6 +111,7 @@ public final class AppSettings {
             lifeLogSummaryIntervalMinutes = try container.decodeIfPresent(Int.self, forKey: .lifeLogSummaryIntervalMinutes) ?? 60
             lifeLogTodoPrompt = try container.decodeIfPresent(String.self, forKey: .lifeLogTodoPrompt) ?? fallback.lifeLogTodoPrompt
             lifeLogSummaryPrompt = try container.decodeIfPresent(String.self, forKey: .lifeLogSummaryPrompt) ?? fallback.lifeLogSummaryPrompt
+            lifeLogMiniWindowAlwaysOnTop = try container.decodeIfPresent(Bool.self, forKey: .lifeLogMiniWindowAlwaysOnTop) ?? false
             accentPalette = try container.decodeIfPresent(AccentPalette.self, forKey: .accentPalette) ?? fallback.accentPalette
 
             // 旧既定値(300ms)のままなら新既定値へ寄せる。自分で別の値にしている人は触らない。
@@ -198,6 +222,23 @@ public final class AppSettings {
         set { storage.formattingBackend = newValue; persist() }
     }
 
+    public var lifeLogFormattingBackend: FormattingBackend {
+        get { storage.lifeLogFormattingBackend }
+        set { storage.lifeLogFormattingBackend = newValue; persist() }
+    }
+
+    public func backend(for purpose: LlmPurpose) -> FormattingBackend {
+        purpose == .dictation ? storage.formattingBackend : storage.lifeLogFormattingBackend
+    }
+
+    public func setBackend(_ backend: FormattingBackend, for purpose: LlmPurpose) {
+        switch purpose {
+        case .dictation: storage.formattingBackend = backend
+        case .lifeLog: storage.lifeLogFormattingBackend = backend
+        }
+        persist()
+    }
+
     public var groqModel: String {
         get { storage.groqModel }
         set {
@@ -208,7 +249,22 @@ public final class AppSettings {
     }
 
     public func model(for backend: FormattingBackend) -> String {
-        switch backend {
+        model(for: backend, purpose: .dictation)
+    }
+
+    public func model(for backend: FormattingBackend, purpose: LlmPurpose) -> String {
+        if purpose == .lifeLog {
+            return switch backend {
+            case .onDevice: "Apple Foundation Models"
+            case .openAI: storage.lifeLogOpenAIModel
+            case .anthropic: storage.lifeLogAnthropicModel
+            case .gemini: storage.lifeLogGeminiModel
+            case .groq: storage.lifeLogGroqModel
+            case .ollama: storage.lifeLogOllamaModel
+            case .lmStudio: storage.lifeLogLmStudioModel
+            }
+        }
+        return switch backend {
         case .onDevice: "Apple Foundation Models"
         case .openAI: storage.openAIModel
         case .anthropic: storage.anthropicModel
@@ -220,8 +276,25 @@ public final class AppSettings {
     }
 
     public func setModel(_ value: String, for backend: FormattingBackend) {
+        setModel(value, for: backend, purpose: .dictation)
+    }
+
+    public func setModel(_ value: String, for backend: FormattingBackend, purpose: LlmPurpose) {
         let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
+        if purpose == .lifeLog {
+            switch backend {
+            case .onDevice: return
+            case .openAI: storage.lifeLogOpenAIModel = trimmed
+            case .anthropic: storage.lifeLogAnthropicModel = trimmed
+            case .gemini: storage.lifeLogGeminiModel = trimmed
+            case .groq: storage.lifeLogGroqModel = trimmed
+            case .ollama: storage.lifeLogOllamaModel = trimmed
+            case .lmStudio: storage.lifeLogLmStudioModel = trimmed
+            }
+            persist()
+            return
+        }
         switch backend {
         case .onDevice: return
         case .openAI: storage.openAIModel = trimmed
@@ -243,6 +316,7 @@ public final class AppSettings {
     public var lifeLogSummaryIntervalMinutes: Int { get { storage.lifeLogSummaryIntervalMinutes } set { storage.lifeLogSummaryIntervalMinutes = max(15, newValue); persist() } }
     public var lifeLogTodoPrompt: String { get { storage.lifeLogTodoPrompt } set { storage.lifeLogTodoPrompt = newValue; persist() } }
     public var lifeLogSummaryPrompt: String { get { storage.lifeLogSummaryPrompt } set { storage.lifeLogSummaryPrompt = newValue; persist() } }
+    public var lifeLogMiniWindowAlwaysOnTop: Bool { get { storage.lifeLogMiniWindowAlwaysOnTop } set { storage.lifeLogMiniWindowAlwaysOnTop = newValue; persist() } }
     public var accentPalette: AccentPalette { get { storage.accentPalette } set { storage.accentPalette = newValue; persist() } }
 
     /// 「Koeの全データを削除」で設定も初期状態へ戻す。

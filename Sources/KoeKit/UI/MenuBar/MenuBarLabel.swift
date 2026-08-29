@@ -3,6 +3,7 @@ import SwiftUI
 /// メニューバーのアイコン。常駐アプリらしくモノクロで、状態はシンボルの差し替えで示す。
 struct MenuBarLabel: View {
     var coordinator: DictationCoordinator
+    var lifeLog: LifeLogCoordinator
     var settings: AppSettings
 
     private var isRecording: Bool { coordinator.isRecording }
@@ -29,6 +30,12 @@ struct MenuBarLabel: View {
                 .contentTransition(.symbolEffect(.replace))
             if settings.showLevelMeterInMenuBar, isRecording {
                 MiniLevelMeter(level: coordinator.inputLevel, tint: .primary)
+            }
+            if lifeLog.isCapturing || lifeLog.isRecoveringCapture {
+                Image(systemName: "record.circle.fill")
+                    .font(.system(size: 8, weight: .bold))
+                    .symbolEffect(.pulse, options: .repeating, isActive: lifeLog.isCapturing)
+                    .accessibilityLabel(lifeLog.captureStatusText)
             }
         }
     }

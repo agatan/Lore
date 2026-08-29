@@ -35,18 +35,13 @@ struct LifeLogMiniWindow: View {
                             case .memo(let memo): memoRow(memo)
                             }
                         }
-                        if env.lifeLog.isCapturing || env.lifeLog.isTranscribing || !env.lifeLog.liveTranscript.isEmpty {
+                        if env.lifeLog.isCapturing || env.lifeLog.isTranscribing {
                             HStack(alignment: .top, spacing: 10) {
                                 LiveWaveform()
                                     .frame(width: 52)
-                                VStack(alignment: .leading, spacing: 5) {
-                                    Text(env.lifeLog.captureStatusText)
-                                        .font(.system(size: 10.5, weight: .semibold, design: .rounded))
-                                        .foregroundStyle(KoeTheme.accent)
-                                    Text(env.lifeLog.liveTranscript.isEmpty ? "音声を取り込んでいます…" : env.lifeLog.liveTranscript)
-                                        .font(.system(size: 12.5))
-                                        .foregroundStyle(env.lifeLog.liveTranscript.isEmpty ? Color.secondary.opacity(0.55) : Color.primary)
-                                }
+                                Text(env.lifeLog.captureStatusText)
+                                    .font(.system(size: 10.5, weight: .semibold, design: .rounded))
+                                    .foregroundStyle(KoeTheme.accent)
                                 Spacer(minLength: 0)
                             }
                             .padding(.horizontal, 12)
@@ -59,9 +54,6 @@ struct LifeLogMiniWindow: View {
                 .onChange(of: items.count) { old, new in
                     guard new > old else { return }
                     withAnimation { proxy.scrollTo("bottom", anchor: .bottom) }
-                }
-                .onChange(of: env.lifeLog.liveTranscript) { _, _ in
-                    withAnimation { proxy.scrollTo("live", anchor: .bottom) }
                 }
                 .overlay {
                     if items.isEmpty && !env.lifeLog.isCapturing && !env.lifeLog.isTranscribing {
@@ -107,7 +99,13 @@ struct LifeLogMiniWindow: View {
             )
             .ignoresSafeArea()
         }
-        .task { await env.lifeLog.followCurrentDay() }
+        .task {
+            env.applyLifeLogMiniWindowLevel()
+            await env.lifeLog.followCurrentDay()
+        }
+        .onChange(of: env.settings.lifeLogMiniWindowAlwaysOnTop) { _, _ in
+            env.applyLifeLogMiniWindowLevel()
+        }
     }
 
     private enum ItemKind { case utterance(LifeLogUtterance), memo(LifeLogMemo) }

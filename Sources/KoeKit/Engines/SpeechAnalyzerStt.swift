@@ -227,7 +227,7 @@ public final class SpeechAnalyzerStt: SttEngine {
                 throw EngineError.notReady("音声モデルのダウンロード中です。完了後に再試行してください")
             case .needsInstall:
                 throw EngineError.notReady(
-                    "音声モデル(\(supported.localizedDisplayName))が未取得です。設定 > モデル から取得してください"
+                    "音声モデル(\(supported.localizedDisplayName))が未取得です。設定 > AI整形 から取得してください"
                 )
             case .notReserved:
                 throw EngineError.needsAppRestart(SpeechAnalyzerStt.needsRestartMessage(supported))

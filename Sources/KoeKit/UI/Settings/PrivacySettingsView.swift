@@ -9,52 +9,14 @@ struct PrivacySettingsView: View {
     var body: some View {
         // 画面外のカードを先に組まない(GeneralSettingsView と同じ理由)。
         LazyVStack(alignment: .leading, spacing: 20) {
-            VStack(alignment: .leading, spacing: 10) {
-                HStack(spacing: 8) {
-                    Image(systemName: sendsOffDevice ? "arrow.up.forward.app.fill" : "hand.raised.fill")
-                        .foregroundStyle(sendsOffDevice ? AnyShapeStyle(KoeTheme.warning) : AnyShapeStyle(KoeTheme.voiceGradient))
-                    Text(sendsOffDevice ? "文章処理に \(providerName) を使っています" : "すべてこの Mac の中で処理されます")
-                        .font(.system(size: 15, weight: .semibold))
-                }
-                Text(sendsOffDevice ? offDeviceSummary : Self.onDeviceSummary)
-                    .font(.system(size: 12))
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-
-            SettingsCard(title: "外に出ないもの") {
-                ForEach(neverLeaves, id: \.self) { item in
-                    Label(item, systemImage: "checkmark.shield")
-                        .font(.system(size: 11.5))
-                        .foregroundStyle(.secondary)
-                }
-                Divider()
-                if sendsOffDevice {
-                    Label(
-                        "口述の整形とライフログの要約・TODO生成に必要な文字データを\(providerName)へ送ります",
-                        systemImage: "arrow.up.forward"
-                    )
-                    .font(.system(size: 11.5))
-                    .foregroundStyle(KoeTheme.warning)
-                    .fixedSize(horizontal: false, vertical: true)
-                } else {
-                    Label("通信するのはモデルのダウンロードのみ", systemImage: "network")
-                        .font(.system(size: 11.5))
-                        .foregroundStyle(KoeTheme.accent)
-                }
-            }
-
-            SettingsCard(title: "前面アプリの扱い") {
-                Text("""
-                モードを自動で切り替えるために、録音を始めた時点でどのアプリを使っていたかだけを見ます。\
-                画面の内容やウィンドウの中の文字は読み取りません。
-                """)
+            SettingsCard(title: "アクセシビリティ") {
+                Text("グローバルショートカットの検知と、仕上げた文章の貼り付けに使います。画面やウィンドウ内の文字は読み取りません。")
                 .font(.system(size: 11.5))
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
             }
 
-            SettingsCard(title: "保存場所", footnote: "通常の口述音声は保存しません。ライフログを有効にした場合だけ、再処理用の短い音声チャンクをMac内へ保存します。") {
+            SettingsCard(title: "保存場所", footnote: "音声入力は文章だけを保存します。ライフログの音声は、設定した保持期間だけこのMacに保存します。") {
                 if let url = env.database?.fileURL {
                     HStack {
                         Text(url.path(percentEncoded: false))
@@ -147,39 +109,6 @@ struct PrivacySettingsView: View {
         .task { env.refreshLifeLogAudioSize() }
     }
 
-    /// 仕上げを外部に出しているかどうかで説明が変わる。判断の出どころは
-    /// `FormattingBackend` 1 箇所だけにして、画面ごとに言うことがずれないようにする。
-    private var sendsOffDevice: Bool {
-        env.settings.formattingBackend.sendsTranscriptOffDevice
-    }
-
-    private static let onDeviceSummary = """
-    Koe はクラウドの音声認識や文章生成サービスに接続しません。\
-    この Mac の中だけで完結することを価値の中心に置いて作っています。
-    """
-
-    private var offDeviceSummary: String { """
-    設定 > モデル で文章処理に \(providerName) を選んでいます。聞き取りはこの Mac の中で完結しますが、\
-    口述の整形では文字起こしと指示文を送ります。ライフログではSummary・TODO生成のため、対象日の発話、メモ、予定の時刻と件名、指示文を送ります。録音した音声そのものは送りません。\
-    外に出したくない場合は、仕上げを「この Mac の中」に戻してください。
-    """ }
-
-    private var providerName: String { env.settings.formattingBackend.displayName }
-
-    /// 仕上げがオンデバイスのときに、この Mac から出ないもの。
-    private var neverLeaves: [String] {
-        var items = [
-            "録音した音声",
-            "通常の口述履歴",
-            "前面アプリの情報",
-        ]
-        if !sendsOffDevice {
-            items.insert("聞き取った文字と仕上げた文章", at: 1)
-            items.insert("共通ルール・モードの指示・カスタム語彙", at: 2)
-        }
-        return items
-    }
-
     private enum DeleteTarget {
         case history
         case lifeLog
@@ -208,7 +137,7 @@ struct PrivacySettingsView: View {
             case .lifeLog:
                 "発話、メモ、予定の控え、要約、TODO、保存音声を削除します。音声入力履歴と設定は残ります。"
             case .application:
-                "履歴、ライフログ、保存音声、語彙、プロンプト、設定、Groq APIキーを削除します。元に戻せません。"
+                "履歴、ライフログ、保存音声、語彙、プロンプト、設定、APIキーを削除します。元に戻せません。"
             }
         }
     }

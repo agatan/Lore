@@ -92,7 +92,7 @@ private struct MenuBarRoot: View {
     @State private var hud: HudController?
 
     var body: some View {
-        MenuBarLabel(coordinator: env.coordinator, settings: env.settings)
+        MenuBarLabel(coordinator: env.coordinator, lifeLog: env.lifeLog, settings: env.settings)
             .task { await bootstrap() }
     }
 
@@ -109,6 +109,7 @@ private struct MenuBarRoot: View {
             } else {
                 openWindow(id: KoeWindow.lifeLogMini)
                 NSApp.activate()
+                DispatchQueue.main.async { env.applyLifeLogMiniWindowLevel() }
             }
         }
         env.onShowMainWindow = {

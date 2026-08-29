@@ -131,9 +131,6 @@ public struct LifeLogWindow: View {
                     guard new > old else { return }
                     withAnimation { proxy.scrollTo("timeline-bottom", anchor: .bottom) }
                 }
-                .onChange(of: env.lifeLog.liveTranscript) { _, _ in
-                    withAnimation { proxy.scrollTo("live-capture", anchor: .bottom) }
-                }
                 .onChange(of: env.lifeLog.highlightedUtteranceID) { _, id in
                     if let id { withAnimation { proxy.scrollTo(id, anchor: .center) } }
                 }
@@ -149,7 +146,7 @@ public struct LifeLogWindow: View {
 
     private var showsLiveCapture: Bool {
         Calendar.current.isDateInToday(env.lifeLog.selectedDate)
-            && (env.lifeLog.isCapturing || env.lifeLog.isTranscribing || !env.lifeLog.liveTranscript.isEmpty)
+            && (env.lifeLog.isCapturing || env.lifeLog.isTranscribing)
     }
 
     private var liveCaptureRow: some View {
@@ -158,17 +155,11 @@ public struct LifeLogWindow: View {
                 .font(.system(size: 10.5, weight: .medium, design: .monospaced))
                 .foregroundStyle(.tertiary)
                 .frame(width: 64, alignment: .leading)
-            VStack(alignment: .leading, spacing: 6) {
-                HStack(spacing: 7) {
-                    LiveWaveform()
-                    Text(env.lifeLog.captureStatusText)
-                        .font(.system(size: 10.5, weight: .semibold, design: .rounded))
-                        .foregroundStyle(KoeTheme.accent)
-                }
-                Text(env.lifeLog.liveTranscript.isEmpty ? "音声を取り込んでいます…" : env.lifeLog.liveTranscript)
-                    .font(.system(size: 13))
-                    .foregroundStyle(env.lifeLog.liveTranscript.isEmpty ? Color.secondary.opacity(0.55) : Color.primary)
-                    .contentTransition(.numericText())
+            HStack(spacing: 7) {
+                LiveWaveform()
+                Text(env.lifeLog.captureStatusText)
+                    .font(.system(size: 10.5, weight: .semibold, design: .rounded))
+                    .foregroundStyle(KoeTheme.accent)
             }
             Spacer(minLength: 0)
         }

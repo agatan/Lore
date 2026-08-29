@@ -62,6 +62,10 @@ public final class AppEnvironment {
     public private(set) var llmModels: [String] = []
     public private(set) var llmStatus: String?
     public private(set) var isCheckingLlm = false
+    public private(set) var lifeLogHasLlmApiKey = false
+    public private(set) var lifeLogLlmModels: [String] = []
+    public private(set) var lifeLogLlmStatus: String?
+    public private(set) var isCheckingLifeLogLlm = false
     /// エンジン別の実測レイテンシ。
     public private(set) var measuredLatencies = MeasuredLatencies()
 
@@ -352,6 +356,17 @@ public final class AppEnvironment {
         if !lifeLogMiniWindowHotkeys.isRunning { startHotkeyMonitor() }
     }
 
+    public func setLifeLogMiniWindowAlwaysOnTop(_ enabled: Bool) {
+        settings.lifeLogMiniWindowAlwaysOnTop = enabled
+        applyLifeLogMiniWindowLevel()
+    }
+
+    public func applyLifeLogMiniWindowLevel() {
+        guard let window = NSApp.windows.first(where: { $0.identifier?.rawValue == KoeWindow.lifeLogMini }) else { return }
+        window.level = settings.lifeLogMiniWindowAlwaysOnTop ? .floating : .normal
+        window.collectionBehavior = settings.lifeLogMiniWindowAlwaysOnTop ? [.fullScreenAuxiliary] : []
+    }
+
     // MARK: 権限
 
     public func refreshPermissions() {
@@ -612,7 +627,16 @@ public final class AppEnvironment {
             try SecretStore.deleteAll()
             try await database.deleteAllUserData()
             settings.resetAll()
-            engines.apply(backend: settings.formattingBackend, model: settings.model(for: settings.formattingBackend))
+            engines.apply(
+                backend: settings.formattingBackend,
+                model: settings.model(for: settings.formattingBackend, purpose: .dictation),
+                purpose: .dictation
+            )
+            engines.apply(
+                backend: settings.lifeLogFormattingBackend,
+                model: settings.model(for: settings.lifeLogFormattingBackend, purpose: .lifeLog),
+                purpose: .lifeLog
+            )
             try await database.modes.seedBuiltinsIfNeeded()
             try await database.sharedRules.seedOrMigrate()
             await reloadModes()
@@ -762,82 +786,125 @@ public final class AppEnvironment {
         measuredLatencies = (try? await database.history.measuredLatencies(limit: 300)) ?? MeasuredLatencies()
     }
 
-    public func applyEngineChange(checkCredentials: Bool = true, resetConnectionState: Bool = false) async {
-        let backend = settings.formattingBackend
-        engines.apply(backend: backend, model: settings.model(for: backend))
+    public func applyEngineChange(
+        purpose: LlmPurpose? = nil,
+        checkCredentials: Bool = true,
+        resetConnectionState: Bool = false
+    ) async {
+        if purpose == nil || purpose == .dictation {
+            await applyEngineChange(for: .dictation, checkCredentials: checkCredentials, resetConnectionState: resetConnectionState)
+        }
+        if purpose == nil || purpose == .lifeLog {
+            await applyEngineChange(for: .lifeLog, checkCredentials: checkCredentials, resetConnectionState: resetConnectionState)
+        }
+        await engines.refreshSttAvailability()
+        for target in LlmPurpose.allCases where purpose == nil || purpose == target {
+            if checkCredentials || settings.backend(for: target) == .onDevice {
+                await engines.refreshLlmAvailability(for: target)
+            }
+        }
+    }
+
+    private func applyEngineChange(for purpose: LlmPurpose, checkCredentials: Bool, resetConnectionState: Bool) async {
+        let backend = settings.backend(for: purpose)
+        engines.apply(backend: backend, model: settings.model(for: backend, purpose: purpose), purpose: purpose)
         if resetConnectionState {
-            llmModels = []
-            llmStatus = nil
+            setLlmModels([], for: purpose)
+            setLlmStatus(nil, for: purpose)
         }
         if checkCredentials {
             do {
-                hasLlmApiKey = if let key = secretKey(for: backend) {
+                let hasKey = if let key = secretKey(for: backend, purpose: purpose) {
                     try SecretStore.read(key)?.isEmpty == false
                 } else {
                     true
                 }
+                setHasLlmApiKey(hasKey, for: purpose)
             } catch {
-                hasLlmApiKey = false
-                llmStatus = error.localizedDescription
+                setHasLlmApiKey(false, for: purpose)
+                setLlmStatus(error.localizedDescription, for: purpose)
                 KoeLog.engine.error("API キーの確認に失敗: \(error.localizedDescription, privacy: .public)")
             }
         }
-        await engines.refreshAvailability(checkLlm: checkCredentials || settings.formattingBackend == .onDevice)
     }
 
     // MARK: 文章処理エンジン
 
     /// API キーを Keychain に保存する(空文字なら削除)。値は保持しない。
-    public func setLlmApiKey(_ key: String) async {
-        let backend = settings.formattingBackend
-        guard let secretKey = secretKey(for: backend) else { return }
-        llmStatus = nil
+    public func setLlmApiKey(_ key: String, purpose: LlmPurpose = .dictation) async {
+        let backend = settings.backend(for: purpose)
+        guard let secretKey = secretKey(for: backend, purpose: purpose) else { return }
+        setLlmStatus(nil, for: purpose)
         do {
             try SecretStore.write(key, for: secretKey)
         } catch {
-            llmStatus = error.localizedDescription
+            setLlmStatus(error.localizedDescription, for: purpose)
             KoeLog.engine.error("API キーの保存に失敗: \(error.localizedDescription, privacy: .public)")
             return
         }
-        llmModels = []
-        await applyEngineChange()
+        setLlmModels([], for: purpose)
+        await applyEngineChange(purpose: purpose)
     }
 
     /// キーとモデルが実際に通るかを 1 往復して確かめる。
     ///
     /// 整形は失敗しても生テキストにフォールバックするので、設定ミスは
     /// 「なんとなく仕上がらない」形でしか表に出ない。ここで明示的に確かめられるようにする。
-    public func checkLlmConnection() async {
-        guard !isCheckingLlm else { return }
-        isCheckingLlm = true
-        llmStatus = nil
-        defer { isCheckingLlm = false }
+    public func checkLlmConnection(purpose: LlmPurpose = .dictation) async {
+        guard !isCheckingLlm(for: purpose) else { return }
+        setIsCheckingLlm(true, for: purpose)
+        setLlmStatus(nil, for: purpose)
+        defer { setIsCheckingLlm(false, for: purpose) }
 
         do {
-            let backend = settings.formattingBackend
-            llmModels = try await engines.availableModels(for: backend)
-            let reply = try await engines.llm.complete(
+            let backend = settings.backend(for: purpose)
+            setLlmModels(try await engines.availableModels(for: backend, purpose: purpose), for: purpose)
+            let engine = purpose == .dictation ? engines.llm : engines.lifeLogLlm
+            let reply = try await engine.complete(
                 prompt: FormattingPrompt(system: "入力をそのまま返してください。", user: "疎通確認"),
                 timeout: .seconds(20)
             )
-            llmStatus = reply.isEmpty
+            setLlmStatus(reply.isEmpty
                 ? "接続できましたが、応答が空でした"
-                : "\(settings.model(for: backend)) に接続できました"
+                : "\(settings.model(for: backend, purpose: purpose)) に接続できました", for: purpose)
         } catch {
-            llmStatus = error.localizedDescription
+            setLlmStatus(error.localizedDescription, for: purpose)
             KoeLog.engine.error("LLM の疎通確認に失敗: \(error.localizedDescription, privacy: .public)")
         }
-        await engines.refreshAvailability()
+        await engines.refreshLlmAvailability(for: purpose)
     }
 
-    private func secretKey(for backend: FormattingBackend) -> SecretStore.Key? {
-        switch backend {
-        case .openAI: .openAIApiKey
-        case .anthropic: .anthropicApiKey
-        case .gemini: .geminiApiKey
-        case .groq: .groqApiKey
-        case .onDevice, .ollama, .lmStudio: nil
+    private func secretKey(for backend: FormattingBackend, purpose: LlmPurpose) -> SecretStore.Key? {
+        switch (purpose, backend) {
+        case (.dictation, .openAI): .openAIApiKey
+        case (.dictation, .anthropic): .anthropicApiKey
+        case (.dictation, .gemini): .geminiApiKey
+        case (.dictation, .groq): .groqApiKey
+        case (.lifeLog, .openAI): .lifeLogOpenAIApiKey
+        case (.lifeLog, .anthropic): .lifeLogAnthropicApiKey
+        case (.lifeLog, .gemini): .lifeLogGeminiApiKey
+        case (.lifeLog, .groq): .lifeLogGroqApiKey
+        case (_, .onDevice), (_, .ollama), (_, .lmStudio): nil
         }
+    }
+
+    public func hasLlmApiKey(for purpose: LlmPurpose) -> Bool { purpose == .dictation ? hasLlmApiKey : lifeLogHasLlmApiKey }
+    public func llmModels(for purpose: LlmPurpose) -> [String] { purpose == .dictation ? llmModels : lifeLogLlmModels }
+    public func llmStatus(for purpose: LlmPurpose) -> String? { purpose == .dictation ? llmStatus : lifeLogLlmStatus }
+    public func isCheckingLlm(for purpose: LlmPurpose) -> Bool { purpose == .dictation ? isCheckingLlm : isCheckingLifeLogLlm }
+    public func llmAvailability(for purpose: LlmPurpose) -> EngineAvailability { purpose == .dictation ? engines.llmAvailability : engines.lifeLogLlmAvailability }
+
+    private func setHasLlmApiKey(_ value: Bool, for purpose: LlmPurpose) {
+        if purpose == .dictation { hasLlmApiKey = value } else { lifeLogHasLlmApiKey = value }
+    }
+    private func setLlmModels(_ value: [String], for purpose: LlmPurpose) {
+        if purpose == .dictation { llmModels = value } else { lifeLogLlmModels = value }
+    }
+    private func setLlmStatus(_ value: String?, for purpose: LlmPurpose) {
+        if purpose == .dictation { llmStatus = value } else { lifeLogLlmStatus = value }
+    }
+    private func setIsCheckingLlm(_ value: Bool, for purpose: LlmPurpose) {
+        if purpose == .dictation { isCheckingLlm = value } else { isCheckingLifeLogLlm = value }
     }
 
     func currentHints() -> SttHints {

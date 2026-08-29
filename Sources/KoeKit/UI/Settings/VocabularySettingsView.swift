@@ -87,7 +87,7 @@ struct VocabularySettingsView: View {
     private var entriesCard: some View {
         SettingsCard(
             title: "辞書 (\(env.vocabulary.count))",
-            footnote: "聞き取りと仕上げの両方でモデルに渡され、表記を統一します。「よくある誤認識」は、仕上げのときに直す手がかりとして使われます。"
+            footnote: "音声入力とライフログの文字起こしで同じ辞書を使います。表記・読みは聞き取りのヒントに、よくある誤認識は音声入力の整形に使います。"
         ) {
             HStack {
                 Text("表記・読み・よくある誤認識を登録します")

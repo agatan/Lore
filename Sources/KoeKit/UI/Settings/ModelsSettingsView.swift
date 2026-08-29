@@ -1,145 +1,102 @@
 import SwiftUI
 
-/// 使っているモデルの状態と実測の速さ(FR-9)。
-///
-/// 選べるのは「聞き取り」と「仕上げ」の 2 段だけ。どちらも既定は追加ダウンロード無しの
-/// OS 内蔵モデルで、変えたときに何が変わるか(外に出るか / 待ち方が変わるか)を
-/// その場で読めるようにする。
+/// 音声入力の整形とライフログの派生処理は、接続先・モデル・APIキーを用途ごとに保持する。
 struct ModelsSettingsView: View {
     var env: AppEnvironment
-
-    private var settings: AppSettings { env.settings }
+    var purpose: LlmPurpose = .dictation
 
     @State private var apiKeyDraft = ""
 
-    private var backend: FormattingBackend { settings.formattingBackend }
+    private var settings: AppSettings { env.settings }
+    private var backend: FormattingBackend { settings.backend(for: purpose) }
+    private var title: String { purpose == .dictation ? "音声入力の整形" : "要約とTODO" }
 
     var body: some View {
         LazyVStack(alignment: .leading, spacing: 20) {
-            if backend.sendsTranscriptOffDevice {
-                NoticeBanner(
-                    title: "文章だけを \(backend.displayName) に送ります",
-                    message: "音声認識はMac内で完結します。整形・ライフログ要約・TODOのため、文字起こし、予定、メモと指示文を送ります。音声ファイルは送りません。",
-                    tint: KoeTheme.warning,
-                    actionTitle: nil,
-                    action: nil
-                )
-            } else {
-                NoticeBanner(
-                    title: "この Mac の中だけで動きます",
-                    message: backend == .onDevice
-                        ? "音声認識と文章処理をmacOS内蔵モデルで行います。"
-                        : "音声認識と文章処理をこのMac上で行います。ローカルサーバーを起動して使います。",
-                    tint: KoeTheme.accent,
-                    actionTitle: nil,
-                    action: nil
-                )
-            }
-
+            privacyNotice
+            if purpose == .dictation { speechRecognitionCard }
             SettingsCard(
-                title: "聞き取り",
-                footnote: "話した声を文字にします。日本語の音声モデルは macOS が管理します。"
+                title: title,
+                footnote: purpose == .dictation
+                    ? "音声入力の文章を整えます。ライフログとは別に選べます。"
+                    : "一日の要約とTODO案を作ります。音声入力とは別に選べます。"
             ) {
-                engineRow(
-                    name: "Apple 音声認識 (SpeechAnalyzer)",
-                    availability: env.engines.sttAvailability,
-                    measured: env.measuredLatencies.transcription[
-                        HistoryStore.key(EngineIdentifier.speechAnalyzer.rawValue, "システム音声モデル")
-                    ],
-                    canInstall: true
-                )
-                if let error = env.speechAssetError {
-                    Text(error)
-                        .font(.system(size: 11))
-                        .foregroundStyle(KoeTheme.recording)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-            }
-
-            SettingsCard(
-                title: "文章の仕上げ",
-                footnote: "音声入力の整形と、ライフログの要約・TODOに共通して使います。"
-            ) {
-                VStack(alignment: .leading, spacing: 10) {
-                    Text("このMac内")
-                        .font(.system(size: 10.5, weight: .semibold))
-                        .foregroundStyle(.secondary)
-                    HStack(spacing: 8) {
-                        providerButton(.onDevice, icon: "apple.logo")
-                        providerButton(.ollama, icon: "shippingbox")
-                        providerButton(.lmStudio, icon: "desktopcomputer")
-                    }
-                    Text("クラウド")
-                        .font(.system(size: 10.5, weight: .semibold))
-                        .foregroundStyle(.secondary)
-                        .padding(.top, 4)
-                    HStack(spacing: 8) {
-                        providerButton(.openAI, icon: "sparkles")
-                        providerButton(.anthropic, icon: "text.bubble")
-                        providerButton(.gemini, icon: "diamond")
-                        providerButton(.groq, icon: "bolt")
-                    }
-                }
-
+                providerPicker
                 Divider()
-
-                engineRow(
-                    name: activeModelName,
-                    availability: env.engines.llmAvailability,
-                    measured: env.measuredLatencies.formatting[activeLatencyKey],
-                    canInstall: false
-                )
-
+                engineStatus
                 if backend != .onDevice {
                     Divider()
                     providerSettings
                 }
             }
-
-            SettingsCard(
-                title: "待ち時間の上限",
-                footnote: "ここを過ぎたら仕上げを打ち切り、文字起こしをそのまま挿入します。"
-            ) {
-                SettingsRow(title: "仕上げを待つ上限") {
-                    HStack(spacing: 10) {
-                        Slider(
-                            value: Binding(
-                                get: { Double(settings.formattingTimeoutMs) },
-                                set: { settings.formattingTimeoutMs = Int($0) }
-                            ),
-                            in: 2_000...20_000,
-                            step: 500
-                        )
-                        .frame(width: 190)
-                        Text(String(format: "%.1f 秒", Double(settings.formattingTimeoutMs) / 1_000))
-                            .font(.system(size: 11, design: .rounded))
-                            .monospacedDigit()
-                            .foregroundStyle(.secondary)
-                            .frame(width: 56, alignment: .trailing)
-                    }
-                }
-            }
+            if purpose == .dictation { timeoutCard } else { promptCard }
         }
         .task {
             await env.reloadMeasuredLatencies()
-            await env.applyEngineChange()
+            await env.applyEngineChange(purpose: purpose)
         }
     }
 
-    private var activeModelName: String {
-        backend == .onDevice ? "Apple Foundation Models" : "\(backend.displayName) / \(settings.model(for: backend))"
+    private var privacyNotice: some View {
+        NoticeBanner(
+            title: backend.sendsTranscriptOffDevice ? "文章だけを \(backend.displayName) に送ります" : "この Mac の中だけで動きます",
+            message: noticeMessage,
+            tint: backend.sendsTranscriptOffDevice ? KoeTheme.warning : KoeTheme.accent,
+            actionTitle: nil,
+            action: nil
+        )
     }
 
-    private var activeLatencyKey: String {
-        HistoryStore.key(env.engines.llm.identifier.rawValue, settings.model(for: backend))
+    private var noticeMessage: String {
+        if backend.sendsTranscriptOffDevice {
+            return purpose == .dictation
+                ? "整形のため、文字起こしと指示文を送ります。音声ファイルは送りません。"
+                : "要約とTODO案のため、対象日の発話、メモ、予定と指示文を送ります。音声ファイルは送りません。"
+        }
+        if backend == .onDevice {
+            return purpose == .dictation
+                ? "聞き取りと整形をmacOS内蔵モデルで行います。"
+                : "要約とTODO案をmacOS内蔵モデルで作ります。"
+        }
+        return "文章処理をこのMac上のローカルサーバーで行います。"
     }
 
-    @ViewBuilder
+    private var speechRecognitionCard: some View {
+        SettingsCard(title: "聞き取り", footnote: "音声入力とライフログの文字起こしに共通です。語彙も両方で共有します。") {
+            HStack(alignment: .firstTextBaseline, spacing: 8) {
+                Text("Apple 音声認識 (SpeechAnalyzer)").font(.system(size: 13, weight: .medium))
+                Spacer()
+                availabilityLabel(env.engines.sttAvailability, canInstall: true)
+            }
+            if let error = env.speechAssetError {
+                Text(error).font(.system(size: 11)).foregroundStyle(KoeTheme.recording)
+            }
+        }
+    }
+
+    private var providerPicker: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text("このMac内").font(.system(size: 10.5, weight: .semibold)).foregroundStyle(.secondary)
+            HStack(spacing: 8) {
+                providerButton(.onDevice, icon: "apple.logo")
+                providerButton(.ollama, icon: "shippingbox")
+                providerButton(.lmStudio, icon: "desktopcomputer")
+            }
+            Text("クラウド").font(.system(size: 10.5, weight: .semibold)).foregroundStyle(.secondary).padding(.top, 4)
+            HStack(spacing: 8) {
+                providerButton(.openAI, icon: "sparkles")
+                providerButton(.anthropic, icon: "text.bubble")
+                providerButton(.gemini, icon: "diamond")
+                providerButton(.groq, icon: "bolt")
+            }
+        }
+    }
+
     private func providerButton(_ option: FormattingBackend, icon: String) -> some View {
         Button {
-            settings.formattingBackend = option
+            settings.setBackend(option, for: purpose)
             apiKeyDraft = ""
-            Task { await env.applyEngineChange(resetConnectionState: true) }
+            Task { await env.applyEngineChange(purpose: purpose, resetConnectionState: true) }
         } label: {
             VStack(spacing: 6) {
                 Image(systemName: icon).font(.system(size: 14, weight: .medium))
@@ -152,165 +109,140 @@ struct ModelsSettingsView: View {
         .buttonStyle(.plain)
     }
 
-    /// 選択中の接続先だけを見せる。キーはKeychainに入れ、保存後は画面に残さない。
+    private var engineStatus: some View {
+        HStack(alignment: .firstTextBaseline, spacing: 8) {
+            Text(activeModelName).font(.system(size: 13, weight: .medium))
+            Spacer()
+            availabilityLabel(env.llmAvailability(for: purpose), canInstall: false)
+        }
+    }
+
     @ViewBuilder
     private var providerSettings: some View {
         if backend.sendsTranscriptOffDevice {
-            SettingsRow(
-                title: "API キー",
-                caption: env.hasLlmApiKey ? "キーチェーンに登録済み" : "Koeはキーの内容を表示しません"
-            ) {
+            SettingsRow(title: "API キー", caption: env.hasLlmApiKey(for: purpose) ? "この用途のキーをキーチェーンに登録済み" : "用途ごとに別のキーを登録できます") {
                 HStack(spacing: 8) {
-                    SecureField("API key", text: $apiKeyDraft)
-                        .textFieldStyle(.roundedBorder)
-                        .frame(width: 180)
-                        .onSubmit { save() }
-                    Button("保存") { save() }
-                        .controlSize(.small)
+                    SecureField("API key", text: $apiKeyDraft).textFieldStyle(.roundedBorder).frame(width: 180).onSubmit(saveKey)
+                    Button("保存", action: saveKey).controlSize(.small)
                         .disabled(apiKeyDraft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-                    if env.hasLlmApiKey {
-                        Button("削除") {
-                            apiKeyDraft = ""
-                            Task { await env.setLlmApiKey("") }
-                        }
-                        .controlSize(.small)
+                    if env.hasLlmApiKey(for: purpose) {
+                        Button("削除") { Task { await env.setLlmApiKey("", purpose: purpose) } }.controlSize(.small)
                     }
                 }
             }
         }
 
         SettingsRow(title: "モデル", caption: localServerCaption) {
-            HStack(spacing: 8) {
-                if env.llmModels.isEmpty {
-                    TextField("", text: Binding(
-                        get: { settings.model(for: backend) },
-                        set: { settings.setModel($0, for: backend); Task { await env.applyEngineChange(checkCredentials: false) } }
-                    ))
-                    .textFieldStyle(.roundedBorder)
-                    .frame(width: 230)
-                } else {
-                    Picker("", selection: Binding(
-                        get: { settings.model(for: backend) },
-                        set: { settings.setModel($0, for: backend); Task { await env.applyEngineChange(checkCredentials: false) } }
-                    )) {
-                        ForEach(modelChoices, id: \.self) { Text($0).tag($0) }
-                    }
-                    .labelsHidden()
-                    .frame(width: 230)
-                }
+            if env.llmModels(for: purpose).isEmpty {
+                TextField("", text: modelBinding).textFieldStyle(.roundedBorder).frame(width: 230)
+            } else {
+                Picker("", selection: modelBinding) {
+                    ForEach(modelChoices, id: \.self) { Text($0).tag($0) }
+                }.labelsHidden().frame(width: 230)
             }
         }
 
         HStack(spacing: 10) {
-            Button(env.isCheckingLlm ? "確認中…" : "接続を確認") {
-                Task { await env.checkLlmConnection() }
+            Button(env.isCheckingLlm(for: purpose) ? "確認中…" : "接続を確認") {
+                Task { await env.checkLlmConnection(purpose: purpose) }
             }
             .controlSize(.small)
-            .disabled(env.isCheckingLlm || (backend.sendsTranscriptOffDevice && !env.hasLlmApiKey))
-
-            if let status = env.llmStatus {
-                Text(status)
-                    .font(.system(size: 10.5))
-                    .foregroundStyle(env.engines.llmAvailability.isReady ? KoeTheme.success : KoeTheme.recording)
+            .disabled(env.isCheckingLlm(for: purpose) || (backend.sendsTranscriptOffDevice && !env.hasLlmApiKey(for: purpose)))
+            if let status = env.llmStatus(for: purpose) {
+                Text(status).font(.system(size: 10.5))
+                    .foregroundStyle(env.llmAvailability(for: purpose).isReady ? KoeTheme.success : KoeTheme.recording)
                     .lineLimit(2)
             }
         }
     }
 
-    /// 一覧に無いモデルを設定していても選択が消えないようにする。
+    private var modelBinding: Binding<String> {
+        Binding(
+            get: { settings.model(for: backend, purpose: purpose) },
+            set: { value in
+                settings.setModel(value, for: backend, purpose: purpose)
+                Task { await env.applyEngineChange(purpose: purpose, checkCredentials: false) }
+            }
+        )
+    }
+
+    private var timeoutCard: some View {
+        SettingsCard(title: "待ち時間の上限", footnote: "時間を過ぎたら整形を打ち切り、文字起こしをそのまま挿入します。") {
+            SettingsRow(title: "仕上げを待つ上限") {
+                HStack(spacing: 10) {
+                    Slider(value: Binding(get: { Double(settings.formattingTimeoutMs) }, set: { settings.formattingTimeoutMs = Int($0) }), in: 2_000...20_000, step: 500).frame(width: 190)
+                    Text(String(format: "%.1f 秒", Double(settings.formattingTimeoutMs) / 1_000))
+                        .font(.system(size: 11, design: .rounded)).monospacedDigit().foregroundStyle(.secondary)
+                }
+            }
+        }
+    }
+
+    private var promptCard: some View {
+        SettingsCard(title: "指示文", footnote: "要約と未確定のTODO案を、この指示文から作ります。") {
+            promptEditor("日次要約", text: Binding(get: { settings.lifeLogSummaryPrompt }, set: { settings.lifeLogSummaryPrompt = $0 }))
+            promptEditor("TODO", text: Binding(get: { settings.lifeLogTodoPrompt }, set: { settings.lifeLogTodoPrompt = $0 }))
+            HStack {
+                Spacer()
+                Button("標準に戻す") {
+                    settings.lifeLogSummaryPrompt = BuiltinLifeLogPrompts.summary
+                    settings.lifeLogTodoPrompt = BuiltinLifeLogPrompts.todo
+                }
+            }
+        }
+    }
+
+    private func promptEditor(_ title: String, text: Binding<String>) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text(title).font(.system(size: 11, weight: .medium)).foregroundStyle(.secondary)
+            TextEditor(text: text).font(.system(size: 11.5, design: .monospaced))
+                .frame(height: 104).scrollContentBackground(.hidden).padding(7).sunkenSurface()
+        }
+    }
+
+    @ViewBuilder
+    private func availabilityLabel(_ availability: EngineAvailability, canInstall: Bool) -> some View {
+        switch availability {
+        case .ready:
+            Label("使えます", systemImage: "checkmark.circle").font(.system(size: 10.5)).foregroundStyle(KoeTheme.success)
+        case .needsDownload(let reason):
+            HStack(spacing: 8) {
+                Text(reason).font(.system(size: 10.5)).foregroundStyle(KoeTheme.warning)
+                if canInstall { Button("取得") { Task { await env.installSpeechAssets() } }.controlSize(.small) }
+            }
+        case .unavailable(let reason):
+            Text(reason).font(.system(size: 10.5)).foregroundStyle(KoeTheme.recording).frame(maxWidth: 260)
+        }
+    }
+
+    private var activeModelName: String {
+        backend == .onDevice ? "Apple Foundation Models" : "\(backend.displayName) / \(settings.model(for: backend, purpose: purpose))"
+    }
+
     private var modelChoices: [String] {
-        let selected = settings.model(for: backend)
-        return env.llmModels.contains(selected) ? env.llmModels : [selected] + env.llmModels
+        let selected = settings.model(for: backend, purpose: purpose)
+        let models = env.llmModels(for: purpose)
+        return models.contains(selected) ? models : [selected] + models
     }
 
     private var localServerCaption: String {
         switch backend {
-        case .ollama: "Ollamaを起動してから確認 · localhost:11434"
-        case .lmStudio: "DeveloperでServerを開始 · localhost:1234"
+        case .ollama: "Ollama · localhost:11434"
+        case .lmStudio: "LM Studio · localhost:1234"
         default: "接続確認で利用可能なモデルを取得"
         }
     }
 
-    private func save() {
+    private func saveKey() {
         let key = apiKeyDraft
         apiKeyDraft = ""
-        Task { await env.setLlmApiKey(key) }
+        Task { await env.setLlmApiKey(key, purpose: purpose) }
     }
 
-    @ViewBuilder
-    private func engineRow(
-        name: String,
-        availability: EngineAvailability,
-        measured: LatencyStats?,
-        canInstall: Bool
-    ) -> some View {
-        VStack(alignment: .leading, spacing: 10) {
-            HStack(alignment: .firstTextBaseline, spacing: 8) {
-                Text(name)
-                    .font(.system(size: 13, weight: .medium))
-                Spacer(minLength: 12)
-                statusView(availability, canInstall: canInstall)
-            }
-            if let measured, measured.count > 0 {
-                HStack(alignment: .top, spacing: 20) {
-                    ForEach(Self.speedLines(measured), id: \.self) { line in
-                        Text(line)
-                            .font(.system(size: 10.5))
-                            .foregroundStyle(.secondary)
-                    }
-                }
-            } else {
-                Text("使うと、ここに実測の速さが出ます")
-                    .font(.system(size: 10.5))
-                    .foregroundStyle(.tertiary)
-            }
-        }
-    }
-
-    @ViewBuilder
-    private func statusView(_ availability: EngineAvailability, canInstall: Bool) -> some View {
-        if canInstall, let progress = env.speechAssetProgress {
-            ProgressView(value: progress).frame(width: 110)
-        } else {
-            switch availability {
-            case .ready:
-                Label("使えます", systemImage: "checkmark.circle")
-                    .font(.system(size: 10.5))
-                    .foregroundStyle(KoeTheme.success)
-            case .needsDownload(let reason):
-                HStack(spacing: 8) {
-                    Text(reason)
-                        .font(.system(size: 10.5))
-                        .foregroundStyle(KoeTheme.warning)
-                    if canInstall {
-                        Button("取得") { Task { await env.installSpeechAssets() } }
-                            .buttonStyle(.bordered)
-                            .controlSize(.small)
-                    }
-                }
-            case .unavailable(let reason):
-                Text(reason)
-                    .font(.system(size: 10.5))
-                    .foregroundStyle(KoeTheme.recording)
-                    .multilineTextAlignment(.trailing)
-                    .frame(maxWidth: 260)
-            }
-        }
-    }
-
-    /// 待ち時間は「音声の長さの何倍か」で見せる。秒数だけでは発話の長さ次第で意味が変わる。
     static func speedLines(_ stats: LatencyStats) -> [String] {
-        guard let factor = stats.realtimeFactor else {
-            return ["実測 \(secondsText(stats.p50Ms))", "\(stats.count) 回の中央値"]
-        }
-        let text = factor < 1
-            ? String(format: "%.2f 倍", factor)
-            : String(format: "%.1f 倍", factor)
-        return [
-            "音声の長さの \(text)",
-            "音声 10 秒 → \(secondsText(Int(factor * 10_000)))",
-            "\(stats.realtimeFactorCount) 回の中央値",
-        ]
+        guard let factor = stats.realtimeFactor else { return ["実測 \(secondsText(stats.p50Ms))", "\(stats.count) 回の中央値"] }
+        let text = factor < 1 ? String(format: "%.2f 倍", factor) : String(format: "%.1f 倍", factor)
+        return ["音声の長さの \(text)", "音声 10 秒 → \(secondsText(Int(factor * 10_000)))", "\(stats.realtimeFactorCount) 回の中央値"]
     }
 
     static func secondsText(_ ms: Int) -> String {

@@ -80,10 +80,9 @@ struct MenuBarPanel: View {
                 }
 
                 if env.lifeLog.isCapturing || env.lifeLog.isTranscribing {
-                    Text(env.lifeLog.liveTranscript.isEmpty ? "音声を取り込んでいます…" : env.lifeLog.liveTranscript)
+                    Text(env.lifeLog.captureStatusText)
                         .font(.system(size: 12.5))
-                        .foregroundStyle(env.lifeLog.liveTranscript.isEmpty ? Color.secondary.opacity(0.65) : Color.primary)
-                        .lineLimit(3)
+                        .foregroundStyle(.secondary)
                         .multilineTextAlignment(.center)
                         .frame(maxWidth: .infinity)
                 } else {

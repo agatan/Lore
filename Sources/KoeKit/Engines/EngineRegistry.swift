@@ -24,6 +24,12 @@ public final class EngineRegistry {
     @ObservationIgnored public let gemini: RemoteLlm
     @ObservationIgnored public let ollama: RemoteLlm
     @ObservationIgnored public let lmStudio: RemoteLlm
+    @ObservationIgnored private let lifeLogGroq: GroqLlm
+    @ObservationIgnored private let lifeLogOpenAI: RemoteLlm
+    @ObservationIgnored private let lifeLogAnthropic: RemoteLlm
+    @ObservationIgnored private let lifeLogGemini: RemoteLlm
+    @ObservationIgnored private let lifeLogOllama: RemoteLlm
+    @ObservationIgnored private let lifeLogLmStudio: RemoteLlm
     /// prepare() で判明した希望フォーマットのキャッシュ。録音開始を待たせないために持つ。
     @ObservationIgnored private var preparedFormat: AVAudioFormat?
 
@@ -31,8 +37,10 @@ public final class EngineRegistry {
     public private(set) var sttAvailability: EngineAvailability = .ready
     /// いま選ばれている仕上げの利用可否。
     public private(set) var llmAvailability: EngineAvailability = .ready
+    public private(set) var lifeLogLlmAvailability: EngineAvailability = .ready
     /// 仕上げをどこで動かすか。設定から `apply(...)` で流し込む。
     public private(set) var backend: FormattingBackend = .onDevice
+    public private(set) var lifeLogBackend: FormattingBackend = .onDevice
 
     public init(
         stt: any SttEngine = SpeechAnalyzerStt(),
@@ -52,6 +60,12 @@ public final class EngineRegistry {
         self.gemini = gemini
         self.ollama = ollama
         self.lmStudio = lmStudio
+        lifeLogGroq = GroqLlm(apiKeySource: { try SecretStore.read(.lifeLogGroqApiKey) })
+        lifeLogOpenAI = RemoteLlm(identifier: .openAI, providerName: "OpenAI", api: .openAI, model: "gpt-5.4-mini", apiKeySource: { try SecretStore.read(.lifeLogOpenAIApiKey) })
+        lifeLogAnthropic = RemoteLlm(identifier: .anthropic, providerName: "Claude", api: .anthropic, model: "claude-sonnet-5", apiKeySource: { try SecretStore.read(.lifeLogAnthropicApiKey) })
+        lifeLogGemini = RemoteLlm(identifier: .gemini, providerName: "Gemini", api: .gemini, model: "gemini-3.6-flash", apiKeySource: { try SecretStore.read(.lifeLogGeminiApiKey) })
+        lifeLogOllama = RemoteLlm(identifier: .ollama, providerName: "Ollama", api: .openAICompatible(baseURL: URL(string: "http://localhost:11434/v1")!, authorizationValue: nil), model: "gpt-oss:20b")
+        lifeLogLmStudio = RemoteLlm(identifier: .lmStudio, providerName: "LM Studio", api: .openAICompatible(baseURL: URL(string: "http://localhost:1234/v1")!, authorizationValue: nil), model: "openai/gpt-oss-20b")
     }
 
     /// いま整形に使うエンジン。セッション開始時にここから 1 つ取り、
@@ -68,32 +82,52 @@ public final class EngineRegistry {
         }
     }
 
+    public var lifeLogLlm: any LlmEngine {
+        switch lifeLogBackend {
+        case .onDevice: onDeviceLlm
+        case .openAI: lifeLogOpenAI
+        case .anthropic: lifeLogAnthropic
+        case .gemini: lifeLogGemini
+        case .groq: lifeLogGroq
+        case .ollama: lifeLogOllama
+        case .lmStudio: lifeLogLmStudio
+        }
+    }
+
     /// 履歴を読む語彙分析は、外部送信の選択とは独立して常にオンデバイスで行う。
     /// `llm` を使うとクラウド選択時に過去の履歴まで送信され、UI の「文章処理だけ」という
     /// 説明とプライバシー境界が崩れる。
     var analysisLlm: any LlmEngine { onDeviceLlm }
     public func apply(backend: FormattingBackend, model: String) {
-        self.backend = backend
+        apply(backend: backend, model: model, purpose: .dictation)
+    }
+
+    public func apply(backend: FormattingBackend, model: String, purpose: LlmPurpose) {
+        if purpose == .dictation { self.backend = backend } else { lifeLogBackend = backend }
         switch backend {
         case .onDevice: break
-        case .openAI: openAI.apply(model: model)
-        case .anthropic: anthropic.apply(model: model)
-        case .gemini: gemini.apply(model: model)
-        case .groq: groq.apply(model: model)
-        case .ollama: ollama.apply(model: model)
-        case .lmStudio: lmStudio.apply(model: model)
+        case .openAI: (purpose == .dictation ? openAI : lifeLogOpenAI).apply(model: model)
+        case .anthropic: (purpose == .dictation ? anthropic : lifeLogAnthropic).apply(model: model)
+        case .gemini: (purpose == .dictation ? gemini : lifeLogGemini).apply(model: model)
+        case .groq: (purpose == .dictation ? groq : lifeLogGroq).apply(model: model)
+        case .ollama: (purpose == .dictation ? ollama : lifeLogOllama).apply(model: model)
+        case .lmStudio: (purpose == .dictation ? lmStudio : lifeLogLmStudio).apply(model: model)
         }
     }
 
     public func availableModels(for backend: FormattingBackend) async throws -> [String] {
+        try await availableModels(for: backend, purpose: .dictation)
+    }
+
+    public func availableModels(for backend: FormattingBackend, purpose: LlmPurpose) async throws -> [String] {
         switch backend {
         case .onDevice: []
-        case .openAI: try await openAI.availableModels()
-        case .anthropic: try await anthropic.availableModels()
-        case .gemini: try await gemini.availableModels()
-        case .groq: try await groq.availableModels()
-        case .ollama: try await ollama.availableModels()
-        case .lmStudio: try await lmStudio.availableModels()
+        case .openAI: try await (purpose == .dictation ? openAI : lifeLogOpenAI).availableModels()
+        case .anthropic: try await (purpose == .dictation ? anthropic : lifeLogAnthropic).availableModels()
+        case .gemini: try await (purpose == .dictation ? gemini : lifeLogGemini).availableModels()
+        case .groq: try await (purpose == .dictation ? groq : lifeLogGroq).availableModels()
+        case .ollama: try await (purpose == .dictation ? ollama : lifeLogOllama).availableModels()
+        case .lmStudio: try await (purpose == .dictation ? lmStudio : lifeLogLmStudio).availableModels()
         }
     }
 
@@ -116,14 +150,29 @@ public final class EngineRegistry {
     }
 
     public func refreshAvailability(languagePreference: LanguagePreference = .auto, checkLlm: Bool = true) async {
+        await refreshSttAvailability(languagePreference: languagePreference)
+        if checkLlm {
+            await refreshLlmAvailability(for: .dictation)
+            await refreshLlmAvailability(for: .lifeLog)
+        }
+    }
+
+    public func refreshSttAvailability(languagePreference: LanguagePreference = .auto) async {
         sttAvailability = await stt.availability(languagePreference: languagePreference)
-        if checkLlm { llmAvailability = await llm.availability() }
+    }
+
+    public func refreshLlmAvailability(for purpose: LlmPurpose) async {
+        if purpose == .dictation {
+            llmAvailability = await llm.availability()
+        } else {
+            lifeLogLlmAvailability = await lifeLogLlm.availability()
+        }
     }
 
     /// 日本語の音声モデルを取得する。OS が管理する資産だが、取得は明示操作で行う。
     public func installSpeechAssets(progress: @escaping @Sendable (Double) -> Void) async throws {
         try await stt.install(progress: progress)
-        await refreshAvailability()
+        await refreshSttAvailability()
     }
 
     /// アイドル時のモデル解放(NFR-5)。
@@ -131,5 +180,8 @@ public final class EngineRegistry {
         preparedFormat = nil
         await stt.unload()
         await llm.unload()
+        if backend != .onDevice || lifeLogBackend != .onDevice {
+            await lifeLogLlm.unload()
+        }
     }
 }

@@ -24,10 +24,37 @@ struct FormattingBackendTests {
         defaults.removePersistentDomain(forName: suite)
         let settings = AppSettings(defaults: defaults)
         #expect(settings.formattingBackend == .onDevice)
+        #expect(settings.lifeLogFormattingBackend == .onDevice)
         #expect(settings.groqModel == GroqLlm.defaultModel)
         #expect(settings.lifeLogAudioRetentionDays == 30)
         #expect(!settings.onboardingCompleted)
         #expect(!settings.lifeLogAudioStorageConfirmed)
+    }
+
+    @MainActor
+    @Test("音声入力とライフログは接続先とモデルを独立して保持する")
+    func purposesAreIndependent() {
+        let suite = #function
+        let defaults = UserDefaults(suiteName: suite)!
+        defaults.removePersistentDomain(forName: suite)
+        let settings = AppSettings(defaults: defaults)
+        settings.setBackend(.openAI, for: .dictation)
+        settings.setBackend(.groq, for: .lifeLog)
+        settings.setModel("voice-model", for: .openAI, purpose: .dictation)
+        settings.setModel("life-model", for: .groq, purpose: .lifeLog)
+
+        #expect(settings.backend(for: .dictation) == .openAI)
+        #expect(settings.backend(for: .lifeLog) == .groq)
+        #expect(settings.model(for: .openAI, purpose: .dictation) == "voice-model")
+        #expect(settings.model(for: .groq, purpose: .lifeLog) == "life-model")
+
+        let registry = EngineRegistry()
+        registry.apply(backend: .openAI, model: "voice-model", purpose: .dictation)
+        registry.apply(backend: .groq, model: "life-model", purpose: .lifeLog)
+        #expect(registry.llm.identifier == .openAI)
+        #expect(registry.llm.modelName == "voice-model")
+        #expect(registry.lifeLogLlm.identifier == .groq)
+        #expect(registry.lifeLogLlm.modelName == "life-model")
     }
 
     @MainActor

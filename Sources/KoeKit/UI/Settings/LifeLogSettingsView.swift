@@ -2,8 +2,6 @@ import SwiftUI
 
 struct LifeLogSettingsView: View {
     var env: AppEnvironment
-    @State private var extractionRuleDraft = ""
-
     private var settings: AppSettings { env.settings }
 
     var body: some View {
@@ -21,6 +19,14 @@ struct LifeLogSettingsView: View {
                         binding: Binding(get: { settings.lifeLogMiniWindowHotkey }, set: { env.updateLifeLogMiniWindowHotkey($0) }),
                         setCaptureMode: { env.setHotkeyCaptureMode($0) }
                     )
+                }
+                Divider()
+                SettingsRow(title: "常に手前に表示", caption: "ミニウィンドウを他のアプリより前に置きます") {
+                    Toggle("", isOn: Binding(
+                        get: { settings.lifeLogMiniWindowAlwaysOnTop },
+                        set: { env.setLifeLogMiniWindowAlwaysOnTop($0) }
+                    ))
+                    .labelsHidden()
                 }
                 if let error = env.hotkeyError {
                     Text(error).font(.system(size: 11)).foregroundStyle(KoeTheme.recording)
@@ -72,68 +78,9 @@ struct LifeLogSettingsView: View {
                 }
             }
 
-            SettingsCard(title: "指示文") {
-                promptEditor("日次要約", text: Binding(
-                    get: { settings.lifeLogSummaryPrompt },
-                    set: { settings.lifeLogSummaryPrompt = $0 }
-                ))
-                promptEditor("TODO", text: Binding(
-                    get: { settings.lifeLogTodoPrompt },
-                    set: { settings.lifeLogTodoPrompt = $0 }
-                ))
-                HStack {
-                    Spacer()
-                    Button("標準に戻す") {
-                        settings.lifeLogSummaryPrompt = BuiltinLifeLogPrompts.summary
-                        settings.lifeLogTodoPrompt = BuiltinLifeLogPrompts.todo
-                    }
-                }
-                Divider()
-                VStack(alignment: .leading, spacing: 8) {
-                    Text("TODO抽出の追加ルール")
-                        .font(.system(size: 11, weight: .medium))
-                        .foregroundStyle(.secondary)
-                    ForEach(env.lifeLog.extractionRules) { rule in
-                        HStack(spacing: 8) {
-                            Text(rule.instruction).font(.system(size: 11.5)).lineLimit(2)
-                            Spacer()
-                            Button { Task { await env.lifeLog.deleteExtractionRule(id: rule.id) } } label: {
-                                Image(systemName: "xmark.circle.fill")
-                            }
-                            .buttonStyle(.plain).foregroundStyle(.tertiary)
-                        }
-                    }
-                    HStack(spacing: 8) {
-                        TextField("例: 「軽く見ておきます」はTODOにしない", text: $extractionRuleDraft)
-                            .textFieldStyle(.roundedBorder)
-                            .onSubmit(addExtractionRule)
-                        Button(action: addExtractionRule) { Image(systemName: "plus.circle.fill") }
-                            .buttonStyle(.plain).foregroundStyle(KoeTheme.accent)
-                            .disabled(extractionRuleDraft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-                    }
-                }
-            }
         }
         .toggleStyle(.switch)
         .task { env.refreshLifeLogAudioSize() }
     }
 
-    private func promptEditor(_ title: String, text: Binding<String>) -> some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Text(title).font(.system(size: 11, weight: .medium)).foregroundStyle(.secondary)
-            TextEditor(text: text)
-                .font(.system(size: 11.5, design: .monospaced))
-                .frame(height: 92)
-                .scrollContentBackground(.hidden)
-                .padding(7)
-                .sunkenSurface()
-        }
-    }
-
-    private func addExtractionRule() {
-        let value = extractionRuleDraft.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !value.isEmpty else { return }
-        extractionRuleDraft = ""
-        Task { await env.lifeLog.addExtractionRule(value) }
-    }
 }
