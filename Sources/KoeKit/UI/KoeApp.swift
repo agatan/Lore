@@ -52,7 +52,7 @@ public struct KoeApp: App {
                 .tint(env.settings.accentPalette.color)
                 .accentColor(env.settings.accentPalette.color)
         }
-        .defaultSize(width: 680, height: 640)
+        .defaultSize(width: 680, height: 520)
     }
 }
 

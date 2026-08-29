@@ -26,9 +26,12 @@ struct LifeLogTodoManagerWindow: View {
                 VStack(alignment: .leading, spacing: 3) {
                     Text("すべてのTODO")
                         .font(.system(size: 19, weight: .semibold, design: .rounded))
-                    Text("完了した項目は、いつでも未実施へ戻せます")
-                        .font(.system(size: 11.5))
-                        .foregroundStyle(.secondary)
+                        .accessibilityIdentifier("todo-manager.root")
+                    if !confirmedTodos.isEmpty {
+                        Text("完了した項目は、いつでも未実施へ戻せます")
+                            .font(.system(size: 11.5))
+                            .foregroundStyle(.secondary)
+                    }
                 }
                 Spacer()
                 Picker("表示", selection: $filter) {
@@ -36,17 +39,15 @@ struct LifeLogTodoManagerWindow: View {
                 }
                 .labelsHidden()
                 .pickerStyle(.segmented)
-                .frame(width: 230)
+                .fixedSize()
+                .accessibilityIdentifier("todo-manager.filter")
             }
             .padding(20)
 
             Divider().opacity(0.45)
 
             if filteredTodos.isEmpty {
-                ContentUnavailableView(
-                    filter == .completed ? "完了したTODOはありません" : "TODOはありません",
-                    systemImage: filter == .completed ? "checkmark.circle" : "circle.dashed"
-                )
+                emptyState
             } else {
                 List(filteredTodos) { todo in
                     todoRow(todo)
@@ -57,7 +58,8 @@ struct LifeLogTodoManagerWindow: View {
                 .scrollContentBackground(.hidden)
             }
         }
-        .frame(minWidth: 560, minHeight: 460)
+        .frame(minWidth: 560, minHeight: 420)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background {
             LinearGradient(
                 colors: [KoeTheme.accent.opacity(0.055), .clear],
@@ -68,12 +70,29 @@ struct LifeLogTodoManagerWindow: View {
         .task { await env.lifeLog.reload() }
     }
 
+    private var emptyState: some View {
+        VStack(spacing: 10) {
+            Image(systemName: filter == .completed ? "checkmark.circle" : "circle.dashed")
+                .font(.system(size: 28, weight: .light))
+                .foregroundStyle(.secondary.opacity(0.45))
+            Text(filter == .completed ? "完了したTODOはありません" : "TODOはありません")
+                .font(.system(size: 14, weight: .medium, design: .rounded))
+                .foregroundStyle(.secondary)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .accessibilityElement(children: .combine)
+        .accessibilityIdentifier("todo-manager.empty")
+    }
+
+    private var confirmedTodos: [LifeLogTodo] {
+        env.lifeLog.todos.filter { $0.status != .draft }
+    }
+
     private var filteredTodos: [LifeLogTodo] {
-        let confirmed = env.lifeLog.todos.filter { $0.status != .draft }
         switch filter {
-        case .open: return confirmed.filter { $0.status == .open }
-        case .completed: return confirmed.filter { $0.status == .completed }
-        case .all: return confirmed
+        case .open: return confirmedTodos.filter { $0.status == .open }
+        case .completed: return confirmedTodos.filter { $0.status == .completed }
+        case .all: return confirmedTodos
         }
     }
 
