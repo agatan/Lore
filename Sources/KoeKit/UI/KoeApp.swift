@@ -119,7 +119,7 @@ private struct MenuBarRoot: View {
         await env.boot()
 
         // 起動直後はKoeのメイン画面を開く。
-        if env.settings.openHistoryAtLaunch {
+        if env.settings.openHistoryAtLaunch || AppEnvironment.usesScreenshotDemoData {
             env.mainSection = .lifeLog
             openWindow(id: KoeWindow.main)
         }

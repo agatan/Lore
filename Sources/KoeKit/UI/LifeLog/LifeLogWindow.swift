@@ -32,7 +32,9 @@ public struct LifeLogWindow: View {
         .task {
             await env.lifeLog.reload()
             await env.lifeLog.loadActivity(containing: env.lifeLog.selectedDate)
-            await env.lifeLog.refreshCalendar(selectedCalendars: Set(env.settings.lifeLogCalendarTitles))
+            if !AppEnvironment.usesScreenshotDemoData {
+                await env.lifeLog.refreshCalendar(selectedCalendars: Set(env.settings.lifeLogCalendarTitles))
+            }
         }
         .sheet(isPresented: $showsExportSheet) {
             LifeLogExportSheet(
