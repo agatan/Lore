@@ -51,6 +51,7 @@ public final class AppEnvironment {
     public var presentsLifeLogAudioConsent = false
     public private(set) var dataOperationError: String?
     public private(set) var lifeLogAudioBytes: Int64 = 0
+    public private(set) var appDataBytes: Int64 = 0
     @ObservationIgnored public var onToggleLifeLogMiniWindow: (() -> Void)?
     @ObservationIgnored public var onShowMainWindow: (() -> Void)?
 
@@ -70,6 +71,8 @@ public final class AppEnvironment {
     public private(set) var measuredLatencies = MeasuredLatencies()
     /// クラウドAIのAPI応答から記録した日別トークン利用量。
     public private(set) var dailyLlmUsage: [DailyLlmUsage] = []
+    public private(set) var dailyDictationDuration: [DailyRecordingDuration] = []
+    public private(set) var dailyLifeLogDuration: [DailyRecordingDuration] = []
 
     /// このプロセスが生きている長さ。起動し直すべきかの判断に使う。
     private let launchedAt = ContinuousClock.now
@@ -186,10 +189,10 @@ public final class AppEnvironment {
             await reloadSharedRules()
             await reloadVocabulary()
             await reloadHistory()
-            await reloadLlmUsage()
+            await reloadUsageStatistics()
             await purgeExpiredHistory()
             await purgeExpiredLifeLogAudio()
-            refreshLifeLogAudioSize()
+            refreshStorageSizes()
             lastAnalysisAt = try? await database.meta.date(forKey: Self.lastAnalysisRunKey)
         } catch {
             bootError = error.localizedDescription
@@ -219,6 +222,34 @@ public final class AppEnvironment {
         } catch {
             dataOperationError = error.localizedDescription
         }
+    }
+
+    public func reloadUsageStatistics() async {
+        await reloadLlmUsage()
+        guard let database else {
+            dailyDictationDuration = []
+            dailyLifeLogDuration = []
+            refreshStorageSizes()
+            return
+        }
+        let calendar = Calendar.current
+        let startOfToday = calendar.startOfDay(for: Date())
+        let since = calendar.date(byAdding: .day, value: -6, to: startOfToday) ?? startOfToday
+        do {
+            async let dictation = database.history.dailyRecordingDuration(since: since, calendar: calendar)
+            async let lifeLog = database.lifeLog.dailyRecordingDuration(since: since, calendar: calendar)
+            (dailyDictationDuration, dailyLifeLogDuration) = try await (dictation, lifeLog)
+#if DEBUG
+            if Self.usesScreenshotDemoData {
+                let demo = ScreenshotDemoData.recordingDurations(calendar: calendar)
+                dailyDictationDuration = demo.dictation
+                dailyLifeLogDuration = demo.lifeLog
+            }
+#endif
+        } catch {
+            dataOperationError = error.localizedDescription
+        }
+        refreshStorageSizes()
     }
 
     public func llmUsage(for purpose: LlmPurpose) -> [DailyLlmUsage] {
@@ -265,6 +296,7 @@ public final class AppEnvironment {
         let arguments = ProcessInfo.processInfo.arguments
         if arguments.contains("--koe-ui-test-settings-dictation") { return .models }
         if arguments.contains("--koe-ui-test-settings-life-log") { return .lifeLogAI }
+        if arguments.contains("--koe-ui-test-settings-usage") { return .usage }
         if arguments.contains("--koe-ui-test-settings-modes") { return .modes }
 #endif
         return nil
@@ -715,15 +747,29 @@ public final class AppEnvironment {
         }
     }
 
+    public func refreshStorageSizes() {
+#if DEBUG
+        if Self.usesScreenshotDemoData {
+            lifeLogAudioBytes = 184_000_000
+            appDataBytes = 197_000_000
+            return
+        }
+#endif
+        lifeLogAudioBytes = Self.directorySize(at: Self.lifeLogAudioRoot)
+        appDataBytes = Self.directorySize(at: Self.appDataRoot)
+    }
+
     public func refreshLifeLogAudioSize() {
-        let root = Self.lifeLogAudioRoot
+        refreshStorageSizes()
+    }
+
+    private static func directorySize(at root: URL) -> Int64 {
         guard let files = FileManager.default.enumerator(
             at: root,
             includingPropertiesForKeys: [.isRegularFileKey, .fileSizeKey],
             options: [.skipsHiddenFiles]
         ) else {
-            lifeLogAudioBytes = 0
-            return
+            return 0
         }
         var total: Int64 = 0
         for case let url as URL in files {
@@ -733,10 +779,15 @@ public final class AppEnvironment {
                     total += Int64(values.fileSize ?? 0)
                 }
             } catch {
-                KoeLog.persistence.error("音声ファイル容量を確認できません: \(error.localizedDescription, privacy: .public)")
+                KoeLog.persistence.error("保存容量を確認できません: \(error.localizedDescription, privacy: .public)")
             }
         }
-        lifeLogAudioBytes = total
+        return total
+    }
+
+    private static var appDataRoot: URL {
+        FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+            .appendingPathComponent("Koe", isDirectory: true)
     }
 
     private static var lifeLogAudioRoot: URL {

@@ -30,7 +30,7 @@ struct CopyTodayLifeLogIntent: AppIntent {
     static let description = IntentDescription("予定・発話・メモを、LLMが読みやすい時系列テキストとしてクリップボードへコピーします。")
     static let supportedModes: IntentModes = .background
 
-    @Parameter(title: "日付", description: "省略すると今日", kind: .date)
+    @Parameter(title: "対象日（未指定なら今日）", description: "空欄のまま実行すると、その時点の今日を書き出します。", kind: .date)
     var date: Date?
     @Parameter(title: "予定", default: true) var includesCalendarEvents: Bool
     @Parameter(title: "発話", default: true) var includesUtterances: Bool
@@ -60,17 +60,28 @@ struct ExportTodayLifeLogIntent: AppIntent {
     static let description = IntentDescription("日付を省略すると今日のライフログを書き出します。出力先フォルダを指定すると、そのフォルダへ直接保存します。")
     static let supportedModes: IntentModes = .background
 
-    @Parameter(title: "日付", description: "省略すると今日", kind: .date)
+    @Parameter(title: "対象日（未指定なら今日）", description: "空欄のまま実行すると、その時点の今日を書き出します。", kind: .date)
     var date: Date?
-    @Parameter(title: "出力先フォルダ", description: "省略するとファイルを次のショートカット処理へ渡します。", supportedContentTypes: [.folder])
+    @Parameter(title: "出力先フォルダ（未指定なら次へ渡す）", description: "指定するとKoeが直接保存します。空欄なら、作成したファイルを次のアクションへ渡します。", supportedContentTypes: [.folder])
     var outputFolder: IntentFile?
-    @Parameter(title: "ファイル名", description: "{{date}} は対象日の yyyyMMdd に置き換わります。", default: "lifelog-{{date}}.md")
+    @Parameter(title: "ファイル名（{{date}}＝yyyyMMdd）", description: "例: lifelog-{{date}}.md は lifelog-20260830.md になります。", default: "lifelog-{{date}}.md")
     var filenameTemplate: String
     @Parameter(title: "予定", default: true) var includesCalendarEvents: Bool
     @Parameter(title: "発話", default: true) var includesUtterances: Bool
     @Parameter(title: "メモ", default: true) var includesMemos: Bool
     @Parameter(title: "要約", default: true) var includesSummary: Bool
     @Parameter(title: "この日に作成・完了したTODO", default: true) var includesTodosForDay: Bool
+
+    static var parameterSummary: some ParameterSummary {
+        Summary("ライフログを \(\.$outputFolder) へ \(\.$filenameTemplate) で保存") {
+            \.$date
+            \.$includesCalendarEvents
+            \.$includesUtterances
+            \.$includesMemos
+            \.$includesSummary
+            \.$includesTodosForDay
+        }
+    }
 
     func perform() async throws -> some IntentResult & ReturnsValue<IntentFile> {
         let targetDate = date ?? Date()

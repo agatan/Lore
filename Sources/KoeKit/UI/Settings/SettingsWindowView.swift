@@ -2,6 +2,7 @@ import SwiftUI
 
 public enum SettingsSection: String, CaseIterable, Identifiable, Hashable, Sendable {
     case common
+    case usage
     case models
     case privacy
     case automation
@@ -17,6 +18,7 @@ public enum SettingsSection: String, CaseIterable, Identifiable, Hashable, Senda
     var title: String {
         switch self {
         case .common: "一般"
+        case .usage: "利用状況"
         case .models: "AI整形"
         case .privacy: "プライバシー"
         case .automation: "連携"
@@ -32,6 +34,7 @@ public enum SettingsSection: String, CaseIterable, Identifiable, Hashable, Senda
     var symbol: String {
         switch self {
         case .common: "gearshape"
+        case .usage: "chart.bar.xaxis"
         case .models: "cpu"
         case .privacy: "hand.raised"
         case .automation: "link"
@@ -53,6 +56,7 @@ struct SettingsWindowView: View {
             List(selection: Binding(get: { env.settingsSection }, set: { env.settingsSection = $0 ?? .common })) {
                 Section("共通") {
                     row(.common)
+                    row(.usage)
                     row(.vocabulary)
                     row(.privacy)
                     row(.automation)
@@ -69,11 +73,11 @@ struct SettingsWindowView: View {
                 }
             }
             .listStyle(.sidebar)
-            .navigationSplitViewColumnWidth(min: 170, ideal: 190, max: 230)
+            .navigationSplitViewColumnWidth(min: 184, ideal: 204, max: 240)
         } detail: {
             detail.navigationTitle(env.settingsSection.title)
         }
-        .frame(minWidth: 900, minHeight: 640)
+        .frame(minWidth: 960, minHeight: 680)
     }
 
     private func row(_ section: SettingsSection) -> some View {
@@ -94,7 +98,7 @@ struct SettingsWindowView: View {
             ScrollView {
                 settingsPane
                     .padding(22)
-                    .frame(maxWidth: 700, alignment: .leading)
+                    .frame(maxWidth: 740, alignment: .leading)
             }
         }
     }
@@ -103,6 +107,7 @@ struct SettingsWindowView: View {
     private var settingsPane: some View {
         switch env.settingsSection {
         case .common: GeneralSettingsView(env: env)
+        case .usage: UsageSettingsView(env: env)
         case .models: ModelsSettingsView(env: env, purpose: .dictation)
         case .privacy: PrivacySettingsView(env: env)
         case .automation: AutomationSettingsView()

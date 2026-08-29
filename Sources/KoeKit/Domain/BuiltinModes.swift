@@ -10,10 +10,6 @@ public enum BuiltinModes {
         [defaultMode, chat, mailAndDocs, memo, code]
     }
 
-    public static var initialExampleIDs: Set<String> {
-        Set(all.lazy.filter { $0.id != defaultModeID }.map(\.id))
-    }
-
     public static func initialMode(id: String) -> Mode? {
         all.first { $0.id == id }
     }

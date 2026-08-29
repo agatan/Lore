@@ -3,6 +3,21 @@ import Foundation
 
 /// LP・マニュアル用の実画面撮影だけに使う、利用者データと分離したインメモリデータ。
 enum ScreenshotDemoData {
+    static func recordingDurations(
+        now: Date = Date(),
+        calendar: Calendar = .current
+    ) -> (dictation: [DailyRecordingDuration], lifeLog: [DailyRecordingDuration]) {
+        let day = calendar.startOfDay(for: now)
+        func sample(_ offset: Int, _ minutes: Double) -> DailyRecordingDuration {
+            let date = calendar.date(byAdding: .day, value: offset, to: day) ?? day
+            return .init(day: LifeLogDateKey.string(for: date, calendar: calendar), seconds: minutes * 60)
+        }
+        return (
+            [sample(0, 18), sample(-1, 24), sample(-2, 11), sample(-3, 31), sample(-4, 16)],
+            [sample(0, 326), sample(-1, 402), sample(-2, 288), sample(-3, 360), sample(-4, 245)]
+        )
+    }
+
     static func seed(database: KoeDatabase, now: Date = Date(), calendar: Calendar = .current) async throws {
         let day = calendar.startOfDay(for: now)
         func time(_ hour: Int, _ minute: Int = 0, dayOffset: Int = 0) -> Date {

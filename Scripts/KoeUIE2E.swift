@@ -163,14 +163,13 @@ private enum KoeUIE2E {
 
     @MainActor
     private static func runAISettingsCUJ(appURL: URL) async throws {
-        print("CUJ 3: 用途別のAI利用量と初期モードを確認する")
-        var app = try await launch(appURL, arguments: ["--koe-screenshot-demo", "--koe-ui-test-settings-dictation"])
+        print("CUJ 3: 利用状況とモードを確認する")
+        var app = try await launch(appURL, arguments: ["--koe-screenshot-demo", "--koe-ui-test-settings-usage"])
         var ui = AXDriver(pid: app.processIdentifier)
-        _ = try ui.waitFor(identifier: "usage.dictation")
-
-        app = try await launch(appURL, arguments: ["--koe-screenshot-demo", "--koe-ui-test-settings-life-log"])
-        ui = AXDriver(pid: app.processIdentifier)
-        _ = try ui.waitFor(identifier: "usage.lifeLog")
+        _ = try ui.waitFor(identifier: "usage.overview")
+        _ = try ui.waitFor(identifier: "usage.recording")
+        _ = try ui.waitFor(identifier: "usage.api")
+        _ = try ui.waitFor(identifier: "usage.storage")
 
         app = try await launch(appURL, arguments: ["--koe-screenshot-demo", "--koe-ui-test-settings-modes"])
         ui = AXDriver(pid: app.processIdentifier)

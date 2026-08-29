@@ -25,8 +25,12 @@ struct GeneralSettingsView: View {
                             }
                             .frame(width: 62)
                             .padding(.vertical, 8)
-                            .background(settings.accentPalette == palette ? palette.color.opacity(0.10) : .clear,
-                                        in: RoundedRectangle(cornerRadius: 12))
+                            .glassEffect(
+                                settings.accentPalette == palette
+                                    ? .regular.tint(palette.color.opacity(0.22)).interactive()
+                                    : .identity,
+                                in: RoundedRectangle(cornerRadius: 12, style: .continuous)
+                            )
                         }
                         .buttonStyle(.plain)
                     }

@@ -43,6 +43,31 @@ public struct LifeLogStore: Sendable {
         }
     }
 
+    /// ライフログの録音時間。発話時間ではなく、保存された音声chunkの長さを使う。
+    public func dailyRecordingDuration(
+        since: Date,
+        calendar: Calendar = .current
+    ) async throws -> [DailyRecordingDuration] {
+        let rows = try queue.read { db in
+            try Row.fetchAll(
+                db,
+                sql: """
+                    SELECT capture_started_at, capture_ended_at FROM life_log_audio_chunks
+                    WHERE capture_started_at >= ?
+                    ORDER BY capture_started_at
+                    """,
+                arguments: [date(since)]
+            )
+        }
+        let intervals = try rows.map { row in
+            (
+                start: try parse(row["capture_started_at"]),
+                end: try parse(row["capture_ended_at"])
+            )
+        }
+        return DailyRecordingDuration.aggregate(intervals: intervals, calendar: calendar)
+    }
+
     /// 発話・予定・メモ・TODO・要約を同じ境界で削除する。音声ファイルは呼び出し側が先に消す。
     public func deleteAll() async throws {
         try await queue.write { db in

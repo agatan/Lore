@@ -151,6 +151,30 @@ public struct HistoryStore: Sendable {
         }
     }
 
+    /// 音声入力でマイクを使った時間を、ローカル日付ごとに集計する。
+    public func dailyRecordingDuration(
+        since: Date,
+        calendar: Calendar = .current
+    ) async throws -> [DailyRecordingDuration] {
+        let rows = try queue.read { db in
+            try Row.fetchAll(
+                db,
+                sql: """
+                    SELECT started_at, audio_duration_ms FROM sessions
+                    WHERE started_at >= ? AND audio_duration_ms > 0
+                    ORDER BY started_at
+                    """,
+                arguments: [PersistenceCoding.encode(date: since)]
+            )
+        }
+        let intervals = try rows.map { row in
+            let startedAt = try PersistenceCoding.decodeDate(row["started_at"])
+            let durationMs: Int = row["audio_duration_ms"]
+            return (start: startedAt, end: startedAt.addingTimeInterval(Double(durationMs) / 1_000))
+        }
+        return DailyRecordingDuration.aggregate(intervals: intervals, calendar: calendar)
+    }
+
     public func delete(id: String) async throws {
         try await queue.write { db in
             try db.execute(sql: "DELETE FROM sessions WHERE id = ?", arguments: [id])

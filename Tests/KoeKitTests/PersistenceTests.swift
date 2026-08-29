@@ -151,6 +151,42 @@ import Testing
     #expect(lifeLog.requestCount == 1)
 }
 
+@Test func recordingDurationAggregatesByDayAndFeature() async throws {
+    let database = try await KoeDatabase.inMemory()
+    var calendar = Calendar(identifier: .gregorian)
+    calendar.timeZone = TimeZone(secondsFromGMT: 0)!
+    let first = try #require(calendar.date(from: DateComponents(year: 2026, month: 8, day: 29)))
+    let second = first.addingTimeInterval(86_400)
+
+    try await database.history.save(makeSession(
+        id: "dictation-1", startedAt: first, status: .completed, raw: "一日目", audioDurationMs: 12_000
+    ))
+    try await database.history.save(makeSession(
+        id: "dictation-2", startedAt: second, status: .completed, raw: "二日目", audioDurationMs: 8_000
+    ))
+    try await database.lifeLog.save(audioChunk: .init(
+        id: "life-log-1", captureStartedAt: first, captureEndedAt: first.addingTimeInterval(30),
+        localPath: "/tmp/usage-life-log-1.m4a"
+    ))
+    try await database.lifeLog.save(audioChunk: .init(
+        id: "life-log-2", captureStartedAt: second, captureEndedAt: second.addingTimeInterval(45),
+        localPath: "/tmp/usage-life-log-2.m4a"
+    ))
+    let beforeMidnight = second.addingTimeInterval(86_390)
+    try await database.lifeLog.save(audioChunk: .init(
+        id: "life-log-midnight", captureStartedAt: beforeMidnight,
+        captureEndedAt: beforeMidnight.addingTimeInterval(20), localPath: "/tmp/usage-life-log-midnight.m4a"
+    ))
+
+    let dictation = try await database.history.dailyRecordingDuration(since: first, calendar: calendar)
+    let lifeLog = try await database.lifeLog.dailyRecordingDuration(since: first, calendar: calendar)
+
+    #expect(dictation.map(\.seconds) == [8, 12])
+    #expect(lifeLog.map(\.seconds) == [10, 55, 30])
+    #expect(dictation.map(\.day) == ["2026-08-30", "2026-08-29"])
+    #expect(lifeLog.map(\.day) == ["2026-08-31", "2026-08-30", "2026-08-29"])
+}
+
 @Test func suggestionsDeduplicateKnownSurfaces() async throws {
     let database = try await KoeDatabase.inMemory()
     try await database.vocabulary.save(VocabularyEntry(id: "known", surface: "Koe"))

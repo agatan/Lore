@@ -18,7 +18,7 @@ struct ModesSettingsView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
-            Text("アプリに合わせて自動選択します。Defaultだけが標準で、ほかは編集・削除できる初期例です。")
+            Text("アプリごとに仕上げ方を切り替えます。Defaultは、どのアプリにも当てはまらないときに使われます。")
                 .font(.system(size: 11.5))
                 .foregroundStyle(.secondary)
 
@@ -32,7 +32,7 @@ struct ModesSettingsView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .task { selectIfNeeded() }
         .onChange(of: env.modes.count) { _, _ in selectIfNeeded() }
-        // 保存や「初期内容に戻す」で env 側が更新されたら、編集中の写しも合わせる。
+        // 保存やDefaultのリセットで env 側が更新されたら、編集中の写しも合わせる。
         .onChange(of: env.sharedRules) { _, newValue in
             if !sharedHasChanges || sharedDraft.isEmpty { sharedDraft = newValue }
         }
@@ -71,8 +71,6 @@ struct ModesSettingsView: View {
                         Spacer()
                         if mode.id == BuiltinModes.defaultModeID {
                             Pill(text: "標準", tint: .secondary)
-                        } else if BuiltinModes.initialExampleIDs.contains(mode.id) {
-                            Pill(text: "初期例", tint: .secondary)
                         }
                     }
                     .tag(Selection.mode(mode.id))
@@ -113,7 +111,7 @@ struct ModesSettingsView: View {
                 } label: {
                     Image(systemName: "minus")
                 }
-                .disabled(currentMode == nil)
+                .disabled(currentMode == nil || currentMode?.id == BuiltinModes.defaultModeID)
                 .help("削除")
 
                 Spacer()
@@ -235,8 +233,8 @@ struct ModesSettingsView: View {
                 .frame(maxHeight: .infinity)
 
                 HStack {
-                    if BuiltinModes.initialMode(id: draft.id) != nil {
-                        Button(draft.id == BuiltinModes.defaultModeID ? "標準の内容に戻す" : "初期内容に戻す") {
+                    if draft.id == BuiltinModes.defaultModeID {
+                        Button("標準の内容に戻す") {
                             Task {
                                 await env.resetMode(id: draft.id)
                                 loadDraft()
