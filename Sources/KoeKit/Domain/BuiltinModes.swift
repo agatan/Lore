@@ -1,12 +1,21 @@
 import Foundation
 
-/// 初期設定として同梱するモード群。ID を固定しているため再シードは冪等。
-/// ユーザーが編集・削除しても、削除済みモードが復活しないよう ModeStore 側で追跡する。
+/// Default と、初回に編集可能な例として入れるモード群。
+/// Default だけがアプリの標準で、ほかはユーザー作成モードと同じ扱いにする。
 public enum BuiltinModes {
     public static let defaultModeID = "builtin.default"
+    public static let retiredModeIDs: Set<String> = ["builtin.ai-agent"]
 
     public static var all: [Mode] {
-        [defaultMode, aiAgent, chat, mailAndDocs, memo, code]
+        [defaultMode, chat, mailAndDocs, memo, code]
+    }
+
+    public static var initialExampleIDs: Set<String> {
+        Set(all.lazy.filter { $0.id != defaultModeID }.map(\.id))
+    }
+
+    public static func initialMode(id: String) -> Mode? {
+        all.first { $0.id == id }
     }
 
     public static let defaultMode = Mode(
@@ -23,34 +32,6 @@ public enum BuiltinModes {
         - 一言だけの発話は無理に構造化せず、1 文のまま返す
         """,
         sortOrder: 0,
-        isBuiltin: true
-    )
-
-    public static let aiAgent = Mode(
-        id: "builtin.ai-agent",
-        name: "AI Agent",
-        bundleIDs: [
-            "com.apple.Terminal",
-            "com.googlecode.iterm2",
-            "com.mitchellh.ghostty",
-            "dev.warp.Warp-Stable",
-            "net.kovidgoyal.kitty",
-            "com.github.wez.wezterm",
-            "com.microsoft.VSCode",
-            "com.todesktop.230313mzl4w4u92",
-            "com.apple.dt.Xcode",
-            "com.jetbrains.*",
-        ],
-        prompt: """
-        AI コーディングエージェントへの指示文として整形してください。
-
-        - 依頼・命令として意図が一読で伝わる文にする
-        - 発話が明らかに複数の依頼を並べているときだけ箇条書き(- )にする。1 つの依頼を工程に分解して項目を増やしてはいけない
-        - 技術用語・ライブラリ名・コマンド名・ファイルパスは正確な表記にする(例: リアクト → React、ギットハブ → GitHub、タイプスクリプト → TypeScript)
-        - 敬語は最小限。「〜してください」程度に留め、冗長な前置きは付けない
-        - 曖昧な指示語(これ・それ)は発話から推測できる範囲でのみ具体化する。推測できないなら言い換えない
-        """,
-        sortOrder: 10,
         isBuiltin: true
     )
 
@@ -73,7 +54,7 @@ public enum BuiltinModes {
         - 絵文字や装飾は発話に含まれていない限り追加しない
         """,
         sortOrder: 20,
-        isBuiltin: true
+        isBuiltin: false
     )
 
     public static let mailAndDocs = Mode(
@@ -97,7 +78,7 @@ public enum BuiltinModes {
         - 挨拶文・署名・宛名は発話に含まれていない限り追加しない
         """,
         sortOrder: 30,
-        isBuiltin: true
+        isBuiltin: false
     )
 
     public static let memo = Mode(
@@ -119,7 +100,7 @@ public enum BuiltinModes {
         - 思考の順序を入れ替えない
         """,
         sortOrder: 40,
-        isBuiltin: true
+        isBuiltin: false
     )
 
     public static let code = Mode(
@@ -139,6 +120,6 @@ public enum BuiltinModes {
         - 技術用語・識別子は正確な表記にする
         """,
         sortOrder: 50,
-        isBuiltin: true
+        isBuiltin: false
     )
 }

@@ -23,6 +23,10 @@ import Testing
     try await database.lifeLog.save(utterance: LifeLogUtterance(
         startedAt: start, endedAt: start.addingTimeInterval(10), text: "削除発話", audioChunkID: chunk.id
     ))
+    try await database.llmUsage.record(.init(
+        id: "delete", occurredAt: start, purpose: .dictation, provider: .openAI, model: "gpt",
+        usage: .init(inputTokens: 10, outputTokens: 2, totalTokens: 12)
+    ))
 
     try await database.deleteAllUserData()
 
@@ -31,6 +35,7 @@ import Testing
     #expect(try await database.modes.all().isEmpty)
     #expect(try await database.lifeLog.day(start).utterances.isEmpty)
     #expect(try await database.lifeLog.pendingAudioChunks().isEmpty)
+    #expect(try await database.llmUsage.daily(since: .distantPast).isEmpty)
 }
 
 @Test func sessionUpsertPreservesOneAuditRow() async throws {
@@ -88,6 +93,8 @@ import Testing
 @Test func builtinSeedingRespectsEditsAndDeletion() async throws {
     let database = try await KoeDatabase.inMemory()
     let originalCount = try await database.modes.all().count
+    #expect(try await database.modes.mode(id: BuiltinModes.defaultModeID)?.isBuiltin == true)
+    #expect(try await database.modes.mode(id: BuiltinModes.chat.id)?.isBuiltin == false)
 
     try await database.modes.seedBuiltinsIfNeeded()
     #expect(try await database.modes.all().count == originalCount)
@@ -98,11 +105,50 @@ import Testing
     try await database.modes.seedBuiltinsIfNeeded()
     #expect(try await database.modes.mode(id: edited.id)?.prompt == edited.prompt)
 
-    let deletedID = BuiltinModes.aiAgent.id
+    let deletedID = BuiltinModes.chat.id
     try await database.modes.delete(id: deletedID)
     try await database.modes.seedBuiltinsIfNeeded()
     #expect(try await database.modes.mode(id: deletedID) == nil)
     #expect(try await database.modes.all().count == originalCount - 1)
+
+    await #expect(throws: ModeStoreError.self) {
+        try await database.modes.delete(id: BuiltinModes.defaultModeID)
+    }
+
+    try await database.modes.save(Mode(id: "builtin.ai-agent", name: "AI Agent", prompt: "legacy"))
+    try await database.modes.seedBuiltinsIfNeeded()
+    #expect(try await database.modes.mode(id: "builtin.ai-agent") == nil)
+}
+
+@Test func llmUsageAggregatesByDayAndPurpose() async throws {
+    let database = try await KoeDatabase.inMemory()
+    var calendar = Calendar(identifier: .gregorian)
+    calendar.timeZone = TimeZone(secondsFromGMT: 0)!
+    let first = Date(timeIntervalSince1970: 1_787_875_200) // 2026-08-29 00:00 UTC
+    let second = first.addingTimeInterval(86_400)
+
+    try await database.llmUsage.record(.init(
+        id: "usage-1", occurredAt: first, purpose: .dictation, provider: .openAI, model: "gpt",
+        usage: .init(inputTokens: 100, outputTokens: 20, totalTokens: 120)
+    ), calendar: calendar)
+    try await database.llmUsage.record(.init(
+        id: "usage-2", occurredAt: first.addingTimeInterval(60), purpose: .dictation, provider: .groq, model: "model",
+        usage: .init(inputTokens: 50, outputTokens: 10, totalTokens: 60)
+    ), calendar: calendar)
+    try await database.llmUsage.record(.init(
+        id: "usage-3", occurredAt: second, purpose: .lifeLog, provider: .anthropic, model: "claude",
+        usage: .init(inputTokens: 500, outputTokens: 80, totalTokens: 580)
+    ), calendar: calendar)
+
+    let daily = try await database.llmUsage.daily(since: first, calendar: calendar)
+    let dictation = try #require(daily.first { $0.purpose == .dictation })
+    #expect(dictation.inputTokens == 150)
+    #expect(dictation.outputTokens == 30)
+    #expect(dictation.totalTokens == 180)
+    #expect(dictation.requestCount == 2)
+    let lifeLog = try #require(daily.first { $0.purpose == .lifeLog })
+    #expect(lifeLog.totalTokens == 580)
+    #expect(lifeLog.requestCount == 1)
 }
 
 @Test func suggestionsDeduplicateKnownSurfaces() async throws {
@@ -311,11 +357,11 @@ struct SharedRulesStoreTests {
     func emptySharedRulesStillBuildsPrompt() {
         let prompt = FormattingPolicy.systemPrompt(
             sharedRules: "",
-            mode: BuiltinModes.aiAgent,
+            mode: BuiltinModes.chat,
             vocabulary: [VocabularyEntry(surface: "レセコン")]
         )
         #expect(prompt.contains("レセコン"))
-        #expect(prompt.contains("AI コーディングエージェントへの指示文"))
+        #expect(prompt.contains("チャットに投稿するメッセージとして整形"))
         #expect(!prompt.hasPrefix("\n"))
     }
 }
@@ -386,19 +432,19 @@ struct VocabularyPromptToneTests {
     /// モードの指示は見出しを被せずそのまま連ねる。
     @Test("モード指示に見出しを付けない")
     func modePromptIsConcatenatedPlainly() {
-        let prompt = FormattingPolicy.systemPrompt(mode: BuiltinModes.aiAgent, vocabulary: [])
+        let prompt = FormattingPolicy.systemPrompt(mode: BuiltinModes.chat, vocabulary: [])
         #expect(!prompt.contains("固有の指示"))
-        #expect(prompt.contains("AI コーディングエージェントへの指示文"))
+        #expect(prompt.contains("チャットに投稿するメッセージとして整形"))
     }
 
     /// 語彙表は入力にいちばん近い位置(最後)に置く。
     @Test("語彙表はモード指示より後ろに来る")
     func vocabularyComesAfterModePrompt() {
         let prompt = FormattingPolicy.systemPrompt(
-            mode: BuiltinModes.aiAgent,
+            mode: BuiltinModes.chat,
             vocabulary: [VocabularyEntry(surface: "レセコン")]
         )
-        let mode = try! #require(prompt.range(of: "AI コーディングエージェントへの指示文"))
+        let mode = try! #require(prompt.range(of: "チャットに投稿するメッセージとして整形"))
         let table = try! #require(prompt.range(of: "# 語彙表"))
         #expect(mode.lowerBound < table.lowerBound)
     }

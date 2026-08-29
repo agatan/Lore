@@ -70,6 +70,28 @@ enum ScreenshotDemoData {
             try await database.lifeLog.save(audioChunk: chunk)
             try await database.lifeLog.save(utterance: LifeLogUtterance(id: "demo-past-utterance-\(index)", startedAt: startedAt, endedAt: startedAt.addingTimeInterval(30), text: "日々の記録", audioChunkID: chunk.id))
         }
+
+        let usageSamples: [(Int, LlmPurpose, Int, Int)] = [
+            (0, .dictation, 1_840, 420), (0, .lifeLog, 4_920, 780),
+            (-1, .dictation, 1_120, 260), (-1, .lifeLog, 3_860, 620),
+            (-2, .dictation, 2_240, 510), (-2, .lifeLog, 5_430, 910),
+            (-4, .dictation, 760, 180), (-4, .lifeLog, 2_940, 480),
+        ]
+        for (index, sample) in usageSamples.enumerated() {
+            let occurredAt = time(18, index, dayOffset: sample.0)
+            try await database.llmUsage.record(LlmUsageEvent(
+                id: "demo-usage-\(index)",
+                occurredAt: occurredAt,
+                purpose: sample.1,
+                provider: .groq,
+                model: GroqLlm.defaultModel,
+                usage: LlmTokenUsage(
+                    inputTokens: sample.2,
+                    outputTokens: sample.3,
+                    totalTokens: sample.2 + sample.3
+                )
+            ))
+        }
     }
 }
 #endif

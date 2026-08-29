@@ -32,6 +32,10 @@ private struct AXDriver {
         }
     }
 
+    func exists(identifier: String) -> Bool {
+        descendants().contains { attribute(kAXIdentifierAttribute as String, of: $0) == identifier }
+    }
+
     func press(identifier: String) throws {
         let element = try waitFor(identifier: identifier)
         guard AXUIElementPerformAction(element, kAXPressAction as CFString) == .success else {
@@ -103,8 +107,9 @@ private enum KoeUIE2E {
             let appURL = URL(fileURLWithPath: CommandLine.arguments.dropFirst().first ?? "build/Koe.app")
             try await runDailyReviewCUJ(appURL: appURL)
             try await runEmptyTodoCUJ(appURL: appURL)
+            try await runAISettingsCUJ(appURL: appURL)
             terminateKoe()
-            print("✓ UI E2E: 2 CUJs passed")
+            print("✓ UI E2E: 3 CUJs passed")
         } catch {
             fputs("✗ UI E2E: \(error.localizedDescription)\n", stderr)
             terminateKoe()
@@ -154,6 +159,26 @@ private enum KoeUIE2E {
         try ui.press(identifier: "life-log.open-all-todos")
         _ = try ui.waitFor(identifier: "todo-manager.root")
         _ = try ui.waitFor(identifier: "todo-manager.empty")
+    }
+
+    @MainActor
+    private static func runAISettingsCUJ(appURL: URL) async throws {
+        print("CUJ 3: 用途別のAI利用量と初期モードを確認する")
+        var app = try await launch(appURL, arguments: ["--koe-screenshot-demo", "--koe-ui-test-settings-dictation"])
+        var ui = AXDriver(pid: app.processIdentifier)
+        _ = try ui.waitFor(identifier: "usage.dictation")
+
+        app = try await launch(appURL, arguments: ["--koe-screenshot-demo", "--koe-ui-test-settings-life-log"])
+        ui = AXDriver(pid: app.processIdentifier)
+        _ = try ui.waitFor(identifier: "usage.lifeLog")
+
+        app = try await launch(appURL, arguments: ["--koe-screenshot-demo", "--koe-ui-test-settings-modes"])
+        ui = AXDriver(pid: app.processIdentifier)
+        _ = try ui.waitFor(identifier: "mode.row.builtin.default")
+        _ = try ui.waitFor(identifier: "mode.row.builtin.chat")
+        guard !ui.exists(identifier: "mode.row.builtin.ai-agent") else {
+            throw UIE2EError.assertion("廃止したAI Agentモードが残っています")
+        }
     }
 
     @MainActor

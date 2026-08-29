@@ -34,6 +34,7 @@ public final class KoeDatabase: Sendable {
     public var vocabulary: VocabularyStore { VocabularyStore(queue: queue) }
     public var meta: MetaStore { MetaStore(queue: queue) }
     public var lifeLog: LifeLogStore { LifeLogStore(queue: queue) }
+    public var llmUsage: LlmUsageStore { LlmUsageStore(queue: queue) }
 
     /// 設定(UserDefaults)と秘密(Keychain)以外の利用者データを一つのDB transactionで消す。
     public func deleteAllUserData() async throws {
@@ -51,6 +52,7 @@ public final class KoeDatabase: Sendable {
             try db.execute(sql: "DELETE FROM vocabulary")
             try db.execute(sql: "DELETE FROM modes")
             try db.execute(sql: "DELETE FROM meta")
+            try db.execute(sql: "DELETE FROM llm_usage_events")
         }
     }
 
@@ -275,6 +277,22 @@ public final class KoeDatabase: Sendable {
             }
             // 過去の完了操作時刻は復元できないため、履歴上の最小限の近似として作成日時を使う。
             try db.execute(sql: "UPDATE life_log_todos SET completed_at=created_at WHERE status='completed'")
+        }
+        migrator.registerMigration("v8-llm-token-usage") { db in
+            try db.execute(sql: """
+                CREATE TABLE llm_usage_events (
+                  id TEXT PRIMARY KEY,
+                  occurred_at TEXT NOT NULL,
+                  day TEXT NOT NULL,
+                  purpose TEXT NOT NULL CHECK (purpose IN ('dictation', 'lifeLog')),
+                  provider TEXT NOT NULL,
+                  model TEXT,
+                  input_tokens INTEGER NOT NULL,
+                  output_tokens INTEGER NOT NULL,
+                  total_tokens INTEGER NOT NULL
+                );
+                CREATE INDEX llm_usage_events_day_purpose ON llm_usage_events(day, purpose);
+                """)
         }
         return migrator
     }

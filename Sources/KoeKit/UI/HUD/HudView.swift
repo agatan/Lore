@@ -218,7 +218,7 @@ private var sampleLevels: [Float] {
         coordinator: previewCoordinator(
             phase: .recording,
             transcript: "えーとこの関数をリファクタして、あーやっぱりテストも一緒に",
-            mode: BuiltinModes.aiAgent,
+            mode: BuiltinModes.defaultMode,
             levels: sampleLevels,
             elapsed: .seconds(7),
             inputDeviceName: "MacBook Pro のマイク"
@@ -232,7 +232,7 @@ private var sampleLevels: [Float] {
         coordinator: previewCoordinator(
             phase: .formatting,
             transcript: "この関数をリファクタして、テストも一緒に書いて",
-            mode: BuiltinModes.aiAgent
+            mode: BuiltinModes.defaultMode
         ),
         onCancel: {}
     )

@@ -18,7 +18,7 @@ struct ModesSettingsView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
-            Text("録音を始めたときに使っていたアプリで、モードが自動で選ばれます。どれにも当てはまらないときは Default になります。")
+            Text("アプリに合わせて自動選択します。Defaultだけが標準で、ほかは編集・削除できる初期例です。")
                 .font(.system(size: 11.5))
                 .foregroundStyle(.secondary)
 
@@ -32,7 +32,7 @@ struct ModesSettingsView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .task { selectIfNeeded() }
         .onChange(of: env.modes.count) { _, _ in selectIfNeeded() }
-        // 保存や「標準に戻す」で env 側が更新されたら、編集中の写しも合わせる。
+        // 保存や「初期内容に戻す」で env 側が更新されたら、編集中の写しも合わせる。
         .onChange(of: env.sharedRules) { _, newValue in
             if !sharedHasChanges || sharedDraft.isEmpty { sharedDraft = newValue }
         }
@@ -69,11 +69,14 @@ struct ModesSettingsView: View {
                                 .foregroundStyle(.secondary)
                         }
                         Spacer()
-                        if mode.isBuiltin {
+                        if mode.id == BuiltinModes.defaultModeID {
                             Pill(text: "標準", tint: .secondary)
+                        } else if BuiltinModes.initialExampleIDs.contains(mode.id) {
+                            Pill(text: "初期例", tint: .secondary)
                         }
                     }
                     .tag(Selection.mode(mode.id))
+                    .accessibilityIdentifier("mode.row.\(mode.id)")
                     .listRowInsets(EdgeInsets(top: 6, leading: 10, bottom: 6, trailing: 10))
                 }
             }
@@ -102,7 +105,7 @@ struct ModesSettingsView: View {
                 } label: {
                     Image(systemName: "plus.square.on.square")
                 }
-                .disabled(currentMode == nil)
+                .disabled(currentMode == nil || currentMode?.id == BuiltinModes.defaultModeID)
                 .help("複製")
 
                 Button {
@@ -130,9 +133,7 @@ struct ModesSettingsView: View {
                     selection = env.modes.first.map { Selection.mode($0.id) } ?? .sharedRules
                 }
             }
-        } message: {
-            Text("標準モードを削除しても、次回起動時に復活することはありません。")
-        }
+        } message: { Text("この操作は取り消せません。") }
     }
 
     @ViewBuilder
@@ -234,8 +235,8 @@ struct ModesSettingsView: View {
                 .frame(maxHeight: .infinity)
 
                 HStack {
-                    if draft.isBuiltin {
-                        Button("標準の内容に戻す") {
+                    if BuiltinModes.initialMode(id: draft.id) != nil {
+                        Button(draft.id == BuiltinModes.defaultModeID ? "標準の内容に戻す" : "初期内容に戻す") {
                             Task {
                                 await env.resetMode(id: draft.id)
                                 loadDraft()

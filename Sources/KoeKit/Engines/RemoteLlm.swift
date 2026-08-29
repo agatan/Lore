@@ -17,6 +17,7 @@ public final class RemoteLlm: LlmEngine {
     private let defaultModel: String
     private let session: URLSession
     private let apiKeySource: @Sendable () throws -> String?
+    private let usageSink = Mutex<LlmUsageSink?>(nil)
 
     public init(
         identifier: EngineIdentifier,
@@ -43,6 +44,10 @@ public final class RemoteLlm: LlmEngine {
         model.withLock { $0 = trimmed.isEmpty ? defaultModel : trimmed }
     }
 
+    public func setUsageSink(_ sink: LlmUsageSink?) {
+        usageSink.withLock { $0 = sink }
+    }
+
     public func availability() async -> EngineAvailability {
         guard requiresApiKey else { return .ready }
         do {
@@ -62,20 +67,36 @@ public final class RemoteLlm: LlmEngine {
         }
         try checkStatus(response, data: data)
         let output: String
+        let usage: LlmTokenUsage?
         switch api {
         case .openAI:
             let response = try JSONDecoder().decode(OpenAIResponse.self, from: data)
             output = response.output.flatMap { $0.content ?? [] }.compactMap(\.text).joined(separator: "\n")
+            usage = response.usage.map { .init(inputTokens: $0.inputTokens, outputTokens: $0.outputTokens, totalTokens: $0.totalTokens) }
         case .anthropic:
-            output = try JSONDecoder().decode(AnthropicResponse.self, from: data).content.compactMap(\.text).joined(separator: "\n")
+            let response = try JSONDecoder().decode(AnthropicResponse.self, from: data)
+            output = response.content.compactMap(\.text).joined(separator: "\n")
+            usage = response.usage.map { .init(inputTokens: $0.inputTokens, outputTokens: $0.outputTokens, totalTokens: $0.inputTokens + $0.outputTokens) }
         case .gemini:
-            output = try JSONDecoder().decode(GeminiResponse.self, from: data).candidates
-                .flatMap(\.content.parts).compactMap(\.text).joined(separator: "\n")
+            let response = try JSONDecoder().decode(GeminiResponse.self, from: data)
+            output = response.candidates.flatMap(\.content.parts).compactMap(\.text).joined(separator: "\n")
+            usage = response.usageMetadata.map {
+                let input = $0.promptTokenCount ?? 0
+                let output = $0.candidatesTokenCount ?? 0
+                return .init(
+                    inputTokens: input,
+                    outputTokens: output,
+                    totalTokens: $0.totalTokenCount ?? input + output
+                )
+            }
         case .openAICompatible:
-            output = try JSONDecoder().decode(ChatResponse.self, from: data).choices.first?.message.content ?? ""
+            let response = try JSONDecoder().decode(ChatResponse.self, from: data)
+            output = response.choices.first?.message.content ?? ""
+            usage = response.usage.map { .init(inputTokens: $0.promptTokens, outputTokens: $0.completionTokens, totalTokens: $0.totalTokens) }
         }
         let cleaned = Self.strippingReasoning(output).trimmingCharacters(in: .whitespacesAndNewlines)
         guard !cleaned.isEmpty else { throw EngineError.failed("\(providerName) が空の応答を返しました") }
+        if let usage { usageSink.withLock { $0 }?(identifier, modelName, usage) }
         return cleaned
     }
 
@@ -184,6 +205,17 @@ public final class RemoteLlm: LlmEngine {
         struct Output: Decodable { let content: [Content]? }
         struct Content: Decodable { let text: String? }
         let output: [Output]
+        let usage: Usage?
+        struct Usage: Decodable {
+            let inputTokens: Int
+            let outputTokens: Int
+            let totalTokens: Int
+            enum CodingKeys: String, CodingKey {
+                case inputTokens = "input_tokens"
+                case outputTokens = "output_tokens"
+                case totalTokens = "total_tokens"
+            }
+        }
     }
     private struct AnthropicRequest: Encodable {
         struct Message: Encodable { let role: String; let content: String }
@@ -193,7 +225,19 @@ public final class RemoteLlm: LlmEngine {
         let messages: [Message]
         enum CodingKeys: String, CodingKey { case model; case maxTokens = "max_tokens"; case system; case messages }
     }
-    private struct AnthropicResponse: Decodable { struct Content: Decodable { let text: String? }; let content: [Content] }
+    private struct AnthropicResponse: Decodable {
+        struct Content: Decodable { let text: String? }
+        struct Usage: Decodable {
+            let inputTokens: Int
+            let outputTokens: Int
+            enum CodingKeys: String, CodingKey {
+                case inputTokens = "input_tokens"
+                case outputTokens = "output_tokens"
+            }
+        }
+        let content: [Content]
+        let usage: Usage?
+    }
     private struct GeminiRequest: Encodable {
         struct Content: Encodable { let parts: [Part] }
         struct Part: Encodable { let text: String }
@@ -207,12 +251,32 @@ public final class RemoteLlm: LlmEngine {
         struct Content: Decodable { let parts: [Part] }
         struct Part: Decodable { let text: String? }
         let candidates: [Candidate]
+        let usageMetadata: Usage?
+        struct Usage: Decodable {
+            let promptTokenCount: Int?
+            let candidatesTokenCount: Int?
+            let totalTokenCount: Int?
+        }
     }
     private struct GeminiModels: Decodable {
         struct Model: Decodable { let name: String; let supportedGenerationMethods: [String]? }
         let models: [Model]
     }
     private struct ChatRequest: Encodable { struct Message: Encodable { let role: String; let content: String }; let model: String; let temperature: Double; let messages: [Message] }
-    private struct ChatResponse: Decodable { struct Choice: Decodable { struct Message: Decodable { let content: String? }; let message: Message }; let choices: [Choice] }
+    private struct ChatResponse: Decodable {
+        struct Choice: Decodable { struct Message: Decodable { let content: String? }; let message: Message }
+        struct Usage: Decodable {
+            let promptTokens: Int
+            let completionTokens: Int
+            let totalTokens: Int
+            enum CodingKeys: String, CodingKey {
+                case promptTokens = "prompt_tokens"
+                case completionTokens = "completion_tokens"
+                case totalTokens = "total_tokens"
+            }
+        }
+        let choices: [Choice]
+        let usage: Usage?
+    }
     private struct ModelList: Decodable { struct Entry: Decodable { let id: String }; let data: [Entry] }
 }

@@ -40,6 +40,46 @@ public enum EngineAvailability: Sendable, Equatable {
     }
 }
 
+/// クラウドLLMがAPI応答で返した実測トークン数。
+public struct LlmTokenUsage: Sendable, Equatable {
+    public let inputTokens: Int
+    public let outputTokens: Int
+    public let totalTokens: Int
+
+    public init(inputTokens: Int, outputTokens: Int, totalTokens: Int) {
+        self.inputTokens = inputTokens
+        self.outputTokens = outputTokens
+        self.totalTokens = totalTokens
+    }
+}
+
+public struct LlmUsageEvent: Sendable, Equatable {
+    public let id: String
+    public let occurredAt: Date
+    public let purpose: LlmPurpose
+    public let provider: EngineIdentifier
+    public let model: String?
+    public let usage: LlmTokenUsage
+
+    public init(
+        id: String = UUID().uuidString,
+        occurredAt: Date = Date(),
+        purpose: LlmPurpose,
+        provider: EngineIdentifier,
+        model: String?,
+        usage: LlmTokenUsage
+    ) {
+        self.id = id
+        self.occurredAt = occurredAt
+        self.purpose = purpose
+        self.provider = provider
+        self.model = model
+        self.usage = usage
+    }
+}
+
+public typealias LlmUsageSink = @Sendable (EngineIdentifier, String?, LlmTokenUsage) -> Void
+
 // MARK: - STT
 
 public struct SttHints: Sendable {

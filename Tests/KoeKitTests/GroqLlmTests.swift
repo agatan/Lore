@@ -1,4 +1,5 @@
 import Foundation
+import Synchronization
 import Testing
 
 @testable import KoeKit
@@ -30,12 +31,15 @@ struct GroqLlmTests {
         }
 
         let engine = GroqLlm(model: "test-model", session: StubProtocol.session(), apiKeySource: { "test-key" })
+        let recordedUsage = Mutex<LlmTokenUsage?>(nil)
+        engine.setUsageSink { _, _, usage in recordedUsage.withLock { $0 = usage } }
 
         let output = try await engine.complete(
             prompt: FormattingPrompt(system: "指示", user: "本文"),
             timeout: .seconds(5)
         )
         #expect(output == "整えた文章")
+        #expect(recordedUsage.withLock { $0 } == LlmTokenUsage(inputTokens: 120, outputTokens: 30, totalTokens: 150))
     }
 
     @Test("API のエラーメッセージをそのまま理由にする")
@@ -83,7 +87,10 @@ struct GroqLlmTests {
     }
 
     private static func chatBody(_ content: String) -> Data {
-        let payload = ["choices": [["message": ["content": content]]]]
+        let payload: [String: Any] = [
+            "choices": [["message": ["content": content]]],
+            "usage": ["prompt_tokens": 120, "completion_tokens": 30, "total_tokens": 150],
+        ]
         return try! JSONSerialization.data(withJSONObject: payload)
     }
 }

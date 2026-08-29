@@ -80,6 +80,7 @@ struct SettingsWindowView: View {
         Label(section.title, systemImage: section.symbol)
             .badge(section == .vocabulary ? env.pendingSuggestions.count : 0)
             .tag(section)
+            .accessibilityIdentifier("settings.section.\(section.rawValue)")
     }
 
     @ViewBuilder

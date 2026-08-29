@@ -68,6 +68,8 @@ public final class AppEnvironment {
     public private(set) var isCheckingLifeLogLlm = false
     /// エンジン別の実測レイテンシ。
     public private(set) var measuredLatencies = MeasuredLatencies()
+    /// クラウドAIのAPI応答から記録した日別トークン利用量。
+    public private(set) var dailyLlmUsage: [DailyLlmUsage] = []
 
     /// このプロセスが生きている長さ。起動し直すべきかの判断に使う。
     private let launchedAt = ContinuousClock.now
@@ -92,6 +94,11 @@ public final class AppEnvironment {
                 onNeedsAppRestart: { [weak self] in self?.relaunchForLostSpeechInventory() }
             )
         )
+        engines.setUsageSink { [weak self] event in
+            Task { @MainActor [weak self] in
+                await self?.recordLlmUsage(event)
+            }
+        }
         wireHotkeys()
         wirePowerNotifications()
         wireAutomationNotifications()
@@ -179,6 +186,7 @@ public final class AppEnvironment {
             await reloadSharedRules()
             await reloadVocabulary()
             await reloadHistory()
+            await reloadLlmUsage()
             await purgeExpiredHistory()
             await purgeExpiredLifeLogAudio()
             refreshLifeLogAudioSize()
@@ -203,6 +211,31 @@ public final class AppEnvironment {
         scheduleBackgroundAnalysis()
     }
 
+    public func reloadLlmUsage() async {
+        guard let database else { dailyLlmUsage = []; return }
+        let since = Calendar.current.date(byAdding: .day, value: -30, to: Date()) ?? Date()
+        do {
+            dailyLlmUsage = try await database.llmUsage.daily(since: since)
+        } catch {
+            dataOperationError = error.localizedDescription
+        }
+    }
+
+    public func llmUsage(for purpose: LlmPurpose) -> [DailyLlmUsage] {
+        dailyLlmUsage.filter { $0.purpose == purpose }
+    }
+
+    private func recordLlmUsage(_ event: LlmUsageEvent) async {
+        guard let database else { return }
+        do {
+            try await database.llmUsage.record(event)
+            await reloadLlmUsage()
+        } catch {
+            dataOperationError = error.localizedDescription
+            KoeLog.persistence.error("LLM利用量を保存できません: \(error.localizedDescription, privacy: .public)")
+        }
+    }
+
     static var usesScreenshotDemoData: Bool {
 #if DEBUG
         ProcessInfo.processInfo.arguments.contains("--koe-screenshot-demo") || usesEmptyUITestData
@@ -225,6 +258,16 @@ public final class AppEnvironment {
 #else
         false
 #endif
+    }
+
+    static var uiTestSettingsSection: SettingsSection? {
+#if DEBUG
+        let arguments = ProcessInfo.processInfo.arguments
+        if arguments.contains("--koe-ui-test-settings-dictation") { return .models }
+        if arguments.contains("--koe-ui-test-settings-life-log") { return .lifeLogAI }
+        if arguments.contains("--koe-ui-test-settings-modes") { return .modes }
+#endif
+        return nil
     }
 
     /// UI、global hotkey、App Intentが共有するライフログ記録の状態遷移。
@@ -487,9 +530,13 @@ public final class AppEnvironment {
 
     public func deleteMode(id: Mode.ID) async {
         guard let database else { return }
-        try? await database.modes.delete(id: id)
-        if coordinator.pinnedModeID == id { coordinator.pinnedModeID = nil }
-        await reloadModes()
+        do {
+            try await database.modes.delete(id: id)
+            if coordinator.pinnedModeID == id { coordinator.pinnedModeID = nil }
+            await reloadModes()
+        } catch {
+            dataOperationError = error.localizedDescription
+        }
     }
 
     public func duplicateMode(_ mode: Mode) async -> Mode? {
@@ -504,8 +551,12 @@ public final class AppEnvironment {
 
     public func resetMode(id: Mode.ID) async {
         guard let database else { return }
-        _ = try? await database.modes.resetToBuiltin(id: id)
-        await reloadModes()
+        do {
+            _ = try await database.modes.resetToInitial(id: id)
+            await reloadModes()
+        } catch {
+            dataOperationError = error.localizedDescription
+        }
     }
 
     // MARK: 語彙

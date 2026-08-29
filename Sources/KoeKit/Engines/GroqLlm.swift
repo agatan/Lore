@@ -24,6 +24,7 @@ public final class GroqLlm: LlmEngine {
     /// キーの取り出し方。既定は Keychain だが、テストが本物の Keychain を
     /// 触らずに済むよう注入できるようにしてある。
     private let apiKeySource: @Sendable () throws -> String?
+    private let usageSink = Mutex<LlmUsageSink?>(nil)
 
     public init(
         model: String = GroqLlm.defaultModel,
@@ -41,6 +42,10 @@ public final class GroqLlm: LlmEngine {
     public func apply(model newValue: String) {
         let trimmed = newValue.trimmingCharacters(in: .whitespacesAndNewlines)
         model.withLock { $0 = trimmed.isEmpty ? Self.defaultModel : trimmed }
+    }
+
+    public func setUsageSink(_ sink: LlmUsageSink?) {
+        usageSink.withLock { $0 = sink }
     }
 
     /// クラウドのモデルはコンテキスト窓が桁違いに広いが、
@@ -88,6 +93,17 @@ public final class GroqLlm: LlmEngine {
         let decoded = try JSONDecoder().decode(ChatResponse.self, from: data)
         guard let content = decoded.choices.first?.message.content else {
             throw EngineError.failed("Groq が空の応答を返しました")
+        }
+        if let usage = decoded.usage {
+            usageSink.withLock { $0 }?(
+                identifier,
+                modelName,
+                LlmTokenUsage(
+                    inputTokens: usage.promptTokens,
+                    outputTokens: usage.completionTokens,
+                    totalTokens: usage.totalTokens
+                )
+            )
         }
         return Self.strippingReasoning(content).trimmingCharacters(in: .whitespacesAndNewlines)
     }
@@ -152,6 +168,18 @@ public final class GroqLlm: LlmEngine {
             let message: Message
         }
         let choices: [Choice]
+        let usage: Usage?
+
+        struct Usage: Decodable {
+            let promptTokens: Int
+            let completionTokens: Int
+            let totalTokens: Int
+            enum CodingKeys: String, CodingKey {
+                case promptTokens = "prompt_tokens"
+                case completionTokens = "completion_tokens"
+                case totalTokens = "total_tokens"
+            }
+        }
     }
 
     private struct ModelList: Decodable {

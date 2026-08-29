@@ -94,6 +94,24 @@ public final class EngineRegistry {
         }
     }
 
+    /// API応答に含まれる実測usageへ、呼び出し用途を付けて上位へ渡す。
+    public func setUsageSink(_ sink: @escaping @Sendable (LlmUsageEvent) -> Void) {
+        let dictation: LlmUsageSink = { provider, model, usage in
+            sink(LlmUsageEvent(purpose: .dictation, provider: provider, model: model, usage: usage))
+        }
+        let lifeLog: LlmUsageSink = { provider, model, usage in
+            sink(LlmUsageEvent(purpose: .lifeLog, provider: provider, model: model, usage: usage))
+        }
+        groq.setUsageSink(dictation)
+        openAI.setUsageSink(dictation)
+        anthropic.setUsageSink(dictation)
+        gemini.setUsageSink(dictation)
+        lifeLogGroq.setUsageSink(lifeLog)
+        lifeLogOpenAI.setUsageSink(lifeLog)
+        lifeLogAnthropic.setUsageSink(lifeLog)
+        lifeLogGemini.setUsageSink(lifeLog)
+    }
+
     /// 履歴を読む語彙分析は、外部送信の選択とは独立して常にオンデバイスで行う。
     /// `llm` を使うとクラウド選択時に過去の履歴まで送信され、UI の「文章処理だけ」という
     /// 説明とプライバシー境界が崩れる。

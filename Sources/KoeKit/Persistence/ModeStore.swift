@@ -3,7 +3,8 @@ import GRDB
 
 public struct ModeStore: Sendable {
     let queue: DatabaseQueue
-    private static let deletedBuiltinIDsKey = "deleted_builtin_mode_ids"
+    // 永続化キーは旧名称だが、現在はDefaultを含む全同梱モードの削除履歴を表す。
+    private static let deletedShippedModeIDsKey = "deleted_builtin_mode_ids"
 
     init(queue: DatabaseQueue) {
         self.queue = queue
@@ -31,16 +32,12 @@ public struct ModeStore: Sendable {
     }
 
     public func delete(id: String) async throws {
+        guard id != BuiltinModes.defaultModeID else { throw ModeStoreError.defaultCannotBeDeleted }
         try await queue.write { db in
-            let builtin = try Bool.fetchOne(
-                db,
-                sql: "SELECT is_builtin FROM modes WHERE id = ?",
-                arguments: [id]
-            ) ?? false
-            if builtin {
-                var deleted = try Self.deletedBuiltinIDs(db: db)
+            if BuiltinModes.initialMode(id: id) != nil {
+                var deleted = try Self.deletedShippedModeIDs(db: db)
                 deleted.insert(id)
-                try Self.setDeletedBuiltinIDs(deleted, db: db)
+                try Self.setDeletedShippedModeIDs(deleted, db: db)
             }
             try db.execute(sql: "DELETE FROM modes WHERE id = ?", arguments: [id])
         }
@@ -53,7 +50,12 @@ public struct ModeStore: Sendable {
     /// 未編集とみなす。写しが無い古い DB は一度だけ同梱内容に揃える(以降は編集が守られる)。
     public func seedBuiltinsIfNeeded() async throws {
         try await queue.write { db in
-            let deleted = try Self.deletedBuiltinIDs(db: db)
+            for id in BuiltinModes.retiredModeIDs {
+                try db.execute(sql: "DELETE FROM modes WHERE id = ?", arguments: [id])
+                try db.execute(sql: "DELETE FROM meta WHERE key = ?", arguments: [Self.shippedPromptPrefix + id])
+            }
+
+            let deleted = try Self.deletedShippedModeIDs(db: db)
             let hasShippedRecords = try Self.hasShippedRecords(db: db)
 
             for mode in BuiltinModes.all where !deleted.contains(mode.id) {
@@ -74,19 +76,23 @@ public struct ModeStore: Sendable {
                     try Self.updatePrompt(mode, db: db)
                 }
 
+                try db.execute(
+                    sql: "UPDATE modes SET is_builtin = ? WHERE id = ?",
+                    arguments: [mode.isBuiltin, mode.id]
+                )
                 try Self.recordShippedPrompt(mode, db: db)
             }
         }
     }
 
-    public func resetToBuiltin(id: String) async throws -> Mode? {
-        guard var builtin = BuiltinModes.all.first(where: { $0.id == id }) else { return nil }
-        builtin.updatedAt = Date()
-        let mode = builtin
+    public func resetToInitial(id: String) async throws -> Mode? {
+        guard var initial = BuiltinModes.initialMode(id: id) else { return nil }
+        initial.updatedAt = Date()
+        let mode = initial
         try await queue.write { db in
-            var deleted = try Self.deletedBuiltinIDs(db: db)
+            var deleted = try Self.deletedShippedModeIDs(db: db)
             deleted.remove(id)
-            try Self.setDeletedBuiltinIDs(deleted, db: db)
+            try Self.setDeletedShippedModeIDs(deleted, db: db)
             try Self.upsert(mode, db: db)
         }
         return mode
@@ -178,23 +184,33 @@ public struct ModeStore: Sendable {
         )
     }
 
-    private static func deletedBuiltinIDs(db: Database) throws -> Set<String> {
+    private static func deletedShippedModeIDs(db: Database) throws -> Set<String> {
         guard let value = try String.fetchOne(
             db,
             sql: "SELECT value FROM meta WHERE key = ?",
-            arguments: [deletedBuiltinIDsKey]
+            arguments: [deletedShippedModeIDsKey]
         ) else { return [] }
         return Set(try PersistenceCoding.decode([String].self, from: value))
     }
 
-    private static func setDeletedBuiltinIDs(_ ids: Set<String>, db: Database) throws {
+    private static func setDeletedShippedModeIDs(_ ids: Set<String>, db: Database) throws {
         let value = try PersistenceCoding.encode(ids.sorted())
         try db.execute(
             sql: """
                 INSERT INTO meta (key, value) VALUES (?, ?)
                 ON CONFLICT(key) DO UPDATE SET value = excluded.value
                 """,
-            arguments: [deletedBuiltinIDsKey, value]
+            arguments: [deletedShippedModeIDsKey, value]
         )
+    }
+}
+
+public enum ModeStoreError: LocalizedError {
+    case defaultCannotBeDeleted
+
+    public var errorDescription: String? {
+        switch self {
+        case .defaultCannotBeDeleted: "Defaultは削除できません"
+        }
     }
 }

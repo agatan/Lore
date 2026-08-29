@@ -1,4 +1,5 @@
 import Foundation
+import Synchronization
 import Testing
 
 @testable import KoeKit
@@ -16,10 +17,13 @@ struct RemoteLlmTests {
             #expect(json["instructions"] as? String == "指示")
             #expect(json["input"] as? String == "本文")
             #expect(json["store"] as? Bool == false)
-            return (200, Data(#"{"output":[{"type":"reasoning"},{"type":"message","content":[{"type":"output_text","text":"結果"}]}]}"#.utf8))
+            return (200, Data(#"{"output":[{"type":"reasoning"},{"type":"message","content":[{"type":"output_text","text":"結果"}]}],"usage":{"input_tokens":40,"output_tokens":8,"total_tokens":48}}"#.utf8))
         }
         let engine = RemoteLlm(identifier: .openAI, providerName: "OpenAI", api: .openAI, model: "gpt-test", session: RemoteStub.session(), apiKeySource: { "secret" })
+        let usage = Mutex<LlmTokenUsage?>(nil)
+        engine.setUsageSink { _, _, value in usage.withLock { $0 = value } }
         #expect(try await engine.complete(prompt: .init(system: "指示", user: "本文"), timeout: .seconds(2)) == "結果")
+        #expect(usage.withLock { $0 } == .init(inputTokens: 40, outputTokens: 8, totalTokens: 48))
     }
 
     @Test("ClaudeはMessages APIの認証とsystemを使う")
@@ -32,10 +36,13 @@ struct RemoteLlmTests {
             let json = try #require(try JSONSerialization.jsonObject(with: body) as? [String: Any])
             #expect(json["system"] as? String == "指示")
             #expect(json["max_tokens"] as? Int == 4_096)
-            return (200, Data(#"{"content":[{"type":"text","text":"結果"}]}"#.utf8))
+            return (200, Data(#"{"content":[{"type":"text","text":"結果"}],"usage":{"input_tokens":50,"output_tokens":9}}"#.utf8))
         }
         let engine = RemoteLlm(identifier: .anthropic, providerName: "Claude", api: .anthropic, model: "claude-test", session: RemoteStub.session(), apiKeySource: { "secret" })
+        let usage = Mutex<LlmTokenUsage?>(nil)
+        engine.setUsageSink { _, _, value in usage.withLock { $0 = value } }
         #expect(try await engine.complete(prompt: .init(system: "指示", user: "本文"), timeout: .seconds(2)) == "結果")
+        #expect(usage.withLock { $0 } == .init(inputTokens: 50, outputTokens: 9, totalTokens: 59))
     }
 
     @Test("GeminiはgenerateContentへsystem instructionを渡す")
@@ -48,10 +55,13 @@ struct RemoteLlmTests {
             let system = try #require(json["systemInstruction"] as? [String: Any])
             let parts = try #require(system["parts"] as? [[String: String]])
             #expect(parts.first?["text"] == "指示")
-            return (200, Data(#"{"candidates":[{"content":{"parts":[{"text":"結果"}]}}]}"#.utf8))
+            return (200, Data(#"{"candidates":[{"content":{"parts":[{"text":"結果"}]}}],"usageMetadata":{"promptTokenCount":60,"candidatesTokenCount":10,"totalTokenCount":70}}"#.utf8))
         }
         let engine = RemoteLlm(identifier: .gemini, providerName: "Gemini", api: .gemini, model: "gemini-test", session: RemoteStub.session(), apiKeySource: { "secret" })
+        let usage = Mutex<LlmTokenUsage?>(nil)
+        engine.setUsageSink { _, _, value in usage.withLock { $0 = value } }
         #expect(try await engine.complete(prompt: .init(system: "指示", user: "本文"), timeout: .seconds(2)) == "結果")
+        #expect(usage.withLock { $0 } == .init(inputTokens: 60, outputTokens: 10, totalTokens: 70))
     }
 
     @Test("Ollama互換APIはローカルにだけ送る")

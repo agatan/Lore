@@ -14,6 +14,7 @@ struct ModelsSettingsView: View {
     var body: some View {
         LazyVStack(alignment: .leading, spacing: 20) {
             privacyNotice
+            usageCard
             if purpose == .dictation { speechRecognitionCard }
             SettingsCard(
                 title: title,
@@ -33,7 +34,8 @@ struct ModelsSettingsView: View {
         }
         .task {
             await env.reloadMeasuredLatencies()
-            await env.applyEngineChange(purpose: purpose)
+            await env.reloadLlmUsage()
+            await env.applyEngineChange(purpose: purpose, checkCredentials: !AppEnvironment.usesScreenshotDemoData)
         }
     }
 
@@ -176,6 +178,76 @@ struct ModelsSettingsView: View {
                 }
             }
         }
+    }
+
+    private var usageCard: some View {
+        SettingsCard(
+            title: "API利用量",
+            footnote: "クラウドAIの応答に含まれる実測値です。接続確認の利用分も含みます。"
+        ) {
+            if env.llmUsage(for: purpose).isEmpty {
+                Label("まだ利用記録はありません", systemImage: "chart.bar")
+                    .font(.system(size: 11.5))
+                    .foregroundStyle(.secondary.opacity(0.65))
+                    .frame(maxWidth: .infinity, minHeight: 42, alignment: .leading)
+            } else {
+                ForEach(recentUsageDays, id: \.day) { value in
+                    HStack(spacing: 12) {
+                        Text(dayLabel(value.date))
+                            .font(.system(size: 11.5, weight: .medium, design: .rounded))
+                            .frame(width: 58, alignment: .leading)
+                        GeometryReader { geometry in
+                            Capsule()
+                                .fill(KoeTheme.accent.opacity(value.usage.totalTokens == 0 ? 0.08 : 0.55))
+                                .frame(
+                                    width: value.usage.totalTokens == 0
+                                        ? 3
+                                        : max(3, geometry.size.width * CGFloat(value.usage.totalTokens) / CGFloat(maxDailyTokens)),
+                                    height: 5
+                                )
+                                .frame(maxHeight: .infinity, alignment: .center)
+                        }
+                        .frame(height: 18)
+                        VStack(alignment: .trailing, spacing: 1) {
+                            Text("\(value.usage.totalTokens.formatted()) tokens")
+                                .font(.system(size: 11.5, weight: .semibold, design: .rounded))
+                                .monospacedDigit()
+                            Text("入力 \(value.usage.inputTokens.formatted()) · 出力 \(value.usage.outputTokens.formatted()) · \(value.usage.requestCount)回")
+                                .font(.system(size: 9.5, design: .rounded))
+                                .foregroundStyle(.secondary)
+                                .monospacedDigit()
+                        }
+                        .frame(width: 190, alignment: .trailing)
+                    }
+                    .frame(height: 34)
+                }
+            }
+        }
+        .accessibilityIdentifier("usage.\(purpose.rawValue)")
+    }
+
+    private var recentUsageDays: [(day: String, date: Date, usage: DailyLlmUsage)] {
+        let calendar = Calendar.current
+        let byDay = Dictionary(uniqueKeysWithValues: env.llmUsage(for: purpose).map { ($0.day, $0) })
+        return (0..<7).compactMap { offset in
+            guard let date = calendar.date(byAdding: .day, value: -offset, to: Date()) else { return nil }
+            let day = LifeLogDateKey.string(for: date, calendar: calendar)
+            return (
+                day,
+                date,
+                byDay[day] ?? DailyLlmUsage(day: day, purpose: purpose, inputTokens: 0, outputTokens: 0, totalTokens: 0, requestCount: 0)
+            )
+        }
+    }
+
+    private var maxDailyTokens: Int {
+        max(1, recentUsageDays.map(\.usage.totalTokens).max() ?? 1)
+    }
+
+    private func dayLabel(_ date: Date) -> String {
+        if Calendar.current.isDateInToday(date) { return "今日" }
+        if Calendar.current.isDateInYesterday(date) { return "昨日" }
+        return date.formatted(.dateTime.month().day())
     }
 
     private var promptCard: some View {

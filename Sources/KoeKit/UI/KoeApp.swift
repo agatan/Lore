@@ -119,6 +119,13 @@ private struct MenuBarRoot: View {
 
         await env.boot()
 
+        if let section = AppEnvironment.uiTestSettingsSection {
+            env.settingsSection = section
+            openWindow(id: KoeWindow.settings)
+            NSApp.activate()
+            return
+        }
+
         // 起動直後はKoeのメイン画面を開く。
         if env.settings.openHistoryAtLaunch || AppEnvironment.usesScreenshotDemoData {
             env.mainSection = .lifeLog

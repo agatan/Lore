@@ -99,7 +99,7 @@ struct ModeResolverTests {
 
     @Test("ビルトインモードはすべて解決可能")
     func builtinsResolve() {
-        #expect(ModeResolver.resolve(bundleID: "com.apple.Terminal", modes: BuiltinModes.all)?.id == "builtin.ai-agent")
+        #expect(ModeResolver.resolve(bundleID: "com.apple.Terminal", modes: BuiltinModes.all)?.id == BuiltinModes.defaultModeID)
         #expect(ModeResolver.resolve(bundleID: "com.unknown.app", modes: BuiltinModes.all)?.id == BuiltinModes.defaultModeID)
     }
 }
@@ -108,7 +108,7 @@ struct ModeResolverTests {
 
 @Suite("整形プロンプトと出力検証")
 struct FormattingPolicyTests {
-    let mode = Mode(id: "m", name: "AI Agent", prompt: "指示文として明瞭に整形する")
+    let mode = Mode(id: "m", name: "Custom", prompt: "指示文として明瞭に整形する")
     let vocabulary = [
         VocabularyEntry(surface: "レセコン", reading: "れせこん", misrecognitions: ["レセ困", "レ背コン"]),
         VocabularyEntry(surface: "無効", enabled: false),
@@ -252,7 +252,7 @@ struct SessionDraftTests {
         SessionContext(
             appBundleID: "com.apple.Terminal",
             appName: "ターミナル",
-            mode: BuiltinModes.aiAgent,
+            mode: BuiltinModes.chat,
             systemPrompt: "system",
             vocabularyCount: 3,
             sttEngine: .speechAnalyzer,
@@ -337,7 +337,7 @@ struct SessionDraftTests {
     func snapshotIsRecorded() {
         var draft = SessionDraft(context: makeContext())
         let record = draft.finalizeTranscript("テキスト", language: .ja, sttLatencyMs: 10, audioDurationMs: 100)
-        #expect(record.modeSnapshot.modeName == BuiltinModes.aiAgent.name)
+        #expect(record.modeSnapshot.modeName == BuiltinModes.chat.name)
         #expect(record.modeSnapshot.systemPrompt == "system")
         #expect(record.modeSnapshot.vocabularyCount == 3)
     }
