@@ -65,6 +65,19 @@ struct LifeLogTests {
         #expect(!coordinator.isRecoveringCapture)
     }
 
+    @Test("終了待ちは記録開始要求の隙間も含み、停止後に解除される")
+    @MainActor
+    func terminationWorkTracksCaptureIntent() {
+        let coordinator = LifeLogCoordinator()
+        #expect(!coordinator.hasPendingTerminationWork)
+
+        coordinator.setCaptureEnabled(true)
+        #expect(coordinator.hasPendingTerminationWork)
+
+        coordinator.setCaptureEnabled(false)
+        #expect(!coordinator.hasPendingTerminationWork)
+    }
+
     @Test("未処理音声は再起動後のqueueに残る")
     func pendingAudioSurvives() async throws {
         let database = try await KoeDatabase.inMemory()

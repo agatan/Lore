@@ -134,6 +134,12 @@ public final class LifeLogCoordinator {
         return "停止中"
     }
 
+    /// 終了前に音声・文字起こし・派生処理の確定を待つ必要がある状態。
+    /// 記録開始要求から実際のcapture開始までの隙間も含める。
+    public var hasPendingTerminationWork: Bool {
+        captureRequested || capture.isRunning || liveTranscriptionTask != nil || isFinalizingSession || isDeriving
+    }
+
     /// スリープ前に音声ファイルとSpeechAnalyzer入力を閉じ、復帰後は同じ記録意図で再開する。
     public func systemWillSleep() {
         isSuspendedForSleep = true

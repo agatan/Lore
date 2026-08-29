@@ -237,6 +237,11 @@ public final class AppEnvironment {
         presentsLifeLogAudioConsent = false
     }
 
+    /// 終了前に音声入力またはライフログの確定を待つ必要がある状態。
+    public var hasPendingTerminationWork: Bool {
+        coordinator.isBusy || lifeLog.hasPendingTerminationWork
+    }
+
     /// すべての終了動線が共有する保存境界。録音意図を下ろしてから処理中の音声を確定する。
     public func prepareForTermination() async {
         hotkeys.stop()

@@ -29,32 +29,30 @@ public struct MainWindowView: View {
     public init(env: AppEnvironment) { self.env = env }
 
     public var body: some View {
-        detail
+        Group {
+            if showsOnboarding {
+                OnboardingView(env: env)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+            } else {
+                detail
+            }
+        }
             .frame(minWidth: 1_080, minHeight: 680)
             .toolbar {
-                ToolbarItem(placement: .principal) {
-                    Picker("表示", selection: Binding(get: { env.mainSection }, set: { env.mainSection = $0 })) {
-                        ForEach(MainSection.allCases) { section in
-                            Text(section.title).tag(section)
+                if !showsOnboarding {
+                    ToolbarItem(placement: .principal) {
+                        Picker("表示", selection: Binding(get: { env.mainSection }, set: { env.mainSection = $0 })) {
+                            ForEach(MainSection.allCases) { section in
+                                Text(section.title).tag(section)
+                            }
                         }
+                        .labelsHidden()
+                        .pickerStyle(.segmented)
+                        .frame(width: 270)
                     }
-                    .labelsHidden()
-                    .pickerStyle(.segmented)
-                    .frame(width: 270)
                 }
             }
             .task { env.refreshPermissions() }
-            .sheet(isPresented: Binding(
-                get: {
-                    if AppEnvironment.usesScreenshotDemoData {
-                        return AppEnvironment.forcesOnboardingForScreenshot
-                    }
-                    return !env.settings.onboardingCompleted
-                },
-                set: { _ in }
-            )) {
-                OnboardingView(env: env)
-            }
             .confirmationDialog(
                 "ライフログの音声を保存しますか？",
                 isPresented: Binding(
@@ -71,6 +69,13 @@ public struct MainWindowView: View {
             } message: {
                 Text("文字起こしに失敗しても発話を回収できるよう、短い音声チャンクをこのMacだけに保存します。音声をGroqへ送ることはありません。既定では30日後に削除します。")
             }
+    }
+
+    private var showsOnboarding: Bool {
+        if AppEnvironment.usesScreenshotDemoData {
+            return AppEnvironment.forcesOnboardingForScreenshot
+        }
+        return !env.settings.onboardingCompleted
     }
 
     @ViewBuilder

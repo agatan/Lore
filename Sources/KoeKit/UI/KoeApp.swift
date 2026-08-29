@@ -128,17 +128,35 @@ private struct MenuBarRoot: View {
 
 /// `NSApp.terminate`、Cmd+Q、システム終了を同じ非同期の保存境界へ集約する。
 final class KoeApplicationDelegate: NSObject, NSApplicationDelegate {
+    static let terminationDeadline: Duration = .seconds(20)
     private var terminationInProgress = false
+    private var terminationReplySent = false
 
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
         guard !terminationInProgress else { return .terminateLater }
+        guard let environment = AppEnvironment.current, environment.hasPendingTerminationWork else {
+            KoeLog.ui.info("保留中の処理がないためKoeを直ちに終了します")
+            return .terminateNow
+        }
+
         terminationInProgress = true
+        KoeLog.ui.info("保留中の処理を確定してからKoeを終了します")
         Task { @MainActor in
-            if let environment = AppEnvironment.current {
-                await environment.prepareForTermination()
-            }
-            sender.reply(toApplicationShouldTerminate: true)
+            await environment.prepareForTermination()
+            finishTermination(sender, reason: "保存処理が完了しました")
+        }
+        Task { @MainActor in
+            do { try await Task.sleep(for: Self.terminationDeadline) } catch { return }
+            finishTermination(sender, reason: "終了期限に到達しました。保存済みデータは次回起動時に回収します")
         }
         return .terminateLater
+    }
+
+    @MainActor
+    private func finishTermination(_ sender: NSApplication, reason: String) {
+        guard !terminationReplySent else { return }
+        terminationReplySent = true
+        KoeLog.ui.info("\(reason, privacy: .public)")
+        sender.reply(toApplicationShouldTerminate: true)
     }
 }

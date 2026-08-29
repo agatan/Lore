@@ -97,7 +97,6 @@ struct OnboardingView: View {
                 endPoint: .bottomTrailing
             )
         }
-        .interactiveDismissDisabled()
         .task { env.refreshPermissions() }
     }
 
