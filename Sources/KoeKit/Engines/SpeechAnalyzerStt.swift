@@ -144,6 +144,14 @@ public final class SpeechAnalyzerStt: SttEngine {
                 if result.isFinal {
                     finalized += text
                     volatileTail = ""
+                    let segment = text.trimmingCharacters(in: .whitespacesAndNewlines)
+                    if !segment.isEmpty {
+                        continuation.yield(.segment(
+                            text: segment,
+                            startOffset: result.range.start.seconds,
+                            endOffset: result.range.end.seconds
+                        ))
+                    }
                 } else {
                     volatileTail = text
                 }
@@ -159,13 +167,13 @@ public final class SpeechAnalyzerStt: SttEngine {
             if salvaged.isEmpty {
                 throw error
             }
-            continuation.yield(.final(text: salvaged, language: LanguageDetector.detect(salvaged, preference: hints.languagePreference)))
+            continuation.yield(.sessionFinished(text: salvaged, language: LanguageDetector.detect(salvaged, preference: hints.languagePreference)))
             continuation.finish()
             return
         }
 
         let text = (finalized + volatileTail).trimmingCharacters(in: .whitespacesAndNewlines)
-        continuation.yield(.final(text: text, language: LanguageDetector.detect(text, preference: hints.languagePreference)))
+        continuation.yield(.sessionFinished(text: text, language: LanguageDetector.detect(text, preference: hints.languagePreference)))
         continuation.finish()
     }
 

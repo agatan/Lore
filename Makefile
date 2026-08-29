@@ -14,7 +14,7 @@ BUNDLE_ID := dev.agatan.Koe
 # ad-hoc 署名だとリビルドごとに identity が変わり、アクセシビリティの許可が毎回無効になる。
 DEV_IDENTITY := $(shell security find-identity -p codesigning 2>/dev/null | grep -o "Koe Dev" | head -1)
 CODESIGN_ID := $(if $(DEV_IDENTITY),Koe Dev,-)
-BUILD_DIR := .build/$(CONFIG)
+BUILD_DIR = .build/$(CONFIG)
 
 .PHONY: all build app run stop test clean install icon dev-cert reset-permissions
 
@@ -37,6 +37,7 @@ app: build
 	@for b in $(BUILD_DIR)/*.bundle; do \
 		[ -e "$$b" ] && cp -R "$$b" "$(CONTENTS)/Resources/" || true; \
 	done
+	@zsh Scripts/extract-app-intents.sh "$(BUILD_DIR)" "$(CONTENTS)"
 	@codesign --force --sign "$(CODESIGN_ID)" --identifier $(BUNDLE_ID) \
 		--timestamp=none "$(APP)" 2>/dev/null \
 		|| codesign --force --sign "$(CODESIGN_ID)" --identifier $(BUNDLE_ID) "$(APP)"

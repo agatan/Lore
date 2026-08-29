@@ -299,6 +299,11 @@ public final class DictationCoordinator {
         finish(phase: .finished(.cancelled), detail: nil)
     }
 
+    /// スリープに持ち越したマイク入力は復帰後に信頼できないため、現在の短い口述だけを閉じる。
+    public func systemWillSleep() {
+        if phase.isActive { cancel() }
+    }
+
     // MARK: パイプライン
 
     private func runSession(
@@ -332,7 +337,9 @@ public final class DictationCoordinator {
                 case .partial(let text):
                     draft?.updatePartial(text)
                     liveTranscript = text
-                case .final(let text, let detected):
+                case .segment:
+                    break
+                case .sessionFinished(let text, let detected):
                     finalText = text
                     language = detected
                 }
@@ -545,11 +552,9 @@ public final class DictationCoordinator {
 
     private func scheduleIdleUnload() {
         unloadTask?.cancel()
-        let minutes = deps.settings.modelIdleUnloadMinutes
-        guard minutes > 0 else { return }
         let engines = deps.engines
         unloadTask = Task { [weak self] in
-            try? await Task.sleep(for: .seconds(minutes * 60))
+            try? await Task.sleep(for: .seconds(10 * 60))
             guard let self, !Task.isCancelled, !phase.isActive else { return }
             await engines.unloadAll()
         }

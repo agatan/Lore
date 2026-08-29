@@ -19,13 +19,34 @@ public enum SecretStore {
     /// 生で `SecItemCopyMatching` を叩くと、ダイアログが何度も出て利用者を不安にさせる
     /// (実際にそうなった、C-71)。プロセスの寿命の間は 1 回読めば十分で、
     /// 書き込み(`write`)は必ずここを通るのでキャッシュはずれない。
-    private static let cache = Mutex<[Key: String?]>([:])
+    private enum CachedSecret: Sendable {
+        case value(String)
+        case missing
+    }
+
+    private static let cache = Mutex<[Key: CachedSecret]>([:])
 
     public static func read(_ key: Key) throws -> String? {
-        if let cached = cache.withLock({ $0[key] }) { return cached }
-        let value = try readFromKeychain(key)
-        cache.withLock { $0[key] = value }
-        return value
+        try cache.withLock { cachedValues in
+            if let cached = cachedValues[key] {
+                switch cached {
+                case .value(let value): return value
+                case .missing: return nil
+                }
+            }
+            do {
+                let value = try readFromKeychain(key)
+                cachedValues[key] = value.map(CachedSecret.value) ?? .missing
+                return value
+            } catch let error as SecretStoreError {
+                // 照会中もlockを保持する。並行する派生処理が認証ダイアログを
+                // 複数予約するのを防ぎ、最初の許可・拒否結果を全処理で共有する。
+                if error.status == errSecUserCanceled || error.status == errSecAuthFailed || error.status == errSecInteractionNotAllowed {
+                    cachedValues[key] = .missing
+                }
+                throw error
+            }
+        }
     }
 
     private static func readFromKeychain(_ key: Key) throws -> String? {
@@ -51,7 +72,11 @@ public enum SecretStore {
     /// `nil` を渡すと削除する。
     public static func write(_ value: String?, for key: Key) throws {
         let trimmed = value?.trimmingCharacters(in: .whitespacesAndNewlines)
-        defer { cache.withLock { $0[key] = (trimmed?.isEmpty == false) ? trimmed : nil } }
+        defer {
+            cache.withLock {
+                $0[key] = if let trimmed, !trimmed.isEmpty { .value(trimmed) } else { .missing }
+            }
+        }
         guard let trimmed, !trimmed.isEmpty else {
             let status = SecItemDelete(baseQuery(key) as CFDictionary)
             guard status == errSecSuccess || status == errSecItemNotFound else {

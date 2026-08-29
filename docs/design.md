@@ -105,8 +105,9 @@ idle
 - 共通ルール
 - 選択されたモードの指示
 - 有効な語彙
+- ライフログのSummary・TODO案生成時は、対象日の全発話・テキストメモ・予定の時刻と件名、ライフログpromptと抽出rule。入力枠を超える場合も末尾切り捨てせず、時系列の分割要約を統合する
 
-録音音声、保存済みの過去履歴、前面アプリ名と bundle ID は含めません。モデル一覧取得と接続確認も `GroqLlm` が担います。
+録音音声、通常の口述履歴、前面アプリ名と bundle ID は含めません。モデル一覧取得と接続確認も `GroqLlm` が担います。
 
 外部送信の有無は `FormattingBackend.sendsTranscriptOffDevice` を唯一の判定元とし、設定画面とプライバシー画面はこの値から表示を決めます。
 
@@ -192,3 +193,11 @@ idle
 ## 11. 依存関係
 
 外部Swift Packageは GRDB.swift のみです。ライセンスは [THIRD_PARTY_NOTICES](../THIRD_PARTY_NOTICES) に記載し、アプリのResourcesにも同梱します。
+
+## 12. ライフログ
+
+テキストメモは発話と別の永続型として扱い、ミニウィンドウのチャット入力から追加する。TODO案は発話IDまたはメモIDの出典を保持する。明確な無音chunkは記録したpeak levelにより再起動時のSTTと後続派生処理を省略する。日付境界ではSpeechAnalyzerを切らず、resultの実時刻で各日の発話・会話・Summaryへ振り分け、追従表示だけを新しい日に進める。ライフログ記録がONの間は壁時計の設定間隔で派生処理を判定し、前回のwatermark以降に発話・メモがある場合だけLLMを呼ぶ。停止時には差分判定を行わず、日付をまたいだ場合を含む各対象日を全データから再要約する。自動開始・終了の条件はKoe内に重複実装せず、macOSショートカットのオートメーションへ委ねる。
+
+`LifeLogCoordinator`は`DictationCoordinator`と状態を共有しない。同時利用時は、共通の`SpeechAnalyzerStt`がセッションごとに別の`SpeechAnalyzer`と`SpeechTranscriber`を生成する。`ContinuousAudioCapture`は録音中の`.partial`を閉じた後に同一directory内の`.m4a`へrenameし、完成ファイルのcommit後にだけ`LifeLogAudioChunk(captured)`を保存してSTTへ進む。失敗時は音声行を残し、起動時に古い順に再実行する。`NSWorkspace.willSleepNotification`で口述を閉じ、ライフログchunkと解析入力を確定する。`didWakeNotification`では記録意図が残る場合だけbackoff付きで新しいcapture/analyzerへ再接続する。
+
+永続モデルはaudio chunk、utterance、conversation、Calendar event snapshot、global TODOとprovenance、抽出rule、daily summaryである。元音声、発話、会話、派生物の順にsource of truthを置く。録音開始から停止までは一つのSpeechAnalyzerストリームを維持し、30秒のaudio chunkは耐久保存の単位に限定して認識文脈を分断しない。入力構成変更や保存失敗時はchunkを確定してセッションを閉じ、利用者の記録意図が有効な間だけbackoff付きで自動再開する。SummaryとTODO案は通常の成形と同じ`LlmEngine`で設定間隔ごとに更新判定し、差分がある場合は対象日の全データから作り直す。入力枠を超える場合だけ分割要約を統合する。未確定のTODO案は再生成時に全置換し、編集・確定されたTODOには触れない。語彙・prompt・抽出ruleの変更は既存Storeを通す。UIはKoeのメインWindow上部でライフログと音声入力をtab切り替えし、ライフログ表示時はCalendar・Timeline・TODOの3カラムだけを見せる。メニューバーでも両用途をtabで分離し、いずれもライフログを既定表示にする。設定は別Windowとし、共通・音声入力・ライフログの階層に分ける。月間Calendarは予定と発話の密度を別色のdotで表現し、Timelineは遅延描画する。右カラムはglobal TODOと、その日の発話密度・話題を示す視覚的なinsightで構成する。CalendarのRSVPは読み取り専用で保存し、既定では参加済みとRSVPのない予定だけを表示・派生処理へ含める。予定時刻は発話との関連付けに使う参考値であり、会話の分割境界にはしない。ライフログ固有のCapture、Calendar、派生処理、prompt、global hotkey設定は専用設定タブへ集約する。

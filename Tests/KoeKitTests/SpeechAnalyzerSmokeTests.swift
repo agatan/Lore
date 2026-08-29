@@ -40,6 +40,20 @@ struct SpeechAnalyzerSmokeTests {
         }
     }
 
+    // Speech frameworkの実機資源を2本占有するため、通常の並列テスト群とは分離して実行する。
+    @Test("同じKoeプロセスで2つの解析セッションを同時に実行できる",
+          .enabled(if: ProcessInfo.processInfo.environment["KOE_RUN_SPEECH_CONCURRENCY"] == "1"))
+    func supportsConcurrentSessions() async throws {
+        let engine = SpeechAnalyzerStt()
+        guard await engine.availability(languagePreference: .auto).isReady else { return }
+        let format = try #require(await engine.prepare(hints: .init()))
+
+        async let first = runOneSession(engine: engine, format: format)
+        async let second = runOneSession(engine: engine, format: format)
+        let results = await (first, second)
+        #expect(results.0 && results.1)
+    }
+
     /// アイドル解放(`unload`)を挟んでも続けて録音できること。
     ///
     /// `AssetInventory.status` は「**予約済み かつ** インストール済み」でしか `.installed` を
@@ -110,7 +124,7 @@ struct SpeechAnalyzerSmokeTests {
         var sawFinal = false
         do {
             for try await event in engine.transcribe(audio: chunks, hints: .init()) {
-                if case .final = event { sawFinal = true }
+                if case .sessionFinished = event { sawFinal = true }
             }
         } catch {
             Issue.record("transcribe が失敗: \(error.localizedDescription)")

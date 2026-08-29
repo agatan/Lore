@@ -31,7 +31,9 @@
 	<key>NSHumanReadableCopyright</key>
 	<string>Copyright © 2026 agatan</string>
 	<key>NSMicrophoneUsageDescription</key>
-	<string>話した内容を文字にするためにマイクを使います。録音した音声は保存・送信しません。Groq を選んだ場合に限り、文字起こしと指示文を文章の仕上げのために送信します。</string>
+	<string>音声入力と、明示的に有効化したライフログのローカル音声保存にマイクを使います。</string>
+	<key>NSCalendarsFullAccessUsageDescription</key>
+	<string>ライフログの時間軸に予定を重ね、発話との関連を保存するためにカレンダーを使います。</string>
 	<key>NSSpeechRecognitionUsageDescription</key>
 	<string>オンデバイスの音声認識で文字起こしを行います。音声がこの Mac の外に出ることはありません。</string>
 </dict>

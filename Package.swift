@@ -1,5 +1,11 @@
 // swift-tools-version: 6.2
 import PackageDescription
+import Foundation
+
+let appIntentsProtocols = URL(fileURLWithPath: #filePath)
+    .deletingLastPathComponent()
+    .appending(path: "Scripts/app-intents-protocols.json")
+    .path
 
 let package = Package(
     name: "Koe",
@@ -21,7 +27,12 @@ let package = Package(
         ),
         .executableTarget(
             name: "Koe",
-            dependencies: ["KoeKit"]
+            dependencies: ["KoeKit"],
+            swiftSettings: [.unsafeFlags([
+                "-emit-const-values",
+                "-Xfrontend", "-const-gather-protocols-file",
+                "-Xfrontend", appIntentsProtocols,
+            ])]
         ),
         .testTarget(
             name: "KoeKitTests",

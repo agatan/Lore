@@ -9,6 +9,8 @@ import Observation
 @MainActor
 @Observable
 public final class AppEnvironment {
+    public private(set) static weak var current: AppEnvironment?
+
     public enum AnalysisState: Equatable, Sendable {
         case idle
         case running
@@ -19,6 +21,9 @@ public final class AppEnvironment {
     public let settings = AppSettings()
     public let engines = EngineRegistry()
     public let hotkeys = HotkeyMonitor()
+    public let lifeLogCaptureHotkeys = HotkeyMonitor()
+    public let lifeLogMiniWindowHotkeys = HotkeyMonitor()
+    public let lifeLog = LifeLogCoordinator()
     public private(set) var coordinator: DictationCoordinator!
 
     public private(set) var database: KoeDatabase?
@@ -41,7 +46,9 @@ public final class AppEnvironment {
     public private(set) var lastAnalysisAt: Date?
 
     /// メインウィンドウで開いているセクション。メニューからの遷移でも使う。
-    public var mainSection: MainSection = .history
+    public var mainSection: MainSection = .lifeLog
+    public var settingsSection: SettingsSection = .common
+    @ObservationIgnored public var onToggleLifeLogMiniWindow: (() -> Void)?
 
     /// 音声モデル取得の進捗(0...1)。nil = 実行中でない。
     public private(set) var speechAssetProgress: Double?
@@ -59,10 +66,12 @@ public final class AppEnvironment {
     private let launchedAt = ContinuousClock.now
     private var permissionWatcher: Task<Void, Never>?
     private var analysisTask: Task<Void, Never>?
+    @ObservationIgnored private var powerObservers: [any NSObjectProtocol] = []
     static let analysisIntervalHours = 20.0
     static let lastAnalysisRunKey = "vocab_analysis_last_run"
 
     public init() {
+        Self.current = self
         coordinator = DictationCoordinator(
             dependencies: .init(
                 settings: settings,
@@ -76,6 +85,22 @@ public final class AppEnvironment {
             )
         )
         wireHotkeys()
+        wirePowerNotifications()
+    }
+
+    private func wirePowerNotifications() {
+        let center = NSWorkspace.shared.notificationCenter
+        powerObservers.append(center.addObserver(forName: NSWorkspace.willSleepNotification, object: nil, queue: .main) {
+            [weak self] _ in
+            Task { @MainActor [weak self] in
+                self?.coordinator.systemWillSleep()
+                self?.lifeLog.systemWillSleep()
+            }
+        })
+        powerObservers.append(center.addObserver(forName: NSWorkspace.didWakeNotification, object: nil, queue: .main) {
+            [weak self] _ in
+            Task { @MainActor [weak self] in self?.lifeLog.systemDidWake() }
+        })
     }
 
     /// 音声モデルの在庫 API が死んだので、プロセスを作り直す(C-15d)。
@@ -102,6 +127,16 @@ public final class AppEnvironment {
         do {
             let database = try await KoeDatabase.openDefault()
             self.database = database
+            await lifeLog.configure(
+                database: database,
+                engines: engines,
+                vocabulary: { [weak self] in self?.vocabulary ?? [] },
+                todoPrompt: { [weak self] in self?.settings.lifeLogTodoPrompt ?? BuiltinLifeLogPrompts.todo },
+                summaryPrompt: { [weak self] in self?.settings.lifeLogSummaryPrompt ?? BuiltinLifeLogPrompts.summary },
+                summaryIntervalMinutes: { [weak self] in self?.settings.lifeLogSummaryIntervalMinutes ?? 60 },
+                participatingEventsOnly: { [weak self] in self?.settings.lifeLogParticipatingEventsOnly ?? true }
+            )
+            lifeLog.selectInputDevice(uid: settings.lifeLogInputDeviceUID)
             try await database.modes.seedBuiltinsIfNeeded()
             try await database.sharedRules.seedOrMigrate()
             await reloadModes()
@@ -120,10 +155,18 @@ public final class AppEnvironment {
 
         // 起動中に済ませておく。設定を開いた瞬間に問い合わせると、その待ちが表示の遅れになる。
         Task { await refreshLoginItem() }
+        await applyEngineChange(checkCredentials: false)
         coordinator.prewarmSounds()
-
-        await applyEngineChange()
+        // SpeechAnalyzerの準備が終わる前に常時録音のAVAudioEngineを起動すると、
+        // macOSの音声基盤内で初期化が競合してtrapする。
+        if database != nil, settings.lifeLogCaptureEnabled { lifeLog.setCaptureEnabled(true) }
         scheduleBackgroundAnalysis()
+    }
+
+    /// UI、global hotkey、App Intentが共有するライフログ記録の状態遷移。
+    public func setLifeLogCaptureEnabled(_ enabled: Bool) {
+        settings.lifeLogCaptureEnabled = enabled
+        lifeLog.setCaptureEnabled(enabled)
     }
 
     // MARK: ホットキー
@@ -140,6 +183,17 @@ public final class AppEnvironment {
             DispatchQueue.main.async { [weak self] in self?.coordinator.cancel() }
             return true
         }
+        lifeLogCaptureHotkeys.update(binding: settings.lifeLogCaptureHotkey)
+        lifeLogCaptureHotkeys.onEvent = { [weak self] event in
+            guard case .released = event, let self else { return }
+            let enabled = !lifeLog.isCapturing
+            setLifeLogCaptureEnabled(enabled)
+        }
+        lifeLogMiniWindowHotkeys.update(binding: settings.lifeLogMiniWindowHotkey)
+        lifeLogMiniWindowHotkeys.onEvent = { [weak self] event in
+            guard case .released = event else { return }
+            self?.onToggleLifeLogMiniWindow?()
+        }
     }
 
     public func startHotkeyMonitor() {
@@ -149,7 +203,11 @@ public final class AppEnvironment {
         }
         do {
             hotkeys.update(binding: settings.hotkey)
+            lifeLogCaptureHotkeys.update(binding: settings.lifeLogCaptureHotkey)
+            lifeLogMiniWindowHotkeys.update(binding: settings.lifeLogMiniWindowHotkey)
             try hotkeys.start()
+            try lifeLogCaptureHotkeys.start()
+            try lifeLogMiniWindowHotkeys.start()
             hotkeyError = nil
         } catch {
             hotkeyError = error.localizedDescription
@@ -160,12 +218,40 @@ public final class AppEnvironment {
     /// ホットキーを記録している間はグローバル監視を止める(録音が始まらないように)。
     public func setHotkeyCaptureMode(_ capturing: Bool) {
         hotkeys.setSuspended(capturing)
+        lifeLogCaptureHotkeys.setSuspended(capturing)
+        lifeLogMiniWindowHotkeys.setSuspended(capturing)
     }
 
     public func updateHotkey(_ binding: HotkeyBinding) {
+        guard binding != settings.lifeLogCaptureHotkey, binding != settings.lifeLogMiniWindowHotkey else {
+            hotkeyError = "同じキーを複数の操作には割り当てられません"
+            return
+        }
         settings.hotkey = binding
         hotkeys.update(binding: binding)
         if !hotkeys.isRunning { startHotkeyMonitor() }
+    }
+
+    public func updateLifeLogCaptureHotkey(_ binding: HotkeyBinding) {
+        guard binding != settings.hotkey, binding != settings.lifeLogMiniWindowHotkey else {
+            hotkeyError = "同じキーを複数の操作には割り当てられません"
+            return
+        }
+        settings.lifeLogCaptureHotkey = binding
+        lifeLogCaptureHotkeys.update(binding: binding)
+        hotkeyError = nil
+        if !lifeLogCaptureHotkeys.isRunning { startHotkeyMonitor() }
+    }
+
+    public func updateLifeLogMiniWindowHotkey(_ binding: HotkeyBinding) {
+        guard binding != settings.hotkey, binding != settings.lifeLogCaptureHotkey else {
+            hotkeyError = "同じキーを複数の操作には割り当てられません"
+            return
+        }
+        settings.lifeLogMiniWindowHotkey = binding
+        lifeLogMiniWindowHotkeys.update(binding: binding)
+        hotkeyError = nil
+        if !lifeLogMiniWindowHotkeys.isRunning { startHotkeyMonitor() }
     }
 
     // MARK: 権限
@@ -456,17 +542,18 @@ public final class AppEnvironment {
         measuredLatencies = (try? await database.history.measuredLatencies(limit: 300)) ?? MeasuredLatencies()
     }
 
-    public func applyEngineChange() async {
+    public func applyEngineChange(checkCredentials: Bool = true) async {
         engines.apply(backend: settings.formattingBackend, groqModel: settings.groqModel)
-        do {
-            hasGroqApiKey = try SecretStore.read(.groqApiKey)?.isEmpty == false
-        } catch {
-            hasGroqApiKey = false
-            groqStatus = error.localizedDescription
-            KoeLog.engine.error("API キーの確認に失敗: \(error.localizedDescription, privacy: .public)")
+        if checkCredentials {
+            do {
+                hasGroqApiKey = try SecretStore.read(.groqApiKey)?.isEmpty == false
+            } catch {
+                hasGroqApiKey = false
+                groqStatus = error.localizedDescription
+                KoeLog.engine.error("API キーの確認に失敗: \(error.localizedDescription, privacy: .public)")
+            }
         }
-        await engines.refreshAvailability()
-        await engines.prewarm(hints: currentHints())
+        await engines.refreshAvailability(checkLlm: checkCredentials || settings.formattingBackend == .onDevice)
     }
 
     // MARK: Groq

@@ -63,8 +63,11 @@ public struct SttHints: Sendable {
 public enum SttEvent: Sendable {
     /// HUD 表示用の暫定テキスト(確定済み + 未確定を連結した全文)。
     case partial(text: String)
+    /// 音声先頭からの範囲を持つ確定segment。wall-clock timestamp復元に使う。
+    case segment(text: String, startOffset: TimeInterval, endOffset: TimeInterval)
     /// 確定テキスト。ストリーム完了直前に 1 回だけ流れる。
-    case final(text: String, language: RecognizedLanguage)
+    /// 入力ストリーム全体を連結した終了時スナップショット。区間確定は `segment`。
+    case sessionFinished(text: String, language: RecognizedLanguage)
 }
 
 /// 音声認識エンジン。

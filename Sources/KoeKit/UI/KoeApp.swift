@@ -10,6 +10,8 @@ public struct KoeApp: App {
     public var body: some Scene {
         MenuBarExtra {
             MenuBarPanel(env: env)
+                .tint(env.settings.accentPalette.color)
+                .accentColor(env.settings.accentPalette.color)
         } label: {
             // ラベルは常駐中ずっと生きているので、ここで初期化を回す。
             MenuBarRoot(env: env)
@@ -19,13 +21,57 @@ public struct KoeApp: App {
         Window("Koe", id: KoeWindow.main) {
             MainWindowView(env: env)
                 .koeWindow()
+                .tint(env.settings.accentPalette.color)
+                .accentColor(env.settings.accentPalette.color)
         }
-        .defaultSize(width: 1_020, height: 640)
+        .defaultSize(width: 1_480, height: 820)
+        .commands {
+            KoeCommands(env: env)
+        }
+
+        Window("Koe 設定", id: KoeWindow.settings) {
+            SettingsWindowView(env: env)
+                .koeWindow()
+                .tint(env.settings.accentPalette.color)
+                .accentColor(env.settings.accentPalette.color)
+        }
+        .defaultSize(width: 980, height: 720)
+
+        Window("ライフログ ミニ", id: KoeWindow.lifeLogMini) {
+            LifeLogMiniWindow(env: env)
+                .koeWindow()
+                .tint(env.settings.accentPalette.color)
+                .accentColor(env.settings.accentPalette.color)
+        }
+        .defaultSize(width: 460, height: 620)
+    }
+}
+
+private struct KoeCommands: Commands {
+    var env: AppEnvironment
+    @Environment(\.openWindow) private var openWindow
+
+    var body: some Commands {
+        CommandGroup(replacing: .appSettings) {
+            Button("設定…") {
+                env.settingsSection = .common
+                openWindow(id: KoeWindow.settings)
+                NSApp.activate()
+            }
+            .keyboardShortcut(",", modifiers: .command)
+        }
+        CommandGroup(after: .windowArrangement) {
+            Button("ライフログ ミニウィンドウ") {
+                env.onToggleLifeLogMiniWindow?()
+            }
+        }
     }
 }
 
 public enum KoeWindow {
     public static let main = "koe.main"
+    public static let settings = "koe.settings"
+    public static let lifeLogMini = "koe.life-log-mini"
 }
 
 /// メニューバーのアイコン + 起動処理。
@@ -49,9 +95,18 @@ private struct MenuBarRoot: View {
 
         await env.boot()
 
-        // 起動直後は履歴を開く。ここが Koe の入口(設定へもここから移れる)。
+        env.onToggleLifeLogMiniWindow = {
+            if let window = NSApp.windows.first(where: { $0.identifier?.rawValue == KoeWindow.lifeLogMini }), window.isVisible {
+                window.close()
+            } else {
+                openWindow(id: KoeWindow.lifeLogMini)
+                NSApp.activate()
+            }
+        }
+
+        // 起動直後はKoeのメイン画面を開く。
         if env.settings.openHistoryAtLaunch {
-            env.mainSection = .history
+            env.mainSection = .lifeLog
             openWindow(id: KoeWindow.main)
         }
     }

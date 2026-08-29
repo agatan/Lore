@@ -194,7 +194,7 @@ public final class AudioCapture {
 
 /// 変換ブロックへ入力バッファを 1 回だけ渡すための箱。
 /// 生成と消費が同じタップ呼び出しの中で完結するため、競合は起きない。
-private final class PendingInput: @unchecked Sendable {
+final class PendingInput: @unchecked Sendable {
     private var buffer: AVAudioPCMBuffer?
 
     init(_ buffer: AVAudioPCMBuffer) {
@@ -209,7 +209,7 @@ private final class PendingInput: @unchecked Sendable {
 
 /// タップスレッドからのみ触るため `@unchecked Sendable`。
 /// 生成・破棄は MainActor 側、変換はタップスレッド側で、両者は同時に走らない。
-private final class Resampler: @unchecked Sendable {
+final class Resampler: @unchecked Sendable {
     private let converter: AVAudioConverter
     private let target: AVAudioFormat
     private let ratio: Double

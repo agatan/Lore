@@ -13,7 +13,7 @@ struct PrivacySettingsView: View {
                 HStack(spacing: 8) {
                     Image(systemName: sendsOffDevice ? "arrow.up.forward.app.fill" : "hand.raised.fill")
                         .foregroundStyle(sendsOffDevice ? AnyShapeStyle(KoeTheme.warning) : AnyShapeStyle(KoeTheme.voiceGradient))
-                    Text(sendsOffDevice ? "仕上げだけ外部に送っています" : "すべてこの Mac の中で処理されます")
+                    Text(sendsOffDevice ? "文章処理に Groq を使っています" : "すべてこの Mac の中で処理されます")
                         .font(.system(size: 15, weight: .semibold))
                 }
                 Text(sendsOffDevice ? Self.offDeviceSummary : Self.onDeviceSummary)
@@ -31,7 +31,7 @@ struct PrivacySettingsView: View {
                 Divider()
                 if sendsOffDevice {
                     Label(
-                        "仕上げに使うため、聞き取った文字と指示文だけ Groq に送ります",
+                        "口述の整形とライフログのSummary・TODO生成に必要な文字データをGroqへ送ります",
                         systemImage: "arrow.up.forward"
                     )
                     .font(.system(size: 11.5))
@@ -54,7 +54,7 @@ struct PrivacySettingsView: View {
                 .fixedSize(horizontal: false, vertical: true)
             }
 
-            SettingsCard(title: "保存場所", footnote: "録音そのものは保存しません。残るのは聞き取った文字と仕上げた文章、そのとき使ったモードと指示文、かかった時間です。") {
+            SettingsCard(title: "保存場所", footnote: "通常の口述音声は保存しません。ライフログを有効にした場合だけ、再処理用の短い音声チャンクをMac内へ保存します。") {
                 if let url = env.database?.fileURL {
                     HStack {
                         Text(url.path(percentEncoded: false))
@@ -112,7 +112,7 @@ struct PrivacySettingsView: View {
 
     private static let offDeviceSummary = """
     設定 > モデル で仕上げに Groq を選んでいます。聞き取りはこの Mac の中で完結しますが、\
-    仕上げのために聞き取った文字と指示文が Groq の API に送られます。録音した音声そのものは送りません。\
+    口述の整形では文字起こしと指示文を送ります。ライフログではSummary・TODO生成のため、対象日の発話、予定の時刻と件名、既存Summary、指示文を送ります。録音した音声そのものは送りません。\
     外に出したくない場合は、仕上げを「この Mac の中」に戻してください。
     """
 
@@ -120,7 +120,7 @@ struct PrivacySettingsView: View {
     private var neverLeaves: [String] {
         var items = [
             "録音した音声",
-            "保存済みの過去履歴",
+            "通常の口述履歴",
             "前面アプリの情報",
         ]
         if !sendsOffDevice {

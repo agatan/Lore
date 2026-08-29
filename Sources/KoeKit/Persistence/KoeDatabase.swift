@@ -33,6 +33,7 @@ public final class KoeDatabase: Sendable {
     public var sharedRules: SharedRulesStore { SharedRulesStore(queue: queue) }
     public var vocabulary: VocabularyStore { VocabularyStore(queue: queue) }
     public var meta: MetaStore { MetaStore(queue: queue) }
+    public var lifeLog: LifeLogStore { LifeLogStore(queue: queue) }
 
     private static var configuration: Configuration {
         var configuration = Configuration()
@@ -136,6 +137,74 @@ public final class KoeDatabase: Sendable {
         migrator.registerMigration("v2-drop-vocabulary-note") { db in
             try db.alter(table: "vocabulary") { table in
                 table.drop(column: "note")
+            }
+        }
+        migrator.registerMigration("v3-daily-life-log") { db in
+            try db.execute(sql: """
+                CREATE TABLE life_log_audio_chunks (
+                  id TEXT PRIMARY KEY, capture_started_at TEXT NOT NULL, capture_ended_at TEXT NOT NULL,
+                  local_path TEXT NOT NULL UNIQUE, transcription_state TEXT NOT NULL,
+                  processing_state TEXT NOT NULL, failure_reason TEXT
+                );
+                CREATE TABLE calendar_event_snapshots (
+                  id TEXT PRIMARY KEY, external_identifier TEXT, title TEXT NOT NULL,
+                  starts_at TEXT NOT NULL, ends_at TEXT NOT NULL, calendar_title TEXT NOT NULL,
+                  is_all_day INTEGER NOT NULL DEFAULT 0
+                );
+                CREATE TABLE life_log_conversations (
+                  id TEXT PRIMARY KEY, started_at TEXT NOT NULL, ended_at TEXT NOT NULL,
+                  calendar_event_id TEXT REFERENCES calendar_event_snapshots(id)
+                );
+                CREATE TABLE life_log_utterances (
+                  id TEXT PRIMARY KEY, started_at TEXT NOT NULL, ended_at TEXT NOT NULL, text TEXT NOT NULL,
+                  audio_chunk_id TEXT NOT NULL REFERENCES life_log_audio_chunks(id),
+                  calendar_event_id TEXT REFERENCES calendar_event_snapshots(id),
+                  conversation_id TEXT REFERENCES life_log_conversations(id)
+                );
+                CREATE INDEX life_log_utterances_started_at ON life_log_utterances(started_at);
+                CREATE VIRTUAL TABLE life_log_utterances_fts USING fts5(text, content='life_log_utterances', content_rowid='rowid', tokenize='trigram');
+                CREATE TRIGGER life_log_utterances_fts_insert AFTER INSERT ON life_log_utterances BEGIN
+                  INSERT INTO life_log_utterances_fts(rowid, text) VALUES (new.rowid, new.text);
+                END;
+                CREATE TRIGGER life_log_utterances_fts_delete AFTER DELETE ON life_log_utterances BEGIN
+                  INSERT INTO life_log_utterances_fts(life_log_utterances_fts, rowid, text) VALUES ('delete', old.rowid, old.text);
+                END;
+                CREATE TRIGGER life_log_utterances_fts_update AFTER UPDATE ON life_log_utterances BEGIN
+                  INSERT INTO life_log_utterances_fts(life_log_utterances_fts, rowid, text) VALUES ('delete', old.rowid, old.text);
+                  INSERT INTO life_log_utterances_fts(rowid, text) VALUES (new.rowid, new.text);
+                END;
+                CREATE TABLE life_log_todos (
+                  id TEXT PRIMARY KEY, title TEXT NOT NULL, status TEXT NOT NULL,
+                  created_at TEXT NOT NULL, due_at TEXT, source_conversation_id TEXT,
+                  source_utterance_ids TEXT NOT NULL, confidence REAL
+                );
+                CREATE TABLE todo_extraction_rules (id TEXT PRIMARY KEY, instruction TEXT NOT NULL, created_at TEXT NOT NULL);
+                CREATE TABLE daily_summaries (
+                  day TEXT PRIMARY KEY, summary TEXT NOT NULL, commitments TEXT NOT NULL, topics TEXT NOT NULL,
+                  calendar_event_count INTEGER NOT NULL, captured_duration_seconds INTEGER NOT NULL,
+                  utterance_count INTEGER NOT NULL, summarized_through TEXT NOT NULL, is_final INTEGER NOT NULL
+                );
+                """)
+        }
+        migrator.registerMigration("v4-calendar-participation-status") { db in
+            try db.alter(table: "calendar_event_snapshots") { table in
+                table.add(column: "participation_status", .text).notNull().defaults(to: CalendarParticipationStatus.none.rawValue)
+            }
+        }
+        migrator.registerMigration("v5-life-log-memos") { db in
+            try db.execute(sql: """
+                CREATE TABLE life_log_memos (
+                  id TEXT PRIMARY KEY,
+                  created_at TEXT NOT NULL,
+                  text TEXT NOT NULL
+                );
+                CREATE INDEX life_log_memos_created_at ON life_log_memos(created_at);
+                """)
+            try db.alter(table: "life_log_todos") { table in
+                table.add(column: "source_memo_ids", .text).notNull().defaults(to: "[]")
+            }
+            try db.alter(table: "life_log_audio_chunks") { table in
+                table.add(column: "peak_level", .double)
             }
         }
         return migrator

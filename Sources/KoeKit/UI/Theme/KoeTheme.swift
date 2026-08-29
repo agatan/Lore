@@ -2,9 +2,9 @@ import SwiftUI
 
 /// 見た目の定数。色とコーナー半径をここに集約して、画面ごとにばらけないようにする。
 public enum KoeTheme {
-    /// 声・波形のアクセント。紫寄りのインディゴから水色へ。
-    public static let accent = Color(red: 0.42, green: 0.37, blue: 0.97)
-    public static let accentSecondary = Color(red: 0.25, green: 0.78, blue: 0.87)
+    /// 画面の環境へ注入された選択色に追従する。
+    public static let accent = Color.accentColor
+    public static let accentSecondary = Color.accentColor.opacity(0.72)
     public static let recording = Color(red: 0.96, green: 0.31, blue: 0.42)
     public static let success = Color(red: 0.20, green: 0.78, blue: 0.55)
     public static let warning = Color(red: 0.98, green: 0.68, blue: 0.22)
@@ -74,6 +74,17 @@ public enum KoeTheme {
             case .clipboardOnly: "doc.on.clipboard.fill"
             case .failed: "exclamationmark.octagon.fill"
             }
+        }
+    }
+}
+
+public extension AccentPalette {
+    var color: Color {
+        switch self {
+        case .ocean: Color(red: 0.08, green: 0.50, blue: 0.86)
+        case .mint: Color(red: 0.06, green: 0.64, blue: 0.49)
+        case .coral: Color(red: 0.93, green: 0.37, blue: 0.31)
+        case .violet: Color(red: 0.46, green: 0.36, blue: 0.91)
         }
     }
 }

@@ -66,4 +66,15 @@ struct AudioLevelTests {
         let level = AudioCapture.level(of: buffer(format: .pcmFormatInt16, amplitude: 0.01))
         #expect(level > 0.05)
     }
+
+    @Test("保存音声をSpeechAnalyzerが要求するInt16へ変換する")
+    func convertsStoredAudioToRecognizerFormat() throws {
+        let source = buffer(format: .pcmFormatFloat32, amplitude: 0.3)
+        let target = AVAudioFormat(commonFormat: .pcmFormatInt16, sampleRate: 16_000, channels: 1, interleaved: false)!
+        let converted = try #require(Resampler(from: source.format, to: target)?.convert(source))
+
+        #expect(converted.format.commonFormat == .pcmFormatInt16)
+        #expect(converted.int16ChannelData != nil)
+        #expect(converted.frameLength > 0)
+    }
 }

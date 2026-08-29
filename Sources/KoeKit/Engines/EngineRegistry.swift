@@ -52,7 +52,6 @@ public final class EngineRegistry {
     /// `llm` を使うと Groq 選択時に過去の履歴まで送信され、UI の「仕上げだけ」という
     /// 説明とプライバシー境界が崩れる。
     var analysisLlm: any LlmEngine { onDeviceLlm }
-
     public func apply(backend: FormattingBackend, groqModel: String) {
         self.backend = backend
         groq.apply(model: groqModel)
@@ -60,7 +59,8 @@ public final class EngineRegistry {
 
     // MARK: 準備
 
-    /// 録音開始を待たせないための事前準備。起動時・セッション終了後に呼ぶ。
+    /// 明示的に必要な場面だけで行う事前準備。アプリ起動時には呼ばない。
+    /// macOS 26では音声入力前のSpeechAnalyzer初期化がOS内部でtrapする場合がある。
     public func prewarm(hints: SttHints) async {
         if let format = try? await stt.prepare(hints: hints) {
             preparedFormat = format
@@ -75,9 +75,9 @@ public final class EngineRegistry {
         return format
     }
 
-    public func refreshAvailability(languagePreference: LanguagePreference = .auto) async {
+    public func refreshAvailability(languagePreference: LanguagePreference = .auto, checkLlm: Bool = true) async {
         sttAvailability = await stt.availability(languagePreference: languagePreference)
-        llmAvailability = await llm.availability()
+        if checkLlm { llmAvailability = await llm.availability() }
     }
 
     /// 日本語の音声モデルを取得する。OS が管理する資産だが、取得は明示操作で行う。
