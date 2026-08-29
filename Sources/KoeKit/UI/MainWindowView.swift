@@ -48,7 +48,7 @@ public struct MainWindowView: View {
                         }
                         .labelsHidden()
                         .pickerStyle(.segmented)
-                        .frame(width: 270)
+                        .fixedSize()
                     }
                 }
             }
