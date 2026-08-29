@@ -2,10 +2,37 @@ import Foundation
 
 /// LLMが予定・発話・メモの境界を保ったまま時系列を解釈できる、安定したテキスト形式。
 public enum LifeLogTextExporter {
+    public struct Options: Sendable, Equatable {
+        public var includesCalendarEvents: Bool
+        public var includesUtterances: Bool
+        public var includesMemos: Bool
+        public var includesSummary: Bool
+        public var includesOpenTodosCreatedOnDay: Bool
+
+        public init(
+            includesCalendarEvents: Bool = true,
+            includesUtterances: Bool = true,
+            includesMemos: Bool = true,
+            includesSummary: Bool = true,
+            includesOpenTodosCreatedOnDay: Bool = true
+        ) {
+            self.includesCalendarEvents = includesCalendarEvents
+            self.includesUtterances = includesUtterances
+            self.includesMemos = includesMemos
+            self.includesSummary = includesSummary
+            self.includesOpenTodosCreatedOnDay = includesOpenTodosCreatedOnDay
+        }
+
+        public var hasSelection: Bool {
+            includesCalendarEvents || includesUtterances || includesMemos || includesSummary || includesOpenTodosCreatedOnDay
+        }
+    }
+
     public static func render(
         date: Date,
         day: LifeLogDay,
         todos: [LifeLogTodo],
+        options: Options = Options(),
         calendar: Calendar = .current
     ) -> String {
         var lines = [
@@ -14,7 +41,7 @@ public enum LifeLogTextExporter {
             "",
         ]
 
-        if let summary = day.summary {
+        if options.includesSummary, let summary = day.summary {
             lines.append("## SUMMARY")
             lines.append(summary.summary)
             if !summary.topics.isEmpty { lines.append("TOPICS: \(summary.topics.joined(separator: ", "))") }
@@ -22,30 +49,39 @@ public enum LifeLogTextExporter {
             lines.append("")
         }
 
-        lines.append("## TIMELINE")
-        let items = day.calendarEvents.map { Item(date: $0.startsAt, line: eventLine($0, calendar: calendar)) }
-            + day.utterances.map { Item(date: $0.startedAt, line: utteranceLine($0, calendar: calendar)) }
-            + day.memos.map { Item(date: $0.createdAt, line: memoLine($0, calendar: calendar)) }
-        if items.isEmpty {
+        if options.includesCalendarEvents || options.includesUtterances || options.includesMemos {
+            lines.append("## TIMELINE")
+            let items = (options.includesCalendarEvents ? day.calendarEvents.map { Item(date: $0.startsAt, line: eventLine($0, calendar: calendar)) } : [])
+                + (options.includesUtterances ? day.utterances.map { Item(date: $0.startedAt, line: utteranceLine($0, calendar: calendar)) } : [])
+                + (options.includesMemos ? day.memos.map { Item(date: $0.createdAt, line: memoLine($0, calendar: calendar)) } : [])
+            if items.isEmpty {
+                lines.append("(empty)")
+            } else {
+                lines.append(contentsOf: items.sorted { $0.date < $1.date }.map(\.line))
+            }
+        }
+
+        let dayTodos = todos.filter {
+            $0.status == .open && calendar.isDate($0.createdAt, inSameDayAs: date)
+        }
+        if options.includesOpenTodosCreatedOnDay, !dayTodos.isEmpty {
+            lines.append("")
+            lines.append("## OPEN TODO CREATED ON THIS DAY")
+            lines.append(contentsOf: dayTodos.map { todoLine($0, calendar: calendar) })
+        }
+
+        lines.append("")
+        return lines.joined(separator: "\n")
+    }
+
+    public static func renderOpenTodos(_ todos: [LifeLogTodo], calendar: Calendar = .current) -> String {
+        var lines = ["# Koe Open TODO Export v1", ""]
+        let open = todos.filter { $0.status == .open }.sorted { $0.createdAt < $1.createdAt }
+        if open.isEmpty {
             lines.append("(empty)")
         } else {
-            lines.append(contentsOf: items.sorted { $0.date < $1.date }.map(\.line))
+            lines.append(contentsOf: open.map { todoLine($0, calendar: calendar) })
         }
-
-        let utteranceIDs = Set(day.utterances.map(\.id))
-        let memoIDs = Set(day.memos.map(\.id))
-        let relatedTodos = todos.filter { todo in
-            !utteranceIDs.isDisjoint(with: todo.sourceUtteranceIDs)
-                || !memoIDs.isDisjoint(with: todo.sourceMemoIDs)
-                || (todo.sourceUtteranceIDs.isEmpty && todo.sourceMemoIDs.isEmpty
-                    && calendar.isDate(todo.createdAt, inSameDayAs: date))
-        }
-        if !relatedTodos.isEmpty {
-            lines.append("")
-            lines.append("## TODO")
-            lines.append(contentsOf: relatedTodos.map { "[TODO status=\($0.status.rawValue)] \($0.title)" })
-        }
-
         lines.append("")
         return lines.joined(separator: "\n")
     }
@@ -65,6 +101,12 @@ public enum LifeLogTextExporter {
 
     private static func memoLine(_ value: LifeLogMemo, calendar: Calendar) -> String {
         "[MEMO \(time(value.createdAt, calendar: calendar))] \(value.text)"
+    }
+
+    private static func todoLine(_ value: LifeLogTodo, calendar: Calendar) -> String {
+        let created = "\(LifeLogDateKey.string(for: value.createdAt, calendar: calendar))T\(time(value.createdAt, calendar: calendar))"
+        let due = value.dueAt.map { " due=\(LifeLogDateKey.string(for: $0, calendar: calendar))" } ?? ""
+        return "[TODO status=open created=\(created)\(due)] \(value.title)"
     }
 
     private static func time(_ date: Date, calendar: Calendar) -> String {

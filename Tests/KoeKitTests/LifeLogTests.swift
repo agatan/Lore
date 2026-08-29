@@ -287,7 +287,7 @@ struct LifeLogTests {
             )],
             summary: nil
         )
-        let todo = LifeLogTodo(title: "RFCを書く", sourceUtteranceIDs: [utterance.id])
+        let todo = LifeLogTodo(title: "RFCを書く", createdAt: date.addingTimeInterval(240), sourceUtteranceIDs: [utterance.id])
 
         let text = LifeLogTextExporter.render(date: date, day: day, todos: [todo], calendar: calendar)
 
@@ -296,7 +296,57 @@ struct LifeLogTests {
         let memoIndex = try #require(text.range(of: "[MEMO 09:03:00]"))
         #expect(calendarIndex.lowerBound < speechIndex.lowerBound)
         #expect(speechIndex.lowerBound < memoIndex.lowerBound)
-        #expect(text.contains("[TODO status=open] RFCを書く"))
+        #expect(text.contains("[TODO status=open created=2026-08-29T09:04:00] RFCを書く"))
+    }
+
+    @Test("日別exportは項目ごとの選択と当日作成の未実施TODOだけを尊重する")
+    func textExportHonorsSelectionAndTodoBoundary() throws {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = try #require(TimeZone(secondsFromGMT: 0))
+        let date = try #require(calendar.date(from: DateComponents(year: 2026, month: 8, day: 29, hour: 9)))
+        let day = LifeLogDay(
+            utterances: [.init(startedAt: date, endedAt: date, text: "発話", audioChunkID: "audio")],
+            memos: [.init(createdAt: date, text: "メモ")],
+            conversations: [],
+            calendarEvents: [.init(title: "予定", startsAt: date, endsAt: date, calendarTitle: "Work")],
+            summary: .init(day: "2026-08-29", summary: "要約", commitments: [], topics: [], calendarEventCount: 1, capturedDurationSeconds: 1, utteranceCount: 1, summarizedThrough: date, isFinal: true)
+        )
+        let todos = [
+            LifeLogTodo(title: "対象", createdAt: date),
+            LifeLogTodo(title: "完了", status: .completed, createdAt: date),
+            LifeLogTodo(title: "下書き", status: .draft, createdAt: date),
+            LifeLogTodo(title: "別日", createdAt: date.addingTimeInterval(-86_400)),
+        ]
+        let options = LifeLogTextExporter.Options(
+            includesCalendarEvents: false,
+            includesUtterances: true,
+            includesMemos: false,
+            includesSummary: true,
+            includesOpenTodosCreatedOnDay: true
+        )
+
+        let text = LifeLogTextExporter.render(date: date, day: day, todos: todos, options: options, calendar: calendar)
+
+        #expect(text.contains("要約"))
+        #expect(text.contains("[SPEECH"))
+        #expect(text.contains("対象"))
+        #expect(!text.contains("[CALENDAR"))
+        #expect(!text.contains("[MEMO"))
+        #expect(!text.contains("完了"))
+        #expect(!text.contains("下書き"))
+        #expect(!text.contains("別日"))
+    }
+
+    @Test("全TODO exportは確定済み未実施だけを含む")
+    func openTodoExport() {
+        let text = LifeLogTextExporter.renderOpenTodos([
+            LifeLogTodo(title: "未実施"),
+            LifeLogTodo(title: "完了", status: .completed),
+            LifeLogTodo(title: "下書き", status: .draft),
+        ])
+        #expect(text.contains("未実施"))
+        #expect(!text.contains("完了"))
+        #expect(!text.contains("下書き"))
     }
 
     @Test("ライフログ削除はすべての派生データとsource of truthを同時に消す")

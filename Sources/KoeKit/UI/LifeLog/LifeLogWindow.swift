@@ -5,6 +5,7 @@ import UniformTypeIdentifiers
 public struct LifeLogWindow: View {
     var env: AppEnvironment
     @State private var exportError: String?
+    @State private var showsExportSheet = false
 
     public init(env: AppEnvironment) { self.env = env }
 
@@ -30,6 +31,14 @@ public struct LifeLogWindow: View {
             await env.lifeLog.reload()
             await env.lifeLog.loadActivity(containing: env.lifeLog.selectedDate)
             await env.lifeLog.refreshCalendar(selectedCalendars: Set(env.settings.lifeLogCalendarTitles))
+        }
+        .sheet(isPresented: $showsExportSheet) {
+            LifeLogExportSheet(
+                date: env.lifeLog.selectedDate,
+                day: env.lifeLog.day,
+                todos: env.lifeLog.todos,
+                onExport: exportSelectedDay
+            )
         }
     }
 
@@ -217,7 +226,7 @@ public struct LifeLogWindow: View {
         VStack(spacing: 12) {
             todoPanel.frame(maxHeight: .infinity)
             insightsPanel.frame(height: 238)
-            Button(action: exportSelectedDay) {
+            Button { showsExportSheet = true } label: {
                 Label("この日を書き出す", systemImage: "square.and.arrow.up")
                     .frame(maxWidth: .infinity)
             }
@@ -238,8 +247,24 @@ public struct LifeLogWindow: View {
     private var todoPanel: some View {
         VStack(spacing: 0) {
             panelHeader("TODO", symbol: "checkmark.circle") {
-                let count = env.lifeLog.todos.filter { $0.status == .open }.count
-                if count > 0 { Pill(text: "\(count)", tint: KoeTheme.accent) }
+                HStack(spacing: 8) {
+                    let count = env.lifeLog.todos.filter { $0.status == .open }.count
+                    if count > 0 { Pill(text: "\(count)", tint: KoeTheme.accent) }
+                    Menu {
+                        Button("未実施TODOをコピー", systemImage: "doc.on.clipboard") {
+                            exportOpenTodos(to: .clipboard)
+                        }
+                        Button("未実施TODOを保存…", systemImage: "doc.badge.arrow.up") {
+                            exportOpenTodos(to: .file)
+                        }
+                    } label: {
+                        Image(systemName: "square.and.arrow.up")
+                            .foregroundStyle(.secondary)
+                    }
+                    .menuStyle(.borderlessButton)
+                    .fixedSize()
+                    .help("すべての未実施TODOを書き出す")
+                }
             }
             Divider().opacity(0.4)
             if env.lifeLog.todos.isEmpty {
@@ -354,21 +379,42 @@ public struct LifeLogWindow: View {
         })
     }
 
-    private func exportSelectedDay() {
-        let panel = NSSavePanel()
-        panel.allowedContentTypes = [.plainText]
-        panel.canCreateDirectories = true
-        panel.nameFieldStringValue = "Koe-LifeLog-\(LifeLogDateKey.string(for: env.lifeLog.selectedDate)).txt"
-        guard panel.runModal() == .OK, let url = panel.url else { return }
-        do {
-            let text = LifeLogTextExporter.render(
-                date: env.lifeLog.selectedDate,
-                day: env.lifeLog.day,
-                todos: env.lifeLog.todos
-            )
-            try text.write(to: url, atomically: true, encoding: .utf8)
-        } catch {
-            exportError = error.localizedDescription
+    private func exportSelectedDay(_ options: LifeLogTextExporter.Options, to destination: LifeLogExportDestination) -> Bool {
+        let text = LifeLogTextExporter.render(
+            date: env.lifeLog.selectedDate,
+            day: env.lifeLog.day,
+            todos: env.lifeLog.todos,
+            options: options
+        )
+        return writeExport(text, filename: "Koe-LifeLog-\(LifeLogDateKey.string(for: env.lifeLog.selectedDate)).txt", to: destination)
+    }
+
+    private func exportOpenTodos(to destination: LifeLogExportDestination) {
+        _ = writeExport(LifeLogTextExporter.renderOpenTodos(env.lifeLog.todos), filename: "Koe-Open-TODO.txt", to: destination)
+    }
+
+    private func writeExport(_ text: String, filename: String, to destination: LifeLogExportDestination) -> Bool {
+        switch destination {
+        case .clipboard:
+            NSPasteboard.general.clearContents()
+            guard NSPasteboard.general.setString(text, forType: .string) else {
+                exportError = "クリップボードへ書き込めませんでした。"
+                return false
+            }
+            return true
+        case .file:
+            let panel = NSSavePanel()
+            panel.allowedContentTypes = [.plainText]
+            panel.canCreateDirectories = true
+            panel.nameFieldStringValue = filename
+            guard panel.runModal() == .OK, let url = panel.url else { return false }
+            do {
+                try text.write(to: url, atomically: true, encoding: .utf8)
+                return true
+            } catch {
+                exportError = error.localizedDescription
+                return false
+            }
         }
     }
 
