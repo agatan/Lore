@@ -1,0 +1,428 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Koe 内部設計リファレンス</title>
+<link rel="stylesheet" href="reference.css">
+</head>
+<body>
+<header>
+<p class="eyebrow">Implementation reference</p>
+<h1>Koe 内部設計</h1>
+<p class="lead">現在のtarget、論理module、runtime flow、永続化、公開adapterをコードに対応づけた実装俯瞰です。設計思想ではなく、変更時にどこを読むかを示します。</p>
+<p class="links">
+<a href="design.md">Markdown版</a>
+<a href="spec.html">外部仕様</a>
+<a href="../PRIVACY.md">Privacy</a>
+<a href="testing.md">Testing</a>
+</p>
+</header>
+<nav>
+<a href="#targets">Targets</a>
+<a href="#modules">Modules</a>
+<a href="#boot">起動</a>
+<a href="#dictation">音声入力</a>
+<a href="#lifelog">Life log</a>
+<a href="#persistence">永続化</a>
+<a href="#settings">設定</a>
+<a href="#ui">UI</a>
+<a href="#automation">自動化</a>
+<a href="#concurrency">並行実行</a>
+<a href="#change-map">変更map</a>
+<a href="#tests">Tests</a>
+</nav>
+<main>
+<section id="targets">
+<h2>1. Build targets</h2>
+<table>
+<thead>
+<tr>
+<th>Product</th>
+<th>Entry point</th>
+<th>Role</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>
+<code>Koe.app</code>
+</td>
+<td>
+<code>Sources/Koe/main.swift</code>
+<br>
+<code>Sources/Koe/AppIntents.swift</code>
+</td>
+<td>SwiftUI app、menu bar、windows、App Intents</td>
+</tr>
+<tr>
+<td>
+<code>koe-cli</code>
+</td>
+<td>
+<code>Sources/KoeCLI/main.swift</code>
+</td>
+<td>CLI</td>
+</tr>
+<tr>
+<td>
+<code>koe-mcp</code>
+</td>
+<td>
+<code>Sources/KoeMCP/main.swift</code>
+</td>
+<td>stdio JSON-RPC MCP server</td>
+</tr>
+<tr>
+<td>
+<code>KoeKit</code>
+</td>
+<td>
+<code>Sources/KoeKit/</code>
+</td>
+<td>domain、use case、adapter、UI</td>
+</tr>
+<tr>
+<td>
+<code>KoeKitTests</code>
+</td>
+<td>
+<code>Tests/KoeKitTests/</code>
+</td>
+<td>単体・統合test</td>
+</tr>
+</tbody>
+</table>
+<pre>Koe ─────┐
+KoeCLI ──┼──&gt; KoeKit ──&gt; GRDB
+KoeMCP ──┘</pre>
+<p class="callout">
+<code>Domain</code>や<code>App</code>は単一の<code>KoeKit</code> target内の論理moduleです。folder間依存はSwift moduleとして強制されていません。</p>
+</section>
+<section id="modules">
+<h2>2. KoeKit modules</h2>
+<table>
+<thead>
+<tr>
+<th>Path</th>
+<th>主要型</th>
+<th>責務</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>
+<code>Domain/</code>
+</td>
+<td>
+<code>SessionDraft</code>, <code>SessionRecord</code>, <code>Mode</code>, <code>LifeLogDay</code>
+</td>
+<td>状態、値、遷移、整形規則</td>
+</tr>
+<tr>
+<td>
+<code>App/</code>
+</td>
+<td>
+<code>AppEnvironment</code>, <code>DictationCoordinator</code>, <code>LifeLogCoordinator</code>
+</td>
+<td>composition rootと実行flow</td>
+</tr>
+<tr>
+<td>
+<code>Engines/</code>
+</td>
+<td>
+<code>SttEngine</code>, <code>LlmEngine</code>, <code>EngineRegistry</code>
+</td>
+<td>SpeechAnalyzerと各LLM adapter</td>
+</tr>
+<tr>
+<td>
+<code>Persistence/</code>
+</td>
+<td>
+<code>KoeDatabase</code>、各Store</td>
+<td>schema、migration、query、backup</td>
+</tr>
+<tr>
+<td>
+<code>System/</code>
+</td>
+<td>
+<code>AudioCapture</code>, <code>TextInserter</code>, <code>SecretStore</code>
+</td>
+<td>macOS API境界</td>
+</tr>
+<tr>
+<td>
+<code>Analysis/</code>
+</td>
+<td>
+<code>VocabularySuggestionJob</code>, <code>ConversationSegmenter</code>
+</td>
+<td>履歴分析、会話分割、export</td>
+</tr>
+<tr>
+<td>
+<code>Automation/</code>
+</td>
+<td>
+<code>KoeAutomationService</code>
+</td>
+<td>CLI/MCP共通use case</td>
+</tr>
+<tr>
+<td>
+<code>UI/</code>
+</td>
+<td>
+<code>KoeApp</code>、windows、settings、HUD</td>
+<td>SwiftUI sceneと操作</td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="boot">
+<h2>3. Processと起動</h2>
+<p>
+<code>KoeApp</code>はMenuBarExtra、main、settings、life-log mini、all TODOのwindowを定義します。<code>AppEnvironment</code>は<code>@MainActor @Observable</code>のcomposition rootです。</p>
+<div class="flow">
+<div class="step">Settings / Engines生成</div>
+<div class="arrow">→</div>
+<div class="step">DB backup / migrate / seed</div>
+<div class="arrow">→</div>
+<div class="step">Mode・語彙・履歴load</div>
+<div class="arrow">→</div>
+<div class="step">Retention purge</div>
+<div class="arrow">→</div>
+<div class="step">3 hotkeysとcoordinator設定</div>
+<div class="arrow">→</div>
+<div class="step">Pending chunk再処理</div>
+</div>
+<p>終了時は未完了のaudio writer、認識、DB保存、派生処理を最大20秒待ちます。</p>
+</section>
+<section id="dictation">
+<h2>4. 音声入力flow</h2>
+<div class="flow">
+<div class="step">Hotkey / UI</div>
+<div class="arrow">→</div>
+<div class="step">SessionContext固定</div>
+<div class="arrow">→</div>
+<div class="step">AudioCapture + STT</div>
+<div class="arrow">→</div>
+<div class="step">rawをinterrupted保存</div>
+<div class="arrow">→</div>
+<div class="step">FormattingPolicy + LLM</div>
+<div class="arrow">→</div>
+<div class="step">TextInserter</div>
+</div>
+<div class="grid">
+<article class="card">
+<h3>Context</h3>
+<p>対象app、mode、共通rule、語彙、STT/LLMを録音開始時に固定します。</p>
+</article>
+<article class="card">
+<h3>Recovery</h3>
+<p>LLM前にrawを保存。整形失敗はraw、挿入失敗はclipboardへ退避します。</p>
+</article>
+<article class="card">
+<h3>Storage</h3>
+<p>通常の音声入力はaudio fileを作りません。履歴にはtext、snapshot、状態、計測値を保存します。</p>
+</article>
+</div>
+</section>
+<section id="lifelog">
+<h2>5. Life-log flow</h2>
+<div class="flow">
+<div class="step">Capture request</div>
+<div class="arrow">→</div>
+<div class="step">30秒 .m4a commit</div>
+<div class="arrow">→</div>
+<div class="step">AudioChunk保存</div>
+<div class="arrow">→</div>
+<div class="step">連続STTでUtterance保存</div>
+<div class="arrow">→</div>
+<div class="step">Calendar / Conversation</div>
+<div class="arrow">→</div>
+<div class="step">Summary / draft TODO</div>
+</div>
+<ul>
+<li>音声入力とは独立したcaptureとSpeechAnalyzer sessionを持ちます。</li>
+<li>30秒chunkは復旧単位で、認識sessionは記録開始から停止まで維持します。</li>
+<li>pending chunkは起動後に再処理し、無音はpeak levelで除外します。</li>
+<li>発話と予定は前後2分で関連付け、conversationは90秒の無発話で分割します。</li>
+<li>設定間隔の差分検出後、その日の全dataからsummaryとdraft TODOを再生成します。</li>
+</ul>
+</section>
+<section id="engines">
+<h2>6. Engines</h2>
+<table>
+<thead>
+<tr>
+<th>Backend</th>
+<th>Adapter / Endpoint</th>
+<th>Mac外へ送信</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Apple Foundation Models</td>
+<td>
+<code>FoundationModelsLlm</code>
+</td>
+<td>なし</td>
+</tr>
+<tr>
+<td>Ollama</td>
+<td>
+<code>RemoteLlm</code> / <code>localhost:11434/v1</code>
+</td>
+<td>なし</td>
+</tr>
+<tr>
+<td>LM Studio</td>
+<td>
+<code>RemoteLlm</code> / <code>localhost:1234/v1</code>
+</td>
+<td>なし</td>
+</tr>
+<tr>
+<td>OpenAI / Anthropic / Gemini</td>
+<td>
+<code>RemoteLlm</code>
+</td>
+<td>明示選択時</td>
+</tr>
+<tr>
+<td>Groq</td>
+<td>
+<code>GroqLlm</code>
+</td>
+<td>明示選択時</td>
+</tr>
+</tbody>
+</table>
+<p>音声入力とlife logはprovider/modelを別設定にします。語彙候補の<code>analysisLlm</code>は常にオンデバイスです。</p>
+</section>
+<section id="persistence">
+<h2>7. Persistence</h2>
+<table>
+<thead>
+<tr>
+<th>Store</th>
+<th>Tables</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>
+<code>HistoryStore</code>
+</td>
+<td>
+<code>sessions</code>, <code>sessions_fts</code>
+</td>
+</tr>
+<tr>
+<td>
+<code>ModeStore</code> / <code>SharedRulesStore</code>
+</td>
+<td>
+<code>modes</code>, <code>meta</code>
+</td>
+</tr>
+<tr>
+<td>
+<code>VocabularyStore</code>
+</td>
+<td>
+<code>vocabulary</code>, <code>vocab_suggestions</code>
+</td>
+</tr>
+<tr>
+<td>
+<code>LifeLogStore</code>
+</td>
+<td>audio chunks、calendar snapshots、conversations、utterances、memos、todos、daily summariesとFTS</td>
+</tr>
+<tr>
+<td>
+<code>LlmUsageStore</code>
+</td>
+<td>
+<code>llm_usage_events</code>
+</td>
+</tr>
+</tbody>
+</table>
+<p>DBは<code>Application Support/Koe/koe.sqlite</code>、migrationはv1〜v8です。既存DBはmigration前と1日1回backupし、<code>Backups/</code>の最新7fileを保持します。全data削除はbackupも削除します。</p>
+</section>
+<section id="settings">
+<h2>8. 設定、秘密、process間同期</h2>
+<ul><li><code>AppSettings.Storage</code>をsuite <code>dev.agatan.Koe</code>のUserDefaults key <code>koe.settings.v1</code>へJSON保存します。</li><li>Provider/modelは音声入力とlife logで分離します。Hotkey、保持期間、calendar filter、summary間隔、表示設定もここに入ります。</li><li>API keyだけはKeychainへ保存します。</li><li>CLI/MCPによるTODO・prompt変更はDistributed Notificationでappへ通知します。</li></ul>
+</section>
+<section id="ui">
+<h2>9. UIとwindow対応</h2>
+<table><thead><tr><th>View</th><th>内容</th></tr></thead><tbody><tr><td><code>MenuBarPanel</code></td><td>Life log/音声入力の操作と各window入口</td></tr><tr><td><code>MainWindowView</code></td><td>Onboarding、life log、history切替</td></tr><tr><td><code>LifeLogWindow</code></td><td>Month activity、timeline、summary、TODO</td></tr><tr><td><code>HistoryBrowserView</code></td><td>履歴、検索、詳細、copy、削除</td></tr><tr><td>Mini / All TODO</td><td>Memo入力とglobal TODO管理</td></tr><tr><td><code>SettingsWindowView</code></td><td>11 settings section</td></tr><tr><td>HUD</td><td>Dictation状態の一時表示</td></tr></tbody></table>
+</section>
+<section id="automation">
+<h2>10. 自動化境界</h2>
+<p>App Intents、CLI、MCPを公開します。CLI/MCPは<code>KoeAutomationService</code>を共有し、日別export、open TODO export、横断検索、TODO CRUD、summary/TODO prompt更新を提供します。公開commandとtool schemaは外部仕様に列挙します。</p>
+</section>
+<section id="concurrency">
+<h2>11. 並行実行とerror表示</h2>
+<ul><li>UI stateとcoordinatorはMainActor、Calendarはactor、DBはDatabaseQueueで直列化します。</li><li>長時間処理は所有Taskでcancelします。</li><li>失敗は履歴status、画面、MCPの<code>isError</code>、CLIのstderr/exit 1のいずれかへ出し、本文やsecretをlogへ出しません。</li></ul>
+</section>
+<section id="change-map">
+<h2>12. 変更時のmap</h2>
+<table>
+<thead>
+<tr>
+<th>変更</th>
+<th>読む場所</th>
+<th>更新・検証</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Provider追加</td>
+<td>FormattingBackend、EngineRegistry、ModelsSettings、SecretStore</td>
+<td>privacy、engine test、spec/design</td>
+</tr>
+<tr>
+<td>永続model</td>
+<td>Domain、migrator、Store</td>
+<td>migration/backup/delete test、design</td>
+</tr>
+<tr>
+<td>Dictation状態</td>
+<td>SessionDraft、Coordinator、HistoryStore</td>
+<td>HUD/history、state test、spec/design</td>
+</tr>
+<tr>
+<td>Life-log派生</td>
+<td>DerivationService、LifeLogStore</td>
+<td>E2E/export、spec/design</td>
+</tr>
+<tr>
+<td>公開自動化</td>
+<td>AutomationService、CLI/MCP/AppIntents</td>
+<td>schema/help、spec両版</td>
+</tr>
+<tr>
+<td>主要window</td>
+<td>KoeApp、View、AppEnvironment</td>
+<td>
+<code>make ui-test</code>、spec/design</td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="tests">
+<h2>13. Test配置</h2>
+<p><code>Tests/KoeKitTests</code>がdomain、formatting、engine、persistence、life log、automationを検証します。<code>make ui-test</code>は署名済みappを起動し、主要CUJをAccessibility APIで検証します。詳細は<a href="testing.md">testing.md</a>を参照してください。</p>
+</section>
+</main>
+<footer>詳細な型と経路は <a href="design.md">Markdown版</a>、利用者との契約は <a href="spec.html">外部仕様</a> を参照してください。</footer>
+</body>
+</html>

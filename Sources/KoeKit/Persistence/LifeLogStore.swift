@@ -75,7 +75,6 @@ public struct LifeLogStore: Sendable {
             try db.execute(sql: "DELETE FROM life_log_conversations")
             try db.execute(sql: "DELETE FROM life_log_memos")
             try db.execute(sql: "DELETE FROM life_log_todos")
-            try db.execute(sql: "DELETE FROM todo_extraction_rules")
             try db.execute(sql: "DELETE FROM daily_summaries")
             try db.execute(sql: "DELETE FROM calendar_event_snapshots")
             try db.execute(sql: "DELETE FROM life_log_audio_chunks")
@@ -277,9 +276,6 @@ public struct LifeLogStore: Sendable {
             ])
         }
     }
-    public func rules() async throws -> [TodoExtractionRule] { try await queue.read { db in try Row.fetchAll(db, sql: "SELECT * FROM todo_extraction_rules ORDER BY created_at").map { TodoExtractionRule(id: $0["id"], instruction: $0["instruction"], createdAt: try parse($0["created_at"])) } } }
-    public func save(rule: TodoExtractionRule) async throws { try await queue.write { db in try db.execute(sql: "INSERT OR REPLACE INTO todo_extraction_rules VALUES (?, ?, ?)", arguments: [rule.id, rule.instruction, date(rule.createdAt)]) } }
-    public func deleteRule(id: String) async throws { try await queue.write { db in try db.execute(sql: "DELETE FROM todo_extraction_rules WHERE id=?", arguments: [id]) } }
     public func save(summary value: DailySummary) async throws { try await queue.write { db in try db.execute(sql: "INSERT OR REPLACE INTO daily_summaries VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)", arguments: [value.day, value.summary, try PersistenceCoding.encode(value.commitments), try PersistenceCoding.encode(value.topics), value.calendarEventCount, value.capturedDurationSeconds, value.utteranceCount, date(value.summarizedThrough), value.isFinal]) } }
 
     private func date(_ value: Date) -> String { PersistenceCoding.encode(date: value) }

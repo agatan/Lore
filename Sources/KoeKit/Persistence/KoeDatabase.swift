@@ -17,7 +17,22 @@ public final class KoeDatabase: Sendable {
             .appendingPathComponent("Koe", isDirectory: true)
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         let url = directory.appendingPathComponent("koe.sqlite", isDirectory: false)
-        let database = try KoeDatabase(queue: DatabaseQueue(path: url.path, configuration: configuration), fileURL: url)
+        return try await open(
+            fileURL: url,
+            backupDirectory: directory.appendingPathComponent("Backups", isDirectory: true)
+        )
+    }
+
+    static func open(fileURL: URL, backupDirectory: URL, now: Date = Date()) async throws -> KoeDatabase {
+        let fileManager = FileManager.default
+        try fileManager.createDirectory(at: fileURL.deletingLastPathComponent(), withIntermediateDirectories: true)
+        let existed = fileManager.fileExists(atPath: fileURL.path)
+        let queue = try DatabaseQueue(path: fileURL.path, configuration: configuration)
+        if existed {
+            let needsMigration = try await queue.read { try !migrator.hasCompletedMigrations($0) }
+            try backup(queue, to: backupDirectory, beforeMigration: needsMigration, now: now)
+        }
+        let database = try KoeDatabase(queue: queue, fileURL: fileURL)
         try await database.modes.seedBuiltinsIfNeeded()
         return database
     }
@@ -36,6 +51,68 @@ public final class KoeDatabase: Sendable {
     public var lifeLog: LifeLogStore { LifeLogStore(queue: queue) }
     public var llmUsage: LlmUsageStore { LlmUsageStore(queue: queue) }
 
+    /// 「Koeの全データを削除」にバックアップも含める。DB単体の削除では復旧点を残す。
+    public func deleteBackups() throws {
+        guard let fileURL else { return }
+        let directory = fileURL.deletingLastPathComponent().appendingPathComponent("Backups", isDirectory: true)
+        if FileManager.default.fileExists(atPath: directory.path) {
+            try FileManager.default.removeItem(at: directory)
+        }
+    }
+
+    private static func backup(
+        _ source: DatabaseQueue,
+        to directory: URL,
+        beforeMigration: Bool,
+        now: Date
+    ) throws {
+        let fileManager = FileManager.default
+        try fileManager.createDirectory(at: directory, withIntermediateDirectories: true)
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.timeZone = .current
+        formatter.dateFormat = beforeMigration ? "yyyyMMdd-HHmmss" : "yyyyMMdd"
+        let prefix = beforeMigration ? "pre-migration" : "daily"
+        let destination = directory.appendingPathComponent("\(prefix)-\(formatter.string(from: now)).sqlite")
+        guard !fileManager.fileExists(atPath: destination.path) else { return }
+
+        let staged = directory.appendingPathComponent(".backup-\(UUID().uuidString).sqlite")
+        do {
+            try source.backup(to: DatabaseQueue(path: staged.path, configuration: configuration))
+            try fileManager.moveItem(at: staged, to: destination)
+        } catch let backupError {
+            if fileManager.fileExists(atPath: staged.path) {
+                do {
+                    try fileManager.removeItem(at: staged)
+                } catch {
+                    throw BackupError.cleanupFailed(
+                        backup: backupError.localizedDescription,
+                        cleanup: error.localizedDescription
+                    )
+                }
+            }
+            throw backupError
+        }
+        try pruneBackups(in: directory, keeping: 7)
+    }
+
+    private static func pruneBackups(in directory: URL, keeping limit: Int) throws {
+        let fileManager = FileManager.default
+        let backups = try fileManager.contentsOfDirectory(
+            at: directory,
+            includingPropertiesForKeys: [.contentModificationDateKey],
+            options: [.skipsHiddenFiles]
+        )
+            .filter { $0.pathExtension == "sqlite" }
+            .map { url in
+                (url, try url.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate ?? .distantPast)
+            }
+            .sorted { $0.1 > $1.1 }
+        for (url, _) in backups.dropFirst(limit) {
+            try fileManager.removeItem(at: url)
+        }
+    }
+
     /// 設定(UserDefaults)と秘密(Keychain)以外の利用者データを一つのDB transactionで消す。
     public func deleteAllUserData() async throws {
         try await queue.write { db in
@@ -43,7 +120,6 @@ public final class KoeDatabase: Sendable {
             try db.execute(sql: "DELETE FROM life_log_conversations")
             try db.execute(sql: "DELETE FROM life_log_memos")
             try db.execute(sql: "DELETE FROM life_log_todos")
-            try db.execute(sql: "DELETE FROM todo_extraction_rules")
             try db.execute(sql: "DELETE FROM daily_summaries")
             try db.execute(sql: "DELETE FROM calendar_event_snapshots")
             try db.execute(sql: "DELETE FROM life_log_audio_chunks")
@@ -199,7 +275,6 @@ public final class KoeDatabase: Sendable {
                   created_at TEXT NOT NULL, due_at TEXT, source_conversation_id TEXT,
                   source_utterance_ids TEXT NOT NULL, confidence REAL
                 );
-                CREATE TABLE todo_extraction_rules (id TEXT PRIMARY KEY, instruction TEXT NOT NULL, created_at TEXT NOT NULL);
                 CREATE TABLE daily_summaries (
                   day TEXT PRIMARY KEY, summary TEXT NOT NULL, commitments TEXT NOT NULL, topics TEXT NOT NULL,
                   calendar_event_count INTEGER NOT NULL, captured_duration_seconds INTEGER NOT NULL,
@@ -330,4 +405,15 @@ enum PersistenceCoding {
 enum PersistenceError: Error {
     case invalidDate(String)
     case invalidStoredValue(column: String, value: String)
+}
+
+private enum BackupError: LocalizedError {
+    case cleanupFailed(backup: String, cleanup: String)
+
+    var errorDescription: String? {
+        switch self {
+        case .cleanupFailed(let backup, let cleanup):
+            "DBバックアップに失敗し、一時ファイルも削除できませんでした。backup: \(backup) / cleanup: \(cleanup)"
+        }
+    }
 }

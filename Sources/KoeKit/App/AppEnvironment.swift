@@ -539,13 +539,13 @@ public final class AppEnvironment {
 
     public func saveSharedRules(_ text: String) async {
         guard let database else { return }
-        try? await database.sharedRules.save(text)
+        guard await performDataOperation({ try await database.sharedRules.save(text) }) else { return }
         await reloadSharedRules()
     }
 
     public func resetSharedRules() async {
         guard let database else { return }
-        _ = try? await database.sharedRules.reset()
+        guard await performDataOperation({ _ = try await database.sharedRules.reset() }) else { return }
         await reloadSharedRules()
     }
 
@@ -556,7 +556,7 @@ public final class AppEnvironment {
 
     public func save(mode: Mode) async {
         guard let database else { return }
-        try? await database.modes.save(mode)
+        guard await performDataOperation({ try await database.modes.save(mode) }) else { return }
         await reloadModes()
     }
 
@@ -605,28 +605,28 @@ public final class AppEnvironment {
 
     public func save(entry: VocabularyEntry) async {
         guard let database else { return }
-        try? await database.vocabulary.save(entry)
+        guard await performDataOperation({ try await database.vocabulary.save(entry) }) else { return }
         await reloadVocabulary()
         lifeLog.vocabularyDidChange()
     }
 
     public func deleteVocabulary(id: String) async {
         guard let database else { return }
-        try? await database.vocabulary.delete(id: id)
+        guard await performDataOperation({ try await database.vocabulary.delete(id: id) }) else { return }
         await reloadVocabulary()
         lifeLog.vocabularyDidChange()
     }
 
     public func acceptSuggestion(id: String) async {
         guard let database else { return }
-        _ = try? await database.vocabulary.accept(suggestionID: id)
+        guard await performDataOperation({ _ = try await database.vocabulary.accept(suggestionID: id) }) else { return }
         await reloadVocabulary()
         lifeLog.vocabularyDidChange()
     }
 
     public func rejectSuggestion(id: String) async {
         guard let database else { return }
-        try? await database.vocabulary.reject(suggestionID: id)
+        guard await performDataOperation({ try await database.vocabulary.reject(suggestionID: id) }) else { return }
         await reloadVocabulary()
     }
 
@@ -646,7 +646,7 @@ public final class AppEnvironment {
 
     public func deleteHistory(id: String) async {
         guard let database else { return }
-        try? await database.history.delete(id: id)
+        guard await performDataOperation({ try await database.history.delete(id: id) }) else { return }
         await reloadHistory()
     }
 
@@ -663,10 +663,14 @@ public final class AppEnvironment {
 
     public func purgeExpiredHistory() async {
         guard let database, settings.historyRetentionDays > 0 else { return }
-        let removed = (try? await database.history.purge(retentionDays: settings.historyRetentionDays)) ?? 0
-        if removed > 0 {
-            KoeLog.persistence.info("保持期間超過の履歴を \(removed, privacy: .public) 件削除しました")
-            await reloadHistory()
+        do {
+            let removed = try await database.history.purge(retentionDays: settings.historyRetentionDays)
+            if removed > 0 {
+                KoeLog.persistence.info("保持期間超過の履歴を \(removed, privacy: .public) 件削除しました")
+                await reloadHistory()
+            }
+        } catch {
+            reportDataOperation(error)
         }
     }
 
@@ -721,6 +725,7 @@ public final class AppEnvironment {
         do {
             try removeLifeLogAudioDirectory()
             try SecretStore.deleteAll()
+            try database.deleteBackups()
             try await database.deleteAllUserData()
             settings.resetAll()
             engines.apply(
@@ -805,6 +810,17 @@ public final class AppEnvironment {
     private func reportDataOperation(_ error: Error) {
         dataOperationError = error.localizedDescription
         KoeLog.persistence.error("保存データの操作に失敗: \(error.localizedDescription, privacy: .public)")
+    }
+
+    private func performDataOperation(_ operation: () async throws -> Void) async -> Bool {
+        dataOperationError = nil
+        do {
+            try await operation()
+            return true
+        } catch {
+            reportDataOperation(error)
+            return false
+        }
     }
 
     private enum DataOperationError: LocalizedError {

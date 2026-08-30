@@ -38,40 +38,6 @@ struct LifeLogTests {
         #expect(try await database.lifeLog.todos().first?.sourceUtteranceIDs == [utterance.id])
     }
 
-    @Test("TODOの追加ルールは派生プロンプトへ混ぜない")
-    @MainActor
-    func legacyExtractionRulesDoNotAffectDerivation() async throws {
-        let database = try await KoeDatabase.inMemory()
-        let startedAt = Date().addingTimeInterval(-60)
-        let chunk = LifeLogAudioChunk(
-            id: "audio-rule-test",
-            captureStartedAt: startedAt,
-            captureEndedAt: startedAt.addingTimeInterval(30),
-            localPath: "/tmp/rule-test.m4a"
-        )
-        try await database.lifeLog.save(audioChunk: chunk)
-        try await database.lifeLog.save(utterance: LifeLogUtterance(
-            startedAt: startedAt,
-            endedAt: startedAt.addingTimeInterval(30),
-            text: "資料を送る",
-            audioChunkID: chunk.id
-        ))
-        try await database.lifeLog.save(rule: TodoExtractionRule(instruction: "LEGACY_RULE_MUST_NOT_BE_USED"))
-
-        let llm = RecordingLifeLogLlm()
-        let coordinator = LifeLogCoordinator()
-        try await coordinator.updateSummary(
-            for: startedAt,
-            respectingInterval: false,
-            force: true,
-            store: database.lifeLog,
-            derivation: LifeLogDerivationService(llm: llm)
-        )
-
-        #expect(!llm.recordedPrompts.map(\.system).joined().contains("LEGACY_RULE_MUST_NOT_BE_USED"))
-        #expect(!llm.recordedPrompts.map(\.user).joined().contains("LEGACY_RULE_MUST_NOT_BE_USED"))
-    }
-
     @Test("日付をまたぐ録音の停止時は両日を再要約対象にする")
     @MainActor
     func stopAcrossMidnightIncludesEveryDay() throws {
@@ -209,16 +175,6 @@ struct LifeLogTests {
 
         #expect(try await database.lifeLog.day(firstDay).utterances.map(\.id) == ["before-midnight"])
         #expect(try await database.lifeLog.day(midnight).utterances.map(\.id) == ["after-midnight"])
-    }
-
-    @Test("TODO抽出ruleを永続化できる")
-    func extractionRuleIsPersisted() async throws {
-        let database = try await KoeDatabase.inMemory()
-        let rule = TodoExtractionRule(instruction: "今後「軽く見ておきます」はTODOにしない")
-        try await database.lifeLog.save(rule: rule)
-        let stored = try #require(await database.lifeLog.rules().first)
-        #expect(stored.id == rule.id)
-        #expect(stored.instruction == rule.instruction)
     }
 
     @Test("再要約はDraftだけを置き換え、確定TODOを保つ")
@@ -513,7 +469,6 @@ struct LifeLogTests {
             title: "予定", startsAt: start, endsAt: start.addingTimeInterval(60), calendarTitle: "Work"
         )])
         try await database.lifeLog.save(todo: LifeLogTodo(title: "TODO"))
-        try await database.lifeLog.save(rule: TodoExtractionRule(instruction: "ルール"))
 
         try await database.lifeLog.deleteAll()
 
@@ -523,7 +478,6 @@ struct LifeLogTests {
         #expect(day.calendarEvents.isEmpty)
         #expect(day.summary == nil)
         #expect(try await database.lifeLog.todos().isEmpty)
-        #expect(try await database.lifeLog.rules().isEmpty)
         #expect(try await database.lifeLog.pendingAudioChunks().isEmpty)
     }
 }

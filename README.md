@@ -4,8 +4,8 @@ macOS 専用の音声入力アプリです。口述入力と、自分の発話�
 
 音声認識と既定の文章整形は Mac 上で動作します。口述音声は保存しません。ライフログを明示的に有効にした場合だけ、再処理可能な音声チャンクをMac内へ保存します。音声は外部へ送信しません。詳しくは [データ取り扱い](PRIVACY.md) を参照してください。
 
-- 要件: [docs/spec.md](docs/spec.md)
-- 設計: [docs/design.md](docs/design.md)
+- 外部仕様: [Markdown](docs/spec.md) / [HTML](docs/spec.html)
+- 内部設計: [Markdown](docs/design.md) / [HTML](docs/design.html)
 - 概要: [docs/overview/index.html](docs/overview/index.html)
 
 ## 必要環境
@@ -105,6 +105,9 @@ Sources/KoeKit/
 ```
 
 中心となる不変条件は「発話を失わない」ことです。STT 確定後の文字起こしを先に永続化してから整形・挿入へ進み、整形失敗時は生テキストへ、挿入失敗時はクリップボードへ退避します。ライフログでは録音開始から停止まで一つのSpeechAnalyzerストリームを維持し、30秒ごとの音声ファイルは復旧用にだけ分割します。入力障害時は保存済み音声から再開し、記録が有効な間は自動再接続します。TODOはLLMの提案をそのまま確定せず、利用者が編集して採用または棄却します。
+
+構造化データは起動時に `~/Library/Application Support/Koe/Backups/` へSQLiteスナップショットとして保存します。未適用のDBマイグレーションがある場合は変更前に必ず作成し、通常時は1日1回、直近7世代を保持します。
+復元が必要な場合は、Koeを停止して元DBを退避してから [バックアップと復旧](docs/recovery.md) の手順を実行します。
 
 ## License
 

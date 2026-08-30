@@ -160,15 +160,6 @@ public struct LifeLogTodo: Identifiable, Codable, Sendable, Hashable {
     }
 }
 
-public struct TodoExtractionRule: Identifiable, Codable, Sendable, Hashable {
-    public var id: String
-    public var instruction: String
-    public var createdAt: Date
-    public init(id: String = UUID().uuidString, instruction: String, createdAt: Date = Date()) {
-        self.id = id; self.instruction = instruction; self.createdAt = createdAt
-    }
-}
-
 public struct DailySummary: Identifiable, Codable, Sendable, Hashable {
     public var id: String { day }
     public var day: String

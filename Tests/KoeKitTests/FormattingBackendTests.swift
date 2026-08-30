@@ -25,7 +25,7 @@ struct FormattingBackendTests {
         let settings = AppSettings(defaults: defaults)
         #expect(settings.formattingBackend == .onDevice)
         #expect(settings.lifeLogFormattingBackend == .onDevice)
-        #expect(settings.groqModel == GroqLlm.defaultModel)
+        #expect(settings.model(for: .groq, purpose: .dictation) == GroqLlm.defaultModel)
         #expect(settings.lifeLogAudioRetentionDays == 30)
         #expect(!settings.onboardingCompleted)
         #expect(!settings.lifeLogAudioStorageConfirmed)
@@ -86,8 +86,8 @@ struct FormattingBackendTests {
     @Test("空のモデル ID は既定値に丸める")
     func blankModelFallsBack() {
         let settings = AppSettings(defaults: UserDefaults(suiteName: #function)!)
-        settings.groqModel = "   "
-        #expect(settings.groqModel == GroqLlm.defaultModel)
+        settings.setModel("   ", for: .groq, purpose: .dictation)
+        #expect(settings.model(for: .groq, purpose: .dictation) == GroqLlm.defaultModel)
     }
 
     @Test("推論を垂れ流すモデルの <think> は落とす")
@@ -154,7 +154,7 @@ struct SettingsForwardCompatTests {
         let settings = AppSettings(defaults: defaults)
         #expect(settings.formattingBackend == .onDevice)  // 知らない値は既定へ
         // 消えたキー(transcriptionBackend)も知らない値も、他の設定を巻き添えにしない
-        #expect(settings.groqModel == "my-model")
+        #expect(settings.model(for: .groq, purpose: .dictation) == "my-model")
         #expect(settings.formattingTimeoutMs == 20_000)
         #expect(settings.holdThresholdMs == 777)
     }

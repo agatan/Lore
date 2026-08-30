@@ -1,4 +1,5 @@
 import Foundation
+import GRDB
 import Testing
 @testable import KoeKit
 
@@ -8,6 +9,85 @@ import Testing
     #expect(database.fileURL == nil)
     #expect(try await database.modes.all().count == BuiltinModes.all.count)
     #expect(try await database.history.count() == 0)
+}
+
+@Test func existingDatabaseIsBackedUpBeforeMigration() async throws {
+    let root = FileManager.default.temporaryDirectory.appendingPathComponent("koe-backup-test-\(UUID().uuidString)")
+    let databaseURL = root.appendingPathComponent("koe.sqlite")
+    let backupDirectory = root.appendingPathComponent("Backups")
+    try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+    _ = try DatabaseQueue(path: databaseURL.path)
+
+    _ = try await KoeDatabase.open(
+        fileURL: databaseURL,
+        backupDirectory: backupDirectory,
+        now: Date(timeIntervalSince1970: 1_788_112_800)
+    )
+
+    let backups = try FileManager.default.contentsOfDirectory(at: backupDirectory, includingPropertiesForKeys: nil)
+    #expect(backups.count == 1)
+    #expect(backups[0].lastPathComponent.hasPrefix("pre-migration-"))
+    try FileManager.default.removeItem(at: root)
+}
+
+@Test func dailyBackupIsAConsistentOncePerDaySnapshot() async throws {
+    let root = FileManager.default.temporaryDirectory.appendingPathComponent("koe-backup-test-\(UUID().uuidString)")
+    let databaseURL = root.appendingPathComponent("koe.sqlite")
+    let backupDirectory = root.appendingPathComponent("Backups")
+    let day = Date(timeIntervalSince1970: 1_788_112_800)
+
+    var database: KoeDatabase? = try await KoeDatabase.open(
+        fileURL: databaseURL,
+        backupDirectory: backupDirectory,
+        now: day
+    )
+    try await database?.history.save(makeSession(id: "before-backup", status: .completed, raw: "保存済み"))
+    database = try await KoeDatabase.open(fileURL: databaseURL, backupDirectory: backupDirectory, now: day)
+    try await database?.history.save(makeSession(id: "after-backup", status: .completed, raw: "後から追加"))
+    database = try await KoeDatabase.open(fileURL: databaseURL, backupDirectory: backupDirectory, now: day)
+
+    let backups = try FileManager.default.contentsOfDirectory(at: backupDirectory, includingPropertiesForKeys: nil)
+    let daily = try #require(backups.first { $0.lastPathComponent.hasPrefix("daily-") })
+    let backupQueue = try DatabaseQueue(path: daily.path)
+    #expect(try await HistoryStore(queue: backupQueue).count() == 1)
+    #expect(try await HistoryStore(queue: backupQueue).record(id: "before-backup") != nil)
+    #expect(try await HistoryStore(queue: backupQueue).record(id: "after-backup") == nil)
+    try database?.deleteBackups()
+    #expect(!FileManager.default.fileExists(atPath: backupDirectory.path))
+    try FileManager.default.removeItem(at: root)
+}
+
+@Test func backupRetentionKeepsSevenNewestSnapshots() async throws {
+    let root = FileManager.default.temporaryDirectory.appendingPathComponent("koe-backup-test-\(UUID().uuidString)")
+    let databaseURL = root.appendingPathComponent("koe.sqlite")
+    let backupDirectory = root.appendingPathComponent("Backups")
+    let firstDay = Date(timeIntervalSince1970: 1_788_112_800)
+    var database: KoeDatabase? = try await KoeDatabase.open(
+        fileURL: databaseURL,
+        backupDirectory: backupDirectory,
+        now: firstDay
+    )
+
+    for offset in 0..<8 {
+        let date = firstDay.addingTimeInterval(TimeInterval(offset * 86_400))
+        database = try await KoeDatabase.open(fileURL: databaseURL, backupDirectory: backupDirectory, now: date)
+        let created = try FileManager.default.contentsOfDirectory(
+            at: backupDirectory,
+            includingPropertiesForKeys: [.contentModificationDateKey]
+        ).max { lhs, rhs in
+            let left = try lhs.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate ?? .distantPast
+            let right = try rhs.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate ?? .distantPast
+            return left < right
+        }
+        if let created {
+            try FileManager.default.setAttributes([.modificationDate: date], ofItemAtPath: created.path)
+        }
+    }
+
+    let backups = try FileManager.default.contentsOfDirectory(at: backupDirectory, includingPropertiesForKeys: nil)
+    #expect(backups.count == 7)
+    try database?.deleteBackups()
+    try FileManager.default.removeItem(at: root)
 }
 
 @Test func deletingAllUserDataCoversEveryPersistedDomain() async throws {

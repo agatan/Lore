@@ -13,7 +13,6 @@ public final class LifeLogCoordinator {
     public private(set) var availableCalendars: [String] = []
     public private(set) var highlightedUtteranceID: String?
     public private(set) var monthActivity: [String: LifeLogDayActivity] = [:]
-    public private(set) var extractionRules: [TodoExtractionRule] = []
     public private(set) var liveTranscript = ""
     public private(set) var isTranscribing = false
     public private(set) var isRecoveringCapture = false
@@ -475,26 +474,11 @@ public final class LifeLogCoordinator {
         guard let database, let id = todo.sourceUtteranceIDs.first else { return }
         do { guard let utterance = try await database.lifeLog.utterance(id: id) else { return }; selectedDate = utterance.startedAt; highlightedUtteranceID = id; await reload() } catch { fail(error) }
     }
-    public func addExtractionRule(_ instruction: String) async {
-        guard let database else { return }
-        let value = instruction.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !value.isEmpty else { return }
-        do { try await database.lifeLog.save(rule: TodoExtractionRule(instruction: value)); await reload() }
-        catch { fail(error) }
-    }
-
-    public func deleteExtractionRule(id: String) async {
-        guard let database else { return }
-        do { try await database.lifeLog.deleteRule(id: id); await reload() }
-        catch { fail(error) }
-    }
-
     public func reload() async {
         guard let database else { return }
         do {
             day = try await database.lifeLog.day(selectedDate, participatingOnly: participatingEventsOnly())
             todos = try await database.lifeLog.todos()
-            extractionRules = try await database.lifeLog.rules()
         } catch { fail(error) }
     }
 

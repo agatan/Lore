@@ -1,203 +1,170 @@
-# Koe 設計文書
+# Koe 内部設計リファレンス
 
-本書は [spec.md](spec.md) の要件を実現する現在の設計を示します。利用者データの境界は [PRIVACY.md](../PRIVACY.md) にまとめています。
+本書は現在のコードをモジュール単位で俯瞰するための実装リファレンスです。[HTML版](design.html) と同じ範囲を扱います。利用者から見える契約は [spec.md](spec.md) / [spec.html](spec.html)、データ取り扱いは [PRIVACY.md](../PRIVACY.md) を参照してください。
 
-## 1. 中心となるドメイン
+## 1. ビルドターゲットと依存関係
 
-Koe の中心概念は「口述セッション」です。録音、認識、永続化、整形、挿入を一つの状態遷移として扱います。
-
-重要な不変条件は次のとおりです。
-
-1. STT が確定するまで、永続化可能な `SessionRecord` は作らない。
-2. STT 確定後は、整形より先に生の文字起こしを保存する。
-3. 整形失敗時は生の文字起こしを使う。
-4. 挿入失敗時は結果をクリップボードへ残す。
-5. 録音開始時の対象アプリ、モード、指示、エンジンをスナップショットし、途中の設定変更で意味を変えない。
-
-これらは `SessionDraft` と `SessionRecord` の境界に置き、UIや永続化アダプタの都合で迂回できないようにします。
-
-## 2. モジュール構成
+| Target / Product | Entry point | 役割 |
+|---|---|---|
+| `Koe` / `Koe.app` | `Sources/Koe/main.swift`, `Sources/Koe/AppIntents.swift` | SwiftUIアプリとApp Intents |
+| `KoeCLI` / `koe-cli` | `Sources/KoeCLI/main.swift` | 標準入出力・ファイル・クリップボード向けCLI |
+| `KoeMCP` / `koe-mcp` | `Sources/KoeMCP/main.swift` | stdio JSON-RPC MCP server |
+| `KoeKit` | `Sources/KoeKit/` | ドメイン、ユースケース、OS/AI/DBアダプタ、UI |
+| `KoeKitTests` | `Tests/KoeKitTests/` | Swift Testingによる単体・統合テスト |
 
 ```text
-Koe.app
-├── Domain
-│   ├── SessionDraft / SessionRecord       セッション状態と監査記録
-│   ├── Mode / ModeResolver                アプリごとの整形ルール
-│   ├── SharedRules / Vocabulary           共通指示と語彙
-│   └── FormattingPolicy                   プロンプト構築と出力検証
-├── Engines
-│   ├── SpeechAnalyzerStt                  オンデバイス音声認識
-│   ├── FoundationModelsLlm                既定のオンデバイス整形
-│   ├── GroqLlm                            利用者が選んだ場合の外部整形
-│   └── EngineRegistry                     エンジン選択と準備
-├── System
-│   ├── AudioCapture / AudioDevices        録音と入力デバイス
-│   ├── HotkeyMonitor / HotkeyBinding      グローバル操作
-│   ├── TextInserter                       ペーストによる挿入
-│   ├── FrontmostAppObserver               対象アプリの確定
-│   ├── SecretStore                        Groq API キーの Keychain 保存
-│   └── Permissions / LoginItem            macOS 権限と常駐設定
-├── Persistence
-│   └── KoeDatabase と各 Store             GRDB / SQLite
-├── Analysis
-│   └── VocabularySuggestionJob            オンデバイス語彙分析
-├── App
-│   ├── DictationCoordinator               セッション状態機械の駆動
-│   ├── AppEnvironment                     UI 状態とユースケース境界
-│   └── AppSettings                        UserDefaults 設定
-└── UI
-    └── メニューバー、HUD、設定、履歴
+Koe ─────┐
+KoeCLI ──┼──> KoeKit ──> GRDB
+KoeMCP ──┘
 ```
 
-依存の中心は Domain です。OS API、ネットワーク、DB、UI は外側のアダプタとして扱います。
+外部Swift PackageはGRDBだけです。`Domain`、`App`、`Engines`などは単一の`KoeKit` target内の論理モジュールであり、import境界としては強制されません。
 
-## 3. セッション状態
+## 2. KoeKitのモジュール一覧
+
+| Path | 主要型 | 現在の責務 |
+|---|---|---|
+| `Domain/` | `SessionDraft`, `SessionRecord`, `Mode`, `FormattingPolicy`, `LifeLogDay`, `LifeLogTodo` | 永続化やUIに依存しない状態、値、遷移、整形規則 |
+| `App/` | `AppEnvironment`, `DictationCoordinator`, `LifeLogCoordinator`, `AppSettings`, `LifeLogDerivationService` | composition rootと二つの実行パイプライン |
+| `Engines/` | `SttEngine`, `LlmEngine`, `SpeechAnalyzerStt`, `FoundationModelsLlm`, `RemoteLlm`, `EngineRegistry` | 音声認識・LLMの共通境界とprovider実装 |
+| `Persistence/` | `KoeDatabase`, `HistoryStore`, `LifeLogStore`, `ModeStore`, `VocabularyStore` | GRDB schema、migration、query、backup |
+| `System/` | `AudioCapture`, `ContinuousAudioCapture`, `TextInserter`, `HotkeyMonitor`, `CalendarProvider`, `SecretStore` | AVFoundation、Accessibility、EventKit、Keychain等のmacOS境界 |
+| `Analysis/` | `VocabularySuggestionJob`, `ConversationSegmenter`, `LifeLogTextExporter` | 履歴分析、会話分割、外部向けテキスト生成 |
+| `Automation/` | `KoeAutomationService` | CLIとMCPが共有するDB・設定ユースケース |
+| `UI/` | `KoeApp`, `MainWindowView`, `LifeLogWindow`, `HistoryBrowserView`, settings views, HUD | SwiftUI sceneと表示・操作 |
+
+## 3. プロセス構成と起動
+
+`KoeApp`は`MenuBarExtra`を常設し、メイン、設定、ライフログミニ、全TODOのwindowを定義します。`AppEnvironment`は`@MainActor @Observable`のcomposition rootで、設定、DB、engine、hotkey、二つのcoordinator、画面投影用stateを所有します。
+
+起動時の主要順序は次です。
+
+1. `AppSettings`と`EngineRegistry`を生成する。
+2. `KoeDatabase.openDefault()`でDBを開き、必要ならbackup、migration、builtin mode seedを行う。
+3. mode、共通ルール、語彙、履歴、利用状況を読み込む。
+4. 保持期間を超えた履歴とライフログ音声を削除する。
+5. engine設定と3本のglobal hotkeyを反映する。
+6. `LifeLogCoordinator.configure`後、保留audio chunkをバックグラウンド再処理する。
+
+終了時はApp delegateが進行中の音声writer、認識、DB保存、停止時派生処理を最大20秒待ちます。時間切れでも確定済みaudio chunkは次回起動時の再処理対象です。
+
+## 4. 音声入力パイプライン
+
+実装の中心は`DictationCoordinator`です。
 
 ```text
-idle
-  └─ start → recording
-                ├─ cancel → cancelled
-                └─ stop → recognizing
-                              ├─ STT failure → failed
-                              └─ transcript finalized
-                                   ↓ SessionRecord(status: interrupted) を保存
-                                formatting
-                                  ├─ success → inserting
-                                  └─ failure → raw transcript → inserting
-                                                   ├─ success → completed / fallback
-                                                   └─ failure → clipboard_only
+Hotkey/UI
+  -> target app・mode・rules・vocabulary・engineをSessionContextへ固定
+  -> AudioCapture + SpeechAnalyzerStt
+  -> raw transcriptをSessionRecord(interrupted)として保存
+  -> FormattingPolicy + LlmEngine
+  -> TextInserter
+  -> completed / fallback / clipboard_only / failed / cancelled
 ```
 
-`interrupted` は終端状態ではありません。生の文字起こしは保存できたものの、その後の処理が完了しなかったことを表し、クラッシュやプロセス終了後の回収根拠になります。
+- 短押しと長押しの解釈は`HotkeyGestureInterpreter`、対象アプリは`FrontmostAppObserver`、mode選択は`ModeResolver`が担当します。
+- `SessionDraft`がrecording、recognizing、formatting、insertingの進捗と計測値を保持し、永続化可能な`SessionRecord`へ確定します。
+- STT確定後、LLMを呼ぶ前にraw transcriptを保存します。
+- LLMのtimeout、利用不可、出力検証エラーではraw transcriptを挿入対象にします。
+- `TextInserter`はclipboardを退避して対象アプリへpasteし、失敗時は結果をclipboardに残します。
+- 通常の音声入力はaudio fileを作りません。
 
-キャンセル時に確定結果がない場合は、録音中の暫定テキストを使って履歴を残します。何も認識していない場合だけ記録を作りません。
+## 5. ライフログパイプライン
 
-## 4. 変動点の置き場所
-
-### 4.1 モード
-
-用途やアプリによる違いは `Mode` に閉じ込めます。モードは bundle ID のパターン、整形指示、言語設定、任意のモデル指定を持ちます。手動固定、完全一致、ワイルドカード、フォールバックの優先順位は `ModeResolver` が一元的に決めます。
-
-全用途に共通する指示は `SharedRules`、固有名詞や表記は `Vocabulary` に置きます。アプリ名を見てパイプライン内で分岐する実装は作りません。
-
-### 4.2 整形バックエンド
-
-文章整形の違いは `FormattingBackend` と `EngineRegistry` に閉じ込めます。
-
-- `onDevice`: Apple Foundation Models。既定値。
-- `groq`: Groq Chat Completions API。利用者が明示的に選択した場合だけ使用。
-
-セッションは開始時のエンジンを最後まで使い、処理中の設定変更を反映しません。出力検証と生テキストへのフォールバックはエンジン共通です。
-
-語彙分析は過去の履歴を読むため、整形バックエンドとは別の `analysisLlm` を使います。`analysisLlm` は常にオンデバイスであり、Groq 選択時も切り替わりません。
-
-## 5. プライバシー境界
-
-### 5.1 録音と音声認識
-
-`AudioCapture` が扱う録音データは処理中のメモリにだけ存在します。ファイルやDBへ保存せず、外部APIへ送信しません。SpeechAnalyzer が必要とする音声アセットは macOS が管理します。
-
-### 5.2 外部送信
-
-アプリが直接通信する実装は `GroqLlm` に限定します。Groq 整形を選んだ場合、次をリクエストへ含めます。
-
-- 今回の文字起こし
-- 共通ルール
-- 選択されたモードの指示
-- 有効な語彙
-- ライフログのSummary・TODO案生成時は、対象日の全発話・テキストメモ・予定の時刻と件名、ライフログpromptと抽出rule。入力枠を超える場合も末尾切り捨てせず、時系列の分割要約を統合する
-
-録音音声、通常の口述履歴、前面アプリ名と bundle ID は含めません。モデル一覧取得と接続確認も `GroqLlm` が担います。
-
-外部送信の有無は `FormattingBackend.sendsTranscriptOffDevice` を唯一の判定元とし、設定画面とプライバシー画面はこの値から表示を決めます。
-
-### 5.3 API キー
-
-`SecretStore` が macOS Keychain の generic password として保存します。値は `AppSettings`、履歴DB、ログ、UI状態へ複製しません。読み出しはプロセス内でキャッシュし、保存・削除時に同じ入口から更新します。
-
-## 6. プロンプトと出力検証
-
-`FormattingPolicy` は次の順で指示を組み立てます。
+`LifeLogCoordinator`は音声入力と状態を共有せず、専用の`ContinuousAudioCapture`とSpeechAnalyzer sessionを持ちます。
 
 ```text
-共通ルール
-モード固有の指示
-語彙
-今回の文字起こし
+capture request
+  -> 30秒単位の .partial を同一directoryの .m4a へcommit
+  -> LifeLogAudioChunkをDBへ保存
+  -> 連続SpeechAnalyzer streamからtimestamp付きutteranceを保存
+  -> calendar snapshotとの任意関連付け
+  -> ConversationSegmenterでconversation再構築
+  -> LifeLogDerivationServiceでsummaryとdraft TODOを生成
 ```
 
-整形は入力への応答ではなく変換です。次の場合は結果を採用せず、生の文字起こしへフォールバックします。
+- 初回開始前にローカルaudio保存への明示同意が必要です。
+- 30秒chunkは復旧・保持の単位であり、認識sessionの境界ではありません。
+- 未処理・失敗chunkは保存状態を持ち、起動後に古い順で再処理します。明確な無音chunkは`peakLevel`で除外します。
+- calendarはEventKitから選択calendarの最小snapshotだけを保存します。発話との関連付けは前後2分を許容し、conversationは90秒以上の無発話で分割します。
+- summaryとdraft TODOは設定間隔ごとに、前回以降の発話またはmemoがある場合だけ、その日の全データから作り直します。停止時は対象日を最終更新します。
+- sleep前にstreamを閉じ、記録意図が残る場合だけwake後にbackoff付きで再接続します。
 
-- 空の出力
-- 入力に対して極端に短い、または長い出力
-- コードフェンスやプロンプト例など、指示漏洩の兆候
-- タイムアウトまたはエンジンエラー
+## 6. Engine構成
 
-## 7. 永続化と監査
+`EngineRegistry`は音声入力用とライフログ派生用の`LlmEngine`を別々に選び、STTは共通factoryから独立sessionを作ります。
 
-`KoeDatabase` は GRDB の `DatabaseQueue` を使い、起動時に名前付きマイグレーションを適用します。
+| Backend | 実装 | 接続先 | Mac外への文字送信 |
+|---|---|---|---|
+| Apple Foundation Models | `FoundationModelsLlm` | OS内蔵 | なし |
+| Ollama | `RemoteLlm` | `http://localhost:11434/v1` | なし |
+| LM Studio | `RemoteLlm` | `http://localhost:1234/v1` | なし |
+| OpenAI | `RemoteLlm` | provider API | あり、明示選択時のみ |
+| Anthropic | `RemoteLlm` | provider API | あり、明示選択時のみ |
+| Gemini | `RemoteLlm` | provider API | あり、明示選択時のみ |
+| Groq | `GroqLlm` | Groq API | あり、明示選択時のみ |
 
-### 7.1 セッション
+過去履歴から語彙候補を作る`analysisLlm`は常にオンデバイスです。API keyは`SecretStore`を通してKeychainへ保存し、用途別に分離します。
 
-履歴は次を保存します。
+## 7. 永続化
 
-- セッションID、開始・終了日時、状態
-- 対象アプリ名と bundle ID
-- モードIDと、モード・最終プロンプトのスナップショット
-- STT / LLM のエンジンとモデル
-- 生の文字起こしと整形結果
-- エラー、音声長、各段の処理時間
+DBは`~/Library/Application Support/Koe/koe.sqlite`です。`DatabaseQueue`を使い、foreign keyを有効化します。
 
-全文検索は FTS5 の trigram tokenizer を使い、日本語の部分一致を扱います。挿入結果だけでなく生の文字起こしも検索対象です。
-
-### 7.2 モード、共通ルール、語彙
-
-ビルトインの初期値と利用者の編集を区別し、同梱内容の更新で利用者の変更を上書きしません。語彙候補は候補本体と根拠を保存し、承認時に語彙へ昇格します。
-
-履歴と語彙候補は別に保存します。履歴を削除しても、候補に複製済みの短い根拠抜粋は残ります。この差をUIとプライバシー文書で明示します。
-
-## 8. 運用上の例外
-
-次は通常の運用状態として扱います。
-
-- 音声アセットが未取得、予約不能、またはプロセス内で回復不能
-- マイク・アクセシビリティ権限が未付与
-- 整形エンジンが利用不可、タイムアウト、異常出力
-- 挿入対象が消えた、またはセキュア入力中
-- DBの初期化・保存・検索失敗
-- 一部の語彙分析バッチだけが失敗
-- 古い設定に現在は存在しない enum 値が残っている
-
-失敗は状態、履歴、ログ、またはUIへ理由を出します。語彙分析の部分失敗は成功として丸めず、透かしを進めないことで次回に再試行します。未知の設定値は該当項目だけ既定値へ戻し、他の設定を巻き込みません。
-
-## 9. 可観測性
-
-ログは `KoeLog` のカテゴリへ集約します。発話内容、整形結果、語彙、APIキーはログに出しません。診断に必要な状態、件数、時間、エンジン名、失敗理由だけを記録します。
-
-履歴は利用者向けの監査記録でもあります。設定を変更した後も、過去の結果がどの入力、モード、指示、エンジンから作られたかを再構成できます。
-
-## 10. 現在の設計判断
-
-| 判断 | 理由 |
+| Store | 主なtable |
 |---|---|
-| macOS 26 / Apple Silicon 専用 | SpeechAnalyzer と Foundation Models を直接利用し、互換層を持たない |
-| STT は SpeechAnalyzer に固定 | ダウンロード型モデルの依存・初期化・障害面を持ち込まない |
-| 整形はオンデバイスを既定にする | 外部送信なしで使い始められる強い既定を保つ |
-| Groq は明示選択時だけ使う | オンデバイス品質を補う選択肢と送信境界を明確に分離する |
-| 語彙分析は常にオンデバイス | 過去履歴の黙示的な外部送信を構造的に防ぐ |
-| 整形前に生テキストを保存する | 後段の失敗で発話を失わない |
-| 挿入はペースト方式 | 日本語IMEを経由したキー入力より互換性が高い |
-| 語彙は提案後に人が承認する | 確率的な分析結果を自動でドメイン設定へ混入させない |
-| 履歴にプロンプトを保存する | 結果の説明可能性と再現性を保つ |
+| `HistoryStore` | `sessions`, `sessions_fts` |
+| `ModeStore` | `modes` |
+| `SharedRulesStore` | `meta` |
+| `VocabularyStore` | `vocabulary`, `vocab_suggestions` |
+| `LifeLogStore` | `life_log_audio_chunks`, `calendar_event_snapshots`, `life_log_conversations`, `life_log_utterances`, `life_log_memos`, `life_log_todos`, `daily_summaries`と各FTS |
+| `LlmUsageStore` | `llm_usage_events` |
 
-## 11. 依存関係
+名前付きmigrationは`v1`から`v8`です。履歴、発話、memo、TODO、summaryの日本語部分一致にはFTS5 trigramを使います。Codable値と配列はJSON、日時はISO 8601文字列で保存します。
 
-外部Swift Packageは GRDB.swift のみです。ライセンスは [THIRD_PARTY_NOTICES](../THIRD_PARTY_NOTICES) に記載し、アプリのResourcesにも同梱します。
+既存DBを開くと、未適用migrationの直前に`Backups/pre-migration-*.sqlite`を作ります。migrationがなくても1日1回`Backups/daily-*.sqlite`を作り、両種を合わせて更新日時が新しい7ファイルを保持します。backupはGRDBのonline backupで整合した単一SQLiteへ固定します。全データ削除はDB内利用者データ、保存audio、backupを削除します。
 
-## 12. ライフログ
+## 8. 設定、秘密、プロセス間同期
 
-テキストメモは発話と別の永続型として扱い、ミニウィンドウのチャット入力から追加する。TODO案は発話IDまたはメモIDの出典を保持する。明確な無音chunkは記録したpeak levelにより再起動時のSTTと後続派生処理を省略する。日付境界ではSpeechAnalyzerを切らず、resultの実時刻で各日の発話・会話・Summaryへ振り分け、追従表示だけを新しい日に進める。ライフログ記録がONの間は壁時計の設定間隔で派生処理を判定し、前回のwatermark以降に発話・メモがある場合だけLLMを呼ぶ。停止時には差分判定を行わず、日付をまたいだ場合を含む各対象日を全データから再要約する。自動開始・終了の条件はKoe内に重複実装せず、macOSショートカットのオートメーションへ委ねる。
+- `AppSettings.Storage`はsuite `dev.agatan.Koe`のUserDefaults key `koe.settings.v1`へJSONで保存します。
+- provider/modelは音声入力とライフログで別設定です。hotkey、保持期間、calendar filter、summary間隔、表示設定もここに入ります。
+- API keyはUserDefaultsやDBには入れずKeychainへ保存します。
+- CLI/MCPによるTODOまたはprompt変更は`DistributedNotificationCenter`でアプリへ通知し、`AppEnvironment`が再読込します。
 
-`LifeLogCoordinator`は`DictationCoordinator`と状態を共有しない。同時利用時は、共通の`SpeechAnalyzerStt`がセッションごとに別の`SpeechAnalyzer`と`SpeechTranscriber`を生成する。`ContinuousAudioCapture`は録音中の`.partial`を閉じた後に同一directory内の`.m4a`へrenameし、完成ファイルのcommit後にだけ`LifeLogAudioChunk(captured)`を保存してSTTへ進む。失敗時は音声行を残し、起動時に古い順に再実行する。`NSWorkspace.willSleepNotification`で口述を閉じ、ライフログchunkと解析入力を確定する。`didWakeNotification`では記録意図が残る場合だけbackoff付きで新しいcapture/analyzerへ再接続する。
+## 9. UIとwindow対応
 
-永続モデルはaudio chunk、utterance、conversation、Calendar event snapshot、global TODOとprovenance、抽出rule、daily summaryである。元音声、発話、会話、派生物の順にsource of truthを置く。録音開始から停止までは一つのSpeechAnalyzerストリームを維持し、30秒のaudio chunkは耐久保存の単位に限定して認識文脈を分断しない。入力構成変更や保存失敗時はchunkを確定してセッションを閉じ、利用者の記録意図が有効な間だけbackoff付きで自動再開する。SummaryとTODO案は通常の成形と同じ`LlmEngine`で設定間隔ごとに更新判定し、差分がある場合は対象日の全データから作り直す。入力枠を超える場合だけ分割要約を統合する。未確定のTODO案は再生成時に全置換し、編集・確定されたTODOには触れない。語彙・prompt・抽出ruleの変更は既存Storeを通す。UIはKoeのメインWindow上部でライフログと音声入力をtab切り替えし、ライフログ表示時はCalendar・Timeline・TODOの3カラムだけを見せる。メニューバーでも両用途をtabで分離し、いずれもライフログを既定表示にする。設定は別Windowとし、共通・音声入力・ライフログの階層に分ける。月間Calendarは予定と発話の密度を別色のdotで表現し、Timelineは遅延描画する。右カラムはglobal TODOと、その日の発話密度・話題を示す視覚的なinsightで構成する。CalendarのRSVPは読み取り専用で保存し、既定では参加済みとRSVPのない予定だけを表示・派生処理へ含める。予定時刻は発話との関連付けに使う参考値であり、会話の分割境界にはしない。ライフログ固有のCapture、Calendar、派生処理、prompt、global hotkey設定は専用設定タブへ集約する。
+| Scene / View | 内容 |
+|---|---|
+| `MenuBarPanel` | ライフログと音声入力の開始停止、直前結果、mode、各windowへの入口 |
+| `MainWindowView` | `lifeLog` / `history`のsegmented切替。初回はonboarding |
+| `LifeLogWindow` | 月間activity、日別timeline、summary、global TODO |
+| `HistoryBrowserView` | 音声入力履歴、検索、詳細、コピー、削除 |
+| `LifeLogMiniWindow` | capture状態とmemo入力 |
+| `LifeLogTodoManagerWindow` | 全TODOの編集、確定、完了、再開、削除 |
+| `SettingsWindowView` | 一般、利用状況、語彙、privacy、連携、音声入力、AI整形、mode、ライフログ、要約とTODO、calendar |
+| `HudController` / `HudView` | 音声入力のrecordingから終了までの一時表示 |
+
+## 10. 自動化境界
+
+`KoeAutomationService`がCLIとMCPで共有され、日別export、open TODO export、横断検索、TODO CRUD、summary/TODO prompt更新を提供します。App Intentsは起動中の`AppEnvironment`を使い、capture開始・終了とexportを提供します。公開コマンドとtool schemaは外部仕様に列挙します。
+
+## 11. 並行実行とエラー表示
+
+- UI stateとcoordinatorは`@MainActor`に固定します。
+- EventKit読込は`CalendarProvider` actor、DB操作はGRDB `DatabaseQueue`で直列化します。
+- STT/LLM protocolとdomain値は`Sendable`を基本とし、長時間処理は`Task`で所有・cancelします。
+- 回復可能な失敗は履歴status、画面のmessage、MCPの`isError`、CLIのstderr/exit 1のいずれかへ出します。本文、API key、語彙はlogへ出しません。
+
+## 12. 変更時の影響範囲
+
+| 変更 | 最初に確認する場所 | 同時に更新するもの |
+|---|---|---|
+| provider追加 | `FormattingBackend`, `EngineRegistry`, `ModelsSettingsView`, `SecretStore` | privacy表示、engine tests、spec/design |
+| 永続model変更 | `Domain`, `KoeDatabase.migrator`, 対応Store | migration test、backup/delete test、design |
+| dictation状態変更 | `SessionDraft`, `DictationCoordinator`, `HistoryStore` | HUD/history、state tests、spec/design |
+| life-log派生変更 | `LifeLogDerivationService`, `LifeLogStore` | E2E/export、spec/design |
+| 公開自動化変更 | `KoeAutomationService`, CLI/MCP/AppIntents | tool schema/help、spec.md/spec.html |
+| 主要window変更 | `KoeApp`, 対応View, `AppEnvironment` | `make ui-test`、spec/design |
+
+## 13. テスト配置
+
+`Tests/KoeKitTests`はdomain、formatting、engine、persistence、life log、automationを対象にします。`make ui-test`は署名済みappを起動し、`Scripts/ui-test.sh`から主要CUJを検証します。詳細な実行方法とE2E契約は[testing.md](testing.md)を参照してください。

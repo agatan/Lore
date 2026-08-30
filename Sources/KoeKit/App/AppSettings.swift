@@ -47,8 +47,6 @@ public final class AppSettings {
         public var lifeLogGroqModel: String = GroqLlm.defaultModel
         public var lifeLogOllamaModel: String = "gpt-oss:20b"
         public var lifeLogLmStudioModel: String = "openai/gpt-oss-20b"
-        /// 長押し閾値の既定値変更を一度だけ反映するための印。
-        public var holdThresholdMigrated: Bool = false
         public var lifeLogCaptureEnabled: Bool = false
         public var lifeLogInputDeviceUID: String?
         /// 音声は発話本文より機微性と容量が大きいので、既定では有限にする。0 = 無期限。
@@ -101,7 +99,6 @@ public final class AppSettings {
             lifeLogGroqModel = try container.decodeIfPresent(String.self, forKey: .lifeLogGroqModel) ?? groqModel
             lifeLogOllamaModel = try container.decodeIfPresent(String.self, forKey: .lifeLogOllamaModel) ?? ollamaModel
             lifeLogLmStudioModel = try container.decodeIfPresent(String.self, forKey: .lifeLogLmStudioModel) ?? lmStudioModel
-            holdThresholdMigrated = try container.decodeIfPresent(Bool.self, forKey: .holdThresholdMigrated) ?? false
             lifeLogCaptureEnabled = try container.decodeIfPresent(Bool.self, forKey: .lifeLogCaptureEnabled) ?? false
             lifeLogInputDeviceUID = try container.decodeIfPresent(String.self, forKey: .lifeLogInputDeviceUID)
             lifeLogAudioRetentionDays = try container.decodeIfPresent(Int.self, forKey: .lifeLogAudioRetentionDays) ?? fallback.lifeLogAudioRetentionDays
@@ -114,11 +111,6 @@ public final class AppSettings {
             lifeLogMiniWindowAlwaysOnTop = try container.decodeIfPresent(Bool.self, forKey: .lifeLogMiniWindowAlwaysOnTop) ?? false
             accentPalette = try container.decodeIfPresent(AccentPalette.self, forKey: .accentPalette) ?? fallback.accentPalette
 
-            // 旧既定値(300ms)のままなら新既定値へ寄せる。自分で別の値にしている人は触らない。
-            if !holdThresholdMigrated {
-                if holdThresholdMs == 300 { holdThresholdMs = fallback.holdThresholdMs }
-                holdThresholdMigrated = true
-            }
         }
     }
 
@@ -132,8 +124,6 @@ public final class AppSettings {
         if let data = defaults.data(forKey: Self.defaultsKey),
            let decoded = try? JSONDecoder().decode(Storage.self, from: data) {
             storage = decoded
-            // マイグレーション結果を書き戻す
-            persist()
         } else {
             storage = Storage()
         }
@@ -239,19 +229,6 @@ public final class AppSettings {
         persist()
     }
 
-    public var groqModel: String {
-        get { storage.groqModel }
-        set {
-            let trimmed = newValue.trimmingCharacters(in: .whitespacesAndNewlines)
-            storage.groqModel = trimmed.isEmpty ? GroqLlm.defaultModel : trimmed
-            persist()
-        }
-    }
-
-    public func model(for backend: FormattingBackend) -> String {
-        model(for: backend, purpose: .dictation)
-    }
-
     public func model(for backend: FormattingBackend, purpose: LlmPurpose) -> String {
         if purpose == .lifeLog {
             return switch backend {
@@ -273,10 +250,6 @@ public final class AppSettings {
         case .ollama: storage.ollamaModel
         case .lmStudio: storage.lmStudioModel
         }
-    }
-
-    public func setModel(_ value: String, for backend: FormattingBackend) {
-        setModel(value, for: backend, purpose: .dictation)
     }
 
     public func setModel(_ value: String, for backend: FormattingBackend, purpose: LlmPurpose) {

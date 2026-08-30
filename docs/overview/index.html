@@ -11,14 +11,14 @@
 <header class="hero">
   <p class="kicker">macOS voice input</p>
   <h1>Koe <span class="hero-sub">— 話した内容を、使える文章へ</span></h1>
-  <p class="lead">音声認識は Mac 上で実行。文章の仕上げはオンデバイスが既定で、必要なときだけ Groq を選べます。</p>
+  <p class="lead">音声認識は Mac 上で実行。文章の仕上げはオンデバイスが既定で、必要なときだけローカルまたはクラウドLLMを選べます。</p>
   <div class="chips">
     <span class="chip">macOS 26+ / Apple Silicon</span>
     <span class="chip">Swift ネイティブ</span>
     <span class="chip">オンデバイス音声認識</span>
     <span class="chip chip-accent">失敗しても発話を失わない</span>
   </div>
-  <p class="doc-links">詳細: <a href="../spec.md">要件</a> / <a href="../design.md">設計</a> / <a href="../../PRIVACY.md">データ取り扱い</a></p>
+  <p class="doc-links">詳細: <a href="../spec.html">外部仕様(HTML)</a> / <a href="../spec.md">外部仕様(Markdown)</a> / <a href="../design.html">内部設計(HTML)</a> / <a href="../design.md">内部設計(Markdown)</a> / <a href="../../PRIVACY.md">データ取り扱い</a></p>
 </header>
 
 <nav id="toc">
@@ -38,7 +38,7 @@
     <div class="arrow">→</div>
     <div class="step step-save"><b>生テキスト保存</b><small>後段より先に永続化</small></div>
     <div class="arrow">→</div>
-    <div class="step step-accent"><b>文章整形</b><small>Foundation Models / Groq</small></div>
+    <div class="step step-accent"><b>文章整形</b><small>オンデバイス / ローカル / クラウド</small></div>
     <div class="arrow">→</div>
     <div class="step"><b>一括挿入</b><small>失敗時はクリップボードへ</small></div>
   </div>
@@ -60,8 +60,8 @@
   <div class="grid">
     <div class="card"><h3>録音音声</h3><p>処理中のメモリだけで扱い、保存も外部送信もしません。</p></div>
     <div class="card"><h3>オンデバイス整形</h3><p>既定値です。文字起こしと指示文は Mac の外へ出ません。</p></div>
-    <div class="card"><h3>Groq 整形</h3><p>明示的に選んだ場合だけ、今回の文字起こし、共通ルール、モード指示、語彙を送信します。</p></div>
-    <div class="card"><h3>履歴分析</h3><p>Groq の選択にかかわらず、過去履歴の分析は常にオンデバイスで行います。</p></div>
+    <div class="card"><h3>クラウド整形</h3><p>明示的に選んだ場合だけ、今回の文字起こし、共通ルール、モード指示、語彙を選択先へ送信します。</p></div>
+    <div class="card"><h3>履歴分析</h3><p>クラウドの選択にかかわらず、過去履歴の分析は常にオンデバイスで行います。</p></div>
   </div>
 </section>
 
@@ -70,7 +70,7 @@
   <div class="layers">
     <div class="layer"><b>UI</b><span>メニューバー / HUD / 設定 / 履歴</span></div>
     <div class="layer layer-core"><b>Domain</b><span>口述セッション / モード / 共通ルール / 語彙 / 整形ポリシー</span></div>
-    <div class="layer"><b>Engines</b><span>SpeechAnalyzer / Foundation Models / Groq</span></div>
+    <div class="layer"><b>Engines</b><span>SpeechAnalyzer / Foundation Models / Remote LLM</span></div>
     <div class="layer"><b>System</b><span>録音 / ホットキー / ペースト挿入 / Keychain / macOS 権限</span></div>
     <div class="layer"><b>Persistence</b><span>GRDB / SQLite / FTS5</span></div>
   </div>
