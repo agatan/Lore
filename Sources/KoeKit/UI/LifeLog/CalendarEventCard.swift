@@ -40,7 +40,8 @@ struct CalendarEventCard: View {
     }
 
     private var timeRange: String {
-        "\(event.startsAt.formatted(date: .omitted, time: .shortened))–\(event.endsAt.formatted(date: .omitted, time: .shortened))"
+        if event.isAllDay { return "終日" }
+        return "\(event.startsAt.formatted(date: .omitted, time: .shortened))–\(event.endsAt.formatted(date: .omitted, time: .shortened))"
     }
 
     private var tint: Color {

@@ -357,19 +357,11 @@ public final class AppEnvironment {
         voiceMemoHotkeys.stop()
         permissionWatcher?.cancel()
         analysisTask?.cancel()
-        if coordinator.isRecording { coordinator.stop() }
         settings.lifeLogCaptureEnabled = false
 
-        async let lifeLogFinished = lifeLog.stopAndWait()
-        let clock = ContinuousClock()
-        let dictationDeadline = clock.now.advanced(by: .seconds(10))
-        while coordinator.isBusy, clock.now < dictationDeadline {
-            do {
-                try await Task.sleep(for: .milliseconds(50))
-            } catch {
-                break
-            }
-        }
+        async let lifeLogFinished = lifeLog.stopForTermination()
+        async let dictationFinished: Void = coordinator.interruptForTermination()
+        await dictationFinished
         if await !lifeLogFinished {
             KoeLog.persistence.error("終了期限までにライフログ処理を完了できませんでした。保存済み音声は次回起動時に再処理します")
         }

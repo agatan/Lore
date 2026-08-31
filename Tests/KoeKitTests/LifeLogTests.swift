@@ -551,7 +551,7 @@ struct LifeLogTests {
         #expect(day.calendarEvents.map(\.participationStatus) == [.none, .accepted])
     }
 
-    @Test("LLM向けexportは予定・発話・メモを時系列で区別する")
+    @Test("人向けMarkdown exportは予定・発話・メモを時系列で区別する")
     func textExportPreservesTimelineKinds() throws {
         var calendar = Calendar(identifier: .gregorian)
         calendar.timeZone = try #require(TimeZone(secondsFromGMT: 0))
@@ -575,12 +575,14 @@ struct LifeLogTests {
 
         let text = LifeLogTextExporter.render(date: date, day: day, todos: [todo], calendar: calendar)
 
-        let calendarIndex = try #require(text.range(of: "[CALENDAR 09:00:00-09:01:00"))
-        let speechIndex = try #require(text.range(of: "[SPEECH 09:02:00]"))
-        let memoIndex = try #require(text.range(of: "[MEMO 09:03:00]"))
+        let calendarIndex = try #require(text.range(of: "**09:00–09:01 予定**"))
+        let speechIndex = try #require(text.range(of: "**09:02 発話**"))
+        let memoIndex = try #require(text.range(of: "**09:03 メモ**"))
         #expect(calendarIndex.lowerBound < speechIndex.lowerBound)
         #expect(speechIndex.lowerBound < memoIndex.lowerBound)
-        #expect(text.contains("[TODO status=open created=2026-08-29T09:04:00] RFCを書く"))
+        #expect(text.contains("- [ ] RFCを書く（09:04に追加）"))
+        #expect(!text.contains("SPEECH"))
+        #expect(!text.contains("status=open"))
     }
 
     @Test("成功した音声入力履歴だけを注釈付きでライフログへ投影する")
@@ -602,10 +604,10 @@ struct LifeLogTests {
         #expect(day.dictations.map(\.id) == ["voice-input"])
         #expect(day.dictations.first?.text == "明日の資料を送る")
         let export = LifeLogTextExporter.render(date: startedAt, day: day, todos: [])
-        #expect(export.contains("[VOICE_INPUT"))
+        #expect(export.contains("音声入力**"))
         #expect(export.contains("明日の資料を送る"))
         #expect(!export.contains("取り消した入力"))
-        #expect(LifeLogDerivationService.timelineItems(day: day).contains { $0.contains("[音声入力") })
+        #expect(!LifeLogDerivationService.timelineItems(day: day).contains { $0.contains("明日の資料を送る") })
     }
 
     @Test("成功した音声入力の実録音区間はライフログ発話より優先される")
@@ -665,6 +667,7 @@ struct LifeLogTests {
         let date = try #require(calendar.date(from: DateComponents(year: 2026, month: 8, day: 29, hour: 9)))
         let day = LifeLogDay(
             utterances: [.init(startedAt: date, endedAt: date, text: "発話", audioChunkID: "audio")],
+            dictations: [.init(id: "dictation", startedAt: date, endedAt: date, text: "除外する音声入力")],
             memos: [.init(createdAt: date, text: "メモ")],
             conversations: [],
             calendarEvents: [.init(title: "予定", startsAt: date, endsAt: date, calendarTitle: "Work")],
@@ -679,6 +682,7 @@ struct LifeLogTests {
         let options = LifeLogTextExporter.Options(
             includesCalendarEvents: false,
             includesUtterances: true,
+            includesDictations: false,
             includesMemos: false,
             includesSummary: true,
             includesTodosForDay: true
@@ -687,14 +691,39 @@ struct LifeLogTests {
         let text = LifeLogTextExporter.render(date: date, day: day, todos: todos, options: options, calendar: calendar)
 
         #expect(text.contains("要約"))
-        #expect(text.contains("[SPEECH"))
+        #expect(text.contains("発話** 発話"))
         #expect(text.contains("対象"))
-        #expect(!text.contains("[CALENDAR"))
-        #expect(!text.contains("[MEMO"))
-        #expect(text.contains("[TODO status=completed"))
+        #expect(!text.contains("予定**"))
+        #expect(!text.contains("メモ**"))
+        #expect(!text.contains("除外する音声入力"))
+        #expect(text.contains("- [x] 完了"))
         #expect(text.contains("完了"))
         #expect(!text.contains("下書き"))
         #expect(!text.contains("別日"))
+    }
+
+    @Test("音声入力だけではsummaryとTODOを生成しない")
+    @MainActor
+    func dictationDoesNotTriggerDerivation() async throws {
+        let database = try await KoeDatabase.inMemory()
+        let date = Date()
+        let snapshot = ModeSnapshot(modeName: "標準", modePrompt: "", systemPrompt: "", vocabularyCount: 0, trigger: .manual)
+        try await database.history.save(SessionRecord(
+            id: "dictation-only", startedAt: date, endedAt: date.addingTimeInterval(5), status: .completed,
+            modeSnapshot: snapshot, sttEngine: EngineIdentifier("speech-analyzer"),
+            rawTranscript: "明日の資料を送ってください", formattedText: "明日の資料を送ってください"
+        ))
+        let llm = RecordingLifeLogLlm()
+        try await LifeLogCoordinator().updateSummary(
+            for: date,
+            respectingInterval: false,
+            store: database.lifeLog,
+            derivation: LifeLogDerivationService(llm: llm)
+        )
+
+        #expect(llm.recordedPrompts.isEmpty)
+        #expect(try await database.lifeLog.day(date).summary == nil)
+        #expect(try await database.lifeLog.todos().isEmpty)
     }
 
     @Test("全TODO exportは確定済み未実施だけを含む")

@@ -10,14 +10,31 @@ enum LifeLogExportDestination: String, CaseIterable, Identifiable {
 }
 
 struct LifeLogExportSheet: View {
-    var date: Date
-    var day: LifeLogDay
-    var todos: [LifeLogTodo]
-    var onExport: (LifeLogTextExporter.Options, LifeLogExportDestination) -> Bool
+    private struct Snapshot: Sendable {
+        var date: Date
+        var day: LifeLogDay
+        var todos: [LifeLogTodo]
+    }
+
+    @State private var snapshot: Snapshot
+    var onExport: (String, Date, LifeLogExportDestination) async -> Bool
 
     @Environment(\.dismiss) private var dismiss
     @State private var options = LifeLogTextExporter.Options()
     @State private var didCopy = false
+    @State private var renderedText = ""
+    @State private var isPreparing = true
+    @State private var isExporting = false
+
+    init(
+        date: Date,
+        day: LifeLogDay,
+        todos: [LifeLogTodo],
+        onExport: @escaping (String, Date, LifeLogExportDestination) async -> Bool
+    ) {
+        _snapshot = State(initialValue: Snapshot(date: date, day: day, todos: todos))
+        self.onExport = onExport
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
@@ -26,7 +43,7 @@ struct LifeLogExportSheet: View {
                     Text("この日を書き出す")
                         .font(.system(size: 18, weight: .semibold, design: .rounded))
                         .accessibilityIdentifier("export.sheet")
-                    Text(date.formatted(.dateTime.year().month().day().weekday(.wide)))
+                    Text(snapshot.date.formatted(.dateTime.year().month().day().weekday(.wide)))
                         .font(.system(size: 11.5, design: .rounded))
                         .foregroundStyle(.secondary)
                 }
@@ -42,10 +59,11 @@ struct LifeLogExportSheet: View {
                     .font(.system(size: 11, weight: .semibold, design: .rounded))
                     .foregroundStyle(.secondary)
                 LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 8), count: 3), spacing: 8) {
-                    exportToggle("予定", id: "calendar", count: day.calendarEvents.count, isOn: $options.includesCalendarEvents)
-                    exportToggle("発話", id: "speech", count: day.utterances.count + day.dictations.count, isOn: $options.includesUtterances)
-                    exportToggle("メモ", id: "memo", count: day.memos.count, isOn: $options.includesMemos)
-                    exportToggle("要約", id: "summary", count: day.summary == nil ? 0 : 1, isOn: $options.includesSummary)
+                    exportToggle("予定", id: "calendar", count: snapshot.day.calendarEvents.count, isOn: $options.includesCalendarEvents)
+                    exportToggle("発話", id: "speech", count: snapshot.day.utterances.count, isOn: $options.includesUtterances)
+                    exportToggle("音声入力", id: "voice-input", count: snapshot.day.dictations.count, isOn: $options.includesDictations)
+                    exportToggle("メモ", id: "memo", count: snapshot.day.memos.count, isOn: $options.includesMemos)
+                    exportToggle("要約", id: "summary", count: snapshot.day.summary == nil ? 0 : 1, isOn: $options.includesSummary)
                     exportToggle("この日のTODO", id: "todo", count: dayTodoCount, isOn: $options.includesTodosForDay)
                 }
             }
@@ -56,18 +74,28 @@ struct LifeLogExportSheet: View {
                         .font(.system(size: 11, weight: .semibold, design: .rounded))
                         .foregroundStyle(.secondary)
                     Spacer()
-                    Text("LLM向けテキスト")
+                    Text("読みやすいMarkdown")
                         .font(.system(size: 10, design: .rounded))
                         .foregroundStyle(.tertiary)
                 }
-                ScrollView([.vertical, .horizontal]) {
-                    Text(preview)
-                        .font(.system(size: 10.5, design: .monospaced))
+                ScrollView(.vertical) {
+                    if isPreparing {
+                        HStack(spacing: 8) {
+                            ProgressView().controlSize(.small)
+                            Text("プレビューを準備中…")
+                        }
+                        .frame(maxWidth: .infinity, minHeight: 180)
+                        .foregroundStyle(.secondary)
+                        .accessibilityIdentifier("export.preparing")
+                    } else {
+                    Text(previewText)
+                        .font(.system(size: 11.5))
                         .foregroundStyle(.secondary)
                         .textSelection(.enabled)
                         .frame(maxWidth: .infinity, alignment: .topLeading)
                         .padding(12)
                         .accessibilityIdentifier("export.preview")
+                    }
                 }
                 .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 14))
                 .overlay {
@@ -79,37 +107,74 @@ struct LifeLogExportSheet: View {
 
             HStack {
                 Button {
-                    if onExport(options, .clipboard) { didCopy = true }
+                    export(to: .clipboard)
                 } label: {
                     Label(didCopy ? "コピーしました" : "コピー", systemImage: didCopy ? "checkmark" : "doc.on.doc")
                 }
                 .buttonStyle(.bordered)
-                .disabled(!options.hasSelection)
+                .disabled(!canExport)
                 Spacer()
                 Button {
-                    if onExport(options, .file) { dismiss() }
+                    export(to: .file)
                 } label: {
-                    Label("テキストファイルを書き出す…", systemImage: "doc.badge.arrow.up")
+                    if isExporting {
+                        ProgressView().controlSize(.small)
+                    } else {
+                        Label("Markdownを書き出す…", systemImage: "doc.badge.arrow.up")
+                    }
                 }
                 .buttonStyle(.borderedProminent)
                 .tint(KoeTheme.accent)
-                .disabled(!options.hasSelection)
+                .disabled(!canExport)
             }
         }
         .padding(22)
         .frame(width: 660, height: 680)
-        .onChange(of: options) { _, _ in didCopy = false }
+        .task(id: options) {
+            didCopy = false
+            isPreparing = true
+            let snapshot = snapshot
+            let options = options
+            let text = await Task.detached(priority: .userInitiated) {
+                LifeLogTextExporter.render(
+                    date: snapshot.date,
+                    day: snapshot.day,
+                    todos: snapshot.todos,
+                    options: options
+                )
+            }.value
+            guard !Task.isCancelled else { return }
+            renderedText = text
+            isPreparing = false
+        }
     }
 
-    private var preview: String {
-        LifeLogTextExporter.render(date: date, day: day, todos: todos, options: options)
+    private var previewText: String {
+        let limit = 30_000
+        guard renderedText.count > limit else { return renderedText }
+        return String(renderedText.prefix(limit)) + "\n\n…プレビューは先頭部分だけを表示しています。書き出しには全文が含まれます。"
     }
 
     private var dayTodoCount: Int {
-        todos.filter {
-            ($0.status == .open && Calendar.current.isDate($0.createdAt, inSameDayAs: date))
-                || ($0.status == .completed && $0.completedAt.map { Calendar.current.isDate($0, inSameDayAs: date) } == true)
+        snapshot.todos.filter {
+            ($0.status == .open && Calendar.current.isDate($0.createdAt, inSameDayAs: snapshot.date))
+                || ($0.status == .completed && $0.completedAt.map { Calendar.current.isDate($0, inSameDayAs: snapshot.date) } == true)
         }.count
+    }
+
+    private var canExport: Bool {
+        options.hasSelection && !isPreparing && !isExporting
+    }
+
+    private func export(to destination: LifeLogExportDestination) {
+        guard canExport else { return }
+        isExporting = true
+        Task {
+            let succeeded = await onExport(renderedText, snapshot.date, destination)
+            isExporting = false
+            if succeeded, destination == .clipboard { didCopy = true }
+            if succeeded, destination == .file { dismiss() }
+        }
     }
 
     private func exportToggle(_ title: String, id: String, count: Int, isOn: Binding<Bool>) -> some View {

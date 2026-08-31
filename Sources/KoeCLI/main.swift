@@ -36,10 +36,10 @@ struct KoeCLI {
             let date = try value(after: "--date", in: arguments).map(parseDay) ?? Date()
             let options = try exportOptions(value(after: "--include", in: arguments))
             text = try await service.exportDay(date, options: options)
-            defaultFilename = "Koe-LifeLog-\(LifeLogDateKey.string(for: date)).txt"
+            defaultFilename = "Koe-LifeLog-\(LifeLogDateKey.string(for: date)).md"
         case "todos":
             text = try await service.exportOpenTodos()
-            defaultFilename = "Koe-Open-TODO.txt"
+            defaultFilename = "Koe-Open-TODO.md"
         default: throw CLIError.usage("書き出し対象は day または todos です")
         }
         try write(text, arguments: arguments, defaultFilename: defaultFilename)
@@ -100,12 +100,13 @@ struct KoeCLI {
     private static func exportOptions(_ value: String?) throws -> LifeLogTextExporter.Options {
         guard let value else { return .init() }
         let names = Set(value.split(separator: ",").map(String.init))
-        let allowed = Set(["calendar", "speech", "memos", "summary", "todos"])
+        let allowed = Set(["calendar", "speech", "voice-input", "memos", "summary", "todos"])
         let unknown = names.subtracting(allowed)
         guard unknown.isEmpty else { throw CLIError.invalidValue("include", unknown.sorted().joined(separator: ",")) }
         return .init(
             includesCalendarEvents: names.contains("calendar"),
             includesUtterances: names.contains("speech"),
+            includesDictations: names.contains("voice-input"),
             includesMemos: names.contains("memos"),
             includesSummary: names.contains("summary"),
             includesTodosForDay: names.contains("todos")
@@ -144,7 +145,7 @@ struct KoeCLI {
     }
 
     private static let usage = """
-    koe export day [--date YYYY-MM-DD] [--include calendar,speech,memos,summary,todos] [--clipboard|--output PATH]
+    koe export day [--date YYYY-MM-DD] [--include calendar,speech,voice-input,memos,summary,todos] [--clipboard|--output PATH]
     koe export todos [--clipboard|--output PATH]
     koe todo list [--status open|draft|completed|all]
     koe todo add "タイトル" | complete ID | reopen ID | delete ID

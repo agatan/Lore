@@ -25,10 +25,6 @@ struct LifeLogMiniWindow: View {
                         Color.clear.frame(height: 1).id("bottom")
                     }
                 }
-                .onChange(of: items.count) { old, new in
-                    guard new > old else { return }
-                    withAnimation { proxy.scrollTo("bottom", anchor: .bottom) }
-                }
                 .task {
                     await Task.yield()
                     proxy.scrollTo("bottom", anchor: .bottom)

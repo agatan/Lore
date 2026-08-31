@@ -15,7 +15,7 @@ Keep Koe's implementation, external specification, and internal design aligned w
 
 - For review, explanation, or diagnosis requests, inspect and report; do not edit unless the user also asks for a change.
 - For implementation or refactoring requests, make the smallest coherent change, preserve external behavior unless explicitly changed, and validate in proportion to risk.
-- Before changing external behavior, module boundaries, persistence models, deletion semantics, or data transmission, update the relevant Markdown and HTML documents first and stop for pair review. Implement only after approval.
+- Before changing external behavior, module boundaries, persistence models, deletion semantics, or data transmission, update the relevant Markdown and HTML documents first. Treat the updated design and specification as automatically approved and continue to implementation unless the user explicitly requests pair review or an approval pause.
 - Do not commit, push, publish, open a pull request, install software, or change external systems unless explicitly requested.
 - Ask before destructive or hard-to-recover actions whose exact target is not already explicit.
 

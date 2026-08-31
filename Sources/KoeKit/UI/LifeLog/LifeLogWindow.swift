@@ -32,7 +32,7 @@ public struct LifeLogWindow: View {
             await env.lifeLog.followCurrentDay()
             await env.lifeLog.loadActivity(containing: env.lifeLog.selectedDate)
             if !AppEnvironment.usesScreenshotDemoData {
-                await env.lifeLog.refreshCalendar(selectedCalendars: Set(env.settings.lifeLogCalendarTitles))
+                await env.lifeLog.refreshCalendarIfNeeded(selectedCalendars: Set(env.settings.lifeLogCalendarTitles))
             }
         }
         .sheet(isPresented: $showsExportSheet) {
@@ -53,7 +53,14 @@ public struct LifeLogWindow: View {
             MonthActivityCalendar(
                 selectedDate: Binding(get: { env.lifeLog.selectedDate }, set: { _ in }),
                 activity: env.lifeLog.monthActivity,
-                onSelect: { date in Task { await env.lifeLog.select(date: date) } },
+                onSelect: { date in
+                    Task {
+                        await env.lifeLog.select(date: date)
+                        if !AppEnvironment.usesScreenshotDemoData {
+                            await env.lifeLog.refreshCalendar(selectedCalendars: Set(env.settings.lifeLogCalendarTitles))
+                        }
+                    }
+                },
                 onMonthChanged: { date in Task { await env.lifeLog.loadActivity(containing: date) } }
             )
             .padding(16)
@@ -119,10 +126,6 @@ public struct LifeLogWindow: View {
                         }
                         Color.clear.frame(height: 1).id("timeline-bottom")
                     }
-                }
-                .onChange(of: timelineItems.count) { old, new in
-                    guard new > old else { return }
-                    withAnimation { proxy.scrollTo("timeline-bottom", anchor: .bottom) }
                 }
                 .onChange(of: env.lifeLog.sourceNavigationRevision) { _, _ in
                     guard let id = env.lifeLog.highlightedTimelineItemID else { return }
@@ -204,6 +207,11 @@ public struct LifeLogWindow: View {
             }
             .padding(.horizontal, 16).padding(.vertical, 11)
             .background(env.lifeLog.highlightedTimelineItemID == "u-\(value.id)" ? KoeTheme.accent.opacity(0.12) : .clear)
+        case .event(let value):
+            CalendarEventCard(event: value)
+                .padding(.horizontal, 12)
+                .padding(.vertical, 7)
+                .accessibilityIdentifier("life-log.timeline-event-\(value.id)")
         case .dictation(let value):
             HStack(alignment: .top, spacing: 12) {
                 Text(value.startedAt.formatted(date: .omitted, time: .shortened))
@@ -251,7 +259,7 @@ public struct LifeLogWindow: View {
             }
             .buttonStyle(.bordered)
             .controlSize(.large)
-            .help("予定・発話・メモをLLM向けテキストで書き出す")
+            .help("予定・発話・音声入力・メモを読みやすいMarkdownで書き出す")
             .accessibilityIdentifier("life-log.export-day")
         }
         .alert("書き出せませんでした", isPresented: Binding(
@@ -398,13 +406,15 @@ public struct LifeLogWindow: View {
     }
 
     private enum ItemKind {
+        case event(CalendarEventSnapshot)
         case utterance(LifeLogUtterance)
         case dictation(LifeLogDictation)
         case memo(LifeLogMemo)
     }
     private struct TimelineItem { var id: String; var date: Date; var kind: ItemKind }
     private var timelineItems: [TimelineItem] {
-        (env.lifeLog.day.utterances.map { TimelineItem(id: "u-\($0.id)", date: $0.startedAt, kind: .utterance($0)) }
+        (env.lifeLog.day.calendarEvents.map { TimelineItem(id: "e-\($0.id)", date: $0.startsAt, kind: .event($0)) }
+         + env.lifeLog.day.utterances.map { TimelineItem(id: "u-\($0.id)", date: $0.startedAt, kind: .utterance($0)) }
          + env.lifeLog.day.dictations.map { TimelineItem(id: "d-\($0.id)", date: $0.startedAt, kind: .dictation($0)) }
          + env.lifeLog.day.memos.map { TimelineItem(id: "m-\($0.id)", date: $0.createdAt, kind: .memo($0)) })
             .sorted { $0.date < $1.date }
@@ -434,21 +444,21 @@ public struct LifeLogWindow: View {
         })
     }
 
-    private func exportSelectedDay(_ options: LifeLogTextExporter.Options, to destination: LifeLogExportDestination) -> Bool {
-        let text = LifeLogTextExporter.render(
-            date: env.lifeLog.selectedDate,
-            day: env.lifeLog.day,
-            todos: env.lifeLog.todos,
-            options: options
-        )
-        return writeExport(text, filename: "Koe-LifeLog-\(LifeLogDateKey.string(for: env.lifeLog.selectedDate)).txt", to: destination)
+    private func exportSelectedDay(_ text: String, date: Date, to destination: LifeLogExportDestination) async -> Bool {
+        await writeExport(text, filename: "Koe-LifeLog-\(LifeLogDateKey.string(for: date)).md", to: destination)
     }
 
     private func exportOpenTodos(to destination: LifeLogExportDestination) {
-        _ = writeExport(LifeLogTextExporter.renderOpenTodos(env.lifeLog.todos), filename: "Koe-Open-TODO.txt", to: destination)
+        let todos = env.lifeLog.todos
+        Task {
+            let text = await Task.detached(priority: .userInitiated) {
+                LifeLogTextExporter.renderOpenTodos(todos)
+            }.value
+            _ = await writeExport(text, filename: "Koe-Open-TODO.md", to: destination)
+        }
     }
 
-    private func writeExport(_ text: String, filename: String, to destination: LifeLogExportDestination) -> Bool {
+    private func writeExport(_ text: String, filename: String, to destination: LifeLogExportDestination) async -> Bool {
         switch destination {
         case .clipboard:
             NSPasteboard.general.clearContents()
@@ -459,12 +469,17 @@ public struct LifeLogWindow: View {
             return true
         case .file:
             let panel = NSSavePanel()
-            panel.allowedContentTypes = [.plainText]
+            panel.allowedContentTypes = [UTType(filenameExtension: "md") ?? .plainText]
             panel.canCreateDirectories = true
             panel.nameFieldStringValue = filename
-            guard panel.runModal() == .OK, let url = panel.url else { return false }
+            let response = await withCheckedContinuation { continuation in
+                panel.begin { continuation.resume(returning: $0) }
+            }
+            guard response == .OK, let url = panel.url else { return false }
             do {
-                try text.write(to: url, atomically: true, encoding: .utf8)
+                try await Task.detached(priority: .userInitiated) {
+                    try text.write(to: url, atomically: true, encoding: .utf8)
+                }.value
                 return true
             } catch {
                 exportError = error.localizedDescription

@@ -27,13 +27,14 @@ struct StopLifeLogIntent: AppIntent {
 
 struct CopyTodayLifeLogIntent: AppIntent {
     static let title: LocalizedStringResource = "ライフログを書き出してコピー"
-    static let description = IntentDescription("予定・発話・メモを、LLMが読みやすい時系列テキストとしてクリップボードへコピーします。")
+    static let description = IntentDescription("予定・発話・音声入力・メモを、読みやすいMarkdownとしてクリップボードへコピーします。")
     static let supportedModes: IntentModes = .background
 
     @Parameter(title: "対象日（未指定なら今日）", description: "空欄のまま実行すると、その時点の今日を書き出します。", kind: .date)
     var date: Date?
     @Parameter(title: "予定", default: true) var includesCalendarEvents: Bool
     @Parameter(title: "発話", default: true) var includesUtterances: Bool
+    @Parameter(title: "音声入力", default: true) var includesDictations: Bool
     @Parameter(title: "メモ", default: true) var includesMemos: Bool
     @Parameter(title: "要約", default: true) var includesSummary: Bool
     @Parameter(title: "この日に作成・完了したTODO", default: true) var includesTodosForDay: Bool
@@ -50,6 +51,7 @@ struct CopyTodayLifeLogIntent: AppIntent {
 
     private var options: LifeLogTextExporter.Options {
         .init(includesCalendarEvents: includesCalendarEvents, includesUtterances: includesUtterances,
+              includesDictations: includesDictations,
               includesMemos: includesMemos, includesSummary: includesSummary,
               includesTodosForDay: includesTodosForDay)
     }
@@ -68,6 +70,7 @@ struct ExportTodayLifeLogIntent: AppIntent {
     var filenameTemplate: String
     @Parameter(title: "予定", default: true) var includesCalendarEvents: Bool
     @Parameter(title: "発話", default: true) var includesUtterances: Bool
+    @Parameter(title: "音声入力", default: true) var includesDictations: Bool
     @Parameter(title: "メモ", default: true) var includesMemos: Bool
     @Parameter(title: "要約", default: true) var includesSummary: Bool
     @Parameter(title: "この日に作成・完了したTODO", default: true) var includesTodosForDay: Bool
@@ -77,6 +80,7 @@ struct ExportTodayLifeLogIntent: AppIntent {
             \.$date
             \.$includesCalendarEvents
             \.$includesUtterances
+            \.$includesDictations
             \.$includesMemos
             \.$includesSummary
             \.$includesTodosForDay
@@ -107,6 +111,7 @@ struct ExportTodayLifeLogIntent: AppIntent {
 
     private var options: LifeLogTextExporter.Options {
         .init(includesCalendarEvents: includesCalendarEvents, includesUtterances: includesUtterances,
+              includesDictations: includesDictations,
               includesMemos: includesMemos, includesSummary: includesSummary,
               includesTodosForDay: includesTodosForDay)
     }
@@ -135,7 +140,7 @@ struct ExportOpenTodosIntent: AppIntent {
 
     func perform() async throws -> some IntentResult & ReturnsValue<IntentFile> {
         let text = try await LifeLogIntentAction.exportOpenTodos()
-        return .result(value: IntentFile(data: Data(text.utf8), filename: "Koe-Open-TODO.txt", type: .plainText))
+        return .result(value: IntentFile(data: Data(text.utf8), filename: "Koe-Open-TODO.md", type: .plainText))
     }
 }
 

@@ -20,6 +20,7 @@ public final class LifeLogCoordinator {
     public private(set) var isSuspendedForVoiceMemo = false
     public private(set) var isRefreshingCalendar = false
     public private(set) var lastCalendarRefreshAt: Date?
+    private var lastCalendarRefreshDay: String?
 
     private let capture = ContinuousAudioCapture()
     private let calendarProvider = CalendarProvider()
@@ -53,6 +54,7 @@ public final class LifeLogCoordinator {
     private var derivationScheduleTask: Task<Void, Never>?
     private var followsCurrentDay = true
     private var isSuspendedForSleep = false
+    private var skipsFinalDerivationForTermination = false
 
     public init() {
         capture.onCommitted = { [weak self] chunk in await self?.commitLiveChunk(chunk) }
@@ -135,6 +137,14 @@ public final class LifeLogCoordinator {
         return true
     }
 
+    /// Cmd-Qでは復旧可能なaudio/DB保存を優先し、終了を遅らせるsummary/TODO生成は行わない。
+    public func stopForTermination(timeout: Duration = .seconds(3)) async -> Bool {
+        if capture.isRunning || liveTranscriptionTask != nil {
+            skipsFinalDerivationForTermination = true
+        }
+        return await stopAndWait(timeout: timeout)
+    }
+
     private func scheduleDerivedUpdates() {
         guard derivationScheduleTask == nil else { return }
         derivationScheduleTask = Task { [weak self] in
@@ -151,9 +161,9 @@ public final class LifeLogCoordinator {
     public var captureStatusText: String {
         if isSuspendedForVoiceMemo { return "ボイスメモ中は一時停止" }
         if isRecoveringCapture { return "再接続中" }
-        if isCapturing, isTranscribing { return "記録・文字起こし中" }
         if isCapturing { return "記録中" }
-        if isTranscribing { return "文字起こし中" }
+        if captureRequested { return "開始準備中" }
+        if isTranscribing { return "保存中" }
         return "停止中"
     }
 
@@ -454,7 +464,10 @@ public final class LifeLogCoordinator {
         pendingLiveSegments = []
         transcriptionFinished = false
         captureFinished = false
-        if Self.shouldForceSummaryAfterCaptureEnded(captureRequested: captureRequested),
+        let shouldForceSummary = Self.shouldForceSummaryAfterCaptureEnded(captureRequested: captureRequested)
+            && !skipsFinalDerivationForTermination
+        skipsFinalDerivationForTermination = false
+        if shouldForceSummary,
            let startedAt, let completedAt {
             for date in Self.daysSpanned(from: startedAt, through: completedAt) {
                 await refreshDerivedIfDue(for: date, respectingInterval: false, force: true)
@@ -517,9 +530,25 @@ public final class LifeLogCoordinator {
             let events = try await calendarProvider.events(start: interval.start, end: interval.end, selectedCalendars: selectedCalendars)
             try await database.lifeLog.save(calendarEvents: events)
             lastCalendarRefreshAt = Date()
+            lastCalendarRefreshDay = LifeLogDateKey.string(for: selectedDate)
             await reload()
             await loadActivity(containing: selectedDate)
         } catch { fail(error) }
+    }
+
+    /// Windowの再表示ごとにEventKitとDBを読み直さず、同じ日の新しいsnapshotを再利用する。
+    public func refreshCalendarIfNeeded(
+        selectedCalendars: Set<String>,
+        maxAge: TimeInterval = 5 * 60,
+        now: Date = Date()
+    ) async {
+        let selectedDay = LifeLogDateKey.string(for: selectedDate)
+        if lastCalendarRefreshDay == selectedDay,
+           let lastCalendarRefreshAt,
+           now.timeIntervalSince(lastCalendarRefreshAt) < maxAge {
+            return
+        }
+        await refreshCalendar(selectedCalendars: selectedCalendars)
     }
 
     public func loadCalendars() async {
@@ -586,6 +615,7 @@ public final class LifeLogCoordinator {
     public func jumpToTime(_ date: Date) async {
         await select(date: date)
         let candidates = day.utterances.map { ($0.startedAt, "u-\($0.id)") }
+            + day.calendarEvents.map { ($0.startsAt, "e-\($0.id)") }
             + day.dictations.map { ($0.startedAt, "d-\($0.id)") }
             + day.memos.map { ($0.createdAt, "m-\($0.id)") }
         guard let nearest = candidates.min(by: {
@@ -768,14 +798,13 @@ public final class LifeLogCoordinator {
         let isPastDay = dayInterval.end <= now
         let shouldFinalize = isPastDay && previous?.isFinal != true
         let additions = value.utterances.filter { $0.endedAt > (previous?.summarizedThrough ?? .distantPast) }
-        let dictationAdditions = value.dictations.filter { $0.endedAt > (previous?.summarizedThrough ?? .distantPast) }
         let memoAdditions = value.memos.filter { $0.createdAt > (previous?.summarizedThrough ?? .distantPast) }
-        let latestAddition = (additions.map(\.endedAt) + dictationAdditions.map(\.endedAt) + memoAdditions.map(\.createdAt)).max()
-        let latestSource = (value.utterances.map(\.endedAt) + value.dictations.map(\.endedAt) + value.memos.map(\.createdAt)).max()
+        let latestAddition = (additions.map(\.endedAt) + memoAdditions.map(\.createdAt)).max()
+        let latestSource = (value.utterances.map(\.endedAt) + value.memos.map(\.createdAt)).max()
         guard force || latestAddition != nil || shouldFinalize else { return }
         let latest = latestSource ?? previous?.summarizedThrough ?? dayInterval.start
         let baseline = previous?.summarizedThrough
-            ?? (value.utterances.map(\.startedAt) + value.dictations.map(\.startedAt) + value.memos.map(\.createdAt)).min()
+            ?? (value.utterances.map(\.startedAt) + value.memos.map(\.createdAt)).min()
             ?? latest
         let interval = TimeInterval(max(15, summaryIntervalMinutes()) * 60)
         guard force || shouldFinalize || !respectingInterval || isPastDay

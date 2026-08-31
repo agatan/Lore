@@ -1,10 +1,11 @@
 import Foundation
 
-/// LLMが予定・発話・メモの境界を保ったまま時系列を解釈できる、安定したテキスト形式。
+/// 人が日記として読みやすく、Markdownの構造をLLMもそのまま解釈できる書き出し形式。
 public enum LifeLogTextExporter {
     public struct Options: Sendable, Equatable {
         public var includesCalendarEvents: Bool
         public var includesUtterances: Bool
+        public var includesDictations: Bool
         public var includesMemos: Bool
         public var includesSummary: Bool
         public var includesTodosForDay: Bool
@@ -12,19 +13,21 @@ public enum LifeLogTextExporter {
         public init(
             includesCalendarEvents: Bool = true,
             includesUtterances: Bool = true,
+            includesDictations: Bool = true,
             includesMemos: Bool = true,
             includesSummary: Bool = true,
             includesTodosForDay: Bool = true
         ) {
             self.includesCalendarEvents = includesCalendarEvents
             self.includesUtterances = includesUtterances
+            self.includesDictations = includesDictations
             self.includesMemos = includesMemos
             self.includesSummary = includesSummary
             self.includesTodosForDay = includesTodosForDay
         }
 
         public var hasSelection: Bool {
-            includesCalendarEvents || includesUtterances || includesMemos || includesSummary || includesTodosForDay
+            includesCalendarEvents || includesUtterances || includesDictations || includesMemos || includesSummary || includesTodosForDay
         }
     }
 
@@ -35,28 +38,33 @@ public enum LifeLogTextExporter {
         options: Options = Options(),
         calendar: Calendar = .current
     ) -> String {
-        var lines = [
-            "# Koe Life Log Export v1",
-            "DATE: \(LifeLogDateKey.string(for: date, calendar: calendar))",
-            "",
-        ]
+        let dateComponents = calendar.dateComponents([.year, .month, .day], from: date)
+        var lines = ["# \(dateComponents.year ?? 0)年\(dateComponents.month ?? 0)月\(dateComponents.day ?? 0)日のライフログ", ""]
 
         if options.includesSummary, let summary = day.summary {
-            lines.append("## SUMMARY")
+            lines.append("## 一日のまとめ")
             lines.append(summary.summary)
-            if !summary.topics.isEmpty { lines.append("TOPICS: \(summary.topics.joined(separator: ", "))") }
-            if !summary.commitments.isEmpty { lines.append("COMMITMENTS: \(summary.commitments.joined(separator: " | "))") }
+            if !summary.topics.isEmpty {
+                lines.append("")
+                lines.append("### 主な話題")
+                lines.append(contentsOf: summary.topics.map { "- \($0)" })
+            }
+            if !summary.commitments.isEmpty {
+                lines.append("")
+                lines.append("### この日の約束")
+                lines.append(contentsOf: summary.commitments.map { "- \($0)" })
+            }
             lines.append("")
         }
 
-        if options.includesCalendarEvents || options.includesUtterances || options.includesMemos {
-            lines.append("## TIMELINE")
+        if options.includesCalendarEvents || options.includesUtterances || options.includesDictations || options.includesMemos {
+            lines.append("## タイムライン")
             let items = (options.includesCalendarEvents ? day.calendarEvents.map { Item(date: $0.startsAt, line: eventLine($0, calendar: calendar)) } : [])
                 + (options.includesUtterances ? day.utterances.map { Item(date: $0.startedAt, line: utteranceLine($0, calendar: calendar)) } : [])
-                + (options.includesUtterances ? day.dictations.map { Item(date: $0.startedAt, line: dictationLine($0, calendar: calendar)) } : [])
+                + (options.includesDictations ? day.dictations.map { Item(date: $0.startedAt, line: dictationLine($0, calendar: calendar)) } : [])
                 + (options.includesMemos ? day.memos.map { Item(date: $0.createdAt, line: memoLine($0, calendar: calendar)) } : [])
             if items.isEmpty {
-                lines.append("(empty)")
+                lines.append("記録はありません。")
             } else {
                 lines.append(contentsOf: items.sorted { $0.date < $1.date }.map(\.line))
             }
@@ -71,12 +79,12 @@ public enum LifeLogTextExporter {
         if options.includesTodosForDay {
             if !createdTodos.isEmpty {
                 lines.append("")
-                lines.append("## OPEN TODO CREATED ON THIS DAY")
+                lines.append("## この日に追加したTODO")
                 lines.append(contentsOf: createdTodos.map { todoLine($0, calendar: calendar) })
             }
             if !completedTodos.isEmpty {
                 lines.append("")
-                lines.append("## TODO COMPLETED ON THIS DAY")
+                lines.append("## この日に完了したTODO")
                 lines.append(contentsOf: completedTodos.map { completedTodoLine($0, calendar: calendar) })
             }
         }
@@ -86,10 +94,10 @@ public enum LifeLogTextExporter {
     }
 
     public static func renderOpenTodos(_ todos: [LifeLogTodo], calendar: Calendar = .current) -> String {
-        var lines = ["# Koe Open TODO Export v1", ""]
+        var lines = ["# 未実施TODO", ""]
         let open = todos.filter { $0.status == .open }.sorted { $0.createdAt < $1.createdAt }
         if open.isEmpty {
-            lines.append("(empty)")
+            lines.append("未実施のTODOはありません。")
         } else {
             lines.append(contentsOf: open.map { todoLine($0, calendar: calendar) })
         }
@@ -103,39 +111,40 @@ public enum LifeLogTextExporter {
     }
 
     private static func eventLine(_ value: CalendarEventSnapshot, calendar: Calendar) -> String {
-        "[CALENDAR \(time(value.startsAt, calendar: calendar))-\(time(value.endsAt, calendar: calendar)) rsvp=\(value.participationStatus.rawValue) calendar=\(quoted(value.calendarTitle))] \(value.title)"
+        let schedule = value.isAllDay
+            ? "終日"
+            : "\(time(value.startsAt, calendar: calendar))–\(time(value.endsAt, calendar: calendar))"
+        return "- **\(schedule) 予定** \(readable(value.title))（\(readable(value.calendarTitle))）"
     }
 
     private static func utteranceLine(_ value: LifeLogUtterance, calendar: Calendar) -> String {
-        "[SPEECH \(time(value.startedAt, calendar: calendar))] \(value.text)"
+        "- **\(time(value.startedAt, calendar: calendar)) 発話** \(readable(value.text))"
     }
 
     private static func dictationLine(_ value: LifeLogDictation, calendar: Calendar) -> String {
-        "[VOICE_INPUT \(time(value.startedAt, calendar: calendar))] \(value.text)"
+        "- **\(time(value.startedAt, calendar: calendar)) 音声入力** \(readable(value.text))"
     }
 
     private static func memoLine(_ value: LifeLogMemo, calendar: Calendar) -> String {
-        "[MEMO \(time(value.createdAt, calendar: calendar))] \(value.text)"
+        "- **\(time(value.createdAt, calendar: calendar)) メモ** \(readable(value.text))"
     }
 
     private static func todoLine(_ value: LifeLogTodo, calendar: Calendar) -> String {
-        let created = "\(LifeLogDateKey.string(for: value.createdAt, calendar: calendar))T\(time(value.createdAt, calendar: calendar))"
-        let due = value.dueAt.map { " due=\(LifeLogDateKey.string(for: $0, calendar: calendar))" } ?? ""
-        return "[TODO status=open created=\(created)\(due)] \(value.title)"
+        let due = value.dueAt.map { "、期限 \(LifeLogDateKey.string(for: $0, calendar: calendar))" } ?? ""
+        return "- [ ] \(readable(value.title))（\(time(value.createdAt, calendar: calendar))に追加\(due)）"
     }
 
     private static func completedTodoLine(_ value: LifeLogTodo, calendar: Calendar) -> String {
-        let created = "\(LifeLogDateKey.string(for: value.createdAt, calendar: calendar))T\(time(value.createdAt, calendar: calendar))"
-        let completed = value.completedAt.map { "\(LifeLogDateKey.string(for: $0, calendar: calendar))T\(time($0, calendar: calendar))" } ?? "unknown"
-        return "[TODO status=completed created=\(created) completed=\(completed)] \(value.title)"
+        let completed = value.completedAt.map { time($0, calendar: calendar) } ?? "時刻不明"
+        return "- [x] \(readable(value.title))（\(completed)に完了）"
     }
 
     private static func time(_ date: Date, calendar: Calendar) -> String {
-        let components = calendar.dateComponents([.hour, .minute, .second], from: date)
-        return String(format: "%02d:%02d:%02d", components.hour ?? 0, components.minute ?? 0, components.second ?? 0)
+        let components = calendar.dateComponents([.hour, .minute], from: date)
+        return String(format: "%02d:%02d", components.hour ?? 0, components.minute ?? 0)
     }
 
-    private static func quoted(_ value: String) -> String {
-        "\"\(value.replacingOccurrences(of: "\"", with: "\\\""))\""
+    private static func readable(_ value: String) -> String {
+        value.replacingOccurrences(of: "\n", with: "  \n  ")
     }
 }

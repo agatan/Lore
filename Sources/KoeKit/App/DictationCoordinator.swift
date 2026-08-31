@@ -121,6 +121,7 @@ public final class DictationCoordinator {
     private var finalizationHandled = false
     private var saveVoiceMemo: ((String) async -> Void)?
     private var voiceMemoFinished: (() -> Void)?
+    private var pendingPersistenceCount = 0
 
     public init(dependencies: Dependencies) {
         self.deps = dependencies
@@ -314,6 +315,36 @@ public final class DictationCoordinator {
         // ストリームを閉じる = エンジンへの「録音停止」の合図。
         audio.stop()
         startFinalizationWatchdog()
+    }
+
+    /// 終了時は録音を止め、既に得られたraw/partial textを保存してLLM・挿入を打ち切る。
+    public func interruptForTermination(timeout: Duration = .seconds(3)) async {
+        if isRecording { stop() }
+        let clock = ContinuousClock()
+        let deadline = clock.now.advanced(by: timeout)
+        while isBusy, clock.now < deadline {
+            do { try await Task.sleep(for: .milliseconds(50)) } catch { break }
+        }
+        if isBusy {
+            cancelRequested = true
+            sessionTask?.cancel()
+            audio.stop()
+            if captureDestination == .dictation, var draft {
+                let partial = draft.partialTranscript.trimmingCharacters(in: .whitespacesAndNewlines)
+                if !partial.isEmpty {
+                    let record = draft.finalizeTranscript(
+                        partial,
+                        language: LanguageDetector.detect(partial),
+                        sttLatencyMs: 0,
+                        audioDurationMs: audio.capturedDurationMs
+                    )
+                    self.draft = draft
+                    persist(record)
+                }
+            }
+            finish(phase: .finished(.cancelled), detail: "終了のため処理を中断しました")
+        }
+        await flushPersistence(timeout: .seconds(2))
     }
 
     /// STT が確定を返さないまま止まった場合の保険。
@@ -591,6 +622,7 @@ public final class DictationCoordinator {
             KoeLog.persistence.error("履歴 DB が未初期化のため保存できませんでした")
             return
         }
+        pendingPersistenceCount += 1
         Task(priority: .utility) {
             // 保存に失敗しても挿入は止めない。失敗自体はログで見えるようにする。
             do {
@@ -600,6 +632,15 @@ public final class DictationCoordinator {
             } catch {
                 KoeLog.persistence.error("履歴の保存に失敗: \(error.localizedDescription, privacy: .public)")
             }
+            self.pendingPersistenceCount -= 1
+        }
+    }
+
+    private func flushPersistence(timeout: Duration) async {
+        let clock = ContinuousClock()
+        let deadline = clock.now.advanced(by: timeout)
+        while pendingPersistenceCount > 0, clock.now < deadline {
+            do { try await Task.sleep(for: .milliseconds(25)) } catch { return }
         }
     }
 

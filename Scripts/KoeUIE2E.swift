@@ -67,6 +67,15 @@ private struct AXDriver {
         return attribute(kAXValueAttribute as String, of: element)
     }
 
+    func waitForString(identifier: String, timeout: TimeInterval = 8, matching predicate: (String) -> Bool) throws -> String {
+        let element = try waitFor("identifier=\(identifier) with expected value", timeout: timeout) { element in
+            guard attribute(kAXIdentifierAttribute as String, of: element) == identifier,
+                  let value: String = attribute(kAXValueAttribute as String, of: element) else { return false }
+            return predicate(value)
+        }
+        return attribute(kAXValueAttribute as String, of: element) ?? ""
+    }
+
     private func waitFor(
         _ description: String,
         timeout: TimeInterval,
@@ -165,6 +174,7 @@ private enum KoeUIE2E {
         }
         try ui.press(identifier: "life-log.calendar-events")
         try ui.press(identifier: "life-log.calendar-event-demo-event-1")
+        _ = try ui.waitFor(identifier: "life-log.timeline-event-demo-event-1")
         try ui.press(identifier: "life-log.search")
         try ui.setValue("オンボーディング", identifier: "life-log.search-input")
         try ui.press(identifier: "life-log.search-result-memo-demo-memo-1")
@@ -178,7 +188,7 @@ private enum KoeUIE2E {
         try ui.waitFor(text: memo)
         try ui.press(identifier: "life-log.export-day")
         _ = try ui.waitFor(identifier: "export.sheet")
-        let initialPreview = try ui.stringValue(identifier: "export.preview") ?? ""
+        let initialPreview = try ui.waitForString(identifier: "export.preview") { $0.contains("初回体験とベータ公開に向けて") }
         guard initialPreview.contains("オンボーディングは3つの価値が順番に伝わる構成にする"),
               initialPreview.contains("プロダクト朝会"),
               initialPreview.contains("初回体験とベータ公開に向けて") else {
@@ -191,10 +201,15 @@ private enum KoeUIE2E {
         guard try ui.stringValue(identifier: "export.include.summary") == "オフ" else {
             throw UIE2EError.assertion("書き出し項目の選択解除が反映されません")
         }
-        let updatedPreview = try ui.stringValue(identifier: "export.preview") ?? ""
+        let updatedPreview = try ui.waitForString(identifier: "export.preview") { !$0.contains("初回体験とベータ公開に向けて") }
         guard !updatedPreview.contains("初回体験とベータ公開に向けて") else {
             throw UIE2EError.assertion("除外した要約が書き出しプレビューに残っています")
         }
+        guard try ui.stringValue(identifier: "export.include.voice-input") == "オン" else {
+            throw UIE2EError.assertion("音声入力が独立した書き出し項目になっていません")
+        }
+        try ui.press(identifier: "export.include.voice-input")
+        _ = try ui.waitForString(identifier: "export.preview") { !$0.contains("レビューで確認したい観点を三つに整理する") }
         try ui.press(identifier: "export.close")
         terminateKoe()
     }
@@ -244,6 +259,8 @@ private enum KoeUIE2E {
         let configuration = NSWorkspace.OpenConfiguration()
         configuration.arguments = arguments
         configuration.activates = true
+        configuration.createsNewApplicationInstance = true
+        configuration.allowsRunningApplicationSubstitution = false
         do {
             return try await NSWorkspace.shared.openApplication(at: url, configuration: configuration)
         } catch {

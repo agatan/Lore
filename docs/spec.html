@@ -172,9 +172,10 @@
 <li>保存済みaudioは文字起こしと派生処理が両方成功するまで必ず保持します。既定の「処理後削除」では成功直後にaudioだけを削除し、保存済みの発話、conversation、summary、TODOは残します。設定は「処理後削除」「7日」「30日」から選べます。</li>
 <li>7日または30日を選んだ場合も、未処理・失敗chunkは期間を超えて保持し、次回起動後の再処理に使います。保持期間を短く変更したときは、新しい条件を満たす処理済みaudioを削除します。</li>
 <li>一時中断と既定マイクの切替・接続解除などの音声構成変更では、現在のchunkを確定して自動再接続します。Sleep前にも閉じ、記録意図が残ればwake後に再開します。マイク権限拒否だけは自動再試行しません。</li>
+<li>App終了時は進行中操作を割り込み、復旧用audioの確定と必要なDB保存だけを短時間待ちます。終了時にsummary/TODO生成は開始せず、未完了chunkは次回起動時に再処理します。</li>
 </ul>
 <h3>日別表示とCalendar</h3>
-<p>通常起動時とmain windowのlife logを開いた時は今日を表示し、dataの読込後にtimeline最下部の最新項目へscrollします。Mini windowも開いた時に今日を表示して最下部へscrollします。TODOの「元の発言へ」など、利用者が過去の項目を明示的に開いた場合はその移動先を優先します。</p>
+<p>通常起動時とmain windowのlife logを開いた時は今日を表示し、dataの読込後にtimeline最下部へ一度だけscrollします。Mini windowも同様です。その後の認識結果や予定の追加では閲覧位置を奪わず、TODOの「元の発言へ」など明示的な移動だけを行います。</p>
 <div class="grid">
 <article class="card">
 <h3>Month</h3>
@@ -182,7 +183,7 @@
 </article>
 <article class="card">
 <h3>Timeline</h3>
-<p>Timeline paneは発話、音声入力、text memoだけを一列の時刻順で表示し、column headerは置きません。右上の予定buttonは選択日の予定を時刻と件名中心の素朴な一覧で表示し、塗りは使いません。予定を選ぶとその開始時刻に最も近いtimeline項目へ移動します。検索buttonまたはCommand-Fで横断検索を開き、検索結果の発話、音声入力、memoは対象項目へ、TODOは出典へ、summaryは対象日へ移動します。Mini windowは予定と記録を一列の時刻順で表示し、進行中の予定を上部に固定します。OS標準のtitle barは表示せず、toggle hotkeyは設定された修飾キーを含む押下と離上が対になった場合だけ切り替えます。今日の最下部とmini windowには同じchat形式の入力欄があり、記録状態と開始・停止操作をその直上に置きます。送信と音声入力は同じ直径の円形controlに揃えます。過去日の履歴へ現在のmemoを混入させないため、main windowの入力欄は今日を選択中だけ表示します。</p>
+<p>Timeline paneは予定、発話、音声入力、text memoを一列の時刻順で表示し、column headerは置きません。右上の予定buttonは選択日の予定を時刻と件名中心の素朴な一覧で表示し、塗りは使いません。日付を選ぶとその日の予定を読み直し、一覧とtimelineの両方へ反映します。検索buttonまたはCommand-Fで横断検索を開き、検索結果の発話、音声入力、memoは対象項目へ、TODOは出典へ、summaryは対象日へ移動します。Mini windowも予定と記録を一列の時刻順で表示し、進行中の予定を上部に固定します。今日の最下部とmini windowには同じchat形式の入力欄があり、記録状態と開始・停止操作をその直上に置きます。記録意図が続く間は内部の文字起こし状態で文言を切り替えません。</p>
 </article>
 <article class="card">
 <h3>Conversation</h3>
@@ -196,7 +197,7 @@
 <h3>SummaryとTODO</h3>
 <ul>
 <li>30分、1時間、2時間の設定間隔でsummaryとdraft TODOを同時更新します。</li>
-<li>前回更新後に発話またはmemoが増え、設定間隔が到来した時だけ、その日の全発話、memo、対象予定から作り直します。利用者が記録を明示的に停止した時も最終更新しますが、ボイスメモ、sleep、入力device・音声構成・語彙変更による内部的な一時停止・再接続では強制再要約しません。入力上限超過時は時系列に分割して統合します。既存のDraft、未実施、完了TODOの文言をpromptへ渡し、同じ作業を再提案しません。モデルが同じ文言を返しても保存前に除外します。</li>
+<li>前回更新後にlife-log発話またはmemoが増え、設定間隔が到来した時だけ、その日のlife-log発話、memo、対象予定から作り直します。通常の音声入力履歴はsummary/TODOの入力にもtriggerにも使いません。明示停止時は最終更新しますが、app終了、ボイスメモ、sleep、再接続では強制再要約しません。</li>
 <li>当日のlive summaryには生成時刻を基準時点として渡し、予定を「終了済み」「進行中」「これから」に区別します。開始前の予定を実施済みの事実として書かず、「このあと予定されている」内容として明示します。</li>
 <li>日付が変わった後のfinal summaryは、発話やmemoの追加がなくても対象日の全予定を含めて作り直し、<code>isFinal</code>として保存します。</li>
 <li>停止時に対象日を最終更新し、audio chunkごとにはLLMを呼びません。</li>
@@ -207,7 +208,7 @@
 <li>Groqでは選択modelにかかわらず、summaryとTODO案を温度0、modelが対応する最小の推論量、共通のJSON出力contractで生成します。APIが対応する最も強いschema制約を使い、最終的にKoeが同じ型として検証します。推論本文は応答dataへ含めません。</li>
 </ul>
 <h3>検索と書き出し</h3>
-<p>発話、memo、TODO、summaryを横断検索します。日別exportではcalendar、発話、memo、summary、その日に作成/完了したTODOを選択でき、open TODO全体も別にexportできます。</p>
+<p>発話、memo、TODO、summaryを横断検索します。日別exportではcalendar、life-log発話、通常の音声入力、memo、summary、その日に作成/完了したTODOを個別選択できます。ボイスメモはmemoとして扱います。出力は日付見出し、時系列の箇条書き、checkbox TODOからなる人間向けMarkdownで、機械用英大文字tagは使いません。画面表示時のsnapshotからUI thread外で生成し、準備中はprogressを表示して画面操作や音声処理をblockしません。</p>
 </section>
 <section id="ui">
 <h2>5. 画面と設定</h2>
@@ -335,7 +336,7 @@
 <tr>
 <td>未実施TODOをfileにする</td>
 <td>
-<code>Koe-Open-TODO.txt</code>を返す</td>
+<code>Koe-Open-TODO.md</code>を返す</td>
 </tr>
 </tbody>
 </table>
@@ -343,7 +344,7 @@
 <section id="cli">
 <h2>8. CLI</h2>
 <p>Build productは<code>koe-cli</code>、配布/link後は<code>koe</code>です。失敗はstderrとexit status 1で返します。</p>
-<pre>koe export day [--date YYYY-MM-DD] [--include calendar,speech,memos,summary,todos] [--clipboard|--output PATH]
+<pre>koe export day [--date YYYY-MM-DD] [--include calendar,speech,voice-input,memos,summary,todos] [--clipboard|--output PATH]
 koe export todos [--clipboard|--output PATH]
 koe todo list [--status open|draft|completed|all]
 koe todo add "タイトル" | complete ID | reopen ID | delete ID
@@ -370,7 +371,7 @@ koe search "検索語" [--limit N]</pre>
 <code>life_log_export</code>
 </td>
 <td>
-<code>date?</code>, <code>include?</code>
+<code>date?: YYYY-MM-DD</code>, <code>include?: [calendar,speech,voice-input,memos,summary,todos]</code>
 </td>
 </tr>
 <tr>
@@ -437,7 +438,7 @@ koe search "検索語" [--limit N]</pre>
 </tbody>
 </table>
 <p>
-<code>life_log_export.include</code>は<code>calendar</code>、<code>speech</code>、<code>memos</code>、<code>summary</code>、<code>todos</code>です。</p>
+<code>life_log_export.include</code>は<code>calendar</code>、<code>speech</code>、<code>voice-input</code>、<code>memos</code>、<code>summary</code>、<code>todos</code>です。</p>
 </section>
 <section id="failures">
 <h2>10. 障害時の外部挙動</h2>
@@ -472,7 +473,7 @@ koe search "検索語" [--limit N]</pre>
 <li>Migration前backupと日次backupが作られ、合計7file以内に保たれる。</li>
 <li>CLI、MCP、Shortcutsの公開interfaceが本書と一致する。</li>
 <li>Life logの実録音中だけmenu barのmonochrome Koe icon右下にrose色badgeが表示され、停止または再接続待ちではbadgeなしへ戻る。</li>
-<li>Life log記録中に成功した音声入力は一件だけ表示・検索・書き出し・派生処理へ現れ、cancelまたは失敗した音声入力の時間帯はlife-log発話が失われない。</li>
+<li>Life log記録中に成功した音声入力は一件だけ表示・検索・書き出しへ現れ、summary/TODOには使われない。Cancelまたは失敗した音声入力の時間帯はlife-log発話が失われない。</li>
 <li>当日のlive summaryは未来の予定を実施済みとして書かず、日付変更後のfinal summaryはその日の全予定を含む。</li>
 <li>Calendar設定から予定を再取得すると、現在選択日のsnapshot、timeline、月間activityが更新される。</li>
 <li>マイク切替などの音声構成変更後も、記録開始意図が残る限りlife-log captureが自動再開する。</li>
@@ -480,9 +481,9 @@ koe search "検索語" [--limit N]</pre>
 <li>通常起動時にmain windowのlife-log画面が開き、memo入力欄の音声ボタンは専用hotkeyと同じボイスメモを開始・停止する。</li>
 <li>「処理後削除」でも未処理・失敗chunkは残り、文字起こしと派生処理が成功したaudioだけが削除される。</li>
 <li>通常起動時、main windowでlife logを開いた時、mini windowを開いた時は、今日のtimelineの最新項目が表示される。</li>
-<li>Timelineはheaderなしの一列で発話・音声入力・memoを時刻順に表示する。予定は右上の一覧から選ぶと開始時刻に最も近いtimeline項目へ移動し、検索はCommand-Fでも開いて結果の項目または出典へ移動する。TODO本文は複数行へ折り返される。</li>
+<li>Timelineはheaderなしの一列で予定・発話・音声入力・memoを時刻順に表示する。日付選択時に予定一覧とtimelineが更新され、検索はCommand-Fでも開いて結果の項目または出典へ移動する。TODO本文は複数行へ折り返される。</li>
 <li>Mini windowはtitle barなしの一列timelineで予定と記録を時刻順に表示し、進行中の予定を上部へ固定する。明示的に閉じるまでSpace切替やfull-screen appの利用中も手前に残り、通常の文字入力ではtoggleされない。</li>
-<li>Main window、mini window、menu barの記録状態は実際のaudio writerの稼働状態から同期され、同じ色、symbol、文言を使う。Main/mini windowでは開始・停止をmemo入力欄の直上に配置する。</li>
+<li>Main window、mini window、menu barの記録状態は実際のaudio writerの稼働状態から同期され、内部の文字起こし状態で文言をちらつかせない。Main/mini windowでは開始・停止をmemo入力欄の直上に配置する。</li>
 <li>継続可能なmessageは<code>×</code>で閉じられ、dismissしても自動再接続や記録開始意図は変わらない。</li>
 <li>月間calendarは今日を塗り、表示中の日を枠線で示し、既存TODOと同じ作業を新しいDraft TODOとして再提案しない。</li>
 <li>ボイスメモなどの内部的な一時停止では強制再要約せず、設定間隔の到来または利用者による明示的な記録停止だけで再要約する。確定済みTODOのIDと新しいDraftのIDは衝突しない。</li>

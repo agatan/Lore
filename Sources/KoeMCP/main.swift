@@ -123,6 +123,7 @@ struct KoeMCP {
         return .init(
             includesCalendarEvents: names.contains("calendar"),
             includesUtterances: names.contains("speech"),
+            includesDictations: names.contains("voice-input"),
             includesMemos: names.contains("memos"),
             includesSummary: names.contains("summary"),
             includesTodosForDay: names.contains("todos")
@@ -130,9 +131,9 @@ struct KoeMCP {
     }
 
     private static var tools: [[String: Any]] { [
-        tool("life_log_export", "指定日の予定・発話・メモ・要約・当日作成の未実施TODOを選択してLLM向けテキストにする", properties: [
+        tool("life_log_export", "指定日の予定・発話・音声入力・メモ・要約・当日TODOを選択して読みやすいMarkdownにする", properties: [
             "date": stringSchema("YYYY-MM-DD。省略時は今日"),
-            "include": ["type": "array", "items": ["type": "string", "enum": ["calendar", "speech", "memos", "summary", "todos"]]],
+            "include": ["type": "array", "items": ["type": "string", "enum": ["calendar", "speech", "voice-input", "memos", "summary", "todos"]]],
         ]),
         tool("todo_export_open", "確定済みで現在未実施のTODO全体をテキストにする"),
         tool("life_log_search", "日本語部分一致で発話・メモ・TODO・要約を横断検索する", properties: ["query": stringSchema("検索語"), "limit": ["type": "integer", "minimum": 1]], required: ["query"]),

@@ -113,11 +113,28 @@ public enum LifeLogSpeechProjection {
         _ utterances: [LifeLogUtterance],
         preferring dictations: [LifeLogDictation]
     ) -> [LifeLogUtterance] {
-        utterances.filter { utterance in
-            !dictations.contains { dictation in
-                dictation.startedAt < utterance.endedAt && utterance.startedAt < dictation.endedAt
+        guard !utterances.isEmpty, !dictations.isEmpty else { return utterances }
+        let utteranceIndices = utterances.indices.sorted { utterances[$0].startedAt < utterances[$1].startedAt }
+        let sortedDictations = dictations.sorted { $0.startedAt < $1.startedAt }
+        var hidden = Set<Int>()
+        var firstCandidate = 0
+        for index in utteranceIndices {
+            let utterance = utterances[index]
+            while firstCandidate < sortedDictations.count,
+                  sortedDictations[firstCandidate].endedAt <= utterance.startedAt {
+                firstCandidate += 1
+            }
+            var candidate = firstCandidate
+            while candidate < sortedDictations.count,
+                  sortedDictations[candidate].startedAt < utterance.endedAt {
+                if utterance.startedAt < sortedDictations[candidate].endedAt {
+                    hidden.insert(index)
+                    break
+                }
+                candidate += 1
             }
         }
+        return utterances.indices.compactMap { hidden.contains($0) ? nil : utterances[$0] }
     }
 }
 
