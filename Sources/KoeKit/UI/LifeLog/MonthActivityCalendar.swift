@@ -80,7 +80,7 @@ struct MonthActivityCalendar: View {
             VStack(spacing: 3) {
                 Text(String(calendar.component(.day, from: date)))
                     .font(.system(size: 11.5, weight: today ? .bold : .medium, design: .rounded))
-                    .foregroundStyle(today ? KoeTheme.accentSecondary : .primary)
+                    .foregroundStyle(today ? KoeTheme.accent : .primary)
                 HStack(spacing: 3) {
                     densityDot(intensity: value.eventIntensity, color: KoeTheme.accentSecondary)
                     densityDot(intensity: value.voiceIntensity, color: KoeTheme.accent)
@@ -89,16 +89,16 @@ struct MonthActivityCalendar: View {
             }
             .frame(maxWidth: .infinity, minHeight: 38)
             .contentShape(.rect)
-            .overlay {
-                if today {
-                    RoundedRectangle(cornerRadius: 10, style: .continuous)
-                        .strokeBorder(KoeTheme.accentSecondary.opacity(0.8), lineWidth: 1.5)
-                }
-            }
-            .glassEffect(
-                selected ? .regular.tint(KoeTheme.accent.opacity(0.24)).interactive() : .identity,
+            .background(
+                today ? KoeTheme.accent.opacity(0.20) : .clear,
                 in: RoundedRectangle(cornerRadius: 10, style: .continuous)
             )
+            .overlay {
+                if selected {
+                    RoundedRectangle(cornerRadius: 10, style: .continuous)
+                        .strokeBorder(KoeTheme.accent.opacity(0.9), lineWidth: 1.5)
+                }
+            }
         }
         .buttonStyle(.plain)
     }

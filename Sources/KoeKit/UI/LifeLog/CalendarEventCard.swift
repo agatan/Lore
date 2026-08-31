@@ -44,9 +44,7 @@ struct CalendarEventCard: View {
     }
 
     private var tint: Color {
-        let palette = [KoeTheme.accent, KoeTheme.accentSecondary, KoeTheme.success, KoeTheme.warning, KoeTheme.recording]
-        let index = event.calendarTitle.unicodeScalars.reduce(0) { ($0 * 31 + Int($1.value)) % palette.count }
-        return palette[index]
+        KoeTheme.accent
     }
 }
 
@@ -54,30 +52,13 @@ struct CalendarEventCard: View {
 struct CurrentCalendarEventStrip: View {
     var events: [CalendarEventSnapshot]
     var selectedDate: Date
-    var calendarColumnWidth: CGFloat?
-
-    init(events: [CalendarEventSnapshot], selectedDate: Date, calendarColumnWidth: CGFloat? = nil) {
-        self.events = events
-        self.selectedDate = selectedDate
-        self.calendarColumnWidth = calendarColumnWidth
-    }
 
     var body: some View {
         TimelineView(.periodic(from: .now, by: 30)) { context in
             if Calendar.current.isDateInToday(selectedDate), let event = currentEvent(at: context.date) {
                 VStack(spacing: 0) {
-                    if let calendarColumnWidth {
-                        HStack(alignment: .top, spacing: 0) {
-                            CalendarEventCard(event: event, isCurrent: true)
-                                .padding(6)
-                                .frame(width: calendarColumnWidth, alignment: .topLeading)
-                            Rectangle().fill(.separator).frame(width: 1)
-                            Color.clear.frame(maxWidth: .infinity)
-                        }
-                    } else {
-                        CalendarEventCard(event: event, isCurrent: true)
-                            .padding(8)
-                    }
+                    CalendarEventCard(event: event, isCurrent: true)
+                        .padding(8)
                     Divider().opacity(0.35)
                 }
             }

@@ -160,7 +160,14 @@ private enum KoeUIE2E {
         _ = try ui.waitFor(identifier: "main.section-picker")
         _ = try ui.waitFor(identifier: "life-log.voice-memo")
         _ = try ui.waitFor(identifier: "life-log.capture-toggle")
-        _ = try ui.waitFor(identifier: "life-log.timeline-divider")
+        guard !ui.exists(identifier: "life-log.timeline-divider") else {
+            throw UIE2EError.assertion("単一timelineに廃止したcolumn dividerが残っています")
+        }
+        try ui.press(identifier: "life-log.calendar-events")
+        try ui.press(identifier: "life-log.calendar-event-demo-event-1")
+        try ui.press(identifier: "life-log.search")
+        try ui.setValue("オンボーディング", identifier: "life-log.search-input")
+        try ui.press(identifier: "life-log.search-result-memo-demo-memo-1")
         try ui.press(identifier: "life-log.todo-source-demo-todo-1")
         try ui.press(identifier: "main.section.history")
         _ = try ui.waitFor(identifier: "history.root")

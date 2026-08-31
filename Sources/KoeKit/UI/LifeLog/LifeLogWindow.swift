@@ -8,9 +8,8 @@ public struct LifeLogWindow: View {
     @State private var exportError: String?
     @State private var showsExportSheet = false
     @State private var showsSearchSheet = false
+    @State private var showsCalendarEvents = false
     @State private var memoDraft = ""
-    @State private var calendarColumnWidth: CGFloat = 120
-    @State private var didSetInitialCalendarWidth = false
 
     public init(env: AppEnvironment) { self.env = env }
 
@@ -83,24 +82,34 @@ public struct LifeLogWindow: View {
     }
 
     private var timeline: some View {
-        GeometryReader { geometry in
         VStack(spacing: 0) {
             panelHeader("Timeline", symbol: "calendar.day.timeline.left") {
                 HStack(spacing: 10) {
+                    Button { showsCalendarEvents = true } label: { Image(systemName: "calendar") }
+                        .buttonStyle(.plain)
+                        .foregroundStyle(.secondary)
+                        .help("この日の予定")
+                        .accessibilityIdentifier("life-log.calendar-events")
+                        .popover(isPresented: $showsCalendarEvents, arrowEdge: .top) {
+                            LifeLogCalendarEventList(
+                                events: env.lifeLog.day.calendarEvents,
+                                onSelect: { event in
+                                    showsCalendarEvents = false
+                                    Task { await env.lifeLog.jumpToTime(event.startsAt) }
+                                }
+                            )
+                        }
                     Button { showsSearchSheet = true } label: { Image(systemName: "magnifyingglass") }
-                        .buttonStyle(.plain).foregroundStyle(.secondary).help("ライフログを検索")
+                        .buttonStyle(.plain)
+                        .foregroundStyle(.secondary)
+                        .help("ライフログを検索 (⌘F)")
+                        .keyboardShortcut("f", modifiers: .command)
+                        .accessibilityIdentifier("life-log.search")
                     Text(env.lifeLog.selectedDate.formatted(.dateTime.year().month().day()))
                         .font(.system(size: 11, weight: .medium, design: .rounded)).foregroundStyle(.tertiary)
                 }
             }
             Divider().opacity(0.4)
-            timelineColumnHeader
-            Divider().opacity(0.4)
-            CurrentCalendarEventStrip(
-                events: env.lifeLog.day.calendarEvents,
-                selectedDate: env.lifeLog.selectedDate,
-                calendarColumnWidth: calendarColumnWidth
-            )
             ScrollViewReader { proxy in
                 ScrollView {
                     LazyVStack(alignment: .leading, spacing: 0) {
@@ -162,31 +171,7 @@ public struct LifeLogWindow: View {
                 .padding(10)
             }
         }
-        .task {
-            guard !didSetInitialCalendarWidth else { return }
-            calendarColumnWidth = min(240, max(90, geometry.size.width * 0.15))
-            didSetInitialCalendarWidth = true
-        }
-        }
         .raisedGlass(cornerRadius: 22)
-    }
-
-    private var timelineColumnHeader: some View {
-        HStack(spacing: 0) {
-            Text("Calendar")
-                .font(.system(size: 10.5, weight: .semibold, design: .rounded))
-                .foregroundStyle(.secondary)
-                .padding(.leading, 10)
-                .frame(width: calendarColumnWidth, alignment: .leading)
-            ResizableDivider(width: $calendarColumnWidth, minimum: 90, maximum: 240)
-                .accessibilityIdentifier("life-log.timeline-divider")
-            Text("発話・メモ")
-                .font(.system(size: 10.5, weight: .semibold, design: .rounded))
-                .foregroundStyle(.secondary)
-                .padding(.leading, 12)
-            Spacer(minLength: 0)
-        }
-        .frame(height: 28)
     }
 
     private var timelineEmptyState: some View {
@@ -201,24 +186,9 @@ public struct LifeLogWindow: View {
     }
 
     private func timelineRow(_ item: TimelineItem) -> some View {
-        HStack(alignment: .top, spacing: 0) {
-            calendarCell(item)
-                .frame(width: calendarColumnWidth, alignment: .topLeading)
-            Rectangle().fill(.separator).frame(width: 1)
-            activityCell(item)
-                .frame(maxWidth: .infinity, alignment: .topLeading)
-        }
+        activityCell(item)
+            .frame(maxWidth: .infinity, alignment: .topLeading)
         .id(item.id)
-    }
-
-    @ViewBuilder
-    private func calendarCell(_ item: TimelineItem) -> some View {
-        if case .event(let value) = item.kind {
-            CalendarEventCard(event: value)
-                .padding(6)
-        } else {
-            Color.clear.frame(height: 1)
-        }
     }
 
     @ViewBuilder
@@ -234,8 +204,6 @@ public struct LifeLogWindow: View {
             }
             .padding(.horizontal, 16).padding(.vertical, 11)
             .background(env.lifeLog.highlightedTimelineItemID == "u-\(value.id)" ? KoeTheme.accent.opacity(0.12) : .clear)
-        case .event:
-            Color.clear.frame(height: 1)
         case .dictation(let value):
             HStack(alignment: .top, spacing: 12) {
                 Text(value.startedAt.formatted(date: .omitted, time: .shortened))
@@ -433,14 +401,12 @@ public struct LifeLogWindow: View {
         case utterance(LifeLogUtterance)
         case dictation(LifeLogDictation)
         case memo(LifeLogMemo)
-        case event(CalendarEventSnapshot)
     }
     private struct TimelineItem { var id: String; var date: Date; var kind: ItemKind }
     private var timelineItems: [TimelineItem] {
         (env.lifeLog.day.utterances.map { TimelineItem(id: "u-\($0.id)", date: $0.startedAt, kind: .utterance($0)) }
          + env.lifeLog.day.dictations.map { TimelineItem(id: "d-\($0.id)", date: $0.startedAt, kind: .dictation($0)) }
-         + env.lifeLog.day.memos.map { TimelineItem(id: "m-\($0.id)", date: $0.createdAt, kind: .memo($0)) }
-         + env.lifeLog.day.calendarEvents.filter { !$0.isAllDay }.map { TimelineItem(id: "e-\($0.id)", date: $0.startsAt, kind: .event($0)) })
+         + env.lifeLog.day.memos.map { TimelineItem(id: "m-\($0.id)", date: $0.createdAt, kind: .memo($0)) })
             .sorted { $0.date < $1.date }
     }
 

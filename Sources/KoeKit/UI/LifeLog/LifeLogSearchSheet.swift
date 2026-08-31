@@ -18,6 +18,7 @@ struct LifeLogSearchSheet: View {
                     .textFieldStyle(.plain)
                     .font(.system(size: 14))
                     .focused($focusesSearch)
+                    .accessibilityIdentifier("life-log.search-input")
                 if isSearching { ProgressView().controlSize(.small) }
                 if !query.isEmpty {
                     Button { query = "" } label: { Image(systemName: "xmark.circle.fill") }
@@ -65,6 +66,7 @@ struct LifeLogSearchSheet: View {
                         .padding(.vertical, 5)
                     }
                     .buttonStyle(.plain)
+                    .accessibilityIdentifier("life-log.search-result-\(result.id)")
                 }
                 .listStyle(.plain)
             }
@@ -97,9 +99,8 @@ struct LifeLogSearchSheet: View {
     }
 
     private func select(_ result: LifeLogSearchResult) {
-        let date = LifeLogDateKey.date(from: result.day) ?? result.occurredAt
         Task {
-            await env.lifeLog.select(date: date)
+            await env.lifeLog.jumpToSearchResult(result)
             dismiss()
         }
     }

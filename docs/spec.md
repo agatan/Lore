@@ -95,7 +95,8 @@ cloud音声入力で送るのは今回の文字起こし、共通rule、mode指�
 - main windowは「ライフログ」と「音声入力」を切り替え、ライフログを既定表示にします。
 - ライフログは月間activity calendar、選択日のtimeline、summary、global TODOを表示します。
 - 通常起動時とmain windowのライフログを開いた時は今日を表示し、dataの読込後にtimeline最下部の最新項目へscrollします。mini windowも開いた時に今日を表示して最下部へscrollします。TODOの「元の発言へ」など、利用者が過去の項目を明示的に開いた場合はその移動先を優先します。
-- timeline paneの内部は共通の時刻順と縦scrollを保った2columnとし、初期幅15%の左columnにcalendar予定、残りの右columnに発話、音声入力、text memoを表示します。境界はdragして幅を変えられます。予定は開始・終了時刻の範囲をcalendarごとの色で塗ったblockとして表示し、今日進行中の予定は左column上部に固定します。各項目は同じ時刻軸上の該当columnへ置き、予定と発話を種類だけで一つの列へ混在させません。
+- timeline paneは発話、音声入力、text memoだけを一列の時刻順で表示し、column headerは置きません。右上の予定buttonは選択日の予定を時刻と件名中心の素朴な一覧で表示し、予定を選ぶとその開始時刻に最も近い発話、音声入力、memoへ移動します。予定一覧では塗りを使いません。
+- 右上の検索buttonまたは`Command-F`で横断検索を開きます。検索結果の発話、音声入力、memoを選ぶと対象日を開いてその項目へ移動し、TODOは出典へ、summaryは対象日へ移動します。
 - mini windowは予定、発話、音声入力、memoを一列の時刻順で表示し、今日進行中の予定をtimeline上部に固定します。OS標準のtitle barは表示せず、Space切替やfull-screen appの利用中も明示的に閉じるまで手前に残ります。Mini windowのtoggle hotkeyは、設定された修飾キーを含む押下と離上が対になった場合だけ切り替え、同じ文字keyだけの通常入力では開閉しません。
 - 今日のtimeline最下部とmini windowには同じchat形式の入力欄があり、送信したmemoを今日のtimelineへ即時追加します。記録状態と開始・停止操作はどちらも入力欄の直上に配置します。送信ボタンと音声入力ボタンは同じ直径の円形controlに揃えます。過去日の履歴へ現在のmemoを混入させないため、main windowの入力欄は今日を選択中だけ表示します。
 - ボイスメモも手入力と同じmemoとして今日のtimelineへ追加します。
@@ -108,11 +109,12 @@ cloud音声入力で送るのは今回の文字起こし、共通rule、mode指�
 - 既定では参加済み、またはRSVPのない予定だけを表示・派生処理に含めます。このfilterは変更できます。
 - Calendar設定の「予定を再取得」から、現在timelineで選択している日の予定を明示的に読み直せます。処理中は連打できず、完了後にtimelineと月間activityを更新します。
 - KoeからRSVPを変更せず、Calendar appへの操作導線も提供しません。
+- 月間activity calendarでは今日をprimary colorの塗りで示し、timelineで表示中の日をprimary colorの枠線で示します。同じ日なら両方を併用します。
 
 ### 4.4 SummaryとTODO
 
 - summaryとdraft TODOを30分、1時間、2時間の設定間隔で同時更新します。
-- 前回更新後に発話またはmemoが増えた場合だけ処理し、対象日の全発話、memo、対象予定から作り直します。入力上限を超える場合は時系列に分割して統合します。
+- 前回更新後に発話またはmemoが増えた場合だけ処理し、設定間隔が到来した時点で対象日の全発話、memo、対象予定から作り直します。利用者が記録を明示的に停止した時も最終更新しますが、ボイスメモ、sleep、入力device・音声構成・語彙変更による内部的な一時停止・再接続では強制再要約しません。入力上限を超える場合は時系列に分割して統合します。既存のDraft、未実施、完了TODOの文言をpromptへ渡し、同じ作業を再提案しません。モデルが同じ文言を返しても保存前に除外します。
 - 当日のライブsummaryには生成時刻を基準時点として渡し、予定を「終了済み」「進行中」「これから」に区別します。開始前の予定を実施済みの事実として書かず、「このあと予定されている」内容として明示します。
 - 日付が変わった後の最終summaryは、発話やmemoの追加がなくても対象日の全予定を含めて作り直し、`isFinal`として保存します。
 - 停止時は記録対象日を最終更新します。audio chunkごとにはLLMを呼びません。
@@ -236,7 +238,9 @@ koe search "検索語" [--limit N]
 15. 通常起動時にmain windowのライフログ画面が開き、memo入力欄の音声ボタンは専用hotkeyと同じボイスメモを開始・停止する。
 16. 「処理後削除」でも未処理・失敗chunkは残り、文字起こしと派生処理が成功したaudioだけが削除される。
 17. 通常起動時、main windowでライフログを開いた時、mini windowを開いた時は、今日のtimelineの最新項目が表示される。
-18. Timelineは初期幅15%でdrag可能な左columnのcalendar予定と、残りの右columnの発話・音声入力・memoを同じ時刻順で表示する。予定は開始・終了範囲を色付きblockで示し、進行中の予定は左column上部に固定され、TODO本文は複数行へ折り返される。
+18. Timelineはheaderなしの一列で発話・音声入力・memoを時刻順に表示する。予定は右上の一覧から選ぶと開始時刻に最も近いtimeline項目へ移動し、検索は`Command-F`でも開いて結果の項目または出典へ移動する。TODO本文は複数行へ折り返される。
 19. Mini windowはtitle barなしの一列timelineで予定と記録を時刻順に表示し、進行中の予定を上部へ固定する。明示的に閉じるまでSpace切替やfull-screen appの利用中も手前に残り、通常の文字入力ではtoggleされない。
 20. Main window、mini window、menu barの記録状態は実際のaudio writerの稼働状態から同期され、同じ色、symbol、文言を使う。Main/mini windowでは開始・停止をmemo入力欄の直上に配置する。
 21. 継続可能なmessageは`×`で閉じられ、dismissしても自動再接続や記録開始意図は変わらない。
+22. 月間calendarは今日を塗り、表示中の日を枠線で示し、既存TODOと同じ作業を新しいDraft TODOとして再提案しない。
+23. ボイスメモなどの内部的な一時停止では強制再要約せず、設定間隔の到来または利用者による明示的な記録停止だけで再要約する。確定済みTODOのIDと新しいDraftのIDは衝突しない。

@@ -75,6 +75,40 @@ struct LifeLogTests {
         #expect(try await database.lifeLog.todos().first?.sourceUtteranceIDs == [utterance.id])
     }
 
+    @Test("再要約の新しいDraft IDは確定済みの旧Draft IDと衝突しない")
+    @MainActor
+    func regeneratedDraftUsesUniqueID() async throws {
+        let database = try await KoeDatabase.inMemory()
+        let date = Date().addingTimeInterval(-120)
+        let day = LifeLogDateKey.string(for: date)
+        let confirmedID = "draft-\(day)-0"
+        try await database.lifeLog.save(todo: LifeLogTodo(
+            id: confirmedID, title: "既存の確定TODO", status: .open
+        ))
+        let chunk = LifeLogAudioChunk(
+            id: "draft-collision-audio", captureStartedAt: date,
+            captureEndedAt: date.addingTimeInterval(60), localPath: "/tmp/draft-collision.m4a"
+        )
+        try await database.lifeLog.save(audioChunk: chunk)
+        try await database.lifeLog.save(utterance: LifeLogUtterance(
+            id: "draft-collision-utterance", startedAt: date,
+            endedAt: date.addingTimeInterval(60), text: "新しい作業", audioChunkID: chunk.id
+        ))
+
+        let coordinator = LifeLogCoordinator()
+        try await coordinator.updateSummary(
+            for: date, respectingInterval: false, force: true,
+            store: database.lifeLog,
+            derivation: LifeLogDerivationService(llm: RecordingLifeLogLlm())
+        )
+
+        let todos = try await database.lifeLog.todos()
+        #expect(todos.contains { $0.id == confirmedID && $0.status == .open })
+        let draft = try #require(todos.first { $0.title == "TODO" })
+        #expect(draft.status == .draft)
+        #expect(draft.id != confirmedID)
+    }
+
     @Test("日付をまたぐ録音の停止時は両日を再要約対象にする")
     @MainActor
     func stopAcrossMidnightIncludesEveryDay() throws {
@@ -117,6 +151,12 @@ struct LifeLogTests {
         #expect(!coordinator.isSuspendedForVoiceMemo)
         #expect(coordinator.isRecoveringCapture)
         coordinator.setCaptureEnabled(false)
+    }
+
+    @Test("明示的な記録停止だけがsession終了時の強制再要約になる")
+    func onlyExplicitStopForcesSummaryAfterCaptureEnds() {
+        #expect(LifeLogCoordinator.shouldForceSummaryAfterCaptureEnded(captureRequested: false))
+        #expect(!LifeLogCoordinator.shouldForceSummaryAfterCaptureEnded(captureRequested: true))
     }
 
     @Test("音声構成変更は再試行し、マイク権限拒否だけは再試行しない")
@@ -270,6 +310,41 @@ struct LifeLogTests {
         #expect(coordinator.sourceNavigationRevision == 2)
     }
 
+    @Test("予定時刻は最も近いtimeline項目へ、検索結果は該当項目へ移動する")
+    @MainActor
+    func timelineNavigationTargetsExpectedItem() async throws {
+        let database = try await KoeDatabase.inMemory()
+        let coordinator = LifeLogCoordinator()
+        let base = Calendar.current.startOfDay(for: Date()).addingTimeInterval(12 * 60 * 60)
+        let before = LifeLogMemo(id: "before", createdAt: base.addingTimeInterval(-300), text: "前")
+        let after = LifeLogMemo(id: "after", createdAt: base.addingTimeInterval(60), text: "後")
+        try await database.lifeLog.save(memo: before)
+        try await database.lifeLog.save(memo: after)
+        await coordinator.configure(
+            database: database,
+            engines: EngineRegistry(),
+            vocabulary: { [] },
+            todoPrompt: { "" },
+            summaryPrompt: { "" },
+            summaryIntervalMinutes: { 60 },
+            participatingEventsOnly: { true },
+            audioProcessingCompleted: {}
+        )
+
+        await coordinator.jumpToTime(base)
+        #expect(coordinator.highlightedTimelineItemID == "m-after")
+
+        await coordinator.jumpToSearchResult(LifeLogSearchResult(
+            id: "memo-before",
+            kind: .memo,
+            text: before.text,
+            occurredAt: before.createdAt,
+            day: LifeLogDateKey.string(for: before.createdAt)
+        ))
+        #expect(coordinator.highlightedTimelineItemID == "m-before")
+        #expect(coordinator.sourceNavigationRevision == 2)
+    }
+
     @Test("メモは発話と分離して保存され、日付境界で正しい日に入る")
     func memosAreTypedAndPartitionedByDay() async throws {
         let database = try await KoeDatabase.inMemory()
@@ -343,6 +418,22 @@ struct LifeLogTests {
             .init("topics", .stringArray),
             .init("todos", .stringArray),
         ])))
+    }
+
+    @Test("既存TODOはpromptへ渡し、同じ文言を新しいTODO案から除外する")
+    func existingTodosAreNotProposedAgain() async throws {
+        let llm = RecordingLifeLogLlm()
+        let service = LifeLogDerivationService(llm: llm)
+        let utterance = LifeLogUtterance(startedAt: Date(), endedAt: Date(), text: "TODOについて話す", audioChunkID: "audio")
+
+        let summary = try await service.summarize(
+            day: LifeLogDay(utterances: [utterance], conversations: [], calendarEvents: [], summary: nil),
+            prompt: "要約",
+            existingTodoTitles: ["ＴＯＤＯ"]
+        )
+
+        #expect(summary.todoTitles.isEmpty)
+        #expect(llm.recordedPrompts.last?.system.contains("<existing_todos>\n- ＴＯＤＯ\n</existing_todos>") == true)
     }
 
     @Test("再要約では当日の全データを時系列でLLMへ渡す")

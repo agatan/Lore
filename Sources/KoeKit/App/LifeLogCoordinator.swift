@@ -454,7 +454,8 @@ public final class LifeLogCoordinator {
         pendingLiveSegments = []
         transcriptionFinished = false
         captureFinished = false
-        if !captureRequested, let startedAt, let completedAt {
+        if Self.shouldForceSummaryAfterCaptureEnded(captureRequested: captureRequested),
+           let startedAt, let completedAt {
             for date in Self.daysSpanned(from: startedAt, through: completedAt) {
                 await refreshDerivedIfDue(for: date, respectingInterval: false, force: true)
             }
@@ -554,6 +555,44 @@ public final class LifeLogCoordinator {
         } catch {
             fail(error)
         }
+    }
+
+    public func jumpToSearchResult(_ result: LifeLogSearchResult) async {
+        let date = LifeLogDateKey.date(from: result.day) ?? result.occurredAt
+        let prefix = "\(result.kind.rawValue)-"
+        let recordID = result.id.hasPrefix(prefix) ? String(result.id.dropFirst(prefix.count)) : result.id
+        switch result.kind {
+        case .utterance:
+            await navigateToSource(date: date, timelineItemID: "u-\(recordID)")
+        case .dictation:
+            await navigateToSource(date: date, timelineItemID: "d-\(recordID)")
+        case .memo:
+            await navigateToSource(date: date, timelineItemID: "m-\(recordID)")
+        case .todo:
+            guard let database else { return }
+            do {
+                if let todo = try await database.lifeLog.todo(id: recordID),
+                   !todo.sourceUtteranceIDs.isEmpty || !todo.sourceMemoIDs.isEmpty {
+                    await jumpToSource(of: todo)
+                } else {
+                    await select(date: date)
+                }
+            } catch { fail(error) }
+        case .summary:
+            await select(date: date)
+        }
+    }
+
+    public func jumpToTime(_ date: Date) async {
+        await select(date: date)
+        let candidates = day.utterances.map { ($0.startedAt, "u-\($0.id)") }
+            + day.dictations.map { ($0.startedAt, "d-\($0.id)") }
+            + day.memos.map { ($0.createdAt, "m-\($0.id)") }
+        guard let nearest = candidates.min(by: {
+            abs($0.0.timeIntervalSince(date)) < abs($1.0.timeIntervalSince(date))
+        }) else { return }
+        highlightedTimelineItemID = nearest.1
+        sourceNavigationRevision += 1
     }
 
     private func navigateToSource(date: Date, timelineItemID: String) async {
@@ -742,13 +781,15 @@ public final class LifeLogCoordinator {
         guard force || shouldFinalize || !respectingInterval || isPastDay
                 || latest.timeIntervalSince(baseline) >= interval else { return }
         let asOf = isPastDay ? dayInterval.end : now
+        let existingTodos = try await store.todos()
         let derived = try await derivation.summarize(
             day: value,
             prompt: summaryPrompt(),
             todoPrompt: todoPrompt(),
+            existingTodoTitles: existingTodos.map(\.title),
             asOf: asOf
         )
-        let commitments = try await store.todos().filter { $0.status != .draft }.map(\.title)
+        let commitments = existingTodos.filter { $0.status != .draft }.map(\.title)
         let duration = value.utterances.reduce(0) { $0 + max(0, Int($1.endedAt.timeIntervalSince($1.startedAt))) }
         let summary = DailySummary(day: LifeLogDateKey.string(for: date), summary: derived.text,
                                    commitments: Array(Set((previous?.commitments ?? []) + commitments)).sorted(), topics: derived.topics,
@@ -757,11 +798,16 @@ public final class LifeLogCoordinator {
                                    isFinal: isPastDay)
         let sourceIDs = value.utterances.map(\.id)
         let sourceMemoIDs = value.memos.map(\.id)
-        let drafts = derived.todoTitles.enumerated().map { index, title in
-            LifeLogTodo(id: "draft-\(summary.day)-\(index)", title: title, status: .draft,
+        let drafts = derived.todoTitles.map { title in
+            LifeLogTodo(title: title, status: .draft,
                         sourceUtteranceIDs: sourceIDs, sourceMemoIDs: sourceMemoIDs)
         }
         try await store.save(summary: summary, replacingDrafts: drafts)
+    }
+
+    /// ボイスメモや再接続の一時停止中は記録意図が残るため、強制再要約しない。
+    nonisolated static func shouldForceSummaryAfterCaptureEnded(captureRequested: Bool) -> Bool {
+        !captureRequested
     }
 
     static func daysSpanned(from start: Date, through end: Date, calendar: Calendar = .current) -> [Date] {
