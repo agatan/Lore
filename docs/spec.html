@@ -166,7 +166,7 @@
 <h3>継続記録</h3>
 <ul>
 <li>通常の音声入力と独立し、同時利用できます。Menu bar、main window、専用hotkey、Shortcutsから開始・停止します。</li>
-<li>Life logが実際に録音している間も、menu barのKoe icon本体はmonochromeで表示し、右下の小さなrose色badgeだけを着色します。停止中と再接続待ちではbadgeを外し、再接続待ちを録音中とは表示しません。</li>
+<li>Life logの全画面とmenu barは、実際のaudio writerの稼働状態を同じ記録状態として表示します。実際に録音している間もmenu barのKoe icon本体はmonochromeで表示し、右下の小さなrose色badgeだけを着色します。開始準備中、停止中、再接続待ちではbadgeを外し、それぞれを録音中とは表示しません。</li>
 <li>音声入力との同時利用中も、復旧可能なlife-log audioの記録は中断しません。音声入力が成功した区間はそのraw transcriptを正本とし、同じ録音時間帯にlife log側で認識した発話はtimeline、検索、書き出し、summary/TODO生成へ重複して出しません。音声入力がcancelまたは失敗した場合は、life log側の発話を残します。</li>
 <li>選択したinput deviceから記録し、30秒ごとに復旧用<code>.m4a</code>をMac内へ確定します。Audioをcloud STTへ送ることはありません。</li>
 <li>保存済みaudioは文字起こしと派生処理が両方成功するまで必ず保持します。既定の「処理後削除」では成功直後にaudioだけを削除し、保存済みの発話、conversation、summary、TODOは残します。設定は「処理後削除」「7日」「30日」から選べます。</li>
@@ -182,7 +182,7 @@
 </article>
 <article class="card">
 <h3>Timeline</h3>
-<p>Pane内部は共通の時刻順と縦scrollを保った2columnとし、初期幅15%の左columnにcalendar予定、残りの右columnに発話、音声入力、text memoを表示します。境界はdragして幅を変えられます。今日の最下部とmini windowには同じchat形式の入力欄があり、送信したmemoを即時追加します。送信と音声入力は同じ直径の円形controlに揃えます。過去日の履歴へ現在のmemoを混入させないため、main windowの入力欄は今日を選択中だけ表示します。</p>
+<p>Pane内部は共通の時刻順と縦scrollを保った2columnとし、初期幅15%の左columnにcalendar予定、残りの右columnに発話、音声入力、text memoを表示します。境界はdragして幅を変えられます。予定は開始・終了時刻の範囲をcalendarごとの色で塗ったblockとして表示し、今日進行中の予定は左column上部に固定します。Mini windowは予定と記録を一列の時刻順で表示し、進行中の予定を上部に固定します。OS標準のtitle barは表示せず、toggle hotkeyは設定された修飾キーを含む押下と離上が対になった場合だけ切り替えます。今日の最下部とmini windowには同じchat形式の入力欄があり、記録状態と開始・停止操作をその直上に置きます。送信と音声入力は同じ直径の円形controlに揃えます。過去日の履歴へ現在のmemoを混入させないため、main windowの入力欄は今日を選択中だけ表示します。</p>
 </article>
 <article class="card">
 <h3>Conversation</h3>
@@ -480,9 +480,9 @@ koe search "検索語" [--limit N]</pre>
 <li>通常起動時にmain windowのlife-log画面が開き、memo入力欄の音声ボタンは専用hotkeyと同じボイスメモを開始・停止する。</li>
 <li>「処理後削除」でも未処理・失敗chunkは残り、文字起こしと派生処理が成功したaudioだけが削除される。</li>
 <li>通常起動時、main windowでlife logを開いた時、mini windowを開いた時は、今日のtimelineの最新項目が表示される。</li>
-<li>Timelineは初期幅15%でdrag可能な左columnのcalendar予定と、残りの右columnの発話・音声入力・memoを同じ時刻順で表示し、TODO本文は複数行へ折り返される。</li>
-<li>Mini windowは明示的に閉じるまでSpace切替やfull-screen appの利用中も手前に残る。</li>
-<li>Main window、mini window、menu barの記録開始・停止は同じ色、symbol、文言を使い、main/mini windowでは状態表示の隣に配置される。</li>
+<li>Timelineは初期幅15%でdrag可能な左columnのcalendar予定と、残りの右columnの発話・音声入力・memoを同じ時刻順で表示する。予定は開始・終了範囲を色付きblockで示し、進行中の予定は左column上部に固定され、TODO本文は複数行へ折り返される。</li>
+<li>Mini windowはtitle barなしの一列timelineで予定と記録を時刻順に表示し、進行中の予定を上部へ固定する。明示的に閉じるまでSpace切替やfull-screen appの利用中も手前に残り、通常の文字入力ではtoggleされない。</li>
+<li>Main window、mini window、menu barの記録状態は実際のaudio writerの稼働状態から同期され、同じ色、symbol、文言を使う。Main/mini windowでは開始・停止をmemo入力欄の直上に配置する。</li>
 <li>継続可能なmessageは<code>×</code>で閉じられ、dismissしても自動再接続や記録開始意図は変わらない。</li>
 </ol>
 </section>

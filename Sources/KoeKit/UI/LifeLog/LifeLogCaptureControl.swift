@@ -20,7 +20,7 @@ struct LifeLogCaptureControl: View {
             }
 
             VStack(alignment: .leading, spacing: 3) {
-                Text(lifeLog.hasCaptureIntent ? "ライフログ記録中" : "ライフログ停止中")
+                Text(statusTitle)
                     .font(.system(size: 12.5, weight: .semibold))
                 Text(lifeLog.captureStatusText)
                     .font(.system(size: 10.5))
@@ -44,12 +44,24 @@ struct LifeLogCaptureControl: View {
     }
 
     private var statusTint: Color {
-        lifeLog.hasCaptureIntent ? KoeTheme.recording : .secondary
+        if lifeLog.isCapturing { return KoeTheme.recording }
+        if lifeLog.isRecoveringCapture || lifeLog.hasCaptureIntent { return KoeTheme.warning }
+        return .secondary
     }
 
     private var statusSymbol: String {
         if lifeLog.isRecoveringCapture { return "arrow.trianglehead.2.clockwise.rotate.90" }
-        return lifeLog.hasCaptureIntent ? "waveform" : "waveform.slash"
+        if lifeLog.isCapturing { return "waveform" }
+        if lifeLog.hasCaptureIntent { return "ellipsis" }
+        return "waveform.slash"
+    }
+
+    private var statusTitle: String {
+        if lifeLog.isSuspendedForVoiceMemo { return "ライフログ一時停止中" }
+        if lifeLog.isRecoveringCapture { return "ライフログ再接続中" }
+        if lifeLog.isCapturing { return "ライフログ記録中" }
+        if lifeLog.hasCaptureIntent { return "ライフログ開始中" }
+        return "ライフログ停止中"
     }
 
     private var buttonFill: AnyShapeStyle {

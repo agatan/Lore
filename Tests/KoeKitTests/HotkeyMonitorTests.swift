@@ -31,12 +31,22 @@ struct HotkeyMonitorTests {
         #expect(up == nil, "離上を飲み込まないと ∂ が入力される")
     }
 
-    @Test("修飾キーが揃っていない D は素通しする")
-    func passesThroughWithoutModifier() {
+    @Test("修飾キーが揃っていない D の押下と離上は素通しする")
+    func passesThroughWithoutModifier() async {
         let monitor = HotkeyMonitor()
         monitor.update(binding: .key(code: Self.keyD, modifiers: Self.optionFlag))
-        let result = monitor.handle(type: .keyDown, event: keyEvent(Self.keyD, down: true, flags: 0))
-        #expect(result != nil, "⌥ 無しの D は普通に入力できなければならない")
+        final class Box { var events: [HotkeyPhysicalEvent] = [] }
+        let box = Box()
+        monitor.onEvent = { box.events.append($0) }
+
+        let down = monitor.handle(type: .keyDown, event: keyEvent(Self.keyD, down: true, flags: 0))
+        let up = monitor.handle(type: .keyUp, event: keyEvent(Self.keyD, down: false, flags: 0))
+        #expect(down != nil, "⌥ 無しの D の押下は普通に入力できなければならない")
+        #expect(up != nil, "成立した押下がない離上からhotkeyを発火してはいけない")
+        await withCheckedContinuation { continuation in
+            DispatchQueue.main.async { continuation.resume() }
+        }
+        #expect(box.events.isEmpty)
     }
 
     @Test("関係ないキーは素通しする")

@@ -96,6 +96,11 @@ public struct LifeLogWindow: View {
             Divider().opacity(0.4)
             timelineColumnHeader
             Divider().opacity(0.4)
+            CurrentCalendarEventStrip(
+                events: env.lifeLog.day.calendarEvents,
+                selectedDate: env.lifeLog.selectedDate,
+                calendarColumnWidth: calendarColumnWidth
+            )
             ScrollViewReader { proxy in
                 ScrollView {
                     LazyVStack(alignment: .leading, spacing: 0) {
@@ -209,16 +214,8 @@ public struct LifeLogWindow: View {
     @ViewBuilder
     private func calendarCell(_ item: TimelineItem) -> some View {
         if case .event(let value) = item.kind {
-            VStack(alignment: .leading, spacing: 4) {
-                Text(timeRange(from: value.startsAt, to: value.endsAt))
-                    .font(.system(size: 9.5, design: .monospaced))
-                    .foregroundStyle(.tertiary)
-                Text(value.title)
-                    .font(.system(size: 11, weight: .semibold))
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-            .padding(.horizontal, 10)
-            .padding(.vertical, 10)
+            CalendarEventCard(event: value)
+                .padding(6)
         } else {
             Color.clear.frame(height: 1)
         }
@@ -445,10 +442,6 @@ public struct LifeLogWindow: View {
          + env.lifeLog.day.memos.map { TimelineItem(id: "m-\($0.id)", date: $0.createdAt, kind: .memo($0)) }
          + env.lifeLog.day.calendarEvents.filter { !$0.isAllDay }.map { TimelineItem(id: "e-\($0.id)", date: $0.startsAt, kind: .event($0)) })
             .sorted { $0.date < $1.date }
-    }
-
-    private func timeRange(from start: Date, to end: Date) -> String {
-        "\(start.formatted(date: .omitted, time: .shortened))–\(end.formatted(date: .omitted, time: .shortened))"
     }
 
     private func setCaptureEnabled(_ enabled: Bool) {

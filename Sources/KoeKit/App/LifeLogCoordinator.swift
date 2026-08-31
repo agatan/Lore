@@ -58,6 +58,7 @@ public final class LifeLogCoordinator {
         capture.onCommitted = { [weak self] chunk in await self?.commitLiveChunk(chunk) }
         capture.onFinished = { [weak self] in await self?.captureWriterFinished() }
         capture.onFailure = { [weak self] error in self?.handleCaptureFailure(error) }
+        capture.onRunningChanged = { [weak self] running in self?.isCapturing = running }
     }
 
     public func configure(
@@ -90,7 +91,6 @@ public final class LifeLogCoordinator {
         captureRetryTask = nil
         if capture.isRunning {
             capture.stop()
-            isCapturing = false
         } else if liveTranscriptionTask == nil {
             scheduleCaptureRetry(unless: ContinuousAudioCapture.Failure.configurationChanged)
         }
@@ -115,7 +115,6 @@ public final class LifeLogCoordinator {
             derivationScheduleTask?.cancel()
             derivationScheduleTask = nil
             capture.stop()
-            isCapturing = false
         }
     }
 
@@ -186,7 +185,6 @@ public final class LifeLogCoordinator {
         KoeLog.session.info("語彙変更を反映するためライフログ解析streamを切り替えます")
         if capture.isRunning {
             capture.stop()
-            isCapturing = false
         }
     }
 
@@ -198,7 +196,6 @@ public final class LifeLogCoordinator {
         captureRetryTask = nil
         isRecoveringCapture = true
         capture.stop()
-        isCapturing = false
     }
 
     public func systemDidWake() {
@@ -221,7 +218,6 @@ public final class LifeLogCoordinator {
         isRecoveringCapture = false
         if capture.isRunning {
             capture.stop()
-            isCapturing = false
         }
 
         let clock = ContinuousClock()
@@ -269,7 +265,6 @@ public final class LifeLogCoordinator {
             hasLiveSegments = false
             transcriptionFinished = false
             captureFinished = false
-            isCapturing = true
             isRecoveringCapture = false
             isTranscribing = true
             liveTranscriptionTask = Task { [weak self] in
@@ -307,7 +302,6 @@ public final class LifeLogCoordinator {
 
     private func handleCaptureFailure(_ error: Error) {
         fail(error)
-        isCapturing = false
         scheduleCaptureRetry(unless: error)
     }
 
@@ -352,7 +346,6 @@ public final class LifeLogCoordinator {
             fail(error)
             if capture.isRunning {
                 capture.stop()
-                isCapturing = false
                 scheduleCaptureRetry(unless: error)
             }
             await finishLiveSessionIfReady()

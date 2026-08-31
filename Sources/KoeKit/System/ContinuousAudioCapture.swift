@@ -21,6 +21,7 @@ public final class ContinuousAudioCapture {
     public var onCommitted: (@MainActor @Sendable (LifeLogAudioChunk) async -> Void)?
     public var onFinished: (@MainActor @Sendable () async -> Void)?
     public var onFailure: (@MainActor @Sendable (Error) -> Void)?
+    public var onRunningChanged: (@MainActor @Sendable (Bool) -> Void)?
     public private(set) var isRunning = false
     public let chunkDuration: Duration
     public var inputDeviceUID: String?
@@ -76,6 +77,7 @@ public final class ContinuousAudioCapture {
         self.resampler = resampler
         self.writer = writer
         isRunning = true
+        onRunningChanged?(true)
         configurationObserver = NotificationCenter.default.addObserver(
             forName: .AVAudioEngineConfigurationChange,
             object: engine,
@@ -99,6 +101,7 @@ public final class ContinuousAudioCapture {
     public func stop() {
         guard isRunning else { return }
         isRunning = false
+        onRunningChanged?(false)
         rotationTask?.cancel()
         rotationTask = nil
         if let configurationObserver { NotificationCenter.default.removeObserver(configurationObserver) }

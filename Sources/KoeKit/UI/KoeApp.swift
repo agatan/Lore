@@ -43,6 +43,7 @@ public struct KoeApp: App {
                 .accentColor(KoeTheme.accent)
         }
         .defaultSize(width: 460, height: 620)
+        .windowStyle(.hiddenTitleBar)
 
         Window("すべてのTODO", id: KoeWindow.lifeLogTodos) {
             LifeLogTodoManagerWindow(env: env)

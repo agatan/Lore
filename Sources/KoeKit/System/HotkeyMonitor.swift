@@ -158,6 +158,7 @@ public final class HotkeyMonitor {
         case .keyUp:
             let code = UInt16(event.getIntegerValueField(.keyboardEventKeycode))
             guard case .key(let bound, _) = binding, code == bound else { return passthrough }
+            guard pressStart != nil else { return passthrough }
             endPress()
             return nil
 

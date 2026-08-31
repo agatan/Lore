@@ -519,6 +519,7 @@ public final class AppEnvironment {
         guard let window = NSApp.windows.first(where: { $0.identifier?.rawValue == KoeWindow.lifeLogMini }) else { return }
         window.level = .floating
         window.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
+        window.isMovableByWindowBackground = true
     }
 
     // MARK: 権限

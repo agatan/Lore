@@ -6,15 +6,10 @@ struct LifeLogMiniWindow: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            LifeLogCaptureControl(
-                lifeLog: env.lifeLog,
-                accessibilityIdentifier: "life-log-mini.capture-toggle"
-            ) {
-                env.setLifeLogCaptureEnabled(!env.lifeLog.hasCaptureIntent)
-            }
-            .padding(12)
-
-            Divider().opacity(0.4)
+            CurrentCalendarEventStrip(
+                events: env.lifeLog.day.calendarEvents,
+                selectedDate: env.lifeLog.selectedDate
+            )
 
             ScrollViewReader { proxy in
                 ScrollView {
@@ -24,20 +19,8 @@ struct LifeLogMiniWindow: View {
                             case .utterance(let utterance): utteranceRow(utterance)
                             case .dictation(let dictation): dictationRow(dictation)
                             case .memo(let memo): memoRow(memo)
+                            case .event(let event): eventRow(event)
                             }
-                        }
-                        if env.lifeLog.isCapturing || env.lifeLog.isTranscribing {
-                            HStack(alignment: .top, spacing: 10) {
-                                LiveWaveform()
-                                    .frame(width: 52)
-                                Text(env.lifeLog.captureStatusText)
-                                    .font(.system(size: 10.5, weight: .semibold, design: .rounded))
-                                    .foregroundStyle(KoeTheme.accent)
-                                Spacer(minLength: 0)
-                            }
-                            .padding(.horizontal, 12)
-                            .padding(.vertical, 10)
-                            .id("live")
                         }
                         Color.clear.frame(height: 1).id("bottom")
                     }
@@ -63,6 +46,15 @@ struct LifeLogMiniWindow: View {
                 }
             }
 
+            Divider().opacity(0.35)
+            LifeLogCaptureControl(
+                lifeLog: env.lifeLog,
+                accessibilityIdentifier: "life-log-mini.capture-toggle"
+            ) {
+                env.setLifeLogCaptureEnabled(!env.lifeLog.hasCaptureIntent)
+            }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 8)
             Divider().opacity(0.35)
             LifeLogMemoComposer(
                 text: $memoDraft,
@@ -92,7 +84,12 @@ struct LifeLogMiniWindow: View {
         }
     }
 
-    private enum ItemKind { case utterance(LifeLogUtterance), dictation(LifeLogDictation), memo(LifeLogMemo) }
+    private enum ItemKind {
+        case utterance(LifeLogUtterance)
+        case dictation(LifeLogDictation)
+        case memo(LifeLogMemo)
+        case event(CalendarEventSnapshot)
+    }
     private struct Item: Identifiable {
         var id: String
         var date: Date
@@ -101,8 +98,16 @@ struct LifeLogMiniWindow: View {
     private var items: [Item] {
         (env.lifeLog.day.utterances.map { Item(id: "u-\($0.id)", date: $0.startedAt, kind: .utterance($0)) }
          + env.lifeLog.day.dictations.map { Item(id: "d-\($0.id)", date: $0.startedAt, kind: .dictation($0)) }
-         + env.lifeLog.day.memos.map { Item(id: "m-\($0.id)", date: $0.createdAt, kind: .memo($0)) })
+         + env.lifeLog.day.memos.map { Item(id: "m-\($0.id)", date: $0.createdAt, kind: .memo($0)) }
+         + env.lifeLog.day.calendarEvents.filter { !$0.isAllDay }.map { Item(id: "e-\($0.id)", date: $0.startsAt, kind: .event($0)) })
             .sorted { $0.date < $1.date }
+    }
+
+    private func eventRow(_ event: CalendarEventSnapshot) -> some View {
+        CalendarEventCard(event: event)
+            .padding(.horizontal, 10)
+            .padding(.vertical, 6)
+            .id("e-\(event.id)")
     }
 
     private func dictationRow(_ dictation: LifeLogDictation) -> some View {
