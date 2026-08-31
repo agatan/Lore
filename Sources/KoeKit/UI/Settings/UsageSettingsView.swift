@@ -61,7 +61,7 @@ struct UsageSettingsView: View {
     }
 
     private var recordingCard: some View {
-        SettingsCard(title: "記録時間", footnote: "音声入力の録音と、ライフログで保存された音声の長さです。") {
+        SettingsCard(title: "記録時間", footnote: "音声入力の録音時間と、ライフログの実発話時間です。無音は含みません。") {
             Chart(week) { value in
                 BarMark(
                     x: .value("日", value.label),

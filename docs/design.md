@@ -134,6 +134,8 @@ DBは`~/Library/Application Support/Koe/koe.sqlite`です。`DatabaseQueue`を�
 
 名前付きmigrationは`v1`から`v8`です。履歴、発話、memo、TODO、summaryの日本語部分一致にはFTS5 trigramを使います。Codable値と配列はJSON、日時はISO 8601文字列で保存します。
 
+利用状況の録音時間は`DailyRecordingDuration.aggregate`で重なる区間を先に統合してから日境界で分割します。音声入力は`HistoryStore`の実録音区間、ライフログは`LifeLogStore`のtimelineに採用されたutterance区間を入力とし、`LifeLogSpeechProjection`と同じ規則で成功した音声入力と重なるutteranceを除外します。復旧用audio chunkの無音区間や同一区間の重複は利用時間へ加算しません。
+
 既存DBを開くと、未適用migrationの直前に`Backups/pre-migration-*.sqlite`を作ります。migrationがなくても1日1回`Backups/daily-*.sqlite`を作り、両種を合わせて更新日時が新しい7ファイルを保持します。backupはGRDBのonline backupで整合した単一SQLiteへ固定します。全データ削除はDB内利用者データ、保存audio、backupを削除します。
 
 ## 8. 設定、秘密、プロセス間同期

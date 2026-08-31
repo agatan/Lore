@@ -253,7 +253,7 @@
 </table>
 <p>Main window、mini window、menu barのlife-log状態表示は同じ記録操作を共有します。停止中の開始操作はblue/cyanの録音記号と「録音を開始」、記録開始意図がある間の停止操作はroseの停止記号と「録音を停止」を表示します。再接続中やボイスメモによる一時停止中も、停止操作は同じroseの外観を保ちます。</p>
 <p>音声構成変更や処理失敗など、継続操作を妨げないmessageはdismiss可能なbannerとして表示し、右端の<code>×</code>で閉じられます。閉じる操作はmessageだけを消し、記録開始意図、自動再接続、保存済みdataには影響しません。</p>
-<p>利用状況には音声入力回数/時間、life-log記録時間、cloud AIの実測token数、storage使用量を表示します。</p>
+<p>利用状況には音声入力回数/録音時間、life-logの実発話時間、cloud AIの実測token数、storage使用量を表示します。Life-logの実発話時間は、無音を含む連続録音時間ではなくtimelineに残る発話区間を日ごとに重複なく集計し、成功した音声入力と重なる発話は二重計上しません。</p>
 </section>
 <section id="data">
 <h2>6. 保存、backup、削除</h2>

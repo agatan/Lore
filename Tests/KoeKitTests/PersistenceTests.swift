@@ -245,11 +245,11 @@ import Testing
         id: "dictation-2", startedAt: second, status: .completed, raw: "二日目", audioDurationMs: 8_000
     ))
     try await database.lifeLog.save(audioChunk: .init(
-        id: "life-log-1", captureStartedAt: first, captureEndedAt: first.addingTimeInterval(30),
+        id: "life-log-1", captureStartedAt: first, captureEndedAt: first.addingTimeInterval(300),
         localPath: "/tmp/usage-life-log-1.m4a"
     ))
     try await database.lifeLog.save(audioChunk: .init(
-        id: "life-log-2", captureStartedAt: second, captureEndedAt: second.addingTimeInterval(45),
+        id: "life-log-2", captureStartedAt: second, captureEndedAt: second.addingTimeInterval(450),
         localPath: "/tmp/usage-life-log-2.m4a"
     ))
     let beforeMidnight = second.addingTimeInterval(86_390)
@@ -257,12 +257,34 @@ import Testing
         id: "life-log-midnight", captureStartedAt: beforeMidnight,
         captureEndedAt: beforeMidnight.addingTimeInterval(20), localPath: "/tmp/usage-life-log-midnight.m4a"
     ))
+    try await database.lifeLog.save(utterance: .init(
+        id: "utterance-1", startedAt: first.addingTimeInterval(15), endedAt: first.addingTimeInterval(45),
+        text: "一日目の発話", audioChunkID: "life-log-1"
+    ))
+    try await database.lifeLog.save(utterance: .init(
+        id: "utterance-shadowed-by-dictation", startedAt: first.addingTimeInterval(5),
+        endedAt: first.addingTimeInterval(10), text: "音声入力と重なる発話",
+        audioChunkID: "life-log-1"
+    ))
+    try await database.lifeLog.save(utterance: .init(
+        id: "utterance-2", startedAt: second.addingTimeInterval(10), endedAt: second.addingTimeInterval(55),
+        text: "二日目の発話", audioChunkID: "life-log-2"
+    ))
+    try await database.lifeLog.save(utterance: .init(
+        id: "utterance-2-overlap", startedAt: second.addingTimeInterval(30), endedAt: second.addingTimeInterval(60),
+        text: "重なる発話", audioChunkID: "life-log-2"
+    ))
+    try await database.lifeLog.save(utterance: .init(
+        id: "utterance-midnight", startedAt: beforeMidnight,
+        endedAt: beforeMidnight.addingTimeInterval(20), text: "日付をまたぐ発話",
+        audioChunkID: "life-log-midnight"
+    ))
 
     let dictation = try await database.history.dailyRecordingDuration(since: first, calendar: calendar)
     let lifeLog = try await database.lifeLog.dailyRecordingDuration(since: first, calendar: calendar)
 
     #expect(dictation.map(\.seconds) == [8, 12])
-    #expect(lifeLog.map(\.seconds) == [10, 55, 30])
+    #expect(lifeLog.map(\.seconds) == [10, 60, 30])
     #expect(dictation.map(\.day) == ["2026-08-30", "2026-08-29"])
     #expect(lifeLog.map(\.day) == ["2026-08-31", "2026-08-30", "2026-08-29"])
 }

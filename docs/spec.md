@@ -150,7 +150,7 @@ Koeのprimary colorはapp icon由来の爽やかなblueに固定し、利用者�
 | Settings: 音声入力 | hotkey、feedback、履歴、AI整形、mode |
 | Settings: ライフログ | 記録・mini window・ボイスメモhotkey、入力device、audio保持、summary間隔、要約/TODO AI、calendar再取得 |
 
-利用状況には音声入力回数・時間、ライフログ記録時間、cloud AIの実測token数、Koe dataのstorage使用量を表示します。local modelはcloud token集計に含みません。
+利用状況には音声入力回数・録音時間、ライフログの実発話時間、cloud AIの実測token数、Koe dataのstorage使用量を表示します。ライフログの実発話時間は、無音を含む連続録音時間ではなくtimelineに残る発話区間を日ごとに重複なく集計し、成功した音声入力と重なる発話は二重計上しません。local modelはcloud token集計に含みません。
 
 Main window、mini window、menu barのライフログ状態表示は同じ記録操作を共有します。停止中の開始操作はblue/cyanの録音記号と「録音を開始」、記録開始意図がある間の停止操作はroseの停止記号と「録音を停止」を表示します。再接続中やボイスメモによる一時停止中も、停止操作は同じroseの外観を保ちます。
 

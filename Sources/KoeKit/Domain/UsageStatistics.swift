@@ -18,8 +18,20 @@ extension DailyRecordingDuration {
         intervals: [(start: Date, end: Date)],
         calendar: Calendar
     ) -> [DailyRecordingDuration] {
+        let sorted = intervals
+            .filter { $0.end > $0.start }
+            .sorted { $0.start < $1.start }
+        var merged: [(start: Date, end: Date)] = []
+        for interval in sorted {
+            if let lastIndex = merged.indices.last, interval.start <= merged[lastIndex].end {
+                merged[lastIndex].end = max(merged[lastIndex].end, interval.end)
+            } else {
+                merged.append(interval)
+            }
+        }
+
         var secondsByDay: [String: TimeInterval] = [:]
-        for interval in intervals where interval.end > interval.start {
+        for interval in merged {
             var cursor = interval.start
             while cursor < interval.end {
                 let startOfDay = calendar.startOfDay(for: cursor)

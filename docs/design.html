@@ -364,6 +364,7 @@ KoeMCP ──┘</pre>
 </tr>
 </tbody>
 </table>
+<p>利用状況の録音時間は<code>DailyRecordingDuration.aggregate</code>で重なる区間を先に統合してから日境界で分割します。音声入力は<code>HistoryStore</code>の実録音区間、life logは<code>LifeLogStore</code>のtimelineに採用されたutterance区間を入力とし、<code>LifeLogSpeechProjection</code>と同じ規則で成功した音声入力と重なるutteranceを除外します。復旧用audio chunkの無音区間や同一区間の重複は利用時間へ加算しません。</p>
 <p>DBは<code>Application Support/Koe/koe.sqlite</code>、migrationはv1〜v8です。既存DBはmigration前と1日1回backupし、<code>Backups/</code>の最新7fileを保持します。全data削除はbackupも削除します。</p>
 </section>
 <section id="settings">

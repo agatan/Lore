@@ -50,27 +50,34 @@ public struct LifeLogStore: Sendable {
         }
     }
 
-    /// ライフログの録音時間。発話時間ではなく、保存された音声chunkの長さを使う。
+    /// タイムラインに採用されたライフログ発話の実時間。無音と音声入力との重複は数えない。
     public func dailyRecordingDuration(
         since: Date,
         calendar: Calendar = .current
     ) async throws -> [DailyRecordingDuration] {
-        let rows = try queue.read { db in
-            try Row.fetchAll(
+        let intervals = try await queue.read { db in
+            let utterances = try Row.fetchAll(
                 db,
                 sql: """
-                    SELECT capture_started_at, capture_ended_at FROM life_log_audio_chunks
-                    WHERE capture_started_at >= ?
-                    ORDER BY capture_started_at
+                    SELECT * FROM life_log_utterances
+                    WHERE started_at >= ?
+                    ORDER BY started_at
                     """,
                 arguments: [date(since)]
-            )
-        }
-        let intervals = try rows.map { row in
-            (
-                start: try parse(row["capture_started_at"]),
-                end: try parse(row["capture_ended_at"])
-            )
+            ).map(decodeUtterance)
+            let dictations = try Row.fetchAll(
+                db,
+                sql: """
+                    SELECT * FROM sessions
+                    WHERE started_at >= ?
+                      AND status IN ('completed', 'fallback', 'clipboard_only')
+                      AND trim(raw_transcript) != ''
+                    ORDER BY started_at
+                    """,
+                arguments: [date(since)]
+            ).map(decodeDictation)
+            return LifeLogSpeechProjection.visibleUtterances(utterances, preferring: dictations)
+                .map { (start: $0.startedAt, end: $0.endedAt) }
         }
         return DailyRecordingDuration.aggregate(intervals: intervals, calendar: calendar)
     }
@@ -133,14 +140,7 @@ public struct LifeLogStore: Sendable {
                   AND status IN ('completed', 'fallback', 'clipboard_only')
                   AND trim(raw_transcript) != ''
                 ORDER BY started_at
-                """, arguments: args).map(SessionRow.init(row:)).map { row in
-                    let record = try row.record()
-                    let endedAt = record.audioDurationMs.map { record.startedAt.addingTimeInterval(Double($0) / 1_000) }
-                        ?? record.endedAt
-                        ?? record.startedAt
-                    return LifeLogDictation(id: record.id, startedAt: record.startedAt, endedAt: endedAt,
-                                            text: record.rawTranscript)
-                }
+                """, arguments: args).map(decodeDictation)
             let utterances = LifeLogSpeechProjection.visibleUtterances(storedUtterances, preferring: dictations)
             let memos = try Row.fetchAll(db, sql: "SELECT * FROM life_log_memos WHERE created_at >= ? AND created_at < ? ORDER BY created_at", arguments: args).map(decodeMemo)
             let conversations = try Row.fetchAll(db, sql: "SELECT * FROM life_log_conversations WHERE started_at >= ? AND started_at < ? ORDER BY started_at", arguments: args).map(decodeConversation)
@@ -342,6 +342,13 @@ public struct LifeLogStore: Sendable {
     private func parse(_ value: String) throws -> Date { try PersistenceCoding.decodeDate(value) }
     private func decodeChunk(_ r: Row) throws -> LifeLogAudioChunk { LifeLogAudioChunk(id: r["id"], captureStartedAt: try parse(r["capture_started_at"]), captureEndedAt: try parse(r["capture_ended_at"]), localPath: r["local_path"], transcriptionState: LifeLogProcessingState(rawValue: r["transcription_state"])!, processingState: LifeLogProcessingState(rawValue: r["processing_state"])!, failureReason: r["failure_reason"], peakLevel: r["peak_level"]) }
     private func decodeUtterance(_ r: Row) throws -> LifeLogUtterance { LifeLogUtterance(id: r["id"], startedAt: try parse(r["started_at"]), endedAt: try parse(r["ended_at"]), text: r["text"], audioChunkID: r["audio_chunk_id"], calendarEventID: r["calendar_event_id"], conversationID: r["conversation_id"]) }
+    private func decodeDictation(_ r: Row) throws -> LifeLogDictation {
+        let record = try SessionRow(row: r).record()
+        let endedAt = record.audioDurationMs.map { record.startedAt.addingTimeInterval(Double($0) / 1_000) }
+            ?? record.endedAt
+            ?? record.startedAt
+        return LifeLogDictation(id: record.id, startedAt: record.startedAt, endedAt: endedAt, text: record.rawTranscript)
+    }
     private func decodeMemo(_ r: Row) throws -> LifeLogMemo { LifeLogMemo(id: r["id"], createdAt: try parse(r["created_at"]), text: r["text"]) }
     private func decodeConversation(_ r: Row) throws -> LifeLogConversation { LifeLogConversation(id: r["id"], startedAt: try parse(r["started_at"]), endedAt: try parse(r["ended_at"]), calendarEventID: r["calendar_event_id"]) }
     private func decodeEvent(_ r: Row) throws -> CalendarEventSnapshot { CalendarEventSnapshot(id: r["id"], externalIdentifier: r["external_identifier"], title: r["title"], startsAt: try parse(r["starts_at"]), endsAt: try parse(r["ends_at"]), calendarTitle: r["calendar_title"], isAllDay: r["is_all_day"], participationStatus: CalendarParticipationStatus(rawValue: r["participation_status"]) ?? .unknown) }
