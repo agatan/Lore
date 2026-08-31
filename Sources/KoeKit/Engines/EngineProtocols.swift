@@ -21,6 +21,12 @@ public enum AudioFormats {
     public static var canonical: AVAudioFormat {
         AVAudioFormat(commonFormat: .pcmFormatFloat32, sampleRate: 16_000, channels: 1, interleaved: false)!
     }
+
+    /// AAC エンコーダが安定して受け取れるライフログ保存用フォーマット。
+    /// マイク固有の sample rate / channel count をそのまま AAC 設定に使わない。
+    static var lifeLogStorage: AVAudioFormat {
+        AVAudioFormat(commonFormat: .pcmFormatFloat32, sampleRate: 48_000, channels: 1, interleaved: false)!
+    }
 }
 
 /// エンジンの使用可否。UI にそのまま出せる文言を持たせる。

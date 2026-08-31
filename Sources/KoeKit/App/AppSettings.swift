@@ -17,6 +17,7 @@ public final class AppSettings {
         public var hotkey: HotkeyBinding = .default
         public var lifeLogCaptureHotkey: HotkeyBinding = .key(code: 0x25, modifiers: 0x000C_0000)
         public var lifeLogMiniWindowHotkey: HotkeyBinding = .key(code: 0x2E, modifiers: 0x000C_0000)
+        public var voiceMemoHotkey: HotkeyBinding = .key(code: 0x09, modifiers: 0x000C_0000)
         /// 300ms だと「軽く叩いた」つもりの押下が長押し扱いになり、トグルが効かないことが多かった。
         public var holdThresholdMs: Int = 500
         public var soundsEnabled: Bool = true
@@ -27,7 +28,6 @@ public final class AppSettings {
         public var formattingTimeoutMs: Int = 6_000
         public var vocabularyAnalysisEnabled: Bool = true
         public var showLevelMeterInMenuBar: Bool = true
-        public var openHistoryAtLaunch: Bool = true
         /// 初回案内を完了するまで、権限と保存範囲を説明する。
         public var onboardingCompleted: Bool = false
         /// 文章の仕上げをどこで動かすか。既定はオンデバイス(外に出さない)。
@@ -69,6 +69,7 @@ public final class AppSettings {
             hotkey = try container.decodeIfPresent(HotkeyBinding.self, forKey: .hotkey) ?? fallback.hotkey
             lifeLogCaptureHotkey = try container.decodeIfPresent(HotkeyBinding.self, forKey: .lifeLogCaptureHotkey) ?? fallback.lifeLogCaptureHotkey
             lifeLogMiniWindowHotkey = try container.decodeIfPresent(HotkeyBinding.self, forKey: .lifeLogMiniWindowHotkey) ?? fallback.lifeLogMiniWindowHotkey
+            voiceMemoHotkey = try container.decodeIfPresent(HotkeyBinding.self, forKey: .voiceMemoHotkey) ?? fallback.voiceMemoHotkey
             holdThresholdMs = try container.decodeIfPresent(Int.self, forKey: .holdThresholdMs) ?? fallback.holdThresholdMs
             soundsEnabled = try container.decodeIfPresent(Bool.self, forKey: .soundsEnabled) ?? fallback.soundsEnabled
             soundVolume = try container.decodeIfPresent(Double.self, forKey: .soundVolume) ?? fallback.soundVolume
@@ -77,7 +78,6 @@ public final class AppSettings {
             formattingTimeoutMs = try container.decodeIfPresent(Int.self, forKey: .formattingTimeoutMs) ?? fallback.formattingTimeoutMs
             vocabularyAnalysisEnabled = try container.decodeIfPresent(Bool.self, forKey: .vocabularyAnalysisEnabled) ?? fallback.vocabularyAnalysisEnabled
             showLevelMeterInMenuBar = try container.decodeIfPresent(Bool.self, forKey: .showLevelMeterInMenuBar) ?? fallback.showLevelMeterInMenuBar
-            openHistoryAtLaunch = try container.decodeIfPresent(Bool.self, forKey: .openHistoryAtLaunch) ?? fallback.openHistoryAtLaunch
             onboardingCompleted = try container.decodeIfPresent(Bool.self, forKey: .onboardingCompleted) ?? false
             // 選択肢が消えた版へ戻したときに、**設定ファイル全体が捨てられない**ようにする。
             // ここで throw すると `AppSettings.init` の `try?` が丸ごと初期値へ倒し、
@@ -149,6 +149,11 @@ public final class AppSettings {
         set { storage.lifeLogMiniWindowHotkey = newValue; persist() }
     }
 
+    public var voiceMemoHotkey: HotkeyBinding {
+        get { storage.voiceMemoHotkey }
+        set { storage.voiceMemoHotkey = newValue; persist() }
+    }
+
     public var holdThreshold: Duration {
         .milliseconds(storage.holdThresholdMs)
     }
@@ -195,11 +200,6 @@ public final class AppSettings {
     public var showLevelMeterInMenuBar: Bool {
         get { storage.showLevelMeterInMenuBar }
         set { storage.showLevelMeterInMenuBar = newValue; persist() }
-    }
-
-    public var openHistoryAtLaunch: Bool {
-        get { storage.openHistoryAtLaunch }
-        set { storage.openHistoryAtLaunch = newValue; persist() }
     }
 
     public var onboardingCompleted: Bool {

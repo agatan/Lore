@@ -23,6 +23,7 @@ public final class AppEnvironment {
     public let hotkeys = HotkeyMonitor()
     public let lifeLogCaptureHotkeys = HotkeyMonitor()
     public let lifeLogMiniWindowHotkeys = HotkeyMonitor()
+    public let voiceMemoHotkeys = HotkeyMonitor()
     public let lifeLog = LifeLogCoordinator()
     public private(set) var coordinator: DictationCoordinator!
 
@@ -42,6 +43,7 @@ public final class AppEnvironment {
     /// ログイン項目の状態。問い合わせが同期 XPC なので、UI は必ずこのキャッシュを読む。
     public private(set) var loginItemState: LoginItem.State = .unknown
     public private(set) var hotkeyError: String?
+    public private(set) var isPreparingVoiceMemo = false
     public private(set) var analysisState: AnalysisState = .idle
     public private(set) var lastAnalysisAt: Date?
 
@@ -76,6 +78,7 @@ public final class AppEnvironment {
 
     /// このプロセスが生きている長さ。起動し直すべきかの判断に使う。
     private let launchedAt = ContinuousClock.now
+    @ObservationIgnored private var bootTask: Task<Void, Never>?
     private var permissionWatcher: Task<Void, Never>?
     private var analysisTask: Task<Void, Never>?
     @ObservationIgnored private var powerObservers: [any NSObjectProtocol] = []
@@ -156,6 +159,18 @@ public final class AppEnvironment {
     // MARK: 起動
 
     public func boot() async {
+        if let bootTask {
+            await bootTask.value
+            return
+        }
+        let task = Task { @MainActor in
+            await self.performBoot()
+        }
+        bootTask = task
+        await task.value
+    }
+
+    private func performBoot() async {
         refreshPermissions()
 
         do {
@@ -296,8 +311,10 @@ public final class AppEnvironment {
         let arguments = ProcessInfo.processInfo.arguments
         if arguments.contains("--koe-ui-test-settings-dictation") { return .models }
         if arguments.contains("--koe-ui-test-settings-life-log") { return .lifeLogAI }
+        if arguments.contains("--koe-ui-test-settings-life-log-general") { return .lifeLog }
         if arguments.contains("--koe-ui-test-settings-usage") { return .usage }
         if arguments.contains("--koe-ui-test-settings-modes") { return .modes }
+        if arguments.contains("--koe-ui-test-settings-calendar") { return .calendar }
 #endif
         return nil
     }
@@ -336,6 +353,7 @@ public final class AppEnvironment {
         hotkeys.stop()
         lifeLogCaptureHotkeys.stop()
         lifeLogMiniWindowHotkeys.stop()
+        voiceMemoHotkeys.stop()
         permissionWatcher?.cancel()
         analysisTask?.cancel()
         if coordinator.isRecording { coordinator.stop() }
@@ -381,6 +399,11 @@ public final class AppEnvironment {
             guard case .released = event else { return }
             self?.onToggleLifeLogMiniWindow?()
         }
+        voiceMemoHotkeys.update(binding: settings.voiceMemoHotkey)
+        voiceMemoHotkeys.onEvent = { [weak self] event in
+            guard case .pressed = event else { return }
+            self?.toggleVoiceMemo()
+        }
     }
 
     public func startHotkeyMonitor() {
@@ -392,9 +415,11 @@ public final class AppEnvironment {
             hotkeys.update(binding: settings.hotkey)
             lifeLogCaptureHotkeys.update(binding: settings.lifeLogCaptureHotkey)
             lifeLogMiniWindowHotkeys.update(binding: settings.lifeLogMiniWindowHotkey)
+            voiceMemoHotkeys.update(binding: settings.voiceMemoHotkey)
             try hotkeys.start()
             try lifeLogCaptureHotkeys.start()
             try lifeLogMiniWindowHotkeys.start()
+            try voiceMemoHotkeys.start()
             hotkeyError = nil
         } catch {
             hotkeyError = error.localizedDescription
@@ -407,10 +432,13 @@ public final class AppEnvironment {
         hotkeys.setSuspended(capturing)
         lifeLogCaptureHotkeys.setSuspended(capturing)
         lifeLogMiniWindowHotkeys.setSuspended(capturing)
+        voiceMemoHotkeys.setSuspended(capturing)
     }
 
     public func updateHotkey(_ binding: HotkeyBinding) {
-        guard binding != settings.lifeLogCaptureHotkey, binding != settings.lifeLogMiniWindowHotkey else {
+        guard binding != settings.lifeLogCaptureHotkey,
+              binding != settings.lifeLogMiniWindowHotkey,
+              binding != settings.voiceMemoHotkey else {
             hotkeyError = "同じキーを複数の操作には割り当てられません"
             return
         }
@@ -420,7 +448,9 @@ public final class AppEnvironment {
     }
 
     public func updateLifeLogCaptureHotkey(_ binding: HotkeyBinding) {
-        guard binding != settings.hotkey, binding != settings.lifeLogMiniWindowHotkey else {
+        guard binding != settings.hotkey,
+              binding != settings.lifeLogMiniWindowHotkey,
+              binding != settings.voiceMemoHotkey else {
             hotkeyError = "同じキーを複数の操作には割り当てられません"
             return
         }
@@ -431,7 +461,9 @@ public final class AppEnvironment {
     }
 
     public func updateLifeLogMiniWindowHotkey(_ binding: HotkeyBinding) {
-        guard binding != settings.hotkey, binding != settings.lifeLogCaptureHotkey else {
+        guard binding != settings.hotkey,
+              binding != settings.lifeLogCaptureHotkey,
+              binding != settings.voiceMemoHotkey else {
             hotkeyError = "同じキーを複数の操作には割り当てられません"
             return
         }
@@ -439,6 +471,47 @@ public final class AppEnvironment {
         lifeLogMiniWindowHotkeys.update(binding: binding)
         hotkeyError = nil
         if !lifeLogMiniWindowHotkeys.isRunning { startHotkeyMonitor() }
+    }
+
+    public func updateVoiceMemoHotkey(_ binding: HotkeyBinding) {
+        guard binding != settings.hotkey,
+              binding != settings.lifeLogCaptureHotkey,
+              binding != settings.lifeLogMiniWindowHotkey else {
+            hotkeyError = "同じキーを複数の操作には割り当てられません"
+            return
+        }
+        settings.voiceMemoHotkey = binding
+        voiceMemoHotkeys.update(binding: binding)
+        hotkeyError = nil
+        if !voiceMemoHotkeys.isRunning { startHotkeyMonitor() }
+    }
+
+    public func toggleVoiceMemo() {
+        if coordinator.isVoiceMemoRecording {
+            coordinator.stop()
+            return
+        }
+        guard !coordinator.isBusy, !isPreparingVoiceMemo else { return }
+        isPreparingVoiceMemo = true
+        Task { [weak self] in
+            guard let self else { return }
+            let suspended = await lifeLog.suspendForVoiceMemo()
+            guard suspended else {
+                lifeLog.resumeAfterVoiceMemo()
+                isPreparingVoiceMemo = false
+                return
+            }
+            let started = coordinator.startVoiceMemo(
+                onRecognized: { [weak self] text in await self?.lifeLog.addMemo(text) },
+                onFinished: { [weak self] in self?.lifeLog.resumeAfterVoiceMemo() }
+            )
+            if !started { lifeLog.resumeAfterVoiceMemo() }
+            isPreparingVoiceMemo = false
+        }
+    }
+
+    public var canToggleVoiceMemo: Bool {
+        coordinator.isVoiceMemoRecording || (!coordinator.isBusy && !isPreparingVoiceMemo)
     }
 
     public func setLifeLogMiniWindowAlwaysOnTop(_ enabled: Bool) {

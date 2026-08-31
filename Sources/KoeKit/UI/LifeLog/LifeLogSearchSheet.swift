@@ -116,6 +116,7 @@ struct LifeLogSearchSheet: View {
     private func symbol(for kind: LifeLogSearchResult.Kind) -> String {
         switch kind {
         case .utterance: "waveform"
+        case .dictation: "keyboard.badge.ellipsis"
         case .memo: "text.bubble"
         case .todo: "checkmark.circle"
         case .summary: "sparkles"
@@ -125,6 +126,7 @@ struct LifeLogSearchSheet: View {
     private func tint(for kind: LifeLogSearchResult.Kind) -> Color {
         switch kind {
         case .utterance: KoeTheme.accent
+        case .dictation: KoeTheme.accent
         case .memo: KoeTheme.accentSecondary
         case .todo: KoeTheme.success
         case .summary: KoeTheme.warning

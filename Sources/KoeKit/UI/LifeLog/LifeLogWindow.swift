@@ -8,6 +8,7 @@ public struct LifeLogWindow: View {
     @State private var exportError: String?
     @State private var showsExportSheet = false
     @State private var showsSearchSheet = false
+    @State private var memoDraft = ""
 
     public init(env: AppEnvironment) { self.env = env }
 
@@ -61,6 +62,7 @@ public struct LifeLogWindow: View {
         .buttonStyle(.borderedProminent)
         .labelStyle(.titleAndIcon)
         .tint(env.lifeLog.isCapturing ? KoeTheme.recording : KoeTheme.accent)
+        .accessibilityIdentifier("life-log.capture-toggle")
     }
 
     private var left: some View {
@@ -132,6 +134,21 @@ public struct LifeLogWindow: View {
             if let error = env.lifeLog.errorMessage {
                 Label(error, systemImage: "exclamationmark.triangle.fill")
                     .font(.caption).foregroundStyle(KoeTheme.recording).padding(8)
+            }
+            if Calendar.current.isDateInToday(env.lifeLog.selectedDate) {
+                Divider().opacity(0.35)
+                LifeLogMemoComposer(
+                    text: $memoDraft,
+                    accessibilityPrefix: "life-log",
+                    isVoiceMemoRecording: env.coordinator.isVoiceMemoRecording,
+                    isPreparingVoiceMemo: env.isPreparingVoiceMemo,
+                    canToggleVoiceMemo: env.canToggleVoiceMemo,
+                    voiceMemoShortcut: env.settings.voiceMemoHotkey.displayName,
+                    onToggleVoiceMemo: env.toggleVoiceMemo
+                ) { value in
+                    Task { await env.lifeLog.addMemo(value) }
+                }
+                .padding(10)
             }
         }
         .raisedGlass(cornerRadius: 22)

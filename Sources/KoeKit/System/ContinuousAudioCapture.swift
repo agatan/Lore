@@ -6,13 +6,14 @@ import Foundation
 @MainActor
 public final class ContinuousAudioCapture {
     public enum Failure: LocalizedError {
-        case alreadyRunning, microphoneDenied, noInputDevice, formatUnsupported
+        case alreadyRunning, microphoneDenied, noInputDevice, formatUnsupported, configurationChanged
         public var errorDescription: String? {
             switch self {
             case .alreadyRunning: "ライフログはすでに記録中です"
             case .microphoneDenied: "マイクの使用が許可されていません"
             case .noInputDevice: "入力デバイスが見つかりません"
             case .formatUnsupported: "この入力フォーマットを変換できません"
+            case .configurationChanged: "音声入力の構成が変わりました"
             }
         }
     }
@@ -48,13 +49,13 @@ public final class ContinuousAudioCapture {
         let inputFormat = input.outputFormat(forBus: 0)
         guard inputFormat.sampleRate > 0, inputFormat.channelCount > 0 else { throw Failure.noInputDevice }
         guard let resampler = Resampler(from: inputFormat, to: target) else { throw Failure.formatUnsupported }
-        let writer = DurableAudioChunkWriter(
+        guard let writer = DurableAudioChunkWriter(
             root: root,
             inputFormat: inputFormat,
             committed: { [weak self] chunk in Task { @MainActor in await self?.onCommitted?(chunk) } },
             finished: { [weak self] in Task { @MainActor in await self?.onFinished?() } },
             failed: { [weak self] error in Task { @MainActor in self?.recordingFailed(error) } }
-        )
+        ) else { throw Failure.formatUnsupported }
         try writer.start(at: Date())
 
         let (stream, continuation) = AsyncStream<AudioChunk>.makeStream(bufferingPolicy: .unbounded)
@@ -82,7 +83,7 @@ public final class ContinuousAudioCapture {
         ) { [weak self] _ in
             Task { @MainActor in
                 guard let self, self.isRunning else { return }
-                self.recordingFailed(EngineError.failed("音声入力の構成が変わりました"))
+                self.recordingFailed(Failure.configurationChanged)
             }
         }
         rotationTask = Task { [weak self] in
@@ -135,9 +136,15 @@ public final class ContinuousAudioCapture {
 
 /// リアルタイムスレッドをディスク I/O で止めない直列 writer。
 private final class DurableAudioChunkWriter: @unchecked Sendable {
+    private enum Failure: LocalizedError {
+        case conversionFailed
+        var errorDescription: String? { "ライフログ音声を保存用フォーマットへ変換できません" }
+    }
+
     private let queue = DispatchQueue(label: "app.koe.life-log.audio-writer", qos: .utility)
     private let root: URL
-    private let inputFormat: AVAudioFormat
+    private let storageFormat = AudioFormats.lifeLogStorage
+    private let storageResampler: Resampler
     private let committed: @Sendable (LifeLogAudioChunk) -> Void
     private let finished: @Sendable () -> Void
     private let failed: @Sendable (Error) -> Void
@@ -147,12 +154,13 @@ private final class DurableAudioChunkWriter: @unchecked Sendable {
     private var failedAlready = false
     private var peakLevel: Float = 0
 
-    init(root: URL, inputFormat: AVAudioFormat,
+    init?(root: URL, inputFormat: AVAudioFormat,
          committed: @escaping @Sendable (LifeLogAudioChunk) -> Void,
          finished: @escaping @Sendable () -> Void,
          failed: @escaping @Sendable (Error) -> Void) {
+        guard let storageResampler = Resampler(from: inputFormat, to: storageFormat) else { return nil }
         self.root = root
-        self.inputFormat = inputFormat
+        self.storageResampler = storageResampler
         self.committed = committed
         self.finished = finished
         self.failed = failed
@@ -168,7 +176,8 @@ private final class DurableAudioChunkWriter: @unchecked Sendable {
             guard !failedAlready else { return }
             do {
                 peakLevel = max(peakLevel, level)
-                try file?.write(from: box.value)
+                guard let converted = storageResampler.convert(box.value) else { throw Failure.conversionFailed }
+                try file?.write(from: converted)
             } catch { report(error) }
         }
     }
@@ -205,11 +214,11 @@ private final class DurableAudioChunkWriter: @unchecked Sendable {
         // `.partial.m4a` という名前で完成ファイルとは区別し、commit 時に rename する。
         let partial = directory.appendingPathComponent(formatter.string(from: date) + "-\(UUID().uuidString).partial.m4a")
         let settings: [String: Any] = [AVFormatIDKey: kAudioFormatMPEG4AAC,
-                                       AVSampleRateKey: inputFormat.sampleRate,
-                                       AVNumberOfChannelsKey: inputFormat.channelCount,
+                                       AVSampleRateKey: storageFormat.sampleRate,
+                                       AVNumberOfChannelsKey: storageFormat.channelCount,
                                        AVEncoderBitRateKey: 64_000]
         file = try AVAudioFile(forWriting: partial, settings: settings,
-                               commonFormat: inputFormat.commonFormat, interleaved: inputFormat.isInterleaved)
+                               commonFormat: storageFormat.commonFormat, interleaved: storageFormat.isInterleaved)
         partialURL = partial
         startedAt = date
         peakLevel = 0

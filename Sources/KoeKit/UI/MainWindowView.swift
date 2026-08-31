@@ -25,6 +25,7 @@ public enum MainSection: String, CaseIterable, Identifiable, Hashable, Sendable 
 /// アプリnavigationを二重に並べないことで、常に3カラムの情報構造を保つ。
 public struct MainWindowView: View {
     var env: AppEnvironment
+    @Environment(\.openWindow) private var openWindow
 
     public init(env: AppEnvironment) { self.env = env }
 
@@ -56,7 +57,15 @@ public struct MainWindowView: View {
                     }
                 }
             }
-            .task { env.refreshPermissions() }
+            .task {
+                env.mainSection = .lifeLog
+                await env.boot()
+                if let section = AppEnvironment.uiTestSettingsSection {
+                    env.settingsSection = section
+                    openWindow(id: KoeWindow.settings)
+                    NSApp.activate()
+                }
+            }
             .confirmationDialog(
                 "ライフログの音声を保存しますか？",
                 isPresented: Binding(

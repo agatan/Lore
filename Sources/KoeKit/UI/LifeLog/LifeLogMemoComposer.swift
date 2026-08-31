@@ -1,0 +1,88 @@
+import SwiftUI
+
+struct LifeLogMemoComposer: View {
+    @Binding var text: String
+    var accessibilityPrefix: String
+    var isVoiceMemoRecording: Bool
+    var isPreparingVoiceMemo: Bool
+    var canToggleVoiceMemo: Bool
+    var voiceMemoShortcut: String
+    var onToggleVoiceMemo: () -> Void
+    var onSend: (String) -> Void
+
+    var body: some View {
+        HStack(alignment: .bottom, spacing: 8) {
+            TextField("メモを追加…", text: $text, axis: .vertical)
+                .textFieldStyle(.plain)
+                .font(.system(size: 12.5))
+                .lineLimit(1...4)
+                .padding(.horizontal, 12)
+                .padding(.vertical, 9)
+                .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 15))
+                .onSubmit(send)
+                .accessibilityIdentifier("\(accessibilityPrefix).memo-input")
+            voiceMemoButton
+            Button(action: send) {
+                Image(systemName: "arrow.up")
+                    .font(.system(size: 12, weight: .bold))
+                    .frame(width: 30, height: 30)
+            }
+            .buttonStyle(.borderedProminent)
+            .buttonBorderShape(.circle)
+            .disabled(trimmedText.isEmpty)
+            .help("メモを追加")
+            .accessibilityIdentifier("\(accessibilityPrefix).memo-send")
+        }
+    }
+
+    private var voiceMemoButton: some View {
+        Button(action: onToggleVoiceMemo) {
+            ZStack {
+                if isVoiceMemoRecording {
+                    Circle()
+                        .fill(KoeTheme.recording.opacity(0.2))
+                        .frame(width: 36, height: 36)
+                        .scaleEffect(isVoiceMemoRecording ? 1.12 : 0.72)
+                        .opacity(isVoiceMemoRecording ? 0.82 : 0)
+                        .animation(
+                            .easeInOut(duration: 0.82).repeatForever(autoreverses: true),
+                            value: isVoiceMemoRecording
+                        )
+                }
+                Circle()
+                    .fill(isVoiceMemoRecording ? AnyShapeStyle(KoeTheme.recordingGradient) : AnyShapeStyle(Color.secondary.opacity(0.12)))
+                    .frame(width: 30, height: 30)
+                if isPreparingVoiceMemo {
+                    ProgressView()
+                        .controlSize(.mini)
+                        .tint(.secondary)
+                } else {
+                    Image(systemName: isVoiceMemoRecording ? "stop.fill" : "mic.fill")
+                        .font(.system(size: 11.5, weight: .semibold))
+                        .foregroundStyle(isVoiceMemoRecording ? .white : .secondary)
+                        .contentTransition(.symbolEffect(.replace))
+                        .symbolEffect(.breathe, options: .repeating, isActive: isVoiceMemoRecording)
+                }
+            }
+            .contentShape(Circle())
+        }
+        .buttonStyle(.plain)
+        .disabled(!canToggleVoiceMemo)
+        .help(isVoiceMemoRecording ? "ボイスメモを停止" : "ボイスメモを開始（\(voiceMemoShortcut)）")
+        .accessibilityLabel(isVoiceMemoRecording ? "ボイスメモを停止" : "ボイスメモを開始")
+        .accessibilityIdentifier("\(accessibilityPrefix).voice-memo")
+        .animation(.snappy(duration: 0.24), value: isVoiceMemoRecording)
+        .animation(.easeInOut(duration: 0.2), value: isPreparingVoiceMemo)
+    }
+
+    private var trimmedText: String {
+        text.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private func send() {
+        let value = trimmedText
+        guard !value.isEmpty else { return }
+        text = ""
+        onSend(value)
+    }
+}

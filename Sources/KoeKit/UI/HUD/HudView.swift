@@ -67,7 +67,7 @@ struct HudView: View {
                 isSpinning: isProcessing
             )
 
-            Text(KoeTheme.label(for: phase))
+            Text(coordinator.activityLabel ?? KoeTheme.label(for: phase))
                 .font(.system(size: 12.5, weight: .medium))
                 .foregroundStyle(.primary.opacity(0.9))
 

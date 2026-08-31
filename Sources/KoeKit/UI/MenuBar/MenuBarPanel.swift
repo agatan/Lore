@@ -1,7 +1,7 @@
 import AppKit
 import SwiftUI
 
-/// メニューバーは二つの主要用途を混ぜず、現在使う一方だけを見せる。
+/// メニューバーは用途ごとのquick actionだけを置き、詳細表示は各windowへ委ねる。
 struct MenuBarPanel: View {
     private enum Tab: String, CaseIterable, Identifiable {
         case lifeLog
@@ -13,8 +13,8 @@ struct MenuBarPanel: View {
     }
 
     var env: AppEnvironment
-    @Environment(\.openWindow) private var openWindow
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.openWindow) private var openWindow
     @State private var tab: Tab = .lifeLog
 
     private var coordinator: DictationCoordinator { env.coordinator }
@@ -34,8 +34,8 @@ struct MenuBarPanel: View {
                 footer
             }
         }
-        .padding(14)
-        .frame(width: 356)
+        .padding(12)
+        .frame(width: 344)
         .task {
             coordinator.refreshPreview()
             await env.lifeLog.reload()
@@ -43,16 +43,18 @@ struct MenuBarPanel: View {
     }
 
     private var header: some View {
-        HStack(spacing: 8) {
-            Image(systemName: "waveform")
-                .font(.system(size: 14, weight: .semibold))
-                .foregroundStyle(KoeTheme.voiceGradient)
-            Text("Koe").font(.system(size: 14, weight: .semibold))
-            Spacer()
-            Circle().fill(statusTint).frame(width: 7, height: 7)
-            Text(statusText)
-                .font(.system(size: 10.5, weight: .medium, design: .rounded))
-                .foregroundStyle(.secondary)
+        HStack(spacing: 9) {
+            Image(nsImage: NSApp.applicationIconImage)
+                .resizable()
+                .interpolation(.high)
+                .frame(width: 24, height: 24)
+            VStack(alignment: .leading, spacing: 1) {
+                Text("Koe").font(.system(size: 14, weight: .semibold))
+                Text("声を残す・書く")
+                    .font(.system(size: 9.5, weight: .medium))
+                    .foregroundStyle(.tertiary)
+            }
+            Spacer(minLength: 0)
         }
     }
 
@@ -68,48 +70,51 @@ struct MenuBarPanel: View {
 
     private var lifeLogTab: some View {
         VStack(spacing: 10) {
-            VStack(spacing: 11) {
+            HStack(spacing: 12) {
                 ZStack {
                     Circle()
                         .fill(env.lifeLog.isCapturing ? KoeTheme.recording.opacity(0.14) : Color.secondary.opacity(0.09))
-                        .frame(width: 54, height: 54)
-                    Image(systemName: env.lifeLog.isCapturing ? "waveform.badge.mic" : "waveform")
-                        .font(.system(size: 23, weight: .medium))
+                        .frame(width: 42, height: 42)
+                    Image(systemName: lifeLogStatusSymbol)
+                        .font(.system(size: 17, weight: .semibold))
                         .foregroundStyle(env.lifeLog.isCapturing ? KoeTheme.recording : Color.secondary)
                         .symbolEffect(.variableColor.iterative, isActive: env.lifeLog.isCapturing)
+                        .symbolEffect(.rotate, options: .repeating, isActive: env.lifeLog.isRecoveringCapture)
                 }
 
-                if env.lifeLog.isCapturing || env.lifeLog.isTranscribing {
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(lifeLogStatusTitle)
+                        .font(.system(size: 12.5, weight: .semibold))
                     Text(env.lifeLog.captureStatusText)
-                        .font(.system(size: 12.5))
-                        .foregroundStyle(.secondary)
-                        .multilineTextAlignment(.center)
-                        .frame(maxWidth: .infinity)
-                } else {
-                    Text("今日の声を、時刻と予定に重ねて残します")
-                        .font(.system(size: 12))
+                        .font(.system(size: 10.5))
                         .foregroundStyle(.secondary)
                 }
+                .frame(maxWidth: .infinity, alignment: .leading)
 
                 Button {
-                    let enabled = !env.lifeLog.isCapturing
-                    env.setLifeLogCaptureEnabled(enabled)
+                    env.setLifeLogCaptureEnabled(!lifeLogCaptureRequested)
                 } label: {
-                    Label(env.lifeLog.isCapturing ? "記録を停止" : "記録を開始",
-                          systemImage: env.lifeLog.isCapturing ? "stop.fill" : "record.circle")
-                        .font(.system(size: 13, weight: .semibold))
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 3)
+                    Image(systemName: lifeLogCaptureRequested ? "stop.fill" : "record.circle.fill")
+                        .font(.system(size: 13, weight: .bold))
+                        .foregroundStyle(.white)
+                        .frame(width: 34, height: 34)
+                        .background(
+                            lifeLogCaptureRequested ? AnyShapeStyle(KoeTheme.recordingGradient) : AnyShapeStyle(KoeTheme.voiceGradient),
+                            in: Circle()
+                        )
+                        .contentTransition(.symbolEffect(.replace))
                 }
-                .buttonStyle(.glassProminent)
-                .tint(env.lifeLog.isCapturing ? KoeTheme.recording : KoeTheme.accent)
+                .buttonStyle(.plain)
+                .help(lifeLogCaptureRequested ? "ライフログ記録を停止" : "ライフログ記録を開始")
+                .accessibilityLabel(lifeLogCaptureRequested ? "ライフログ記録を停止" : "ライフログ記録を開始")
+                .accessibilityIdentifier("menu.life-log.capture-toggle")
             }
-            .padding(14)
+            .padding(12)
             .sunkenSurface()
 
             HStack(spacing: 8) {
-                compactButton("ライフログを開く", symbol: "arrow.up.right") { open(.lifeLog) }
-                compactButton("ミニ", symbol: "rectangle.inset.filled") {
+                compactButton("今日を開く", symbol: "calendar") { open(.lifeLog) }
+                compactButton("ミニウィンドウ", symbol: "rectangle.inset.filled") {
                     dismiss()
                     env.onToggleLifeLogMiniWindow?()
                 }
@@ -159,6 +164,8 @@ struct MenuBarPanel: View {
                     .font(.system(size: 11.5)).foregroundStyle(.tertiary)
                     .frame(maxWidth: .infinity, minHeight: 48, alignment: .center)
             }
+
+            compactButton("音声入力履歴を開く", symbol: "clock.arrow.circlepath") { open(.history) }
         }
     }
 
@@ -196,32 +203,43 @@ struct MenuBarPanel: View {
 
     private var footer: some View {
         HStack(spacing: 6) {
-            Button { open(tab == .lifeLog ? .lifeLog : .history) } label: {
-                Label("Koeを開く", systemImage: "macwindow")
-            }
-            .buttonStyle(.borderless).font(.system(size: 11.5))
-            Spacer()
             Button {
                 dismiss()
                 env.settingsSection = tab == .lifeLog ? .lifeLog : .dictation
                 openWindow(id: KoeWindow.settings)
                 NSApp.activate()
-            } label: { Image(systemName: "gearshape") }
-            .buttonStyle(.borderless).help("設定")
-            Button { NSApp.terminate(nil) } label: { Image(systemName: "power") }
+            } label: {
+                Label("\(tab.title)の設定", systemImage: "gearshape")
+            }
+            .buttonStyle(.borderless)
+            .font(.system(size: 11))
+            Spacer()
+            Button { NSApp.terminate(nil) } label: {
+                Label("終了", systemImage: "power")
+                    .labelStyle(.iconOnly)
+            }
                 .buttonStyle(.borderless).help("Koeを終了")
         }
         .foregroundStyle(.secondary)
         .padding(.horizontal, 2)
     }
 
-    private var statusText: String {
-        tab == .lifeLog ? env.lifeLog.captureStatusText : KoeTheme.label(for: coordinator.phase)
+    private var lifeLogCaptureRequested: Bool {
+        env.settings.lifeLogCaptureEnabled
     }
 
-    private var statusTint: Color {
-        if tab == .lifeLog { return env.lifeLog.isCapturing ? KoeTheme.recording : .secondary.opacity(0.35) }
-        return KoeTheme.tint(for: coordinator.phase)
+    private var lifeLogStatusTitle: String {
+        if env.lifeLog.isCapturing { return "記録中" }
+        if env.lifeLog.isRecoveringCapture { return "再接続中" }
+        if env.lifeLog.isTranscribing { return "文字起こし中" }
+        return "ライフログ"
+    }
+
+    private var lifeLogStatusSymbol: String {
+        if env.lifeLog.isCapturing { return "waveform" }
+        if env.lifeLog.isRecoveringCapture { return "arrow.clockwise" }
+        if env.lifeLog.isTranscribing { return "text.bubble" }
+        return "waveform.slash"
     }
 
     private func open(_ section: MainSection) {

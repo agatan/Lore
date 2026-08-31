@@ -106,6 +106,21 @@ public struct LifeLogDictation: Identifiable, Sendable, Hashable {
     }
 }
 
+/// 同じマイク区間を二つの認識経路が文字化した場合、成功した音声入力を正本にする。
+/// Raw audioと保存済みutteranceは回復用に残し、利用者へ返すprojectionだけを一意にする。
+public enum LifeLogSpeechProjection {
+    public static func visibleUtterances(
+        _ utterances: [LifeLogUtterance],
+        preferring dictations: [LifeLogDictation]
+    ) -> [LifeLogUtterance] {
+        utterances.filter { utterance in
+            !dictations.contains { dictation in
+                dictation.startedAt < utterance.endedAt && utterance.startedAt < dictation.endedAt
+            }
+        }
+    }
+}
+
 /// 利用者がタイムラインへ直接残すテキスト。音声認識結果とは混同しない。
 public struct LifeLogMemo: Identifiable, Codable, Sendable, Hashable {
     public var id: String
@@ -212,6 +227,7 @@ public struct LifeLogDayActivity: Sendable, Equatable {
 public struct LifeLogSearchResult: Identifiable, Sendable, Equatable {
     public enum Kind: String, Sendable {
         case utterance
+        case dictation
         case memo
         case todo
         case summary
@@ -219,6 +235,7 @@ public struct LifeLogSearchResult: Identifiable, Sendable, Equatable {
         public var displayName: String {
             switch self {
             case .utterance: "発話"
+            case .dictation: "音声入力"
             case .memo: "メモ"
             case .todo: "TODO"
             case .summary: "要約"

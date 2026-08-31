@@ -5,6 +5,19 @@ import Testing
 
 // MARK: - ホットキー
 
+@Suite("音声captureの出力先")
+struct SpeechCaptureDestinationTests {
+    @Test("ボイスメモは履歴と前面appへ出さずライフログを一時停止する")
+    func voiceMemoIsMemoOnly() {
+        #expect(!SpeechCaptureDestination.voiceMemo.writesHistory)
+        #expect(!SpeechCaptureDestination.voiceMemo.insertsIntoFrontmostApp)
+        #expect(SpeechCaptureDestination.voiceMemo.suspendsLifeLogCapture)
+        #expect(SpeechCaptureDestination.dictation.writesHistory)
+        #expect(SpeechCaptureDestination.dictation.insertsIntoFrontmostApp)
+        #expect(!SpeechCaptureDestination.dictation.suspendsLifeLogCapture)
+    }
+}
+
 @Suite("ホットキーのハイブリッド判定")
 struct HotkeyGestureTests {
     let interpreter = HotkeyGestureInterpreter(holdThreshold: .milliseconds(300))

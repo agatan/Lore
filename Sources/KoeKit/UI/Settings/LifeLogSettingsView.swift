@@ -21,6 +21,14 @@ struct LifeLogSettingsView: View {
                     )
                 }
                 Divider()
+                SettingsRow(title: "ボイスメモ", caption: "押すたびに録音開始・停止。認識結果を今日のメモだけに追加します") {
+                    HotkeyRecorderView(
+                        binding: Binding(get: { settings.voiceMemoHotkey }, set: { env.updateVoiceMemoHotkey($0) }),
+                        setCaptureMode: { env.setHotkeyCaptureMode($0) }
+                    )
+                    .accessibilityIdentifier("life-log.voice-memo-hotkey")
+                }
+                Divider()
                 SettingsRow(title: "常に手前に表示", caption: "ミニウィンドウを他のアプリより前に置きます") {
                     Toggle("", isOn: Binding(
                         get: { settings.lifeLogMiniWindowAlwaysOnTop },

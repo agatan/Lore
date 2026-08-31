@@ -77,4 +77,22 @@ struct AudioLevelTests {
         #expect(converted.int16ChannelData != nil)
         #expect(converted.frameLength > 0)
     }
+
+    @Test("マイク固有の形式をAAC保存用の48kHzモノラルへ変換する")
+    func convertsDeviceAudioToLifeLogStorageFormat() throws {
+        let inputFormat = AVAudioFormat(
+            commonFormat: .pcmFormatFloat32,
+            sampleRate: 16_000,
+            channels: 1,
+            interleaved: false
+        )!
+        let source = AVAudioPCMBuffer(pcmFormat: inputFormat, frameCapacity: 1_600)!
+        source.frameLength = 1_600
+        let converted = try #require(Resampler(from: inputFormat, to: AudioFormats.lifeLogStorage)?.convert(source))
+
+        #expect(converted.format.sampleRate == 48_000)
+        #expect(converted.format.channelCount == 1)
+        #expect(converted.format.commonFormat == .pcmFormatFloat32)
+        #expect(converted.frameLength > 0)
+    }
 }

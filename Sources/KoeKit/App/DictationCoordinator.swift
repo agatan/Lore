@@ -2,6 +2,15 @@ import AppKit
 import Foundation
 import Observation
 
+public enum SpeechCaptureDestination: Sendable, Equatable {
+    case dictation
+    case voiceMemo
+
+    var writesHistory: Bool { self == .dictation }
+    var insertsIntoFrontmostApp: Bool { self == .dictation }
+    var suspendsLifeLogCapture: Bool { self == .voiceMemo }
+}
+
 /// 口述セッションの状態機械を駆動する唯一の場所。
 ///
 /// 順序を強制するのがこのクラスの仕事: STT 確定 → 永続化 → 整形 → 挿入。
@@ -71,6 +80,8 @@ public final class DictationCoordinator {
     /// 録音に使っている入力デバイス名。録音が始まって実際に束ねてから入る。
     public private(set) var inputDeviceName: String?
     public private(set) var lastRecord: SessionRecord?
+    public private(set) var captureDestination: SpeechCaptureDestination = .dictation
+    public private(set) var activityLabel: String?
     /// HUD・メニューに出す補足(整形スキップ理由など)。
     public private(set) var statusDetail: String?
     /// 次回以降のモードを手動で固定する(FR-4.5)。nil = アプリから自動判定。
@@ -108,6 +119,8 @@ public final class DictationCoordinator {
     private var cancelRequested = false
     /// 確定処理に入ったか。watchdog とセッションタスクの二重実行を防ぐ。
     private var finalizationHandled = false
+    private var saveVoiceMemo: ((String) async -> Void)?
+    private var voiceMemoFinished: (() -> Void)?
 
     public init(dependencies: Dependencies) {
         self.deps = dependencies
@@ -164,6 +177,10 @@ public final class DictationCoordinator {
             KoeLog.session.info("処理中のため録音を開始しませんでした")
             return false
         }
+        captureDestination = .dictation
+        activityLabel = nil
+        saveVoiceMemo = nil
+        voiceMemoFinished = nil
         lingerTask?.cancel()
         unloadTask?.cancel()
         cancelRequested = false
@@ -229,6 +246,64 @@ public final class DictationCoordinator {
         return true
     }
 
+    /// 音声入力のcaptureとSTTだけを使い、確定textをlife-log memoへ渡す。
+    /// SessionDraftを作らないため、履歴・LLM整形・前面app挿入へは到達しない。
+    @discardableResult
+    public func startVoiceMemo(
+        onRecognized: @escaping (String) async -> Void,
+        onFinished: @escaping () -> Void
+    ) -> Bool {
+        guard !phase.isActive else {
+            KoeLog.session.info("処理中のためボイスメモを開始しませんでした")
+            return false
+        }
+        lingerTask?.cancel()
+        unloadTask?.cancel()
+        cancelRequested = false
+        statusDetail = nil
+        liveTranscript = ""
+        levelHistory = Array(repeating: 0, count: Self.levelHistoryLength)
+        inputLevel = 0
+        recordingElapsed = .zero
+        inputDeviceName = nil
+        draft = nil
+        targetApp = nil
+        activeMode = nil
+        captureDestination = .voiceMemo
+        activityLabel = "ボイスメモ"
+        saveVoiceMemo = onRecognized
+        voiceMemoFinished = onFinished
+        phase = .recording
+        recordingStartedAt = ContinuousClock.now
+        stopRequestedAt = nil
+        sounds.isEnabled = deps.settings.soundsEnabled
+        sounds.volume = Float(deps.settings.soundVolume)
+        sounds.play(.start)
+
+        let vocabulary = deps.vocabulary().filter(\.enabled)
+        let hints = SttHints(
+            contextualStrings: FormattingPolicy.contextualStrings(vocabulary),
+            vocabularyPrompt: FormattingPolicy.vocabularyHint(vocabulary),
+            languagePreference: .auto
+        )
+        startElapsedTimer()
+        finalizationHandled = false
+        sessionTask = Task { [weak self] in
+            guard let self else { return }
+            await self.runSession(
+                engine: self.deps.engines.stt,
+                llm: self.deps.engines.llm,
+                hints: hints,
+                vocabulary: vocabulary
+            )
+        }
+        return true
+    }
+
+    public var isVoiceMemoRecording: Bool {
+        captureDestination == .voiceMemo && isRecording
+    }
+
     public func stop() {
         guard isRecording else { return }
         stopRequestedAt = ContinuousClock.now
@@ -260,6 +335,12 @@ public final class DictationCoordinator {
         levelTask?.cancel()
 
         let salvaged = (draft?.partialTranscript ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        let voiceMemoSalvaged = liveTranscript.trimmingCharacters(in: .whitespacesAndNewlines)
+        if captureDestination == .voiceMemo, !voiceMemoSalvaged.isEmpty {
+            statusDetail = "音声認識が応答しないため、途中までのテキストを使いました"
+            await completeVoiceMemo(voiceMemoSalvaged, alreadyHandled: true)
+            return
+        }
         guard !salvaged.isEmpty else {
             sounds.play(.failure)
             finish(phase: .finished(.failed("音声認識が応答しませんでした")), detail: nil)
@@ -356,12 +437,29 @@ public final class DictationCoordinator {
                 return
             }
 
+            if captureDestination == .voiceMemo {
+                await completeVoiceMemo(transcript)
+                return
+            }
+
             try await complete(transcript: transcript, language: language, llm: llm)
         } catch is CancellationError {
             return
         } catch {
             await fail(error)
         }
+    }
+
+    private func completeVoiceMemo(_ transcript: String, alreadyHandled: Bool = false) async {
+        if !alreadyHandled {
+            guard !finalizationHandled else { return }
+            finalizationHandled = true
+        }
+        watchdogTask?.cancel()
+        liveTranscript = transcript
+        await saveVoiceMemo?(transcript)
+        sounds.play(.complete)
+        finish(phase: .finished(.completed), detail: statusDetail ?? "メモに追加しました")
     }
 
     /// ★ ここから先は「発話を失わない」経路。
@@ -477,6 +575,11 @@ public final class DictationCoordinator {
         audio.stop()
         pressStartedSession = false
         refreshResolvedMode()
+        let didFinishVoiceMemo = captureDestination == .voiceMemo ? voiceMemoFinished : nil
+        saveVoiceMemo = nil
+        voiceMemoFinished = nil
+        captureDestination = .dictation
+        didFinishVoiceMemo?()
         scheduleLinger()
         scheduleIdleUnload()
     }
@@ -537,6 +640,7 @@ public final class DictationCoordinator {
             if case .finished = phase {
                 phase = .idle
                 liveTranscript = ""
+                activityLabel = nil
             }
         }
     }

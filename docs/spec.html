@@ -74,6 +74,7 @@
 <h2>2. 初回起動と権限</h2>
 <ul>
 <li>Onboardingでmicrophone、入力操作、任意のcalendar権限と保存範囲を説明します。</li>
+<li>通常起動ではmenu bar常駐に加えてmain windowを開き、life logを選択した状態で表示します。</li>
 <li>Microphone権限がなければ録音できず、accessibility権限がなければ対象appへ挿入できません。Calendar権限は音声入力には不要です。</li>
 <li>Life logの初回開始前に30秒単位の復旧用audioをMac内へ保存する明示同意が必要です。同意前のShortcuts開始はKoeを開くようerrorを返します。</li>
 </ul>
@@ -152,14 +153,25 @@
 <li>Statusは<code>interrupted</code>、<code>completed</code>、<code>cancelled</code>、<code>failed</code>、<code>fallback</code>、<code>clipboard_only</code>です。</li>
 <li>日本語部分一致検索、copy、個別/一括削除、保持日数設定があり、現在の保存件数を確認できます。</li>
 </ul>
+<h3>ボイスメモ</h3>
+<ul>
+<li>専用global hotkey、main windowとmini windowのmemo入力欄にある音声ボタンは、いずれも押すたびに録音開始・停止を切り替え、認識した生textを今日のlife-log memoとして保存します。文章整形、前面appへの挿入、通常の音声入力履歴への保存は行いません。</li>
+<li>Memo入力欄の音声ボタンは、開始準備中をprogress表示、録音中を録音色とpulse animationで示し、通常の音声入力など別の音声処理中は新規開始できません。</li>
+<li>Life log記録中は現在の復旧用audio chunkを確定してcaptureを一時停止し、ボイスメモの完了、cancel、失敗後に記録開始意図が残っている場合だけ自動再開します。</li>
+<li>一回のボイスメモはmemo一件だけを作り、通常の音声入力履歴やlife-log utteranceへ同じ内容を追加しません。</li>
+</ul>
 </section>
 <section id="lifelog">
 <h2>4. Life log</h2>
 <h3>継続記録</h3>
 <ul>
 <li>通常の音声入力と独立し、同時利用できます。Menu bar、main window、専用hotkey、Shortcutsから開始・停止します。</li>
-<li>選択したinput deviceから記録し、30秒ごとに復旧用<code>.m4a</code>をMac内へ確定します。既定保持は30日です。</li>
-<li>一時中断は自動再接続し、sleep前に閉じてwake後に再開します。保留chunkは次回起動時に再処理します。</li>
+<li>Life logが実際に録音している間は、menu barにKoeのapp iconを主表示し、その右下へ録音色の小さなbadgeを重ねます。停止中と再接続待ちでは通常のmonochrome表示へ戻し、再接続待ちを録音中とは表示しません。</li>
+<li>音声入力との同時利用中も、復旧可能なlife-log audioの記録は中断しません。音声入力が成功した区間はそのraw transcriptを正本とし、同じ録音時間帯にlife log側で認識した発話はtimeline、検索、書き出し、summary/TODO生成へ重複して出しません。音声入力がcancelまたは失敗した場合は、life log側の発話を残します。</li>
+<li>選択したinput deviceから記録し、30秒ごとに復旧用<code>.m4a</code>をMac内へ確定します。Audioをcloud STTへ送ることはありません。</li>
+<li>保存済みaudioは文字起こしと派生処理が両方成功するまで必ず保持します。既定の「処理後削除」では成功直後にaudioだけを削除し、保存済みの発話、conversation、summary、TODOは残します。設定は「処理後削除」「7日」「30日」から選べます。</li>
+<li>7日または30日を選んだ場合も、未処理・失敗chunkは期間を超えて保持し、次回起動後の再処理に使います。保持期間を短く変更したときは、新しい条件を満たす処理済みaudioを削除します。</li>
+<li>一時中断と既定マイクの切替・接続解除などの音声構成変更では、現在のchunkを確定して自動再接続します。Sleep前にも閉じ、記録意図が残ればwake後に再開します。マイク権限拒否だけは自動再試行しません。</li>
 </ul>
 <h3>日別表示とCalendar</h3>
 <div class="grid">
@@ -169,7 +181,7 @@
 </article>
 <article class="card">
 <h3>Timeline</h3>
-<p>時刻付き発話、text memo、calendar予定を区別します。Mini windowからmemoを追加できます。</p>
+<p>時刻付き発話、text memo、calendar予定を区別します。今日のtimeline最下部とmini windowには同じchat形式の入力欄があり、送信したmemoを今日のtimelineへ即時追加します。ボイスメモも手入力と同じmemoとして追加します。過去日の履歴へ現在のmemoを混入させないため、main windowの入力欄は今日を選択中だけ表示します。</p>
 </article>
 <article class="card">
 <h3>Conversation</h3>
@@ -177,13 +189,15 @@
 </article>
 <article class="card">
 <h3>Calendar</h3>
-<p>選択calendarの最小snapshotを読取専用で保存。既定は参加済み/RSVPなしだけを対象にします。</p>
+<p>選択calendarの最小snapshotを読取専用で保存。既定は参加済み/RSVPなしだけを対象にします。Calendar設定の「予定を再取得」は現在timelineで選択中の日を読み直し、timelineと月間activityを更新します。</p>
 </article>
 </div>
 <h3>SummaryとTODO</h3>
 <ul>
 <li>30分、1時間、2時間の設定間隔でsummaryとdraft TODOを同時更新します。</li>
 <li>差分がある時だけ、その日の全発話、memo、対象予定から作り直します。入力上限超過時は時系列に分割して統合します。</li>
+<li>当日のlive summaryには生成時刻を基準時点として渡し、予定を「終了済み」「進行中」「これから」に区別します。開始前の予定を実施済みの事実として書かず、「このあと予定されている」内容として明示します。</li>
+<li>日付が変わった後のfinal summaryは、発話やmemoの追加がなくても対象日の全予定を含めて作り直し、<code>isFinal</code>として保存します。</li>
 <li>停止時に対象日を最終更新し、audio chunkごとにはLLMを呼びません。</li>
 <li>Draft TODOは編集して確定または棄却できます。再生成で置換するのはdraftだけです。</li>
 <li>TODO状態は<code>draft</code>、<code>open</code>、<code>completed</code>。UI、CLI、MCPから操作できます。</li>
@@ -204,15 +218,15 @@
 <tbody>
 <tr>
 <td>Menu bar</td>
-<td>Life log/音声入力切替、開始停止、直前結果copy、mode固定、window起動、終了</td>
+<td>Life log/音声入力の用途別quick action。Life logは記録切替、今日の画面、mini window、音声入力は録音、mode、直前結果、履歴を各tab内にまとめ、共通footerは設定と終了だけを置く</td>
 </tr>
 <tr>
 <td>Main window</td>
-<td>Onboarding、life log、音声入力履歴</td>
+<td>通常起動時にlife logを選択して表示。Onboarding、life log、今日のtimeline最下部からの手入力・音声memo追加、音声入力履歴</td>
 </tr>
 <tr>
 <td>Mini window</td>
-<td>Life log状態、memo追加、常に手前</td>
+<td>Life log状態、今日のtimelineへの手入力・音声memo追加、常に手前</td>
 </tr>
 <tr>
 <td>全TODO</td>
@@ -228,7 +242,7 @@
 </tr>
 <tr>
 <td>Settings: Life log</td>
-<td>Hotkey、input device、audio保持、summary間隔、要約/TODO AI、calendar</td>
+<td>記録・mini window・ボイスメモhotkey、input device、audio保持、summary間隔、要約/TODO AI、calendar再取得</td>
 </tr>
 </tbody>
 </table>
@@ -255,7 +269,7 @@
 <tr>
 <td>Life-log audio</td>
 <td>Application Support配下</td>
-<td>30日</td>
+<td>文字起こし・派生処理の成功後に削除。7日または30日へ変更可能</td>
 </tr>
 <tr>
 <td>設定</td>
@@ -451,6 +465,14 @@ koe search "検索語" [--limit N]</pre>
 <li>保留life-log chunkは再起動後に再処理される。</li>
 <li>Migration前backupと日次backupが作られ、合計7file以内に保たれる。</li>
 <li>CLI、MCP、Shortcutsの公開interfaceが本書と一致する。</li>
+<li>Life logの実録音中だけmenu barにKoeのapp iconと右下の録音色badgeが表示され、停止または再接続待ちでは通常表示へ戻る。</li>
+<li>Life log記録中に成功した音声入力は一件だけ表示・検索・書き出し・派生処理へ現れ、cancelまたは失敗した音声入力の時間帯はlife-log発話が失われない。</li>
+<li>当日のlive summaryは未来の予定を実施済みとして書かず、日付変更後のfinal summaryはその日の全予定を含む。</li>
+<li>Calendar設定から予定を再取得すると、現在選択日のsnapshot、timeline、月間activityが更新される。</li>
+<li>マイク切替などの音声構成変更後も、記録開始意図が残る限りlife-log captureが自動再開する。</li>
+<li>ボイスメモ一回につきmemoだけが一件作られ、通常の音声入力履歴とlife-log utteranceには同じ内容が追加されない。</li>
+<li>通常起動時にmain windowのlife-log画面が開き、memo入力欄の音声ボタンは専用hotkeyと同じボイスメモを開始・停止する。</li>
+<li>「処理後削除」でも未処理・失敗chunkは残り、文字起こしと派生処理が成功したaudioだけが削除される。</li>
 </ol>
 </section>
 </main>

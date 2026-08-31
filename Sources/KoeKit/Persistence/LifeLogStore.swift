@@ -119,7 +119,7 @@ public struct LifeLogStore: Sendable {
         let interval = calendar.dateInterval(of: .day, for: dateValue)!
         return try await queue.read { db in
             let args: StatementArguments = [date(interval.start), date(interval.end)]
-            let utterances = try Row.fetchAll(db, sql: "SELECT * FROM life_log_utterances WHERE started_at >= ? AND started_at < ? ORDER BY started_at", arguments: args).map(decodeUtterance)
+            let storedUtterances = try Row.fetchAll(db, sql: "SELECT * FROM life_log_utterances WHERE started_at >= ? AND started_at < ? ORDER BY started_at", arguments: args).map(decodeUtterance)
             let dictations = try Row.fetchAll(db, sql: """
                 SELECT * FROM sessions
                 WHERE started_at >= ? AND started_at < ?
@@ -128,12 +128,13 @@ public struct LifeLogStore: Sendable {
                 ORDER BY started_at
                 """, arguments: args).map(SessionRow.init(row:)).map { row in
                     let record = try row.record()
-                    let endedAt = record.endedAt
-                        ?? record.audioDurationMs.map { record.startedAt.addingTimeInterval(Double($0) / 1_000) }
+                    let endedAt = record.audioDurationMs.map { record.startedAt.addingTimeInterval(Double($0) / 1_000) }
+                        ?? record.endedAt
                         ?? record.startedAt
                     return LifeLogDictation(id: record.id, startedAt: record.startedAt, endedAt: endedAt,
                                             text: record.rawTranscript)
                 }
+            let utterances = LifeLogSpeechProjection.visibleUtterances(storedUtterances, preferring: dictations)
             let memos = try Row.fetchAll(db, sql: "SELECT * FROM life_log_memos WHERE created_at >= ? AND created_at < ? ORDER BY created_at", arguments: args).map(decodeMemo)
             let conversations = try Row.fetchAll(db, sql: "SELECT * FROM life_log_conversations WHERE started_at >= ? AND started_at < ? ORDER BY started_at", arguments: args).map(decodeConversation)
             let participationClause = participatingOnly ? " AND participation_status IN ('none', 'accepted')" : ""
@@ -190,19 +191,20 @@ public struct LifeLogStore: Sendable {
     public func search(_ query: String, limit: Int = 100, calendar: Calendar = .current) async throws -> [LifeLogSearchResult] {
         let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return [] }
+        let fetchLimit = max(1, limit) * 2
         let rows = try queue.read { db in
             if trimmed.count >= 3 {
                 let phrase = "\"\(trimmed.replacingOccurrences(of: "\"", with: "\"\""))\""
-                return try Row.fetchAll(db, sql: Self.ftsSearchSQL, arguments: [phrase, phrase, phrase, phrase, max(1, limit)])
+                return try Row.fetchAll(db, sql: Self.ftsSearchSQL, arguments: [phrase, phrase, phrase, phrase, fetchLimit])
             }
             let escaped = trimmed
                 .replacingOccurrences(of: "\\", with: "\\\\")
                 .replacingOccurrences(of: "%", with: "\\%")
                 .replacingOccurrences(of: "_", with: "\\_")
             let pattern = "%\(escaped)%"
-            return try Row.fetchAll(db, sql: Self.likeSearchSQL, arguments: [pattern, pattern, pattern, pattern, pattern, pattern, max(1, limit)])
+            return try Row.fetchAll(db, sql: Self.likeSearchSQL, arguments: [pattern, pattern, pattern, pattern, pattern, pattern, fetchLimit])
         }
-        return try rows.map { row in
+        let storedResults = try rows.map { row in
             let occurredAt = try parse(row["occurred_at"])
             return LifeLogSearchResult(
                 id: "\(row["kind"] as String)-\(row["id"] as String)",
@@ -211,6 +213,52 @@ public struct LifeLogStore: Sendable {
                 occurredAt: occurredAt,
                 day: (row["day"] as String?) ?? LifeLogDateKey.string(for: occurredAt, calendar: calendar),
                 todoStatus: (row["status"] as String?).flatMap(LifeLogTodo.Status.init(rawValue:))
+            )
+        }
+        let utteranceDays = Set(storedResults.filter { $0.kind == .utterance }.map { LifeLogDateKey.string(for: $0.occurredAt, calendar: calendar) })
+        var visibleUtteranceIDs: Set<String> = []
+        for dayKey in utteranceDays {
+            guard let date = LifeLogDateKey.date(from: dayKey, calendar: calendar) else { continue }
+            visibleUtteranceIDs.formUnion(try await day(date, calendar: calendar).utterances.map { "utterance-\($0.id)" })
+        }
+        let projectedResults = storedResults.filter { $0.kind != .utterance || visibleUtteranceIDs.contains($0.id) }
+        let dictationResults = try await searchDictations(trimmed, limit: fetchLimit, calendar: calendar)
+        return Array((projectedResults + dictationResults).sorted { $0.occurredAt > $1.occurredAt }.prefix(max(1, limit)))
+    }
+
+    private func searchDictations(_ query: String, limit: Int, calendar: Calendar) async throws -> [LifeLogSearchResult] {
+        let rows = try queue.read { db in
+            if query.count >= 3 {
+                let phrase = "\"\(query.replacingOccurrences(of: "\"", with: "\"\""))\""
+                return try Row.fetchAll(db, sql: """
+                    SELECT s.id, s.raw_transcript text, s.started_at occurred_at
+                    FROM sessions s JOIN sessions_fts f ON f.rowid=s.rowid
+                    WHERE sessions_fts MATCH ?
+                      AND s.status IN ('completed', 'fallback', 'clipboard_only')
+                      AND trim(s.raw_transcript) != ''
+                    ORDER BY s.started_at DESC LIMIT ?
+                    """, arguments: [phrase, limit])
+            }
+            let escaped = query
+                .replacingOccurrences(of: "\\", with: "\\\\")
+                .replacingOccurrences(of: "%", with: "\\%")
+                .replacingOccurrences(of: "_", with: "\\_")
+            return try Row.fetchAll(db, sql: """
+                SELECT id, raw_transcript text, started_at occurred_at FROM sessions
+                WHERE raw_transcript LIKE ? ESCAPE '\\'
+                  AND status IN ('completed', 'fallback', 'clipboard_only')
+                  AND trim(raw_transcript) != ''
+                ORDER BY started_at DESC LIMIT ?
+                """, arguments: ["%\(escaped)%", limit])
+        }
+        return try rows.map { row in
+            let occurredAt = try parse(row["occurred_at"])
+            return LifeLogSearchResult(
+                id: "dictation-\(row["id"] as String)",
+                kind: .dictation,
+                text: row["text"],
+                occurredAt: occurredAt,
+                day: LifeLogDateKey.string(for: occurredAt, calendar: calendar)
             )
         }
     }

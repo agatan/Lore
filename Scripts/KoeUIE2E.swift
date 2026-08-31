@@ -43,6 +43,25 @@ private struct AXDriver {
         }
     }
 
+    func setValue(_ value: String, identifier: String) throws {
+        let element = try waitFor(identifier: identifier)
+        guard AXUIElementSetAttributeValue(
+            element,
+            kAXValueAttribute as CFString,
+            value as CFString
+        ) == .success else {
+            throw UIE2EError.action("入力できませんでした: \(identifier)")
+        }
+    }
+
+    func waitFor(text: String, timeout: TimeInterval = 8) throws {
+        _ = try waitFor("text=\(text)", timeout: timeout) { element in
+            let title: String? = attribute(kAXTitleAttribute as String, of: element)
+            let value: String? = attribute(kAXValueAttribute as String, of: element)
+            return title == text || value == text
+        }
+    }
+
     func stringValue(identifier: String) throws -> String? {
         let element = try waitFor(identifier: identifier)
         return attribute(kAXValueAttribute as String, of: element)
@@ -76,13 +95,28 @@ private struct AXDriver {
     private func descendants() -> [AXUIElement] {
         var result: [AXUIElement] = []
         var pending = [application]
+        var visited: Set<CFHashCode> = []
         while let element = pending.popLast(), result.count < 5_000 {
+            guard visited.insert(CFHash(element)).inserted else { continue }
             result.append(element)
-            if let children: [AXUIElement] = attribute(kAXChildrenAttribute as String, of: element) {
-                pending.append(contentsOf: children.reversed())
-            }
+            pending.append(contentsOf: elements(kAXChildrenAttribute as String, of: element).reversed())
         }
         return result
+    }
+
+    /// macOS 26ではCFArrayを`[AXUIElement]`へ直接castすると同じ要素へ化けるため、
+    /// Core Foundationの配列から参照を1件ずつ取り出す。
+    private func elements(_ name: String, of element: AXUIElement) -> [AXUIElement] {
+        var value: CFTypeRef?
+        guard AXUIElementCopyAttributeValue(element, name as CFString, &value) == .success,
+              let value,
+              CFGetTypeID(value) == CFArrayGetTypeID() else { return [] }
+        let array = unsafeBitCast(value, to: CFArray.self)
+        return (0..<CFArrayGetCount(array)).map { index in
+            Unmanaged<AXUIElement>
+                .fromOpaque(CFArrayGetValueAtIndex(array, index)!)
+                .takeUnretainedValue()
+        }
     }
 
     private func attribute<T>(_ name: String, of element: AXUIElement) -> T? {
@@ -124,9 +158,14 @@ private enum KoeUIE2E {
         let ui = AXDriver(pid: app.processIdentifier)
 
         _ = try ui.waitFor(identifier: "main.section-picker")
+        _ = try ui.waitFor(identifier: "life-log.voice-memo")
         try ui.press(identifier: "main.section.history")
         _ = try ui.waitFor(identifier: "history.root")
         try ui.press(identifier: "main.section.lifeLog")
+        let memo = "メイン画面から追加したE2Eメモ"
+        try ui.setValue(memo, identifier: "life-log.memo-input")
+        try ui.press(identifier: "life-log.memo-send")
+        try ui.waitFor(text: memo)
         try ui.press(identifier: "life-log.export-day")
         _ = try ui.waitFor(identifier: "export.sheet")
         let initialPreview = try ui.stringValue(identifier: "export.preview") ?? ""
@@ -170,6 +209,15 @@ private enum KoeUIE2E {
         _ = try ui.waitFor(identifier: "usage.recording")
         _ = try ui.waitFor(identifier: "usage.api")
         _ = try ui.waitFor(identifier: "usage.storage")
+
+        app = try await launch(appURL, arguments: ["--koe-screenshot-demo", "--koe-ui-test-settings-calendar"])
+        ui = AXDriver(pid: app.processIdentifier)
+        _ = try ui.waitFor(identifier: "calendar.settings.root")
+        _ = try ui.waitFor(identifier: "calendar.refresh")
+
+        app = try await launch(appURL, arguments: ["--koe-screenshot-demo", "--koe-ui-test-settings-life-log-general"])
+        ui = AXDriver(pid: app.processIdentifier)
+        _ = try ui.waitFor(identifier: "life-log.voice-memo-hotkey")
 
         app = try await launch(appURL, arguments: ["--koe-screenshot-demo", "--koe-ui-test-settings-modes"])
         ui = AXDriver(pid: app.processIdentifier)

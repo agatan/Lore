@@ -24,8 +24,32 @@ struct LifeLogCalendarSettingsView: View {
                 )
                 Divider()
                 calendars
+                Divider()
+                SettingsRow(
+                    title: "予定を再取得",
+                    caption: "\(env.lifeLog.selectedDate.formatted(.dateTime.year().month().day()))の予定をCalendarから読み直します"
+                ) {
+                    Button {
+                        Task { await env.lifeLog.refreshCalendar(selectedCalendars: selectedCalendars) }
+                    } label: {
+                        if env.lifeLog.isRefreshingCalendar {
+                            ProgressView().controlSize(.small)
+                        } else {
+                            Label("再取得", systemImage: "arrow.clockwise")
+                        }
+                    }
+                    .disabled(env.lifeLog.isRefreshingCalendar)
+                    .accessibilityIdentifier("calendar.refresh")
+                }
+                if let refreshedAt = env.lifeLog.lastCalendarRefreshAt {
+                    Text("最終取得: \(refreshedAt.formatted(date: .omitted, time: .shortened))")
+                        .font(.system(size: 10.5, design: .rounded))
+                        .foregroundStyle(.secondary)
+                        .frame(maxWidth: .infinity, alignment: .trailing)
+                }
             }
         }
+        .accessibilityIdentifier("calendar.settings.root")
         .toggleStyle(.switch)
         .task { await env.lifeLog.loadCalendars() }
     }

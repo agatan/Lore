@@ -5,6 +5,43 @@ import Testing
 
 @Suite("Daily Life Logのsource of truthと派生処理")
 struct LifeLogTests {
+    @Test("同じ認識範囲の再通知は一つの発話を更新する")
+    func repeatedFinalSegmentIsIdempotent() async throws {
+        let database = try await KoeDatabase.inMemory()
+        let startedAt = Date(timeIntervalSince1970: 1_000)
+        let chunk = LifeLogAudioChunk(
+            id: "audio",
+            captureStartedAt: startedAt,
+            captureEndedAt: startedAt.addingTimeInterval(30),
+            localPath: "/tmp/audio.m4a"
+        )
+        try await database.lifeLog.save(audioChunk: chunk)
+        let id = LifeLogCoordinator.transcriptionSegmentID(
+            scopeID: "live-session",
+            startOffset: 4.387,
+            endOffset: 6.520
+        )
+
+        try await database.lifeLog.save(utterance: LifeLogUtterance(
+            id: id,
+            startedAt: startedAt.addingTimeInterval(4.387),
+            endedAt: startedAt.addingTimeInterval(6.520),
+            text: "狙い方としては早くしたい",
+            audioChunkID: chunk.id
+        ))
+        try await database.lifeLog.save(utterance: LifeLogUtterance(
+            id: id,
+            startedAt: startedAt.addingTimeInterval(4.387),
+            endedAt: startedAt.addingTimeInterval(6.520),
+            text: "狙い方としては早くしたい",
+            audioChunkID: chunk.id
+        ))
+
+        let utterances = try await database.lifeLog.day(startedAt).utterances
+        #expect(utterances.count == 1)
+        #expect(utterances.first?.id == id)
+    }
+
     @Test("録音停止時は差分がなくても一日の全データを再要約する")
     @MainActor
     func stoppedCaptureForcesWholeDaySummary() async throws {
@@ -63,6 +100,31 @@ struct LifeLogTests {
         #expect(coordinator.isRecoveringCapture)
         coordinator.setCaptureEnabled(false)
         #expect(!coordinator.isRecoveringCapture)
+    }
+
+    @Test("ボイスメモ中だけcaptureを止め、終了後に記録意図から再接続する")
+    @MainActor
+    func voiceMemoSuspensionKeepsCaptureIntent() async {
+        let coordinator = LifeLogCoordinator()
+        coordinator.setCaptureEnabled(true)
+
+        #expect(await coordinator.suspendForVoiceMemo(timeout: .seconds(1)))
+        #expect(coordinator.isSuspendedForVoiceMemo)
+        #expect(coordinator.captureStatusText == "ボイスメモ中は一時停止")
+        #expect(coordinator.hasPendingTerminationWork)
+
+        coordinator.resumeAfterVoiceMemo()
+        #expect(!coordinator.isSuspendedForVoiceMemo)
+        #expect(coordinator.isRecoveringCapture)
+        coordinator.setCaptureEnabled(false)
+    }
+
+    @Test("音声構成変更は再試行し、マイク権限拒否だけは再試行しない")
+    @MainActor
+    func captureRetryPolicy() {
+        #expect(LifeLogCoordinator.shouldRetryCapture(after: ContinuousAudioCapture.Failure.configurationChanged))
+        #expect(!LifeLogCoordinator.shouldRetryCapture(after: ContinuousAudioCapture.Failure.microphoneDenied))
+        #expect(LifeLogCoordinator.shouldRetryCapture(after: ContinuousAudioCapture.Failure.noInputDevice))
     }
 
     @Test("終了待ちは記録開始要求の隙間も含み、停止後に解除される")
@@ -236,6 +298,59 @@ struct LifeLogTests {
         #expect(!sent.contains("前回の要約"))
     }
 
+    @Test("ライブ要約は予定を基準時点との関係で分類する")
+    func liveSummaryLabelsCalendarEventsRelativeToAsOf() async throws {
+        let llm = RecordingLifeLogLlm()
+        let service = LifeLogDerivationService(llm: llm)
+        let asOf = Date(timeIntervalSince1970: 1_800_000_000)
+        let day = LifeLogDay(
+            utterances: [],
+            conversations: [],
+            calendarEvents: [
+                CalendarEventSnapshot(title: "終了した予定", startsAt: asOf.addingTimeInterval(-7_200), endsAt: asOf.addingTimeInterval(-3_600), calendarTitle: "Work"),
+                CalendarEventSnapshot(title: "進行中の予定", startsAt: asOf.addingTimeInterval(-600), endsAt: asOf.addingTimeInterval(600), calendarTitle: "Work"),
+                CalendarEventSnapshot(title: "これからの予定", startsAt: asOf.addingTimeInterval(3_600), endsAt: asOf.addingTimeInterval(7_200), calendarTitle: "Work"),
+            ],
+            summary: nil
+        )
+
+        _ = try await service.summarize(day: day, prompt: "要約", asOf: asOf)
+        let user = llm.recordedPrompts.map(\.user).joined(separator: "\n")
+        let system = llm.recordedPrompts.map(\.system).joined(separator: "\n")
+        #expect(user.contains("[予定・終了済み"))
+        #expect(user.contains("[予定・進行中"))
+        #expect(user.contains("[予定・これから"))
+        #expect(system.contains("未実施の予定として未来形"))
+    }
+
+    @Test("日付変更後は差分がなくても全予定から最終要約を作り直す")
+    @MainActor
+    func pastDayFinalizationIncludesAllCalendarEvents() async throws {
+        let database = try await KoeDatabase.inMemory()
+        let llm = RecordingLifeLogLlm()
+        let coordinator = LifeLogCoordinator()
+        let calendar = Calendar.current
+        let now = Date()
+        let date = try #require(calendar.date(byAdding: .day, value: -1, to: calendar.startOfDay(for: now)))
+        let eventStart = date.addingTimeInterval(18 * 3_600)
+        try await database.lifeLog.save(calendarEvents: [CalendarEventSnapshot(
+            title: "夕方の予定", startsAt: eventStart, endsAt: eventStart.addingTimeInterval(3_600), calendarTitle: "Work"
+        )])
+        try await database.lifeLog.save(summary: DailySummary(
+            day: LifeLogDateKey.string(for: date), summary: "途中", commitments: [], topics: [],
+            calendarEventCount: 1, capturedDurationSeconds: 0, utteranceCount: 0,
+            summarizedThrough: date, isFinal: false
+        ))
+
+        try await coordinator.updateSummary(
+            for: date, respectingInterval: true, now: now,
+            store: database.lifeLog, derivation: LifeLogDerivationService(llm: llm)
+        )
+
+        #expect(llm.recordedPrompts.map(\.user).joined().contains("夕方の予定"))
+        #expect(try await database.lifeLog.day(date).summary?.isFinal == true)
+    }
+
     @Test("月間activityは予定と発話の密度を日別に保つ")
     func monthlyActivity() async throws {
         let database = try await KoeDatabase.inMemory()
@@ -325,6 +440,56 @@ struct LifeLogTests {
         #expect(export.contains("明日の資料を送る"))
         #expect(!export.contains("取り消した入力"))
         #expect(LifeLogDerivationService.timelineItems(day: day).contains { $0.contains("[音声入力") })
+    }
+
+    @Test("成功した音声入力の実録音区間はライフログ発話より優先される")
+    func successfulDictationSuppressesOverlappingLifeLogUtterance() async throws {
+        let database = try await KoeDatabase.inMemory()
+        let startedAt = Date(timeIntervalSince1970: 1_777_777_700)
+        let chunk = LifeLogAudioChunk(
+            id: "audio", captureStartedAt: startedAt, captureEndedAt: startedAt.addingTimeInterval(30),
+            localPath: "/tmp/audio.m4a"
+        )
+        try await database.lifeLog.save(audioChunk: chunk)
+        try await database.lifeLog.save(utterance: LifeLogUtterance(
+            id: "life-log", startedAt: startedAt.addingTimeInterval(1), endedAt: startedAt.addingTimeInterval(7),
+            text: "重複する内容", audioChunkID: chunk.id
+        ))
+        let snapshot = ModeSnapshot(modeName: "標準", modePrompt: "", systemPrompt: "", vocabularyCount: 0, trigger: .manual)
+        try await database.history.save(SessionRecord(
+            id: "dictation", startedAt: startedAt, endedAt: startedAt.addingTimeInterval(20), status: .completed,
+            modeSnapshot: snapshot, sttEngine: EngineIdentifier("speech-analyzer"),
+            rawTranscript: "重複する内容", formattedText: "重複する内容", audioDurationMs: 8_000
+        ))
+
+        let day = try await database.lifeLog.day(startedAt)
+        #expect(day.utterances.isEmpty)
+        #expect(day.dictations.map(\.id) == ["dictation"])
+        let results = try await database.lifeLog.search("重複する内容")
+        #expect(results.map(\.kind) == [.dictation])
+    }
+
+    @Test("cancelした音声入力はライフログ発話を隠さない")
+    func cancelledDictationKeepsLifeLogUtterance() async throws {
+        let database = try await KoeDatabase.inMemory()
+        let startedAt = Date(timeIntervalSince1970: 1_777_777_700)
+        let chunk = LifeLogAudioChunk(
+            id: "audio", captureStartedAt: startedAt, captureEndedAt: startedAt.addingTimeInterval(30),
+            localPath: "/tmp/audio.m4a"
+        )
+        try await database.lifeLog.save(audioChunk: chunk)
+        try await database.lifeLog.save(utterance: LifeLogUtterance(
+            id: "life-log", startedAt: startedAt.addingTimeInterval(1), endedAt: startedAt.addingTimeInterval(7),
+            text: "残す内容", audioChunkID: chunk.id
+        ))
+        let snapshot = ModeSnapshot(modeName: "標準", modePrompt: "", systemPrompt: "", vocabularyCount: 0, trigger: .manual)
+        try await database.history.save(SessionRecord(
+            id: "cancelled", startedAt: startedAt, endedAt: startedAt.addingTimeInterval(8), status: .cancelled,
+            modeSnapshot: snapshot, sttEngine: EngineIdentifier("speech-analyzer"),
+            rawTranscript: "残す内容", audioDurationMs: 8_000
+        ))
+
+        #expect(try await database.lifeLog.day(startedAt).utterances.map(\.id) == ["life-log"])
     }
 
     @Test("日別exportは項目ごとの選択と当日作成・完了TODOを尊重する")

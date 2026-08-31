@@ -16,6 +16,9 @@ public final class LifeLogCoordinator {
     public private(set) var liveTranscript = ""
     public private(set) var isTranscribing = false
     public private(set) var isRecoveringCapture = false
+    public private(set) var isSuspendedForVoiceMemo = false
+    public private(set) var isRefreshingCalendar = false
+    public private(set) var lastCalendarRefreshAt: Date?
 
     private let capture = ContinuousAudioCapture()
     private let calendarProvider = CalendarProvider()
@@ -33,7 +36,7 @@ public final class LifeLogCoordinator {
     private var liveChunks: [LifeLogAudioChunk] = []
     private var pendingLiveSegments: [(text: String, start: TimeInterval, end: TimeInterval)] = []
     private var liveFinalTranscript = ""
-    private var liveSegmentIndex = 0
+    private var hasLiveSegments = false
     private var transcriptionFinished = false
     private var captureFinished = false
     private var isDeriving = false
@@ -74,7 +77,20 @@ public final class LifeLogCoordinator {
         Task { await resumePending() }
     }
 
-    public func selectInputDevice(uid: String?) { capture.inputDeviceUID = uid }
+    public func selectInputDevice(uid: String?) {
+        guard capture.inputDeviceUID != uid else { return }
+        capture.inputDeviceUID = uid
+        guard captureRequested else { return }
+        isRecoveringCapture = true
+        captureRetryTask?.cancel()
+        captureRetryTask = nil
+        if capture.isRunning {
+            capture.stop()
+            isCapturing = false
+        } else if liveTranscriptionTask == nil {
+            scheduleCaptureRetry(unless: ContinuousAudioCapture.Failure.configurationChanged)
+        }
+    }
 
     public func setCaptureEnabled(_ enabled: Bool) {
         let wasRequested = captureRequested
@@ -130,6 +146,7 @@ public final class LifeLogCoordinator {
     }
 
     public var captureStatusText: String {
+        if isSuspendedForVoiceMemo { return "ボイスメモ中は一時停止" }
         if isRecoveringCapture { return "再接続中" }
         if isCapturing, isTranscribing { return "記録・文字起こし中" }
         if isCapturing { return "記録中" }
@@ -185,8 +202,41 @@ public final class LifeLogCoordinator {
         scheduleCaptureRetry(unless: EngineError.failed("スリープから復帰しました"))
     }
 
+    /// ボイスメモの音声をlife-log utteranceへ取り込まないための排他境界。
+    /// 記録開始意図は維持し、現在のchunkと認識sessionだけを確定する。
+    public func suspendForVoiceMemo(timeout: Duration = .seconds(15)) async -> Bool {
+        isSuspendedForVoiceMemo = true
+        captureRetryTask?.cancel()
+        captureRetryTask = nil
+        isRecoveringCapture = false
+        if capture.isRunning {
+            capture.stop()
+            isCapturing = false
+        }
+
+        let clock = ContinuousClock()
+        let deadline = clock.now.advanced(by: timeout)
+        while capture.isRunning || liveTranscriptionTask != nil || isFinalizingSession || isStartingCapture {
+            guard clock.now < deadline else {
+                fail(EngineError.failed("ライフログの一時停止を完了できませんでした"))
+                return false
+            }
+            do { try await Task.sleep(for: .milliseconds(50)) } catch { return false }
+        }
+        return true
+    }
+
+    public func resumeAfterVoiceMemo() {
+        guard isSuspendedForVoiceMemo else { return }
+        isSuspendedForVoiceMemo = false
+        guard captureRequested, !isSuspendedForSleep else { return }
+        captureRetryAttempt = 0
+        scheduleCaptureRetry(unless: EngineError.failed("ボイスメモが終了しました"))
+    }
+
     private func startLiveCapture() async {
-        guard captureRequested, !isSuspendedForSleep, !isStartingCapture, let engines else { return }
+        guard captureRequested, !isSuspendedForSleep, !isSuspendedForVoiceMemo,
+              !isStartingCapture, let engines else { return }
         isStartingCapture = true
         defer { isStartingCapture = false }
         do {
@@ -198,6 +248,7 @@ public final class LifeLogCoordinator {
                 languagePreference: .auto
             )
             let format = try await engines.stt.prepare(hints: hints) ?? AudioFormats.canonical
+            guard captureRequested, !isSuspendedForSleep, !isSuspendedForVoiceMemo else { return }
             let startedAt = Date()
             let stream = try capture.start(format: format)
             liveSessionStartedAt = startedAt
@@ -205,7 +256,7 @@ public final class LifeLogCoordinator {
             liveChunks = []
             pendingLiveSegments = []
             liveFinalTranscript = ""
-            liveSegmentIndex = 0
+            hasLiveSegments = false
             transcriptionFinished = false
             captureFinished = false
             isCapturing = true
@@ -251,8 +302,8 @@ public final class LifeLogCoordinator {
     }
 
     private func scheduleCaptureRetry(unless error: Error) {
-        guard captureRequested, !isSuspendedForSleep else { return }
-        if let failure = error as? ContinuousAudioCapture.Failure, case .microphoneDenied = failure { return }
+        guard captureRequested, !isSuspendedForSleep, !isSuspendedForVoiceMemo,
+              Self.shouldRetryCapture(after: error) else { return }
         captureRetryTask?.cancel()
         isRecoveringCapture = true
         captureRetryAttempt += 1
@@ -340,15 +391,19 @@ public final class LifeLogCoordinator {
                 let event = capturedDay.calendarEvents.filter { $0.contains(startedAt, tolerance: 120) }
                     .min { $0.endsAt.timeIntervalSince($0.startsAt) < $1.endsAt.timeIntervalSince($1.startsAt) }
                 let utterance = LifeLogUtterance(
-                    id: "live-\(liveSessionID ?? chunk.id)-\(liveSegmentIndex)",
+                    id: Self.transcriptionSegmentID(
+                        scopeID: "live-\(liveSessionID ?? chunk.id)",
+                        startOffset: segment.start,
+                        endOffset: segment.end
+                    ),
                     startedAt: startedAt,
                     endedAt: min(endedAt, chunk.captureEndedAt.addingTimeInterval(120)),
                     text: segment.text,
                     audioChunkID: chunk.id,
                     calendarEventID: event?.id
                 )
-                liveSegmentIndex += 1
                 try await database.lifeLog.save(utterance: utterance)
+                hasLiveSegments = true
                 affectedDates[LifeLogDateKey.string(for: startedAt)] = startedAt
             } catch { fail(error); remaining.append(segment) }
         }
@@ -365,7 +420,7 @@ public final class LifeLogCoordinator {
         let startedAt = liveSessionStartedAt
         let completedAt = liveChunks.last?.captureEndedAt ?? liveSessionStartedAt
         await flushLiveSegments()
-        if liveSegmentIndex == 0,
+        if !hasLiveSegments,
            !liveFinalTranscript.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
            let chunk = liveChunks.first,
            let sessionStart = liveSessionStartedAt {
@@ -403,9 +458,11 @@ public final class LifeLogCoordinator {
         await reload()
         // 終了待ちは、停止時の最終要約と再読込まで含めて完了とみなす。
         liveTranscriptionTask = nil
-        if restartForVocabulary, captureRequested, !isSuspendedForSleep {
+        if restartForVocabulary, captureRequested, !isSuspendedForSleep, !isSuspendedForVoiceMemo {
             restartForVocabulary = false
             await startLiveCapture()
+        } else if captureRequested, isRecoveringCapture, !isSuspendedForSleep, !isSuspendedForVoiceMemo {
+            scheduleCaptureRetry(unless: EngineError.failed("音声streamの終了後に再接続します"))
         }
     }
 
@@ -447,10 +504,14 @@ public final class LifeLogCoordinator {
 
     public func refreshCalendar(selectedCalendars: Set<String>) async {
         guard let database, let interval = Calendar.current.dateInterval(of: .day, for: selectedDate) else { return }
+        guard !isRefreshingCalendar else { return }
+        isRefreshingCalendar = true
+        defer { isRefreshingCalendar = false }
         do {
             guard try await calendarProvider.requestAccess() else { return }
             let events = try await calendarProvider.events(start: interval.start, end: interval.end, selectedCalendars: selectedCalendars)
             try await database.lifeLog.save(calendarEvents: events)
+            lastCalendarRefreshAt = Date()
             await reload()
             await loadActivity(containing: selectedDate)
         } catch { fail(error) }
@@ -538,11 +599,15 @@ public final class LifeLogCoordinator {
                                                    endedAt: chunk.captureEndedAt, text: transcript,
                                                    audioChunkID: chunk.id, calendarEventID: event?.id)]
                 } else {
-                    utterances = timedSegments.enumerated().map { index, segment in
+                    utterances = timedSegments.map { segment in
                         let startedAt = chunk.captureStartedAt.addingTimeInterval(max(0, segment.start))
                         let endedAt = min(chunk.captureEndedAt, chunk.captureStartedAt.addingTimeInterval(max(segment.start, segment.end)))
                         let event = capturedDay.calendarEvents.filter { $0.contains(startedAt, tolerance: 120) }.min { $0.endsAt.timeIntervalSince($0.startsAt) < $1.endsAt.timeIntervalSince($1.startsAt) }
-                        return LifeLogUtterance(id: "utterance-\(chunk.id)-\(index)", startedAt: startedAt,
+                        return LifeLogUtterance(id: Self.transcriptionSegmentID(
+                            scopeID: "utterance-\(chunk.id)",
+                            startOffset: segment.start,
+                            endOffset: segment.end
+                        ), startedAt: startedAt,
                                                 endedAt: endedAt, text: segment.text,
                                                 audioChunkID: chunk.id, calendarEventID: event?.id)
                     }
@@ -576,6 +641,18 @@ public final class LifeLogCoordinator {
         do { for chunk in try await database.lifeLog.pendingAudioChunks() { await process(chunk) } } catch { fail(error) }
     }
 
+    /// SpeechAnalyzerは同じ確定範囲を複数回通知することがある。
+    /// 認識範囲をidentityにし、再通知は別発話の追加ではなく既存発話の更新にする。
+    nonisolated static func transcriptionSegmentID(
+        scopeID: String,
+        startOffset: TimeInterval,
+        endOffset: TimeInterval
+    ) -> String {
+        let startMilliseconds = Int64((max(0, startOffset) * 1_000).rounded())
+        let endMilliseconds = Int64((max(0, max(startOffset, endOffset)) * 1_000).rounded())
+        return "\(scopeID)-\(startMilliseconds)-\(endMilliseconds)"
+    }
+
     private func segmentAndRefresh(for date: Date) async {
         guard let database else { return }
         do {
@@ -607,37 +684,47 @@ public final class LifeLogCoordinator {
     }
 
     /// 定期実行は差分の有無を判定し、停止時は対象日のsource of truth全体から必ずsummaryを再構築する。
-    func updateSummary(for date: Date, respectingInterval: Bool, force: Bool = false, store: LifeLogStore,
-                       derivation: LifeLogDerivationService) async throws {
+    func updateSummary(
+        for date: Date,
+        respectingInterval: Bool,
+        force: Bool = false,
+        now: Date = Date(),
+        store: LifeLogStore,
+        derivation: LifeLogDerivationService
+    ) async throws {
         let value = try await store.day(date, participatingOnly: participatingEventsOnly())
         let previous = value.summary
+        let calendar = Calendar.current
+        guard let dayInterval = calendar.dateInterval(of: .day, for: date) else { return }
+        let isPastDay = dayInterval.end <= now
+        let shouldFinalize = isPastDay && previous?.isFinal != true
         let additions = value.utterances.filter { $0.endedAt > (previous?.summarizedThrough ?? .distantPast) }
         let dictationAdditions = value.dictations.filter { $0.endedAt > (previous?.summarizedThrough ?? .distantPast) }
         let memoAdditions = value.memos.filter { $0.createdAt > (previous?.summarizedThrough ?? .distantPast) }
         let latestAddition = (additions.map(\.endedAt) + dictationAdditions.map(\.endedAt) + memoAdditions.map(\.createdAt)).max()
-        let latest = (value.utterances.map(\.endedAt) + value.dictations.map(\.endedAt) + value.memos.map(\.createdAt)).max()
-        guard force || latestAddition != nil else {
-            if var previous, !Calendar.current.isDateInToday(date), !previous.isFinal {
-                previous.isFinal = true
-                try await store.save(summary: previous)
-            }
-            return
-        }
-        guard let latest else { return }
+        let latestSource = (value.utterances.map(\.endedAt) + value.dictations.map(\.endedAt) + value.memos.map(\.createdAt)).max()
+        guard force || latestAddition != nil || shouldFinalize else { return }
+        let latest = latestSource ?? previous?.summarizedThrough ?? dayInterval.start
         let baseline = previous?.summarizedThrough
             ?? (value.utterances.map(\.startedAt) + value.dictations.map(\.startedAt) + value.memos.map(\.createdAt)).min()
             ?? latest
         let interval = TimeInterval(max(15, summaryIntervalMinutes()) * 60)
-        guard force || !respectingInterval || !Calendar.current.isDateInToday(date)
+        guard force || shouldFinalize || !respectingInterval || isPastDay
                 || latest.timeIntervalSince(baseline) >= interval else { return }
-        let derived = try await derivation.summarize(day: value, prompt: summaryPrompt(), todoPrompt: todoPrompt())
+        let asOf = isPastDay ? dayInterval.end : now
+        let derived = try await derivation.summarize(
+            day: value,
+            prompt: summaryPrompt(),
+            todoPrompt: todoPrompt(),
+            asOf: asOf
+        )
         let commitments = try await store.todos().filter { $0.status != .draft }.map(\.title)
         let duration = value.utterances.reduce(0) { $0 + max(0, Int($1.endedAt.timeIntervalSince($1.startedAt))) }
         let summary = DailySummary(day: LifeLogDateKey.string(for: date), summary: derived.text,
                                    commitments: Array(Set((previous?.commitments ?? []) + commitments)).sorted(), topics: derived.topics,
                                    calendarEventCount: value.calendarEvents.count, capturedDurationSeconds: duration,
                                    utteranceCount: value.utterances.count, summarizedThrough: latest,
-                                   isFinal: !Calendar.current.isDateInToday(date))
+                                   isFinal: isPastDay)
         let sourceIDs = value.utterances.map(\.id)
         let sourceMemoIDs = value.memos.map(\.id)
         let drafts = derived.todoTitles.enumerated().map { index, title in
@@ -679,4 +766,11 @@ public final class LifeLogCoordinator {
     }
 
     private func fail(_ error: Error) { errorMessage = error.localizedDescription; KoeLog.session.error("ライフログ処理に失敗: \(error.localizedDescription, privacy: .public)") }
+
+    static func shouldRetryCapture(after error: Error) -> Bool {
+        if let failure = error as? ContinuousAudioCapture.Failure, case .microphoneDenied = failure {
+            return false
+        }
+        return true
+    }
 }

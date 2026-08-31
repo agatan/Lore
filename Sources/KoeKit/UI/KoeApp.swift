@@ -26,9 +26,7 @@ public struct KoeApp: App {
                 .accentColor(env.settings.accentPalette.color)
         }
         .defaultSize(width: 1_480, height: 820)
-        .commands {
-            KoeCommands(env: env)
-        }
+        .commands { KoeCommands(env: env) }
 
         Window("Koe 設定", id: KoeWindow.settings) {
             SettingsWindowView(env: env)
@@ -87,7 +85,6 @@ public enum KoeWindow {
 /// メニューバーのアイコン + 起動処理。
 private struct MenuBarRoot: View {
     var env: AppEnvironment
-
     @Environment(\.openWindow) private var openWindow
     @State private var hud: HudController?
 
@@ -126,11 +123,9 @@ private struct MenuBarRoot: View {
             return
         }
 
-        // 起動直後はKoeのメイン画面を開く。
-        if env.settings.openHistoryAtLaunch || AppEnvironment.usesScreenshotDemoData {
-            env.mainSection = .lifeLog
-            openWindow(id: KoeWindow.main)
-        }
+        env.mainSection = .lifeLog
+        openWindow(id: KoeWindow.main)
+        NSApp.activate()
     }
 }
 

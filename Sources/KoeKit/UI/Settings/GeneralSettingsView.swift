@@ -38,10 +38,6 @@ struct GeneralSettingsView: View {
                 }
             }
             SettingsCard(title: "起動") {
-                SettingsToggle(title: "起動時にKoeを開く", isOn: Binding(
-                    get: { settings.openHistoryAtLaunch },
-                    set: { settings.openHistoryAtLaunch = $0 }
-                ))
                 SettingsToggle(
                     title: "ログイン時に起動する",
                     caption: env.loginItemState == .requiresApproval

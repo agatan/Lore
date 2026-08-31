@@ -70,24 +70,16 @@ struct LifeLogMiniWindow: View {
             }
 
             Divider().opacity(0.35)
-            HStack(alignment: .bottom, spacing: 8) {
-                TextField("メモを追加…", text: $memoDraft, axis: .vertical)
-                    .textFieldStyle(.plain)
-                    .font(.system(size: 12.5))
-                    .lineLimit(1...4)
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 9)
-                    .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 15))
-                    .onSubmit { sendMemo() }
-                Button(action: sendMemo) {
-                    Image(systemName: "arrow.up")
-                        .font(.system(size: 12, weight: .bold))
-                        .frame(width: 30, height: 30)
-                }
-                .buttonStyle(.borderedProminent)
-                .buttonBorderShape(.circle)
-                .disabled(memoDraft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-                .help("メモを追加")
+            LifeLogMemoComposer(
+                text: $memoDraft,
+                accessibilityPrefix: "life-log-mini",
+                isVoiceMemoRecording: env.coordinator.isVoiceMemoRecording,
+                isPreparingVoiceMemo: env.isPreparingVoiceMemo,
+                canToggleVoiceMemo: env.canToggleVoiceMemo,
+                voiceMemoShortcut: env.settings.voiceMemoHotkey.displayName,
+                onToggleVoiceMemo: env.toggleVoiceMemo
+            ) { value in
+                Task { await env.lifeLog.addMemo(value) }
             }
             .padding(10)
         }
@@ -178,12 +170,5 @@ struct LifeLogMiniWindow: View {
         .padding(.horizontal, 12)
         .padding(.vertical, 9)
         .id("m-\(memo.id)")
-    }
-
-    private func sendMemo() {
-        let value = memoDraft.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !value.isEmpty else { return }
-        memoDraft = ""
-        Task { await env.lifeLog.addMemo(value) }
     }
 }
