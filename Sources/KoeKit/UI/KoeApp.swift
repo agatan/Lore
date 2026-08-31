@@ -11,8 +11,8 @@ public struct KoeApp: App {
     public var body: some Scene {
         MenuBarExtra {
             MenuBarPanel(env: env)
-                .tint(env.settings.accentPalette.color)
-                .accentColor(env.settings.accentPalette.color)
+                .tint(KoeTheme.accent)
+                .accentColor(KoeTheme.accent)
         } label: {
             // ラベルは常駐中ずっと生きているので、ここで初期化を回す。
             MenuBarRoot(env: env)
@@ -22,8 +22,8 @@ public struct KoeApp: App {
         Window("Koe", id: KoeWindow.main) {
             MainWindowView(env: env)
                 .koeWindow()
-                .tint(env.settings.accentPalette.color)
-                .accentColor(env.settings.accentPalette.color)
+                .tint(KoeTheme.accent)
+                .accentColor(KoeTheme.accent)
         }
         .defaultSize(width: 1_480, height: 820)
         .commands { KoeCommands(env: env) }
@@ -31,24 +31,24 @@ public struct KoeApp: App {
         Window("Koe 設定", id: KoeWindow.settings) {
             SettingsWindowView(env: env)
                 .koeWindow()
-                .tint(env.settings.accentPalette.color)
-                .accentColor(env.settings.accentPalette.color)
+                .tint(KoeTheme.accent)
+                .accentColor(KoeTheme.accent)
         }
         .defaultSize(width: 980, height: 720)
 
         Window("ライフログ ミニ", id: KoeWindow.lifeLogMini) {
             LifeLogMiniWindow(env: env)
                 .koeWindow()
-                .tint(env.settings.accentPalette.color)
-                .accentColor(env.settings.accentPalette.color)
+                .tint(KoeTheme.accent)
+                .accentColor(KoeTheme.accent)
         }
         .defaultSize(width: 460, height: 620)
 
         Window("すべてのTODO", id: KoeWindow.lifeLogTodos) {
             LifeLogTodoManagerWindow(env: env)
                 .koeWindow()
-                .tint(env.settings.accentPalette.color)
-                .accentColor(env.settings.accentPalette.color)
+                .tint(KoeTheme.accent)
+                .accentColor(KoeTheme.accent)
         }
         .defaultSize(width: 680, height: 520)
     }

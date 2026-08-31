@@ -52,17 +52,23 @@ public struct LifeLogWindow: View {
 
     private var captureButton: some View {
         Button {
-            setCaptureEnabled(!env.lifeLog.isCapturing)
+            setCaptureEnabled(!hasCaptureIntent)
         } label: {
             Label(
-                env.lifeLog.isCapturing ? "記録中" : "記録を開始",
-                systemImage: env.lifeLog.isCapturing ? "waveform.circle.fill" : "waveform.circle"
+                hasCaptureIntent ? "録音を停止" : "録音を開始",
+                systemImage: hasCaptureIntent ? "stop.circle.fill" : "record.circle.fill"
             )
         }
         .buttonStyle(.borderedProminent)
         .labelStyle(.titleAndIcon)
-        .tint(env.lifeLog.isCapturing ? KoeTheme.recording : KoeTheme.accent)
+        .controlSize(.large)
+        .tint(KoeTheme.recording)
+        .help(hasCaptureIntent ? "ライフログ録音を停止" : "ライフログ録音を開始")
         .accessibilityIdentifier("life-log.capture-toggle")
+    }
+
+    private var hasCaptureIntent: Bool {
+        env.lifeLog.isCapturing || env.lifeLog.isRecoveringCapture || env.lifeLog.isSuspendedForVoiceMemo
     }
 
     private var left: some View {
@@ -126,8 +132,9 @@ public struct LifeLogWindow: View {
                     guard new > old else { return }
                     withAnimation { proxy.scrollTo("timeline-bottom", anchor: .bottom) }
                 }
-                .onChange(of: env.lifeLog.highlightedUtteranceID) { _, id in
-                    if let id { withAnimation { proxy.scrollTo(id, anchor: .center) } }
+                .onChange(of: env.lifeLog.sourceNavigationRevision) { _, _ in
+                    guard let id = env.lifeLog.highlightedTimelineItemID else { return }
+                    withAnimation { proxy.scrollTo(id, anchor: .center) }
                 }
                 .overlay { if timelineItems.isEmpty && !showsLiveCapture { timelineEmptyState } }
             }
@@ -205,8 +212,8 @@ public struct LifeLogWindow: View {
                 Spacer(minLength: 0)
             }
             .padding(.horizontal, 16).padding(.vertical, 11)
-            .background(env.lifeLog.highlightedUtteranceID == value.id ? KoeTheme.accent.opacity(0.12) : .clear)
-            .id(value.id)
+            .background(env.lifeLog.highlightedTimelineItemID == "u-\(value.id)" ? KoeTheme.accent.opacity(0.12) : .clear)
+            .id("u-\(value.id)")
         case .event(let value):
             HStack(spacing: 10) {
                 Text(timeRange(from: value.startsAt, to: value.endsAt))
@@ -250,6 +257,8 @@ public struct LifeLogWindow: View {
                 .buttonStyle(.plain).foregroundStyle(.tertiary).help("メモを削除")
             }
             .padding(.horizontal, 16).padding(.vertical, 11)
+            .background(env.lifeLog.highlightedTimelineItemID == "m-\(value.id)" ? KoeTheme.accent.opacity(0.12) : .clear)
+            .id("m-\(value.id)")
         }
     }
 
@@ -317,29 +326,38 @@ public struct LifeLogWindow: View {
                 .foregroundStyle(.secondary.opacity(0.4)).frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
                 List(visibleTodos) { todo in
-                    HStack(alignment: .top) {
-                        if todo.status == .draft {
-                            Image(systemName: "sparkles").foregroundStyle(.secondary)
-                        } else {
-                            Button { toggle(todo) } label: {
-                                Image(systemName: todo.status == .completed ? "checkmark.circle.fill" : "circle")
-                                    .foregroundStyle(todo.status == .completed ? KoeTheme.success : .secondary)
-                            }.buttonStyle(.plain)
+                    VStack(alignment: .leading, spacing: 6) {
+                        HStack(alignment: .top) {
+                            if todo.status == .draft {
+                                Image(systemName: "sparkles").foregroundStyle(.secondary)
+                            } else {
+                                Button { toggle(todo) } label: {
+                                    Image(systemName: todo.status == .completed ? "checkmark.circle.fill" : "circle")
+                                        .foregroundStyle(todo.status == .completed ? KoeTheme.success : .secondary)
+                                }.buttonStyle(.plain)
+                            }
+                            TextField("TODO", text: todoTitle(todo)).textFieldStyle(.plain).font(.system(size: 12))
+                                .strikethrough(todo.status == .completed)
+                            Spacer()
+                            if todo.status == .draft {
+                                Button { confirm(todo) } label: { Image(systemName: "checkmark") }
+                                    .buttonStyle(.plain).foregroundStyle(KoeTheme.success).help("TODOにする")
+                                Button { Task { await env.lifeLog.delete(todoID: todo.id) } } label: { Image(systemName: "xmark") }
+                                    .buttonStyle(.plain).foregroundStyle(.tertiary).help("棄却")
+                            }
+                            if todo.status != .draft {
+                                Button { Task { await env.lifeLog.delete(todoID: todo.id) } } label: { Image(systemName: "trash") }
+                                    .buttonStyle(.plain).foregroundStyle(.tertiary).help("Delete")
+                            }
                         }
-                        TextField("TODO", text: todoTitle(todo)).textFieldStyle(.plain).font(.system(size: 12))
-                            .strikethrough(todo.status == .completed)
-                        Spacer()
-                        if todo.status == .draft {
-                            Button { confirm(todo) } label: { Image(systemName: "checkmark") }
-                                .buttonStyle(.plain).foregroundStyle(KoeTheme.success).help("TODOにする")
-                            Button { Task { await env.lifeLog.delete(todoID: todo.id) } } label: { Image(systemName: "xmark") }
-                                .buttonStyle(.plain).foregroundStyle(.tertiary).help("棄却")
-                        }
-                        Button { Task { await env.lifeLog.jumpToSource(of: todo) } } label: { Image(systemName: "arrow.turn.down.left") }
-                            .buttonStyle(.plain).foregroundStyle(.tertiary).disabled(todo.sourceUtteranceIDs.isEmpty).help("Source")
-                        if todo.status != .draft {
-                            Button { Task { await env.lifeLog.delete(todoID: todo.id) } } label: { Image(systemName: "trash") }
-                                .buttonStyle(.plain).foregroundStyle(.tertiary).help("Delete")
+                        if hasSource(todo) {
+                            Button { Task { await env.lifeLog.jumpToSource(of: todo) } } label: {
+                                Label("元の発言へ", systemImage: "quote.bubble")
+                                    .font(.system(size: 10.5, weight: .medium))
+                            }
+                            .buttonStyle(.plain)
+                            .foregroundStyle(KoeTheme.accent)
+                            .accessibilityIdentifier("life-log.todo-source-\(todo.id)")
                         }
                     }
                     .listRowBackground(todo.status == .draft ? KoeTheme.accent.opacity(0.055) : Color.clear)
@@ -352,6 +370,10 @@ public struct LifeLogWindow: View {
 
     private var visibleTodos: [LifeLogTodo] {
         env.lifeLog.todos.filter { $0.status != .completed }
+    }
+
+    private func hasSource(_ todo: LifeLogTodo) -> Bool {
+        !todo.sourceUtteranceIDs.isEmpty || !todo.sourceMemoIDs.isEmpty
     }
 
     private var insightsPanel: some View {

@@ -239,6 +239,37 @@ struct LifeLogTests {
         #expect(stored.sourceMemoIDs == ["memo"])
     }
 
+    @Test("TODOのmemo出典は対象日を読み込んだ後にtimelineへ案内する")
+    @MainActor
+    func todoMemoSourceNavigation() async throws {
+        let database = try await KoeDatabase.inMemory()
+        let coordinator = LifeLogCoordinator()
+        let sourceDate = Date(timeIntervalSince1970: 1_777_777_700)
+        let memo = LifeLogMemo(id: "source-memo", createdAt: sourceDate, text: "出典メモ")
+        try await database.lifeLog.save(memo: memo)
+        await coordinator.configure(
+            database: database,
+            engines: EngineRegistry(),
+            vocabulary: { [] },
+            todoPrompt: { "" },
+            summaryPrompt: { "" },
+            summaryIntervalMinutes: { 60 },
+            participatingEventsOnly: { true },
+            audioProcessingCompleted: {}
+        )
+
+        let todo = LifeLogTodo(title: "確認する", sourceMemoIDs: [memo.id])
+        await coordinator.jumpToSource(of: todo)
+
+        #expect(Calendar.current.isDate(coordinator.selectedDate, inSameDayAs: sourceDate))
+        #expect(coordinator.day.memos.map(\.id) == [memo.id])
+        #expect(coordinator.highlightedTimelineItemID == "m-\(memo.id)")
+        #expect(coordinator.sourceNavigationRevision == 1)
+
+        await coordinator.jumpToSource(of: todo)
+        #expect(coordinator.sourceNavigationRevision == 2)
+    }
+
     @Test("メモは発話と分離して保存され、日付境界で正しい日に入る")
     func memosAreTypedAndPartitionedByDay() async throws {
         let database = try await KoeDatabase.inMemory()

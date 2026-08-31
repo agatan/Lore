@@ -11,7 +11,8 @@ public final class LifeLogCoordinator {
     public private(set) var todos: [LifeLogTodo] = []
     public private(set) var errorMessage: String?
     public private(set) var availableCalendars: [String] = []
-    public private(set) var highlightedUtteranceID: String?
+    public private(set) var highlightedTimelineItemID: String?
+    public private(set) var sourceNavigationRevision = 0
     public private(set) var monthActivity: [String: LifeLogDayActivity] = [:]
     public private(set) var liveTranscript = ""
     public private(set) var isTranscribing = false
@@ -536,9 +537,32 @@ public final class LifeLogCoordinator {
     public func update(todo: LifeLogTodo) async { guard let database else { return }; do { try await database.lifeLog.save(todo: todo); await reload() } catch { fail(error) } }
     public func delete(todoID: String) async { guard let database else { return }; do { try await database.lifeLog.deleteTodo(id: todoID); await reload() } catch { fail(error) } }
     public func jumpToSource(of todo: LifeLogTodo) async {
-        guard let database, let id = todo.sourceUtteranceIDs.first else { return }
-        do { guard let utterance = try await database.lifeLog.utterance(id: id) else { return }; selectedDate = utterance.startedAt; highlightedUtteranceID = id; await reload() } catch { fail(error) }
+        guard let database else { return }
+        do {
+            for id in todo.sourceUtteranceIDs {
+                if let utterance = try await database.lifeLog.utterance(id: id) {
+                    await navigateToSource(date: utterance.startedAt, timelineItemID: "u-\(id)")
+                    return
+                }
+            }
+            for id in todo.sourceMemoIDs {
+                if let memo = try await database.lifeLog.memo(id: id) {
+                    await navigateToSource(date: memo.createdAt, timelineItemID: "m-\(id)")
+                    return
+                }
+            }
+            errorMessage = "元の発言が見つかりませんでした。"
+        } catch {
+            fail(error)
+        }
     }
+
+    private func navigateToSource(date: Date, timelineItemID: String) async {
+        await select(date: date)
+        highlightedTimelineItemID = timelineItemID
+        sourceNavigationRevision += 1
+    }
+
     public func reload() async {
         guard let database else { return }
         do {

@@ -54,16 +54,10 @@ struct MenuBarLabel: View {
 
 @MainActor
 enum MenuBarStatusIcon {
-    static func lifeLogRecording(baseIcon: NSImage? = nil) -> NSImage {
+    static func lifeLogRecording() -> NSImage {
         let size = NSSize(width: 24, height: 20)
         let image = NSImage(size: size, flipped: false) { rect in
-            let appIcon = baseIcon ?? koeApplicationIcon
-            appIcon.draw(
-                in: NSRect(x: 1, y: 1, width: 18, height: 18),
-                from: .zero,
-                operation: .sourceOver,
-                fraction: 1
-            )
+            drawKoeMark()
 
             let badgeRect = NSRect(x: 14, y: 0.5, width: 9, height: 9)
             let badgeBorder = NSBezierPath(ovalIn: badgeRect)
@@ -72,8 +66,8 @@ enum MenuBarStatusIcon {
 
             let badge = NSBezierPath(ovalIn: badgeRect.insetBy(dx: 1.25, dy: 1.25))
             NSGradient(colors: [
-                NSColor(red: 0.96, green: 0.31, blue: 0.42, alpha: 1),
-                NSColor(red: 0.99, green: 0.52, blue: 0.35, alpha: 1),
+                NSColor(red: 0.89, green: 0.33, blue: 0.44, alpha: 1),
+                NSColor(red: 0.94, green: 0.46, blue: 0.52, alpha: 1),
             ])?.draw(in: badge, angle: 0)
             return true
         }
@@ -81,11 +75,17 @@ enum MenuBarStatusIcon {
         return image
     }
 
-    private static var koeApplicationIcon: NSImage {
-        if let url = Bundle.main.url(forResource: "AppIcon", withExtension: "icns"),
-           let icon = NSImage(contentsOf: url) {
-            return icon
+    private static func drawKoeMark() {
+        let heights: [CGFloat] = [5, 9, 13, 17, 11, 7, 14, 9, 5]
+        let barWidth: CGFloat = 1.5
+        let gap: CGFloat = 0.45
+        let totalWidth = CGFloat(heights.count) * barWidth + CGFloat(heights.count - 1) * gap
+        var x = 1 + (18 - totalWidth) / 2
+        NSColor.labelColor.setFill()
+        for height in heights {
+            let bar = NSRect(x: x, y: 1 + (18 - height) / 2, width: barWidth, height: height)
+            NSBezierPath(roundedRect: bar, xRadius: barWidth / 2, yRadius: barWidth / 2).fill()
+            x += barWidth + gap
         }
-        return NSApp.applicationIconImage
     }
 }

@@ -153,12 +153,13 @@ private enum KoeUIE2E {
 
     @MainActor
     private static func runDailyReviewCUJ(appURL: URL) async throws {
-        print("CUJ 1: ライフログを確認し、音声入力へ切り替え、日別書き出しを調整する")
+        print("CUJ 1: ライフログのTODO出典を確認し、音声入力へ切り替え、日別書き出しを調整する")
         let app = try await launch(appURL, arguments: ["--koe-screenshot-demo"])
         let ui = AXDriver(pid: app.processIdentifier)
 
         _ = try ui.waitFor(identifier: "main.section-picker")
         _ = try ui.waitFor(identifier: "life-log.voice-memo")
+        try ui.press(identifier: "life-log.todo-source-demo-todo-1")
         try ui.press(identifier: "main.section.history")
         _ = try ui.waitFor(identifier: "history.root")
         try ui.press(identifier: "main.section.lifeLog")

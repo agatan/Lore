@@ -81,7 +81,6 @@ public final class AppSettings {
         public var lifeLogTodoPrompt: String = BuiltinLifeLogPrompts.todo
         public var lifeLogSummaryPrompt: String = BuiltinLifeLogPrompts.summary
         public var lifeLogMiniWindowAlwaysOnTop: Bool = false
-        public var accentPalette: AccentPalette = .ocean
 
         init() {}
 
@@ -131,8 +130,6 @@ public final class AppSettings {
             lifeLogTodoPrompt = try container.decodeIfPresent(String.self, forKey: .lifeLogTodoPrompt) ?? fallback.lifeLogTodoPrompt
             lifeLogSummaryPrompt = try container.decodeIfPresent(String.self, forKey: .lifeLogSummaryPrompt) ?? fallback.lifeLogSummaryPrompt
             lifeLogMiniWindowAlwaysOnTop = try container.decodeIfPresent(Bool.self, forKey: .lifeLogMiniWindowAlwaysOnTop) ?? false
-            accentPalette = try container.decodeIfPresent(AccentPalette.self, forKey: .accentPalette) ?? fallback.accentPalette
-
         }
     }
 
@@ -319,8 +316,6 @@ public final class AppSettings {
     public var lifeLogTodoPrompt: String { get { storage.lifeLogTodoPrompt } set { storage.lifeLogTodoPrompt = newValue; persist() } }
     public var lifeLogSummaryPrompt: String { get { storage.lifeLogSummaryPrompt } set { storage.lifeLogSummaryPrompt = newValue; persist() } }
     public var lifeLogMiniWindowAlwaysOnTop: Bool { get { storage.lifeLogMiniWindowAlwaysOnTop } set { storage.lifeLogMiniWindowAlwaysOnTop = newValue; persist() } }
-    public var accentPalette: AccentPalette { get { storage.accentPalette } set { storage.accentPalette = newValue; persist() } }
-
     /// 「Koeの全データを削除」で設定も初期状態へ戻す。
     public func resetAll() {
         storage = Storage()

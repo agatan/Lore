@@ -72,7 +72,7 @@ cloud音声入力で送るのは今回の文字起こし、共通rule、mode指�
 ### 3.5 ボイスメモ
 
 - 専用global hotkey、main windowとmini windowのmemo入力欄にある音声ボタンは、いずれも押すたびに録音開始・停止を切り替え、認識した生textを今日のライフログmemoとして保存します。文章整形、前面appへの挿入、通常の音声入力履歴への保存は行いません。
-- memo入力欄の音声ボタンは、開始準備中をprogress表示、録音中を録音色とpulse animationで示し、通常の音声入力など別の音声処理中は新規開始できません。
+- memo入力欄の音声ボタンは、開始準備中をprogress表示、録音中をKoeのblueと調和するrose色とpulse animationで示し、通常の音声入力など別の音声処理中は新規開始できません。
 - ライフログ記録中に開始した場合は、現在の復旧用audio chunkを確定してライフログcaptureを一時停止します。ボイスメモの完了、cancel、失敗後は、利用者の記録開始意図が残っている場合だけライフログを自動再開します。
 - この排他境界により、一回のボイスメモはmemo一件だけを作り、通常の音声入力履歴やライフログutteranceへ同じ内容を追加しません。
 
@@ -82,7 +82,7 @@ cloud音声入力で送るのは今回の文字起こし、共通rule、mode指�
 
 - ライフログは通常の音声入力と独立して開始・停止でき、同時利用できます。
 - menu bar、main window、専用global hotkey、macOS Shortcutsから操作できます。
-- ライフログが実際に録音している間は、menu barにKoeのapp iconを主表示し、その右下へ録音色の小さなbadgeを重ねます。停止中と再接続待ちでは通常のmonochrome表示へ戻し、再接続待ちを録音中とは表示しません。
+- ライフログが実際に録音している間も、menu barのKoe icon本体はmonochromeで表示し、右下の小さなrose色badgeだけを着色します。停止中と再接続待ちではbadgeを外し、再接続待ちを録音中とは表示しません。
 - 音声入力との同時利用中も、復旧可能なライフログaudioの記録は中断しません。音声入力が成功した区間はそのraw transcriptを正本とし、同じ録音時間帯にライフログ側で認識した発話はtimeline、検索、書き出し、summary/TODO生成へ重複して出しません。音声入力がcancelまたは失敗した場合は、ライフログ側の発話を残します。
 - 入力deviceを選択できます。記録中は30秒ごとに復旧用`.m4a`をMac内へ確定します。audioをcloud STTへ送ることはありません。
 - 保存済みaudioは文字起こしと派生処理が両方成功するまで必ず保持します。既定の「処理後削除」では成功直後にaudioだけを削除し、保存済みの発話、conversation、summary、TODOは残します。設定は「処理後削除」「7日」「30日」から選べます。
@@ -94,7 +94,7 @@ cloud音声入力で送るのは今回の文字起こし、共通rule、mode指�
 
 - main windowは「ライフログ」と「音声入力」を切り替え、ライフログを既定表示にします。
 - ライフログは月間activity calendar、選択日のtimeline、summary、global TODOを表示します。
-- timelineは時刻付き発話、text memo、calendar予定を区別します。今日のtimeline最下部とミニwindowには同じchat形式の入力欄があり、送信したmemoを今日のtimelineへ即時追加します。過去日の履歴へ現在のmemoを混入させないため、main windowの入力欄は今日を選択中だけ表示します。
+- timelineは時刻付き発話、text memo、calendar予定を区別します。今日のtimeline最下部とミニwindowには同じchat形式の入力欄があり、送信したmemoを今日のtimelineへ即時追加します。送信ボタンと音声入力ボタンは同じ直径の円形controlに揃えます。過去日の履歴へ現在のmemoを混入させないため、main windowの入力欄は今日を選択中だけ表示します。
 - ボイスメモも手入力と同じmemoとして今日のtimelineへ追加します。
 - 発話は90秒以上の無発話でconversationに分けます。予定との関連は前後2分のずれを許容しますが、予定境界だけではconversationを分けません。
 - 日付をまたぐ記録は実時刻の日へ分配され、表示が今日を追従中なら新しい日へ切り替わります。
@@ -115,6 +115,7 @@ cloud音声入力で送るのは今回の文字起こし、共通rule、mode指�
 - 停止時は記録対象日を最終更新します。audio chunkごとにはLLMを呼びません。
 - draft TODOは未確定候補です。編集して確定、または棄却できます。次回生成時に置換されるのはdraftだけで、確定・完了TODOは変更しません。
 - TODOは`draft`、`open`、`completed`を持ち、全TODO window、CLI、MCPで追加、編集、完了、再開、削除できます。
+- TODOが発話またはmemoの出典情報を持つ場合は「元の発言へ」を表示します。選ぶと出典の日へ移動し、該当するtimeline行を中央へscrollして強調します。意味の伝わらない記号だけの操作にはしません。
 - summary用とTODO用の指示文は設定、CLI、MCPから編集できます。
 - cloudを選んだ場合は対象日の発話、memo、予定の時刻と件名、各指示文を送ります。録音audio、通常の音声入力履歴、前面app情報は送りません。
 - Groqで選んだmodelにかかわらず、summaryとTODO案は再現性を優先する温度0、modelが対応する最小の推論量、共通のJSON出力contractで生成します。APIが対応する最も強いschema制約を使い、最終的にKoeが同じ型として検証します。推論本文は応答dataへ含めません。
@@ -128,10 +129,12 @@ cloud音声入力で送るのは今回の文字起こし、共通rule、mode指�
 
 ## 5. 画面と設定
 
+Koeのprimary colorはapp icon由来の爽やかなblueに固定し、利用者がcolor themeを切り替える設定は持ちません。録音、成功、警告は同じbrand paletteに合わせたsemantic colorを全画面で共有します。
+
 | 場所 | 公開機能 |
 |---|---|
-| Menu bar | ライフログ/音声入力の用途別quick action。ライフログは記録切替、今日の画面、mini window、音声入力は録音、mode、直前結果、履歴を各tab内にまとめ、共通footerは設定と終了だけを置く |
-| Main window | 通常起動時にライフログを選択して表示。onboarding、ライフログ、今日のtimeline最下部からの手入力・音声memo追加、音声入力履歴 |
+| Menu bar | ライフログ/音声入力の用途別quick action。ライフログは記録切替、今日の画面、mini window、音声入力は録音、mode、直前結果、履歴を各tab内にまとめ、共通footerは設定と終了だけを置く。「今日を開く」「ミニウィンドウ」はsystem fontを直接描画するcompact buttonとする |
+| Main window | 通常起動時にライフログを選択して表示。onboarding、ライフログ、今日のtimeline最下部からの手入力・音声memo追加、音声入力履歴。停止中のcapture操作はrose色の録音記号と「録音を開始」、録音中は停止記号と「録音を停止」を表示する |
 | Mini window | ライフログ状態、今日のtimelineへの手入力・音声memo追加。常に手前を設定可能 |
 | 全TODO window | draft確認、編集、確定、完了、再開、削除 |
 | Settings: 共通 | 一般、利用状況、語彙、privacy、連携 |
@@ -216,7 +219,7 @@ koe search "検索語" [--limit N]
 6. 保留ライフログchunkは再起動後に再処理される。
 7. migration前backupと日次backupが作られ、合計7file以内に保たれる。
 8. CLI、MCP、Shortcutsの公開interfaceが本書と一致する。
-9. ライフログの実録音中だけmenu barにKoeのapp iconと右下の録音色badgeが表示され、停止または再接続待ちでは通常表示へ戻る。
+9. ライフログの実録音中だけmenu barのmonochrome Koe icon右下にrose色badgeが表示され、停止または再接続待ちではbadgeなしへ戻る。
 10. ライフログ記録中に成功した音声入力は一件だけ表示・検索・書き出し・派生処理へ現れ、cancelまたは失敗した音声入力の時間帯はライフログ発話が失われない。
 11. 当日のライブsummaryは未来の予定を実施済みとして書かず、日付変更後の最終summaryはその日の全予定を含む。
 12. Calendar設定から予定を再取得すると、現在選択日のsnapshot、timeline、月間activityが更新される。

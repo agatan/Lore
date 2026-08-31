@@ -287,7 +287,12 @@ public struct LifeLogStore: Sendable {
             try db.execute(sql: """
                 INSERT INTO life_log_memos VALUES (?, ?, ?)
                 ON CONFLICT(id) DO UPDATE SET text=excluded.text
-                """, arguments: [value.id, date(value.createdAt), value.text])
+            """, arguments: [value.id, date(value.createdAt), value.text])
+        }
+    }
+    public func memo(id: String) async throws -> LifeLogMemo? {
+        try await queue.read { db in
+            try Row.fetchOne(db, sql: "SELECT * FROM life_log_memos WHERE id=?", arguments: [id]).map(decodeMemo)
         }
     }
     public func deleteMemo(id: String) async throws {

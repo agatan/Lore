@@ -61,9 +61,9 @@ enum ScreenshotDemoData {
         try await database.lifeLog.save(memo: LifeLogMemo(id: "demo-memo-1", createdAt: time(11, 6), text: "オンボーディングは3つの価値が順番に伝わる構成にする"))
         try await database.lifeLog.save(memo: LifeLogMemo(id: "demo-memo-2", createdAt: time(15, 20), text: "マニュアルには日別エクスポートの選択画面も載せる"))
 
-        try await database.lifeLog.save(todo: LifeLogTodo(id: "demo-todo-1", title: "外部ベータの確認項目をまとめる", createdAt: time(10, 25)))
-        try await database.lifeLog.save(todo: LifeLogTodo(id: "demo-todo-2", title: "LP用スクリーンショットを選ぶ", createdAt: time(14, 48)))
-        try await database.lifeLog.save(todo: LifeLogTodo(id: "demo-todo-3", title: "書き出し結果を別のLLMで試す", status: .draft, createdAt: time(16, 20)))
+        try await database.lifeLog.save(todo: LifeLogTodo(id: "demo-todo-1", title: "外部ベータの確認項目をまとめる", createdAt: time(10, 25), sourceUtteranceIDs: ["demo-utterance-2"]))
+        try await database.lifeLog.save(todo: LifeLogTodo(id: "demo-todo-2", title: "LP用スクリーンショットを選ぶ", createdAt: time(14, 48), sourceUtteranceIDs: ["demo-utterance-4"]))
+        try await database.lifeLog.save(todo: LifeLogTodo(id: "demo-todo-3", title: "書き出し結果を別のLLMで試す", status: .draft, createdAt: time(16, 20), sourceUtteranceIDs: ["demo-utterance-5"]))
         try await database.lifeLog.save(todo: LifeLogTodo(id: "demo-todo-4", title: "初回体験の文言を確認する", status: .completed, createdAt: time(9, 5), completedAt: time(12, 10)))
 
         try await database.lifeLog.save(summary: DailySummary(
