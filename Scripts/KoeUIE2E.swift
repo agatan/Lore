@@ -159,6 +159,8 @@ private enum KoeUIE2E {
 
         _ = try ui.waitFor(identifier: "main.section-picker")
         _ = try ui.waitFor(identifier: "life-log.voice-memo")
+        _ = try ui.waitFor(identifier: "life-log.capture-toggle")
+        _ = try ui.waitFor(identifier: "life-log.timeline-divider")
         try ui.press(identifier: "life-log.todo-source-demo-todo-1")
         try ui.press(identifier: "main.section.history")
         _ = try ui.waitFor(identifier: "history.root")

@@ -515,15 +515,10 @@ public final class AppEnvironment {
         coordinator.isVoiceMemoRecording || (!coordinator.isBusy && !isPreparingVoiceMemo)
     }
 
-    public func setLifeLogMiniWindowAlwaysOnTop(_ enabled: Bool) {
-        settings.lifeLogMiniWindowAlwaysOnTop = enabled
-        applyLifeLogMiniWindowLevel()
-    }
-
     public func applyLifeLogMiniWindowLevel() {
         guard let window = NSApp.windows.first(where: { $0.identifier?.rawValue == KoeWindow.lifeLogMini }) else { return }
-        window.level = settings.lifeLogMiniWindowAlwaysOnTop ? .floating : .normal
-        window.collectionBehavior = settings.lifeLogMiniWindowAlwaysOnTop ? [.fullScreenAuxiliary] : []
+        window.level = .floating
+        window.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
     }
 
     // MARK: 権限

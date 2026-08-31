@@ -9,6 +9,8 @@ public struct LifeLogWindow: View {
     @State private var showsExportSheet = false
     @State private var showsSearchSheet = false
     @State private var memoDraft = ""
+    @State private var calendarColumnWidth: CGFloat = 120
+    @State private var didSetInitialCalendarWidth = false
 
     public init(env: AppEnvironment) { self.env = env }
 
@@ -27,11 +29,8 @@ public struct LifeLogWindow: View {
                 endPoint: .bottomTrailing
             ).ignoresSafeArea()
         }
-        .toolbar {
-            ToolbarItem(placement: .primaryAction) { captureButton }
-        }
         .task {
-            await env.lifeLog.reload()
+            await env.lifeLog.followCurrentDay()
             await env.lifeLog.loadActivity(containing: env.lifeLog.selectedDate)
             if !AppEnvironment.usesScreenshotDemoData {
                 await env.lifeLog.refreshCalendar(selectedCalendars: Set(env.settings.lifeLogCalendarTitles))
@@ -48,27 +47,6 @@ public struct LifeLogWindow: View {
         .sheet(isPresented: $showsSearchSheet) {
             LifeLogSearchSheet(env: env)
         }
-    }
-
-    private var captureButton: some View {
-        Button {
-            setCaptureEnabled(!hasCaptureIntent)
-        } label: {
-            Label(
-                hasCaptureIntent ? "録音を停止" : "録音を開始",
-                systemImage: hasCaptureIntent ? "stop.circle.fill" : "record.circle.fill"
-            )
-        }
-        .buttonStyle(.borderedProminent)
-        .labelStyle(.titleAndIcon)
-        .controlSize(.large)
-        .tint(KoeTheme.recording)
-        .help(hasCaptureIntent ? "ライフログ録音を停止" : "ライフログ録音を開始")
-        .accessibilityIdentifier("life-log.capture-toggle")
-    }
-
-    private var hasCaptureIntent: Bool {
-        env.lifeLog.isCapturing || env.lifeLog.isRecoveringCapture || env.lifeLog.isSuspendedForVoiceMemo
     }
 
     private var left: some View {
@@ -105,6 +83,7 @@ public struct LifeLogWindow: View {
     }
 
     private var timeline: some View {
+        GeometryReader { geometry in
         VStack(spacing: 0) {
             panelHeader("Timeline", symbol: "calendar.day.timeline.left") {
                 HStack(spacing: 10) {
@@ -115,18 +94,17 @@ public struct LifeLogWindow: View {
                 }
             }
             Divider().opacity(0.4)
+            timelineColumnHeader
+            Divider().opacity(0.4)
             ScrollViewReader { proxy in
                 ScrollView {
                     LazyVStack(alignment: .leading, spacing: 0) {
                         ForEach(timelineItems, id: \.id) { item in
                             timelineRow(item)
-                            Divider().padding(.leading, 92).opacity(0.25)
+                            Divider().opacity(0.25)
                         }
-                        if showsLiveCapture {
-                            liveCaptureRow
-                                .id("live-capture")
-                        }
-                    }.id("timeline-bottom")
+                        Color.clear.frame(height: 1).id("timeline-bottom")
+                    }
                 }
                 .onChange(of: timelineItems.count) { old, new in
                     guard new > old else { return }
@@ -136,12 +114,33 @@ public struct LifeLogWindow: View {
                     guard let id = env.lifeLog.highlightedTimelineItemID else { return }
                     withAnimation { proxy.scrollTo(id, anchor: .center) }
                 }
-                .overlay { if timelineItems.isEmpty && !showsLiveCapture { timelineEmptyState } }
+                .task {
+                    await Task.yield()
+                    proxy.scrollTo("timeline-bottom", anchor: .bottom)
+                }
+                .overlay { if timelineItems.isEmpty { timelineEmptyState } }
             }
             if let error = env.lifeLog.errorMessage {
-                Label(error, systemImage: "exclamationmark.triangle.fill")
-                    .font(.caption).foregroundStyle(KoeTheme.recording).padding(8)
+                NoticeBanner(
+                    title: "ライフログを継続しています",
+                    message: error,
+                    tint: KoeTheme.warning,
+                    actionTitle: nil,
+                    action: nil,
+                    onDismiss: env.lifeLog.dismissError
+                )
+                .padding(8)
+                .accessibilityIdentifier("life-log.notice")
             }
+            Divider().opacity(0.35)
+            LifeLogCaptureControl(
+                lifeLog: env.lifeLog,
+                accessibilityIdentifier: "life-log.capture-toggle"
+            ) {
+                setCaptureEnabled(!env.lifeLog.hasCaptureIntent)
+            }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 8)
             if Calendar.current.isDateInToday(env.lifeLog.selectedDate) {
                 Divider().opacity(0.35)
                 LifeLogMemoComposer(
@@ -158,50 +157,75 @@ public struct LifeLogWindow: View {
                 .padding(10)
             }
         }
+        .task {
+            guard !didSetInitialCalendarWidth else { return }
+            calendarColumnWidth = min(240, max(90, geometry.size.width * 0.15))
+            didSetInitialCalendarWidth = true
+        }
+        }
         .raisedGlass(cornerRadius: 22)
     }
 
-    private var showsLiveCapture: Bool {
-        Calendar.current.isDateInToday(env.lifeLog.selectedDate)
-            && (env.lifeLog.isCapturing || env.lifeLog.isTranscribing)
-    }
-
-    private var liveCaptureRow: some View {
-        HStack(alignment: .top, spacing: 12) {
-            Text(Date.now.formatted(date: .omitted, time: .shortened))
-                .font(.system(size: 10.5, weight: .medium, design: .monospaced))
-                .foregroundStyle(.tertiary)
-                .frame(width: 64, alignment: .leading)
-            HStack(spacing: 7) {
-                LiveWaveform()
-                Text(env.lifeLog.captureStatusText)
-                    .font(.system(size: 10.5, weight: .semibold, design: .rounded))
-                    .foregroundStyle(KoeTheme.accent)
-            }
+    private var timelineColumnHeader: some View {
+        HStack(spacing: 0) {
+            Text("Calendar")
+                .font(.system(size: 10.5, weight: .semibold, design: .rounded))
+                .foregroundStyle(.secondary)
+                .padding(.leading, 10)
+                .frame(width: calendarColumnWidth, alignment: .leading)
+            ResizableDivider(width: $calendarColumnWidth, minimum: 90, maximum: 240)
+                .accessibilityIdentifier("life-log.timeline-divider")
+            Text("発話・メモ")
+                .font(.system(size: 10.5, weight: .semibold, design: .rounded))
+                .foregroundStyle(.secondary)
+                .padding(.leading, 12)
             Spacer(minLength: 0)
         }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 12)
-        .background(KoeTheme.accent.opacity(0.055))
+        .frame(height: 28)
     }
 
     private var timelineEmptyState: some View {
-        VStack(spacing: 14) {
-            Image(systemName: env.lifeLog.isCapturing ? "waveform" : "waveform.slash")
+        VStack(spacing: 10) {
+            Image(systemName: env.lifeLog.hasCaptureIntent ? "waveform" : "waveform.slash")
                 .font(.system(size: 32, weight: .light))
-                .foregroundStyle(env.lifeLog.isCapturing ? KoeTheme.accent : Color.secondary.opacity(0.42))
-            if env.lifeLog.isCapturing {
-                Text("Listening").font(.system(size: 12, weight: .medium, design: .rounded))
-                    .foregroundStyle(.secondary.opacity(0.55))
-            } else {
-                Button { setCaptureEnabled(true) } label: { Label("Start", systemImage: "record.circle") }
-                    .buttonStyle(.borderedProminent)
+                .foregroundStyle(env.lifeLog.hasCaptureIntent ? KoeTheme.accent : Color.secondary.opacity(0.42))
+            Text(env.lifeLog.hasCaptureIntent ? "発話を待っています" : "この日の記録はありません")
+                .font(.system(size: 12, weight: .medium, design: .rounded))
+                .foregroundStyle(.secondary.opacity(0.55))
+        }
+    }
+
+    private func timelineRow(_ item: TimelineItem) -> some View {
+        HStack(alignment: .top, spacing: 0) {
+            calendarCell(item)
+                .frame(width: calendarColumnWidth, alignment: .topLeading)
+            Rectangle().fill(.separator).frame(width: 1)
+            activityCell(item)
+                .frame(maxWidth: .infinity, alignment: .topLeading)
+        }
+        .id(item.id)
+    }
+
+    @ViewBuilder
+    private func calendarCell(_ item: TimelineItem) -> some View {
+        if case .event(let value) = item.kind {
+            VStack(alignment: .leading, spacing: 4) {
+                Text(timeRange(from: value.startsAt, to: value.endsAt))
+                    .font(.system(size: 9.5, design: .monospaced))
+                    .foregroundStyle(.tertiary)
+                Text(value.title)
+                    .font(.system(size: 11, weight: .semibold))
+                    .fixedSize(horizontal: false, vertical: true)
             }
+            .padding(.horizontal, 10)
+            .padding(.vertical, 10)
+        } else {
+            Color.clear.frame(height: 1)
         }
     }
 
     @ViewBuilder
-    private func timelineRow(_ item: TimelineItem) -> some View {
+    private func activityCell(_ item: TimelineItem) -> some View {
         switch item.kind {
         case .utterance(let value):
             HStack(alignment: .top, spacing: 12) {
@@ -213,17 +237,8 @@ public struct LifeLogWindow: View {
             }
             .padding(.horizontal, 16).padding(.vertical, 11)
             .background(env.lifeLog.highlightedTimelineItemID == "u-\(value.id)" ? KoeTheme.accent.opacity(0.12) : .clear)
-            .id("u-\(value.id)")
-        case .event(let value):
-            HStack(spacing: 10) {
-                Text(timeRange(from: value.startsAt, to: value.endsAt))
-                    .font(.system(size: 10.5, design: .monospaced))
-                    .frame(width: 92, alignment: .leading)
-                Circle().fill(KoeTheme.accentSecondary).frame(width: 5, height: 5)
-                Text(value.title).font(.system(size: 11.5, weight: .semibold))
-                Spacer()
-            }
-            .padding(.horizontal, 16).padding(.vertical, 10).foregroundStyle(.secondary)
+        case .event:
+            Color.clear.frame(height: 1)
         case .dictation(let value):
             HStack(alignment: .top, spacing: 12) {
                 Text(value.startedAt.formatted(date: .omitted, time: .shortened))
@@ -258,7 +273,6 @@ public struct LifeLogWindow: View {
             }
             .padding(.horizontal, 16).padding(.vertical, 11)
             .background(env.lifeLog.highlightedTimelineItemID == "m-\(value.id)" ? KoeTheme.accent.opacity(0.12) : .clear)
-            .id("m-\(value.id)")
         }
     }
 
@@ -336,7 +350,11 @@ public struct LifeLogWindow: View {
                                         .foregroundStyle(todo.status == .completed ? KoeTheme.success : .secondary)
                                 }.buttonStyle(.plain)
                             }
-                            TextField("TODO", text: todoTitle(todo)).textFieldStyle(.plain).font(.system(size: 12))
+                            TextField("TODO", text: todoTitle(todo), axis: .vertical)
+                                .textFieldStyle(.plain)
+                                .font(.system(size: 12))
+                                .lineLimit(1...6)
+                                .fixedSize(horizontal: false, vertical: true)
                                 .strikethrough(todo.status == .completed)
                             Spacer()
                             if todo.status == .draft {

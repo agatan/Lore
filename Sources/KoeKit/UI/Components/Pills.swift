@@ -203,6 +203,7 @@ struct NoticeBanner: View {
     var tint: Color = KoeTheme.warning
     var actionTitle: String?
     var action: (() -> Void)?
+    var onDismiss: (() -> Void)? = nil
 
     var body: some View {
         HStack(alignment: .top, spacing: 10) {
@@ -222,6 +223,16 @@ struct NoticeBanner: View {
                 Button(actionTitle, action: action)
                     .buttonStyle(.borderless)
                     .font(.system(size: 11, weight: .medium))
+            }
+            if let onDismiss {
+                Button(action: onDismiss) {
+                    Image(systemName: "xmark")
+                        .font(.system(size: 10, weight: .semibold))
+                        .foregroundStyle(.secondary)
+                }
+                .buttonStyle(.plain)
+                .help("閉じる")
+                .accessibilityLabel("通知を閉じる")
             }
         }
         .padding(12)

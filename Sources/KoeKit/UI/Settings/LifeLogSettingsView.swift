@@ -28,14 +28,6 @@ struct LifeLogSettingsView: View {
                     )
                     .accessibilityIdentifier("life-log.voice-memo-hotkey")
                 }
-                Divider()
-                SettingsRow(title: "常に手前に表示", caption: "ミニウィンドウを他のアプリより前に置きます") {
-                    Toggle("", isOn: Binding(
-                        get: { settings.lifeLogMiniWindowAlwaysOnTop },
-                        set: { env.setLifeLogMiniWindowAlwaysOnTop($0) }
-                    ))
-                    .labelsHidden()
-                }
                 if let error = env.hotkeyError {
                     Text(error).font(.system(size: 11)).foregroundStyle(KoeTheme.recording)
                 }

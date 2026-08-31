@@ -70,44 +70,11 @@ struct MenuBarPanel: View {
 
     private var lifeLogTab: some View {
         VStack(spacing: 10) {
-            HStack(spacing: 12) {
-                ZStack {
-                    Circle()
-                        .fill(env.lifeLog.isCapturing ? KoeTheme.recording.opacity(0.14) : Color.secondary.opacity(0.09))
-                        .frame(width: 42, height: 42)
-                    Image(systemName: lifeLogStatusSymbol)
-                        .font(.system(size: 17, weight: .semibold))
-                        .foregroundStyle(env.lifeLog.isCapturing ? KoeTheme.recording : Color.secondary)
-                        .symbolEffect(.variableColor.iterative, isActive: env.lifeLog.isCapturing)
-                        .symbolEffect(.rotate, options: .repeating, isActive: env.lifeLog.isRecoveringCapture)
-                }
-
-                VStack(alignment: .leading, spacing: 3) {
-                    Text(lifeLogStatusTitle)
-                        .font(.system(size: 12.5, weight: .semibold))
-                    Text(env.lifeLog.captureStatusText)
-                        .font(.system(size: 10.5))
-                        .foregroundStyle(.secondary)
-                }
-                .frame(maxWidth: .infinity, alignment: .leading)
-
-                Button {
-                    env.setLifeLogCaptureEnabled(!lifeLogCaptureRequested)
-                } label: {
-                    Image(systemName: lifeLogCaptureRequested ? "stop.fill" : "record.circle.fill")
-                        .font(.system(size: 13, weight: .bold))
-                        .foregroundStyle(.white)
-                        .frame(width: 34, height: 34)
-                        .background(
-                            lifeLogCaptureRequested ? AnyShapeStyle(KoeTheme.recordingGradient) : AnyShapeStyle(KoeTheme.voiceGradient),
-                            in: Circle()
-                        )
-                        .contentTransition(.symbolEffect(.replace))
-                }
-                .buttonStyle(.plain)
-                .help(lifeLogCaptureRequested ? "ライフログ記録を停止" : "ライフログ記録を開始")
-                .accessibilityLabel(lifeLogCaptureRequested ? "ライフログ記録を停止" : "ライフログ記録を開始")
-                .accessibilityIdentifier("menu.life-log.capture-toggle")
+            LifeLogCaptureControl(
+                lifeLog: env.lifeLog,
+                accessibilityIdentifier: "menu.life-log.capture-toggle"
+            ) {
+                env.setLifeLogCaptureEnabled(!env.lifeLog.hasCaptureIntent)
             }
             .padding(12)
             .sunkenSurface()
@@ -233,24 +200,6 @@ struct MenuBarPanel: View {
         }
         .foregroundStyle(.secondary)
         .padding(.horizontal, 2)
-    }
-
-    private var lifeLogCaptureRequested: Bool {
-        env.settings.lifeLogCaptureEnabled
-    }
-
-    private var lifeLogStatusTitle: String {
-        if env.lifeLog.isCapturing { return "記録中" }
-        if env.lifeLog.isRecoveringCapture { return "再接続中" }
-        if env.lifeLog.isTranscribing { return "文字起こし中" }
-        return "ライフログ"
-    }
-
-    private var lifeLogStatusSymbol: String {
-        if env.lifeLog.isCapturing { return "waveform" }
-        if env.lifeLog.isRecoveringCapture { return "arrow.clockwise" }
-        if env.lifeLog.isTranscribing { return "text.bubble" }
-        return "waveform.slash"
     }
 
     private func open(_ section: MainSection) {

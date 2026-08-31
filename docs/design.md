@@ -47,6 +47,8 @@ KoeMCP ──┘
 6. `LifeLogCoordinator.configure`後、保留audio chunkをバックグラウンド再処理する。
 7. UI test用の明示的な遷移がなければ`mainSection = .lifeLog`としてmain windowを開く。
 
+`LifeLogWindow`と`LifeLogMiniWindow`は表示開始時に`LifeLogCoordinator.followCurrentDay()`で今日を読み込み、読込完了後の表示revisionを使ってtimeline末尾へscrollします。TODOの出典移動は専用の`sourceNavigationRevision`を使い、自動的な末尾移動より優先します。
+
 終了時はApp delegateが進行中の音声writer、認識、DB保存、停止時派生処理を最大20秒待ちます。時間切れでも確定済みaudio chunkは次回起動時の再処理対象です。
 
 ## 4. 音声入力パイプライン
@@ -137,7 +139,7 @@ DBは`~/Library/Application Support/Koe/koe.sqlite`です。`DatabaseQueue`を�
 ## 8. 設定、秘密、プロセス間同期
 
 - `AppSettings.Storage`はsuite `dev.agatan.Koe`のUserDefaults key `koe.settings.v1`へJSONで保存します。
-- provider/modelは音声入力とライフログで別設定です。通常音声入力、ライフログcapture、mini window、ボイスメモのhotkey、保持期間、calendar filter、summary間隔、表示設定もここに入ります。Color themeは設定として保持せず、`KoeTheme`の固定brand tokenを使います。
+- provider/modelは音声入力とライフログで別設定です。通常音声入力、ライフログcapture、mini window、ボイスメモのhotkey、保持期間、calendar filter、summary間隔をここに入れます。Mini windowは常時手前を不変条件とし、表示levelの設定は持ちません。Color themeも設定として保持せず、`KoeTheme`の固定brand tokenを使います。
 - API keyはUserDefaultsやDBには入れずKeychainへ保存します。
 - CLI/MCPによるTODOまたはprompt変更は`DistributedNotificationCenter`でアプリへ通知し、`AppEnvironment`が再読込します。
 
@@ -149,13 +151,15 @@ DBは`~/Library/Application Support/Koe/koe.sqlite`です。`DatabaseQueue`を�
 | `MenuBarPanel` | 用途別quick action。ライフログtabはcompactなcapture状態と記録切替、今日のmain/mini window入口、音声入力tabは録音、hotkey、mode、直前結果、履歴入口を持つ。共通footerは設定と終了だけに限定する。Main/mini入口はglass buttonによるtext rasterizationを避け、plain button内にsystem fontを直接描画する |
 | `MenuBarLabel` | 音声入力のphase、入力level、ライフログcapture状態。`LifeLogCoordinator.isCapturing`中もKoe icon本体はmonochrome maskとして描画し、右下のrose色badgeだけを着色する。停止中または`isRecoveringCapture`のみの状態ではbadgeなしのmonochrome表示にする |
 | `MainWindowView` | `lifeLog` / `history`のsegmented切替。初回はonboarding、通常起動は`lifeLog`を開く |
-| `LifeLogWindow` | 月間activity、日別timeline、summary、global TODO。Toolbarのcapture buttonは録音開始/停止というaction label、record/stop symbol、録音色を組み合わせる。今日のtimeline最下部に`LifeLogMemoComposer`を置く。TODOにsource provenanceがある場合はラベル付きの「元の発言へ」を表示し、対象日の再読込後に発話またはmemoのtimeline IDへscrollして強調する |
+| `LifeLogWindow` | 月間activity、日別timeline、summary、global TODO。Timeline本体は共通時刻順のrowを、初期幅15%で`ResizableDivider`により可変なcalendar event columnと、残りのutterance/dictation/memo columnへ投影し、一つの縦scrollで動かす。表示開始時は今日を読み込んで末尾へscrollする。Toolbarにはcapture操作を置かず、今日のtimeline末尾の状態表示に`LifeLogCaptureControl`を置き、その下に`LifeLogMemoComposer`を置く。TODO本文はvertical axisを持つ複数行入力にし、source provenanceがある場合はラベル付きの「元の発言へ」を表示して該当行を中央へscroll・強調する |
+| `LifeLogCaptureControl` | Main、mini、menu barで共有するcapture状態と開始・停止操作。停止中の開始はblue/cyanのrecord、記録開始意図がある間の停止はroseのstopとして、symbol、文言、semantic colorを一か所で決める。Main/miniでは状態textの隣へ配置する |
 | `HistoryBrowserView` | 音声入力履歴、検索、詳細、コピー、削除 |
-| `LifeLogMiniWindow` | capture状態と`LifeLogMemoComposer`による今日のmemo入力 |
+| `LifeLogMiniWindow` | 表示時に今日を読み込んでtimeline末尾へscrollし、`LifeLogCaptureControl`と`LifeLogMemoComposer`を表示する。`AppEnvironment`がwindow levelを常に`.floating`、collection behaviorを`.canJoinAllSpaces`と`.fullScreenAuxiliary`に固定し、利用者がclose buttonまたはtoggle hotkeyを使うまで非表示にしない |
 | `LifeLogMemoComposer` | main/mini windowで共有するchat形式のmemo入力。空白を除外し、送信済みtextをclearして`LifeLogCoordinator.addMemo`へ渡す。送信と音声は同じ直径の円形controlにし、音声ボタンは`AppEnvironment.toggleVoiceMemo`と同じactionを受け、準備中、録音中、別処理中の状態だけを描画する |
-| `LifeLogTodoManagerWindow` | 全TODOの編集、確定、完了、再開、削除 |
+| `LifeLogTodoManagerWindow` | 全TODOの編集、確定、完了、再開、削除。TODO本文はvertical axisを持つ複数行入力とし、本文量に応じてrowを広げる |
 | `LifeLogCalendarSettingsView` | calendar選択、参加filter、選択日の予定を明示的に再取得する操作と進行状態 |
 | `SettingsWindowView` | 一般、利用状況、語彙、privacy、連携、音声入力、AI整形、mode、ライフログ、要約とTODO、calendar |
+| `DismissibleNoticeBanner` | 継続可能なmessageと明示的な`×`を表示する。Dismiss actionは表示stateだけをclearし、capture requestやretry taskを変更しない |
 | `HudController` / `HudView` | 通常音声入力またはボイスメモのrecordingから終了までの一時表示 |
 
 ## 10. 自動化境界
@@ -181,6 +185,7 @@ DBは`~/Library/Application Support/Koe/koe.sqlite`です。`DatabaseQueue`を�
 | live summaryの時点変更 | `LifeLogDerivationService`, `LifeLogCoordinator` | 過去・進行中・未来予定と日次finalizeのtest、spec/design |
 | 公開自動化変更 | `KoeAutomationService`, CLI/MCP/AppIntents | tool schema/help、spec.md/spec.html |
 | 主要window変更 | `KoeApp`, 対応View, `AppEnvironment` | `make ui-test`、spec/design |
+| life-log timeline・TODO表示変更 | `LifeLogWindow`, `LifeLogMiniWindow`, `LifeLogTodoManagerWindow` | 初期scroll、2column、長文TODO、状態操作、dismiss操作のUI test、spec/design |
 | menu bar状態表示変更 | `MenuBarLabel`, `DictationCoordinator`, `LifeLogCoordinator` | 状態別表示test、`make ui-test`、spec/design |
 | 音声構成変更時の再接続 | `ContinuousAudioCapture`, `LifeLogCoordinator` | retry policyと一時停止状態test、`swift test`、spec/design |
 | life-log audio保持policy | `AppSettings`, `LifeLogStore`, `AppEnvironment`, `LifeLogSettingsView` | 処理成功・未処理・失敗・7日/30日境界test、`swift test`、spec/design |

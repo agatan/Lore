@@ -6,21 +6,11 @@ struct LifeLogMiniWindow: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            HStack(spacing: 10) {
-                Label("ライフログ", systemImage: "waveform")
-                    .font(.system(size: 13, weight: .semibold, design: .rounded))
-                Spacer()
-                Toggle(isOn: Binding(
-                    get: { env.lifeLog.isCapturing },
-                    set: { enabled in
-                        env.setLifeLogCaptureEnabled(enabled)
-                    }
-                )) {
-                    Image(systemName: env.lifeLog.isCapturing ? "record.circle.fill" : "record.circle")
-                }
-                .toggleStyle(.button)
-                .tint(env.lifeLog.isCapturing ? KoeTheme.recording : KoeTheme.accent)
-                .help(env.lifeLog.isCapturing ? "記録を止める" : "記録を始める")
+            LifeLogCaptureControl(
+                lifeLog: env.lifeLog,
+                accessibilityIdentifier: "life-log-mini.capture-toggle"
+            ) {
+                env.setLifeLogCaptureEnabled(!env.lifeLog.hasCaptureIntent)
             }
             .padding(12)
 
@@ -55,6 +45,10 @@ struct LifeLogMiniWindow: View {
                 .onChange(of: items.count) { old, new in
                     guard new > old else { return }
                     withAnimation { proxy.scrollTo("bottom", anchor: .bottom) }
+                }
+                .task {
+                    await Task.yield()
+                    proxy.scrollTo("bottom", anchor: .bottom)
                 }
                 .overlay {
                     if items.isEmpty && !env.lifeLog.isCapturing && !env.lifeLog.isTranscribing {
@@ -95,9 +89,6 @@ struct LifeLogMiniWindow: View {
         .task {
             env.applyLifeLogMiniWindowLevel()
             await env.lifeLog.followCurrentDay()
-        }
-        .onChange(of: env.settings.lifeLogMiniWindowAlwaysOnTop) { _, _ in
-            env.applyLifeLogMiniWindowLevel()
         }
     }
 

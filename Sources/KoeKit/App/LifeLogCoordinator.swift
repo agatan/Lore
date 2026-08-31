@@ -158,6 +158,12 @@ public final class LifeLogCoordinator {
         return "停止中"
     }
 
+    public var hasCaptureIntent: Bool { captureRequested }
+
+    public func dismissError() {
+        errorMessage = nil
+    }
+
     /// 終了前に音声・文字起こし・派生処理の確定を待つ必要がある状態。
     /// 記録開始要求から実際のcapture開始までの隙間も含める。
     public var hasPendingTerminationWork: Bool {

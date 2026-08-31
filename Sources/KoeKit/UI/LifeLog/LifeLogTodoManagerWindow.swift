@@ -107,9 +107,11 @@ struct LifeLogTodoManagerWindow: View {
             .help(todo.status == .completed ? "未実施に戻す" : "完了にする")
 
             VStack(alignment: .leading, spacing: 5) {
-                TextField("TODO", text: title(todo))
+                TextField("TODO", text: title(todo), axis: .vertical)
                     .textFieldStyle(.plain)
                     .font(.system(size: 13.5, weight: .medium))
+                    .lineLimit(1...8)
+                    .fixedSize(horizontal: false, vertical: true)
                     .strikethrough(todo.status == .completed)
                 HStack(spacing: 8) {
                     Text("作成 \(todo.createdAt.formatted(.dateTime.year().month().day()))")

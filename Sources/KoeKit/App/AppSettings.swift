@@ -80,7 +80,6 @@ public final class AppSettings {
         public var lifeLogSummaryIntervalMinutes: Int = 60
         public var lifeLogTodoPrompt: String = BuiltinLifeLogPrompts.todo
         public var lifeLogSummaryPrompt: String = BuiltinLifeLogPrompts.summary
-        public var lifeLogMiniWindowAlwaysOnTop: Bool = false
 
         init() {}
 
@@ -129,7 +128,6 @@ public final class AppSettings {
             lifeLogSummaryIntervalMinutes = try container.decodeIfPresent(Int.self, forKey: .lifeLogSummaryIntervalMinutes) ?? 60
             lifeLogTodoPrompt = try container.decodeIfPresent(String.self, forKey: .lifeLogTodoPrompt) ?? fallback.lifeLogTodoPrompt
             lifeLogSummaryPrompt = try container.decodeIfPresent(String.self, forKey: .lifeLogSummaryPrompt) ?? fallback.lifeLogSummaryPrompt
-            lifeLogMiniWindowAlwaysOnTop = try container.decodeIfPresent(Bool.self, forKey: .lifeLogMiniWindowAlwaysOnTop) ?? false
         }
     }
 
@@ -315,7 +313,6 @@ public final class AppSettings {
     public var lifeLogSummaryIntervalMinutes: Int { get { storage.lifeLogSummaryIntervalMinutes } set { storage.lifeLogSummaryIntervalMinutes = max(15, newValue); persist() } }
     public var lifeLogTodoPrompt: String { get { storage.lifeLogTodoPrompt } set { storage.lifeLogTodoPrompt = newValue; persist() } }
     public var lifeLogSummaryPrompt: String { get { storage.lifeLogSummaryPrompt } set { storage.lifeLogSummaryPrompt = newValue; persist() } }
-    public var lifeLogMiniWindowAlwaysOnTop: Bool { get { storage.lifeLogMiniWindowAlwaysOnTop } set { storage.lifeLogMiniWindowAlwaysOnTop = newValue; persist() } }
     /// 「Koeの全データを削除」で設定も初期状態へ戻す。
     public func resetAll() {
         storage = Storage()
