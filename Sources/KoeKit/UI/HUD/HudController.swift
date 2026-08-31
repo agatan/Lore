@@ -27,6 +27,7 @@ final class HudController {
         withObservationTracking {
             _ = coordinator.phase
             _ = settings.hudEnabled
+            _ = settings.applicationLanguage
         } onChange: { [weak self] in
             Task { @MainActor [weak self] in
                 guard let self else { return }
@@ -78,7 +79,7 @@ final class HudController {
 
     private func makePanel() -> NSPanel {
         let hosting = NSHostingController(
-            rootView: HudView(coordinator: coordinator) { [weak self] in
+            rootView: HudLocalizedView(coordinator: coordinator, settings: settings) { [weak self] in
                 self?.coordinator.cancel()
             }
         )
@@ -126,5 +127,16 @@ final class HudController {
             y: frame.minY + 96
         )
         panel.setFrameOrigin(origin)
+    }
+}
+
+private struct HudLocalizedView: View {
+    var coordinator: DictationCoordinator
+    var settings: AppSettings
+    var onCancel: () -> Void
+
+    var body: some View {
+        HudView(coordinator: coordinator, onCancel: onCancel)
+            .environment(\.locale, settings.applicationLanguage.resolvedLocale())
     }
 }

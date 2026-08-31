@@ -5,6 +5,20 @@ struct GeneralSettingsView: View {
 
     var body: some View {
         LazyVStack(alignment: .leading, spacing: 20) {
+            SettingsCard(title: "表示") {
+                SettingsRow(title: "表示言語") {
+                    Picker("表示言語", selection: Binding(
+                        get: { env.settings.applicationLanguage },
+                        set: { env.settings.applicationLanguage = $0 }
+                    )) {
+                        ForEach(ApplicationLanguage.allCases) { language in
+                            Text(LocalizedStringKey(language.label)).tag(language)
+                        }
+                    }
+                    .labelsHidden()
+                    .frame(width: 180)
+                }
+            }
             SettingsCard(title: "起動") {
                 SettingsToggle(
                     title: "ログイン時に起動する",

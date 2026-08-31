@@ -5,6 +5,7 @@ struct Pill: View {
     var text: String
     var systemImage: String?
     var tint: Color = .secondary
+    var localized = false
 
     var body: some View {
         HStack(spacing: 3) {
@@ -12,8 +13,13 @@ struct Pill: View {
                 Image(systemName: systemImage)
                     .font(.system(size: 9, weight: .semibold))
             }
-            Text(text)
-                .font(.system(size: 10.5, weight: .medium))
+            if localized {
+                Text(LocalizedStringKey(text))
+                    .font(.system(size: 10.5, weight: .medium))
+            } else {
+                Text(text)
+                    .font(.system(size: 10.5, weight: .medium))
+            }
         }
         .foregroundStyle(tint)
         .padding(.horizontal, 8)
@@ -49,7 +55,7 @@ struct StatusBadge: View {
     }
 
     var body: some View {
-        Pill(text: status.displayName, systemImage: symbol, tint: tint)
+        Pill(text: status.displayName, systemImage: symbol, tint: tint, localized: true)
     }
 }
 
@@ -135,10 +141,10 @@ struct SettingsRow<Control: View>: View {
     var body: some View {
         HStack(alignment: .firstTextBaseline, spacing: 16) {
             VStack(alignment: .leading, spacing: 2) {
-                Text(title)
+                Text(LocalizedStringKey(title))
                     .font(.system(size: 12))
                 if let caption {
-                    Text(caption)
+                    Text(LocalizedStringKey(caption))
                         .font(.system(size: 10.5))
                         .foregroundStyle(.secondary)
                 }
@@ -177,7 +183,7 @@ struct SettingsCard<Content: View>: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             if let title {
-                Text(title)
+                Text(LocalizedStringKey(title))
                     .font(.system(size: 12, weight: .semibold))
                     .foregroundStyle(.secondary)
             }
@@ -188,7 +194,7 @@ struct SettingsCard<Content: View>: View {
             .frame(maxWidth: .infinity, maxHeight: fillsVertically ? .infinity : nil, alignment: .leading)
             .raisedGlass()
             if let footnote {
-                Text(footnote)
+                Text(LocalizedStringKey(footnote))
                     .font(.system(size: 11))
                     .foregroundStyle(.secondary)
             }
@@ -211,16 +217,16 @@ struct NoticeBanner: View {
                 .foregroundStyle(tint)
                 .font(.system(size: 13))
             VStack(alignment: .leading, spacing: 2) {
-                Text(title)
+                Text(LocalizedStringKey(title))
                     .font(.system(size: 12, weight: .semibold))
-                Text(message)
+                Text(LocalizedStringKey(message))
                     .font(.system(size: 11))
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
             }
             Spacer(minLength: 4)
             if let actionTitle, let action {
-                Button(actionTitle, action: action)
+                Button(LocalizedStringKey(actionTitle), action: action)
                     .buttonStyle(.borderless)
                     .font(.system(size: 11, weight: .medium))
             }

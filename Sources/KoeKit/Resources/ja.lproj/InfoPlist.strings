@@ -1,0 +1,3 @@
+"NSMicrophoneUsageDescription" = "音声入力と、明示的に有効化したライフログのローカル音声保存にマイクを使います。";
+"NSCalendarsFullAccessUsageDescription" = "ライフログの時間軸に予定を重ね、発話との関連を保存するためにカレンダーを使います。";
+"NSSpeechRecognitionUsageDescription" = "オンデバイスの音声認識で文字起こしを行います。音声がこの Mac の外に出ることはありません。";

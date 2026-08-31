@@ -11,6 +11,7 @@ public struct KoeApp: App {
     public var body: some Scene {
         MenuBarExtra {
             MenuBarPanel(env: env)
+                .environment(\.locale, env.settings.applicationLanguage.resolvedLocale())
                 .tint(KoeTheme.accent)
                 .accentColor(KoeTheme.accent)
         } label: {
@@ -21,6 +22,7 @@ public struct KoeApp: App {
 
         Window("Koe", id: KoeWindow.main) {
             MainWindowView(env: env)
+                .environment(\.locale, env.settings.applicationLanguage.resolvedLocale())
                 .koeWindow()
                 .tint(KoeTheme.accent)
                 .accentColor(KoeTheme.accent)
@@ -30,6 +32,7 @@ public struct KoeApp: App {
 
         Window("Koe 設定", id: KoeWindow.settings) {
             SettingsWindowView(env: env)
+                .environment(\.locale, env.settings.applicationLanguage.resolvedLocale())
                 .koeWindow()
                 .tint(KoeTheme.accent)
                 .accentColor(KoeTheme.accent)
@@ -38,6 +41,7 @@ public struct KoeApp: App {
 
         Window("ライフログ ミニ", id: KoeWindow.lifeLogMini) {
             LifeLogMiniWindow(env: env)
+                .environment(\.locale, env.settings.applicationLanguage.resolvedLocale())
                 .koeWindow()
                 .tint(KoeTheme.accent)
                 .accentColor(KoeTheme.accent)
@@ -47,6 +51,7 @@ public struct KoeApp: App {
 
         Window("すべてのTODO", id: KoeWindow.lifeLogTodos) {
             LifeLogTodoManagerWindow(env: env)
+                .environment(\.locale, env.settings.applicationLanguage.resolvedLocale())
                 .koeWindow()
                 .tint(KoeTheme.accent)
                 .accentColor(KoeTheme.accent)

@@ -158,7 +158,7 @@ private struct VocabularyRow: View {
                             .foregroundStyle(.secondary)
                     }
                     if entry.source == .suggested {
-                        Pill(text: "提案由来", tint: KoeTheme.accent)
+                        Pill(text: "提案由来", tint: KoeTheme.accent, localized: true)
                     }
                 }
                 if !entry.misrecognitions.isEmpty {
@@ -201,7 +201,7 @@ private struct SuggestionRow: View {
             HStack(spacing: 8) {
                 Text(suggestion.surface)
                     .font(.system(size: 12.5, weight: .semibold))
-                Pill(text: suggestion.evidence.kind.displayName, tint: KoeTheme.accent)
+                Pill(text: suggestion.evidence.kind.displayName, tint: KoeTheme.accent, localized: true)
                 Text("\(suggestion.evidence.count) 回")
                     .font(.system(size: 10.5))
                     .foregroundStyle(.secondary)

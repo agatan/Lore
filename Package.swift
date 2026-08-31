@@ -9,6 +9,7 @@ let appIntentsProtocols = URL(fileURLWithPath: #filePath)
 
 let package = Package(
     name: "Koe",
+    defaultLocalization: "en",
     platforms: [.macOS("26.0")],
     products: [
         .executable(name: "Koe", targets: ["Koe"]),
@@ -25,7 +26,8 @@ let package = Package(
             name: "KoeKit",
             dependencies: [
                 .product(name: "GRDB", package: "GRDB.swift"),
-            ]
+            ],
+            resources: [.process("Resources")]
         ),
         .executableTarget(
             name: "Koe",

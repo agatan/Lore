@@ -9,6 +9,7 @@ struct MenuBarPanel: View {
 
         var id: String { rawValue }
         var title: String { self == .lifeLog ? "ライフログ" : "音声入力" }
+        var settingsTitle: String { self == .lifeLog ? "ライフログの設定" : "音声入力の設定" }
         var symbol: String { self == .lifeLog ? "calendar.day.timeline.left" : "waveform.and.mic" }
     }
 
@@ -61,7 +62,7 @@ struct MenuBarPanel: View {
     private var tabPicker: some View {
         Picker("", selection: $tab) {
             ForEach(Tab.allCases) { item in
-                Label(item.title, systemImage: item.symbol).tag(item)
+                Label(LocalizedStringKey(item.title), systemImage: item.symbol).tag(item)
             }
         }
         .labelsHidden()
@@ -92,7 +93,7 @@ struct MenuBarPanel: View {
     private var dictationTab: some View {
         VStack(alignment: .leading, spacing: 11) {
             Button { coordinator.toggleFromUI() } label: {
-                Label(coordinator.isRecording ? "停止して文章にする" : "音声入力を開始",
+                Label(LocalizedStringKey(coordinator.isRecording ? "停止して文章にする" : "音声入力を開始"),
                       systemImage: coordinator.isRecording ? "stop.fill" : "mic.fill")
                     .font(.system(size: 13, weight: .semibold))
                     .frame(maxWidth: .infinity)
@@ -155,7 +156,7 @@ struct MenuBarPanel: View {
             HStack(spacing: 7) {
                 Image(systemName: symbol)
                     .font(.system(size: 12, weight: .semibold))
-                Text(title)
+                Text(LocalizedStringKey(title))
                     .font(.system(size: 12, weight: .semibold))
             }
             .foregroundStyle(.primary)
@@ -187,7 +188,7 @@ struct MenuBarPanel: View {
                 openWindow(id: KoeWindow.settings)
                 NSApp.activate()
             } label: {
-                Label("\(tab.title)の設定", systemImage: "gearshape")
+                Label(LocalizedStringKey(tab.settingsTitle), systemImage: "gearshape")
             }
             .buttonStyle(.borderless)
             .font(.system(size: 11))

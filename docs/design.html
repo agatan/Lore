@@ -369,7 +369,7 @@ KoeMCP ──┘</pre>
 </section>
 <section id="settings">
 <h2>8. 設定、秘密、process間同期</h2>
-<ul><li><code>AppSettings.Storage</code>をsuite <code>dev.agatan.Koe</code>のUserDefaults key <code>koe.settings.v1</code>へJSON保存します。</li><li>Provider/modelは音声入力とlife logで分離します。通常音声入力、life-log capture、mini window、ボイスメモのhotkey、保持期間、calendar filter、summary間隔をここに入れます。Mini windowは常時手前を不変条件とし、表示levelの設定は持ちません。Color themeも設定として保持せず、<code>KoeTheme</code>の固定brand tokenを使います。</li><li>API keyだけはKeychainへ保存します。</li><li>CLI/MCPによるTODO・prompt変更はDistributed Notificationでappへ通知します。</li></ul>
+<ul><li><code>AppSettings.Storage</code>をsuite <code>dev.agatan.Koe</code>のUserDefaults key <code>koe.settings.v1</code>へJSON保存します。</li><li><code>ApplicationLanguage</code>は<code>system</code>、<code>en</code>、<code>ja</code>、<code>zh-Hans</code>の閉じた値として保存し、既定は<code>system</code>です。<code>system</code>はmacOSの優先言語から最初の対応localeを選び、なければ<code>en</code>へ解決します。<code>zh-Hant</code>は<code>zh-Hans</code>へ暗黙変換しません。既存設定にfieldがなければ<code>system</code>で補完し、GRDB migrationは追加しません。</li><li>Provider/modelは音声入力とlife logで分離します。通常音声入力、life-log capture、mini window、ボイスメモのhotkey、保持期間、calendar filter、summary間隔をここに入れます。Mini windowは常時手前を不変条件とし、表示levelの設定は持ちません。Color themeも設定として保持せず、<code>KoeTheme</code>の固定brand tokenを使います。</li><li><code>AppEnvironment</code>の設定から解決した<code>Locale</code>を全SwiftUI sceneへ注入します。Localization resourceの開発言語と欠損keyのfallbackは英語です。表示言語はUI shellだけのvariation pointで、STT locale、mode、prompt、保存data、export、CLI/MCP contractへ伝播させません。</li><li>API keyだけはKeychainへ保存します。</li><li>CLI/MCPによるTODO・prompt変更はDistributed Notificationでappへ通知します。</li></ul>
 </section>
 <section id="ui">
 <h2>9. UIとwindow対応</h2>

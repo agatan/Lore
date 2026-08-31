@@ -20,9 +20,9 @@ struct LifeLogCaptureControl: View {
             }
 
             VStack(alignment: .leading, spacing: 3) {
-                Text(statusTitle)
+                Text(LocalizedStringKey(statusTitle))
                     .font(.system(size: 12.5, weight: .semibold))
-                Text(lifeLog.captureStatusText)
+                Text(LocalizedStringKey(lifeLog.captureStatusText))
                     .font(.system(size: 10.5))
                     .foregroundStyle(.secondary)
             }
@@ -37,8 +37,8 @@ struct LifeLogCaptureControl: View {
                     .contentTransition(.symbolEffect(.replace))
             }
             .buttonStyle(.plain)
-            .help(actionLabel)
-            .accessibilityLabel(actionLabel)
+            .help(LocalizedStringKey(actionLabel))
+            .accessibilityLabel(LocalizedStringKey(actionLabel))
             .accessibilityIdentifier(accessibilityIdentifier)
         }
     }

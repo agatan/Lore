@@ -107,7 +107,7 @@ private struct HistoryRow: View {
                     Pill(text: Self.durationText(insert), systemImage: "timer", tint: .secondary)
                 }
                 if let language = record.language, language != .unknown {
-                    Pill(text: language.displayName, tint: .secondary)
+                    Pill(text: language.displayName, tint: .secondary, localized: true)
                 }
             }
         }
@@ -168,10 +168,10 @@ private struct HistoryDetailView: View {
                     Pill(text: appName, systemImage: "app", tint: .secondary)
                 }
                 Pill(text: record.modeSnapshot.modeName, systemImage: "slider.horizontal.3", tint: KoeTheme.accent)
-                Pill(text: record.modeSnapshot.trigger.displayName, systemImage: "hand.tap", tint: .secondary)
+                Pill(text: record.modeSnapshot.trigger.displayName, systemImage: "hand.tap", tint: .secondary, localized: true)
                 Pill(text: record.sttEngine.displayName, systemImage: "waveform", tint: .secondary)
                 if let llm = record.llmEngine {
-                    Pill(text: llm.displayName, systemImage: "wand.and.sparkles", tint: .secondary)
+                    Pill(text: llm.displayName, systemImage: "wand.and.sparkles", tint: .secondary, localized: llm == .none)
                 }
             }
         }

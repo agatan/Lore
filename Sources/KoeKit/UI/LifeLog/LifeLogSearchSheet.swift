@@ -46,7 +46,7 @@ struct LifeLogSearchSheet: View {
                                 .foregroundStyle(tint(for: result.kind)).frame(width: 18)
                             VStack(alignment: .leading, spacing: 5) {
                                 HStack(spacing: 7) {
-                                    Text(result.kind.displayName)
+                                    Text(LocalizedStringKey(result.kind.displayName))
                                         .font(.system(size: 10.5, weight: .semibold, design: .rounded))
                                         .foregroundStyle(tint(for: result.kind))
                                     Text(result.day)

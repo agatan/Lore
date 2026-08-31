@@ -75,13 +75,13 @@ struct SettingsWindowView: View {
             .listStyle(.sidebar)
             .navigationSplitViewColumnWidth(min: 184, ideal: 204, max: 240)
         } detail: {
-            detail.navigationTitle(env.settingsSection.title)
+            detail.navigationTitle(LocalizedStringKey(env.settingsSection.title))
         }
         .frame(minWidth: 960, minHeight: 680)
     }
 
     private func row(_ section: SettingsSection) -> some View {
-        Label(section.title, systemImage: section.symbol)
+        Label(LocalizedStringKey(section.title), systemImage: section.symbol)
             .badge(section == .vocabulary ? env.pendingSuggestions.count : 0)
             .tag(section)
             .accessibilityIdentifier("settings.section.\(section.rawValue)")

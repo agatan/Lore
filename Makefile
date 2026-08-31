@@ -49,6 +49,9 @@ app: build tools
 	@for b in $(BUILD_DIR)/*.bundle; do \
 		[ -e "$$b" ] && cp -R "$$b" "$(CONTENTS)/Resources/" || true; \
 	done
+	@for l in Sources/KoeKit/Resources/*.lproj; do \
+		[ -e "$$l" ] && cp -R "$$l" "$(CONTENTS)/Resources/" || true; \
+	done
 	@zsh Scripts/extract-app-intents.sh "$(BUILD_DIR)" "$(CONTENTS)"
 	@codesign --force --sign "$(CODESIGN_ID)" --identifier $(BUNDLE_ID).cli \
 		--timestamp=none "$(CONTENTS)/Helpers/koe"

@@ -44,9 +44,9 @@ public struct MainWindowView: View {
                     ToolbarItem(placement: .principal) {
                         Picker("表示", selection: Binding(get: { env.mainSection }, set: { env.mainSection = $0 })) {
                             ForEach(MainSection.allCases) { section in
-                                Text(section.title)
+                                Text(LocalizedStringKey(section.title))
                                     .tag(section)
-                                    .accessibilityLabel(section.title)
+                                    .accessibilityLabel(LocalizedStringKey(section.title))
                                     .accessibilityIdentifier("main.section.\(section.rawValue)")
                             }
                         }

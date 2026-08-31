@@ -51,7 +51,7 @@ struct ModesSettingsView: View {
                     }
                     Spacer()
                     if env.isSharedRulesEdited {
-                        Pill(text: "編集済み", tint: KoeTheme.accent)
+                        Pill(text: "編集済み", tint: KoeTheme.accent, localized: true)
                     }
                 }
                 .tag(Selection.sharedRules)
@@ -70,7 +70,7 @@ struct ModesSettingsView: View {
                         }
                         Spacer()
                         if mode.id == BuiltinModes.defaultModeID {
-                            Pill(text: "標準", tint: .secondary)
+                            Pill(text: "標準", tint: .secondary, localized: true)
                         }
                     }
                     .tag(Selection.mode(mode.id))
@@ -200,7 +200,7 @@ struct ModesSettingsView: View {
                     SettingsRow(title: "言語") {
                         Picker("", selection: bind(\.languagePreference)) {
                             ForEach(LanguagePreference.allCases) { preference in
-                                Text(preference.displayName).tag(preference)
+                                Text(LocalizedStringKey(preference.displayName)).tag(preference)
                             }
                         }
                         .labelsHidden()

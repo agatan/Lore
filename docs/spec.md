@@ -13,6 +13,7 @@
 | 任意権限 | ライフログに予定を表示する場合のcalendar |
 | 音声認識 | Apple SpeechAnalyzerによるオンデバイス認識 |
 | 既定の文章処理 | Apple Foundation Modelsによるオンデバイス処理 |
+| 表示言語 | システム設定、英語、日本語、簡体字中国語から選択可能。既定はシステム設定 |
 | 保存 | Mac内のSQLite、UserDefaults、Keychain、ライフログaudio file |
 
 対象外はmacOS以外、音声fileの一括文字起こし、音声commandによるアプリ操作、通常の音声入力audioの保存、cloud STTです。
@@ -140,13 +141,15 @@ cloud音声入力で送るのは今回の文字起こし、共通rule、mode指�
 
 Koeのprimary colorはapp icon由来の爽やかなblueに固定し、利用者がcolor themeを切り替える設定は持ちません。録音、成功、警告は同じbrand paletteに合わせたsemantic colorを全画面で共有します。
 
+表示言語は「システム設定」「English」「日本語」「简体中文」から選べ、選択は再起動後も保持します。「システム設定」はmacOSの優先言語から最初の対応言語を使い、対応言語がない場合は英語へfallbackします。繁体字中国語を簡体字中国語へ暗黙に置き換えません。変更はmenu bar、各windowの内容、onboarding、settings、HUD、dialog、noticeへ直ちに反映しますが、音声認識・modeの言語、prompt、保存済みtext、検索、書き出し内容、CLI/MCPの機械向けinterfaceは変更しません。
+
 | 場所 | 公開機能 |
 |---|---|
 | Menu bar | ライフログ/音声入力の用途別quick action。ライフログは記録切替、今日の画面、mini window、音声入力は録音、mode、直前結果、履歴を各tab内にまとめ、共通footerは設定と終了だけを置く。「今日を開く」「ミニウィンドウ」はsystem fontを直接描画するcompact buttonとする |
 | Main window | 通常起動時にライフログの今日を選択し、timelineの最新位置を表示。onboarding、ライフログ、今日のtimeline最下部からの手入力・音声memo追加、音声入力履歴。記録操作はtoolbar右肩ではなくtimeline内の状態表示に置く |
 | Mini window | ライフログ状態、今日のtimelineへの手入力・音声memo追加。一度開いたら明示的に閉じるまで、ほかのapp、desktop Space、full-screen Spaceより手前に表示し続ける。記録操作はwindow右肩ではなく状態表示に置く |
 | 全TODO window | draft確認、編集、確定、完了、再開、削除 |
-| Settings: 共通 | 一般、利用状況、語彙、privacy、連携 |
+| Settings: 共通 | 一般（表示言語を含む）、利用状況、語彙、privacy、連携 |
 | Settings: 音声入力 | hotkey、feedback、履歴、AI整形、mode |
 | Settings: ライフログ | 記録・mini window・ボイスメモhotkey、入力device、audio保持、summary間隔、要約/TODO AI、calendar再取得 |
 
@@ -162,7 +165,7 @@ Main window、mini window、menu barのライフログ状態表示は同じ記�
 |---|---|---|
 | 履歴、mode、語彙、ライフログ、TODO、利用量 | `~/Library/Application Support/Koe/koe.sqlite` | 履歴は無期限、各設定に従う |
 | ライフログaudio | Application Support配下 | 文字起こし・派生処理の成功後に削除。7日または30日へ変更可能 |
-| 一般設定 | app UserDefaults | app data削除まで |
+| 一般設定（表示言語を含む） | app UserDefaults | app data削除まで |
 | API key | macOS Keychain | 個別削除まで |
 | DB backup | `~/Library/Application Support/Koe/Backups/` | 最新7file |
 
