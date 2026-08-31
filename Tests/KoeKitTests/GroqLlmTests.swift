@@ -21,6 +21,9 @@ struct GroqLlmTests {
             #expect(json["model"] as? String == "test-model")
             // 再現性のため温度は 0 固定(NFR-4)。
             #expect(json["temperature"] as? Double == 0)
+            #expect(json["reasoning_effort"] == nil)
+            #expect(json["include_reasoning"] == nil)
+            #expect(json["response_format"] == nil)
 
             let messages = try #require(json["messages"] as? [[String: String]])
             #expect(messages.map(\.["role"]) == ["system", "user"])
@@ -40,6 +43,69 @@ struct GroqLlmTests {
         )
         #expect(output == "整えた文章")
         #expect(recordedUsage.withLock { $0 } == LlmTokenUsage(inputTokens: 120, outputTokens: 30, totalTokens: 150))
+    }
+
+    @Test("GPT-OSSの構造化派生はlow reasoningとstrict schemaを使う")
+    func buildsStrictStructuredRequestForGptOss() async throws {
+        StubProtocol.respond { request in
+            let body = try #require(request.bodyData)
+            let json = try #require(try JSONSerialization.jsonObject(with: body) as? [String: Any])
+            #expect(json["temperature"] as? Double == 0)
+            #expect(json["reasoning_effort"] as? String == "low")
+            #expect(json["include_reasoning"] as? Bool == false)
+
+            let format = try #require(json["response_format"] as? [String: Any])
+            #expect(format["type"] as? String == "json_schema")
+            let wrapper = try #require(format["json_schema"] as? [String: Any])
+            #expect(wrapper["name"] as? String == "life_log_summary")
+            #expect(wrapper["strict"] as? Bool == true)
+            let schema = try #require(wrapper["schema"] as? [String: Any])
+            #expect(schema["type"] as? String == "object")
+            #expect(schema["additionalProperties"] as? Bool == false)
+            #expect(schema["required"] as? [String] == ["summary", "topics", "todos"])
+            let properties = try #require(schema["properties"] as? [String: [String: Any]])
+            #expect(properties["summary"]?["type"] as? String == "string")
+            #expect(properties["topics"]?["type"] as? String == "array")
+            #expect(properties["todos"]?["type"] as? String == "array")
+            return (200, Self.chatBody(#"{"summary":"要約","topics":[],"todos":[]}"#))
+        }
+
+        let engine = GroqLlm(model: "openai/gpt-oss-120b", session: StubProtocol.session(), apiKeySource: { "test-key" })
+        _ = try await engine.complete(prompt: Self.structuredPrompt, timeout: .seconds(5))
+    }
+
+    @Test("reasoningを無効化できるmodelはnoneとJSON Object Modeを使う")
+    func buildsStructuredRequestForQwen() async throws {
+        StubProtocol.respond { request in
+            let body = try #require(request.bodyData)
+            let json = try #require(try JSONSerialization.jsonObject(with: body) as? [String: Any])
+            #expect(json["temperature"] as? Double == 0)
+            #expect(json["reasoning_effort"] as? String == "none")
+            #expect(json["include_reasoning"] as? Bool == false)
+            let format = try #require(json["response_format"] as? [String: Any])
+            #expect(format["type"] as? String == "json_object")
+            #expect(format["json_schema"] == nil)
+            return (200, Self.chatBody(#"{"summary":"要約","topics":[],"todos":[]}"#))
+        }
+
+        let engine = GroqLlm(model: "qwen/qwen3.6-27b", session: StubProtocol.session(), apiKeySource: { "test-key" })
+        _ = try await engine.complete(prompt: Self.structuredPrompt, timeout: .seconds(5))
+    }
+
+    @Test("未知modelは未対応のreasoning parameterを送らずJSON Object Modeを使う")
+    func buildsStructuredRequestForOtherModel() async throws {
+        StubProtocol.respond { request in
+            let body = try #require(request.bodyData)
+            let json = try #require(try JSONSerialization.jsonObject(with: body) as? [String: Any])
+            #expect(json["reasoning_effort"] == nil)
+            #expect(json["include_reasoning"] == nil)
+            let format = try #require(json["response_format"] as? [String: Any])
+            #expect(format["type"] as? String == "json_object")
+            return (200, Self.chatBody(#"{"summary":"要約","topics":[],"todos":[]}"#))
+        }
+
+        let engine = GroqLlm(model: "another/model", session: StubProtocol.session(), apiKeySource: { "test-key" })
+        _ = try await engine.complete(prompt: Self.structuredPrompt, timeout: .seconds(5))
     }
 
     @Test("API のエラーメッセージをそのまま理由にする")
@@ -92,6 +158,18 @@ struct GroqLlmTests {
             "usage": ["prompt_tokens": 120, "completion_tokens": 30, "total_tokens": 150],
         ]
         return try! JSONSerialization.data(withJSONObject: payload)
+    }
+
+    private static var structuredPrompt: FormattingPrompt {
+        FormattingPrompt(
+            system: "指示",
+            user: "本文",
+            output: .json(.init(name: "life_log_summary", fields: [
+                .init("summary", .string),
+                .init("topics", .stringArray),
+                .init("todos", .stringArray),
+            ]))
+        )
     }
 }
 

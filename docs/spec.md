@@ -117,6 +117,7 @@ cloud音声入力で送るのは今回の文字起こし、共通rule、mode指�
 - TODOは`draft`、`open`、`completed`を持ち、全TODO window、CLI、MCPで追加、編集、完了、再開、削除できます。
 - summary用とTODO用の指示文は設定、CLI、MCPから編集できます。
 - cloudを選んだ場合は対象日の発話、memo、予定の時刻と件名、各指示文を送ります。録音audio、通常の音声入力履歴、前面app情報は送りません。
+- Groqで選んだmodelにかかわらず、summaryとTODO案は再現性を優先する温度0、modelが対応する最小の推論量、共通のJSON出力contractで生成します。APIが対応する最も強いschema制約を使い、最終的にKoeが同じ型として検証します。推論本文は応答dataへ含めません。
 
 ### 4.5 検索と書き出し
 

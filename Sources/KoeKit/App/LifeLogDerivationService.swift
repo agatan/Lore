@@ -37,7 +37,10 @@ public struct LifeLogDerivationService: Sendable {
             prompt: FormattingPrompt(
                 system: system,
                 user: clipped(transcript, reserving: system.count),
-                expectedOutputCharacters: 1_200
+                expectedOutputCharacters: 1_200,
+                output: .json(.init(name: "life_log_todos", fields: [
+                    .init("todos", .stringArray),
+                ]))
             ),
             timeout: .seconds(30)
         )
@@ -61,7 +64,7 @@ public struct LifeLogDerivationService: Sendable {
         return LifeLogDerivedSummary(
             text: output.summary.trimmingCharacters(in: .whitespacesAndNewlines),
             topics: output.topics.map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }.filter { !$0.isEmpty },
-            todoTitles: Array(Set((output.todos ?? []).map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }.filter { !$0.isEmpty })).sorted()
+            todoTitles: Array(Set(output.todos.map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }.filter { !$0.isEmpty })).sorted()
         )
     }
 
@@ -108,7 +111,16 @@ public struct LifeLogDerivationService: Sendable {
 
     private func requestSummary(system: String, user: String, expectedOutputCharacters: Int) async throws -> SummaryOutput {
         let response = try await llm.complete(
-            prompt: FormattingPrompt(system: system, user: user, expectedOutputCharacters: expectedOutputCharacters),
+            prompt: FormattingPrompt(
+                system: system,
+                user: user,
+                expectedOutputCharacters: expectedOutputCharacters,
+                output: .json(.init(name: "life_log_summary", fields: [
+                    .init("summary", .string),
+                    .init("topics", .stringArray),
+                    .init("todos", .stringArray),
+                ]))
+            ),
             timeout: .seconds(30)
         )
         return try decode(SummaryOutput.self, from: response)
@@ -148,7 +160,7 @@ public struct LifeLogDerivationService: Sendable {
     }
 
     private struct TodoOutput: Decodable { var todos: [String] }
-    private struct SummaryOutput: Codable { var summary: String; var topics: [String]; var todos: [String]? }
+    private struct SummaryOutput: Codable { var summary: String; var topics: [String]; var todos: [String] }
 }
 
 public enum LifeLogDerivationError: LocalizedError, Sendable {

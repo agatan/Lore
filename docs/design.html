@@ -310,6 +310,7 @@ KoeMCP ──┘</pre>
 </tr>
 </tbody>
 </table>
+<p><code>FormattingPrompt</code>は通常textか、名前とfield型を持つ構造化出力contractを明示します。<code>LifeLogDerivationService</code>はsummary/TODOのJSON contractを宣言し、model判定を持ちません。<code>GroqLlm</code>はこれを温度0、推論本文なし、選択modelが対応する最小の推論量と最も強いJSON制約へ変換します。GPT-OSSは<code>reasoning_effort = low</code>とstrict JSON Schema、reasoningを無効化できるmodelは無効化とJSON Object Mode、それ以外は未対応parameterを送らずJSON Object Modeを使います。全経路で同じapp側decodeを最終検証とし、通常の文章変換は温度0とprovider既定の推論量を維持します。</p>
 <p>音声入力とlife logはprovider/modelを別設定にします。語彙候補の<code>analysisLlm</code>は常にオンデバイスです。</p>
 </section>
 <section id="persistence">

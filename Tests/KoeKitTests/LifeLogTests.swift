@@ -260,14 +260,23 @@ struct LifeLogTests {
 
     @Test("SummaryとTODOはLLMのJSON出力から型付き派生データになる")
     func llmDerivation() async throws {
-        let service = LifeLogDerivationService(llm: StubLifeLogLlm())
+        let llm = RecordingLifeLogLlm()
+        let service = LifeLogDerivationService(llm: llm)
         let utterance = LifeLogUtterance(startedAt: Date(), endedAt: Date(), text: "RFCを書きます", audioChunkID: "audio")
-        #expect(try await service.extractTodoTitles(from: [utterance], prompt: "抽出") == ["RFCを書く"])
+        #expect(try await service.extractTodoTitles(from: [utterance], prompt: "抽出") == ["TODO"])
+        #expect(llm.recordedPrompts.last?.output == .json(.init(name: "life_log_todos", fields: [
+            .init("todos", .stringArray),
+        ])))
         let summary = try await service.summarize(
             day: LifeLogDay(utterances: [utterance], conversations: [], calendarEvents: [], summary: nil),
             prompt: "要約"
         )
-        #expect(summary == LifeLogDerivedSummary(text: "RFCの作成を約束した。", topics: ["RFC"], todoTitles: ["RFCを書く"]))
+        #expect(summary == LifeLogDerivedSummary(text: "全体", topics: ["話題"], todoTitles: ["TODO"]))
+        #expect(llm.recordedPrompts.last?.output == .json(.init(name: "life_log_summary", fields: [
+            .init("summary", .string),
+            .init("topics", .stringArray),
+            .init("todos", .stringArray),
+        ])))
     }
 
     @Test("再要約では当日の全データを時系列でLLMへ渡す")
@@ -655,7 +664,7 @@ private struct StubLifeLogLlm: LlmEngine {
     func complete(prompt: FormattingPrompt, timeout: Duration) async throws -> String {
         if prompt.system.contains("\"summary\"") { return #"{"summary":"RFCの作成を約束した。","topics":["RFC"],"todos":["RFCを書く"]}"# }
         if prompt.system.contains("\"todos\"") { return #"{"todos":["RFCを書く"]}"# }
-        return #"{"summary":"RFCの作成を約束した。","topics":["RFC"]}"#
+        return #"{"summary":"RFCの作成を約束した。","topics":["RFC"],"todos":[]}"#
     }
     func unload() async {}
 }

@@ -113,6 +113,8 @@ capture request
 | Gemini | `RemoteLlm` | provider API | あり、明示選択時のみ |
 | Groq | `GroqLlm` | Groq API | あり、明示選択時のみ |
 
+`FormattingPrompt`は通常textか、名前とfield型を持つ構造化出力contractを明示します。`LifeLogDerivationService`はsummary/TODOのJSON contractを宣言し、model判定を持ちません。`GroqLlm`は構造化出力contractを温度0、推論本文なし、選択modelが対応する最小の推論量と最も強いJSON制約へ変換します。GPT-OSSは`reasoning_effort = low`とstrict JSON Schema、reasoningを無効化できるmodelは無効化とJSON Object Mode、それ以外は未対応parameterを送らずJSON Object Modeを使います。全経路で同じapp側decodeを最終検証とし、通常の文章変換は温度0とprovider既定の推論量を維持します。
+
 過去履歴から語彙候補を作る`analysisLlm`は常にオンデバイスです。API keyは`SecretStore`を通してKeychainへ保存し、用途別に分離します。
 
 ## 7. 永続化

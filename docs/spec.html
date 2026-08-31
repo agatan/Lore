@@ -202,6 +202,7 @@
 <li>Draft TODOは編集して確定または棄却できます。再生成で置換するのはdraftだけです。</li>
 <li>TODO状態は<code>draft</code>、<code>open</code>、<code>completed</code>。UI、CLI、MCPから操作できます。</li>
 <li>Cloud派生処理は対象日の発話、memo、予定の時刻/件名、指示文を送ります。Audio、通常の音声入力履歴、前面app情報は送りません。</li>
+<li>Groqでは選択modelにかかわらず、summaryとTODO案を温度0、modelが対応する最小の推論量、共通のJSON出力contractで生成します。APIが対応する最も強いschema制約を使い、最終的にKoeが同じ型として検証します。推論本文は応答dataへ含めません。</li>
 </ul>
 <h3>検索と書き出し</h3>
 <p>発話、memo、TODO、summaryを横断検索します。日別exportではcalendar、発話、memo、summary、その日に作成/完了したTODOを選択でき、open TODO全体も別にexportできます。</p>
