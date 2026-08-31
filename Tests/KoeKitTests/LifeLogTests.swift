@@ -157,6 +157,41 @@ struct LifeLogTests {
         #expect(try await database.lifeLog.pendingAudioChunks().isEmpty)
     }
 
+    @Test("処理済み音声だけが保持policyの削除対象になる")
+    func onlyProcessedAudioIsDeletable() async throws {
+        let database = try await KoeDatabase.inMemory()
+        let oldStart = Date(timeIntervalSince1970: 100)
+        let recentStart = Date(timeIntervalSince1970: 300)
+        let processedOld = LifeLogAudioChunk(
+            id: "processed-old", captureStartedAt: oldStart, captureEndedAt: oldStart.addingTimeInterval(30),
+            localPath: "/tmp/processed-old.m4a", transcriptionState: .transcribed, processingState: .extracted
+        )
+        let processedRecent = LifeLogAudioChunk(
+            id: "processed-recent", captureStartedAt: recentStart, captureEndedAt: recentStart.addingTimeInterval(30),
+            localPath: "/tmp/processed-recent.m4a", transcriptionState: .transcribed, processingState: .extracted
+        )
+        let pending = LifeLogAudioChunk(
+            id: "pending", captureStartedAt: oldStart, captureEndedAt: oldStart.addingTimeInterval(30),
+            localPath: "/tmp/pending.m4a"
+        )
+        let failed = LifeLogAudioChunk(
+            id: "failed", captureStartedAt: oldStart, captureEndedAt: oldStart.addingTimeInterval(30),
+            localPath: "/tmp/failed.m4a", transcriptionState: .failed, processingState: .failed,
+            failureReason: "test"
+        )
+        for chunk in [processedOld, processedRecent, pending, failed] {
+            try await database.lifeLog.save(audioChunk: chunk)
+        }
+
+        let processedOnly = try await database.lifeLog.deletableAudioFileURLs(endedBefore: nil)
+        #expect(Set(processedOnly.map(\.path)) == [processedOld.localPath, processedRecent.localPath])
+
+        let retainedForDays = try await database.lifeLog.deletableAudioFileURLs(
+            endedBefore: Date(timeIntervalSince1970: 250)
+        )
+        #expect(retainedForDays.map(\.path) == [processedOld.localPath])
+    }
+
     @Test("1秒未満の音声はSpeechAnalyzerへ渡さない境界である")
     func subsecondCaptureBoundary() {
         let start = Date(timeIntervalSince1970: 100)

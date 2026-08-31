@@ -29,6 +29,7 @@ public final class LifeLogCoordinator {
     private var summaryPrompt: @MainActor () -> String = { BuiltinLifeLogPrompts.summary }
     private var summaryIntervalMinutes: @MainActor () -> Int = { 60 }
     private var participatingEventsOnly: @MainActor () -> Bool = { true }
+    private var audioProcessingCompleted: @MainActor () async -> Void = {}
     private var lastCapturedDate: Date?
     private var liveTranscriptionTask: Task<Void, Never>?
     private var liveSessionStartedAt: Date?
@@ -65,13 +66,15 @@ public final class LifeLogCoordinator {
         todoPrompt: @MainActor @escaping () -> String,
         summaryPrompt: @MainActor @escaping () -> String,
         summaryIntervalMinutes: @MainActor @escaping () -> Int,
-        participatingEventsOnly: @MainActor @escaping () -> Bool
+        participatingEventsOnly: @MainActor @escaping () -> Bool,
+        audioProcessingCompleted: @MainActor @escaping () async -> Void
     ) async {
         self.database = database; self.engines = engines; self.vocabulary = vocabulary
         self.todoPrompt = todoPrompt
         self.summaryPrompt = summaryPrompt
         self.summaryIntervalMinutes = summaryIntervalMinutes
         self.participatingEventsOnly = participatingEventsOnly
+        self.audioProcessingCompleted = audioProcessingCompleted
         await reload()
         // 保留音声の再処理は重要だが、履歴・ライフログウィンドウの初期表示を待たせない。
         Task { await resumePending() }
@@ -441,6 +444,7 @@ public final class LifeLogCoordinator {
                 chunk.processingState = .extracted
                 try await database.lifeLog.save(audioChunk: chunk)
             }
+            await audioProcessingCompleted()
         } catch { fail(error) }
         isTranscribing = false
         liveTranscript = ""
@@ -555,6 +559,7 @@ public final class LifeLogCoordinator {
                 chunk.transcriptionState = .transcribed
                 chunk.processingState = .extracted
                 try await database.lifeLog.save(audioChunk: chunk)
+                await audioProcessingCompleted()
                 await reload()
                 return
             }
@@ -619,11 +624,13 @@ public final class LifeLogCoordinator {
             guard !utterances.isEmpty else {
                 chunk.processingState = .extracted
                 try await database.lifeLog.save(audioChunk: chunk)
+                await audioProcessingCompleted()
                 await reload()
                 return
             }
             chunk.processingState = .extracted
             try await database.lifeLog.save(audioChunk: chunk)
+            await audioProcessingCompleted()
             let affectedDates = Dictionary(grouping: utterances, by: { LifeLogDateKey.string(for: $0.startedAt) })
                 .compactMapValues(\.first?.startedAt)
             for date in affectedDates.values { await segmentAndRefresh(for: date) }

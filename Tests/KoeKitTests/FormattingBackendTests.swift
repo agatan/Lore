@@ -26,9 +26,25 @@ struct FormattingBackendTests {
         #expect(settings.formattingBackend == .onDevice)
         #expect(settings.lifeLogFormattingBackend == .onDevice)
         #expect(settings.model(for: .groq, purpose: .dictation) == GroqLlm.defaultModel)
-        #expect(settings.lifeLogAudioRetentionDays == 30)
+        #expect(settings.lifeLogAudioRetentionPolicy == .processedOnly)
         #expect(!settings.onboardingCompleted)
         #expect(!settings.lifeLogAudioStorageConfirmed)
+    }
+
+    @MainActor
+    @Test("旧版の音声保持設定は更新だけで破壊的に変更しない")
+    func preservesLegacyAudioRetention() throws {
+        let suite = #function
+        let defaults = UserDefaults(suiteName: suite)!
+        defaults.removePersistentDomain(forName: suite)
+        var storage = AppSettings.Storage()
+        storage.lifeLogAudioRetentionDays = 0
+        defaults.set(try JSONEncoder().encode(storage), forKey: AppSettings.defaultsKey)
+
+        let settings = AppSettings(defaults: defaults)
+        #expect(settings.lifeLogAudioRetentionPolicy == .unlimited)
+        settings.lifeLogAudioRetentionPolicy = .days(7)
+        #expect(settings.lifeLogAudioRetentionDays == 7)
     }
 
     @MainActor

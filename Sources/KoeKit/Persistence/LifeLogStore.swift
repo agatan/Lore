@@ -23,7 +23,7 @@ public struct LifeLogStore: Sendable {
         try await queue.read { db in try Row.fetchAll(db, sql: "SELECT * FROM life_log_audio_chunks WHERE transcription_state IN ('captured','failed') OR processing_state != 'extracted' ORDER BY capture_started_at").map(decodeChunk) }
     }
 
-    public func audioFileURLs(endedBefore cutoff: Date? = nil) async throws -> [URL] {
+    public func deletableAudioFileURLs(endedBefore cutoff: Date?) async throws -> [URL] {
         try await queue.read { db in
             let rows: [Row]
             if let cutoff {
@@ -37,7 +37,14 @@ public struct LifeLogStore: Sendable {
                     arguments: [date(cutoff)]
                 )
             } else {
-                rows = try Row.fetchAll(db, sql: "SELECT local_path FROM life_log_audio_chunks ORDER BY capture_ended_at")
+                rows = try Row.fetchAll(
+                    db,
+                    sql: """
+                        SELECT local_path FROM life_log_audio_chunks
+                        WHERE transcription_state = 'transcribed' AND processing_state = 'extracted'
+                        ORDER BY capture_ended_at
+                        """
+                )
             }
             return rows.map { URL(fileURLWithPath: $0["local_path"]) }
         }

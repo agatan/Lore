@@ -195,7 +195,8 @@ public final class AppEnvironment {
                 todoPrompt: { [weak self] in self?.settings.lifeLogTodoPrompt ?? BuiltinLifeLogPrompts.todo },
                 summaryPrompt: { [weak self] in self?.settings.lifeLogSummaryPrompt ?? BuiltinLifeLogPrompts.summary },
                 summaryIntervalMinutes: { [weak self] in self?.settings.lifeLogSummaryIntervalMinutes ?? 60 },
-                participatingEventsOnly: { [weak self] in self?.settings.lifeLogParticipatingEventsOnly ?? true }
+                participatingEventsOnly: { [weak self] in self?.settings.lifeLogParticipatingEventsOnly ?? true },
+                audioProcessingCompleted: { [weak self] in await self?.purgeExpiredLifeLogAudio() }
             )
             lifeLog.selectInputDevice(uid: settings.lifeLogInputDeviceUID)
             try await database.modes.seedBuiltinsIfNeeded()
@@ -750,14 +751,19 @@ public final class AppEnvironment {
     // MARK: 保存データ
 
     public func purgeExpiredLifeLogAudio() async {
-        guard let database, settings.lifeLogAudioRetentionDays > 0 else { return }
-        guard let cutoff = Calendar.current.date(
-            byAdding: .day,
-            value: -settings.lifeLogAudioRetentionDays,
-            to: Date()
-        ) else { return }
+        guard let database else { return }
+        let cutoff: Date?
+        switch settings.lifeLogAudioRetentionPolicy {
+        case .processedOnly:
+            cutoff = nil
+        case .days(let days):
+            guard let date = Calendar.current.date(byAdding: .day, value: -days, to: Date()) else { return }
+            cutoff = date
+        case .unlimited:
+            return
+        }
         do {
-            for url in try await database.lifeLog.audioFileURLs(endedBefore: cutoff) {
+            for url in try await database.lifeLog.deletableAudioFileURLs(endedBefore: cutoff) {
                 if FileManager.default.fileExists(atPath: url.path) {
                     try FileManager.default.removeItem(at: url)
                 }

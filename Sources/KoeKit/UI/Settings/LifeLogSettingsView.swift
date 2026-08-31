@@ -57,14 +57,16 @@ struct LifeLogSettingsView: View {
                     .frame(width: 240)
                 }
                 SettingsRow(title: "音声の保持期間") {
-                    Picker("", selection: Binding(get: { settings.lifeLogAudioRetentionDays }, set: {
-                        settings.lifeLogAudioRetentionDays = $0
+                    Picker("", selection: Binding(get: { settings.lifeLogAudioRetentionPolicy }, set: {
+                        settings.lifeLogAudioRetentionPolicy = $0
                         Task { await env.purgeExpiredLifeLogAudio() }
                     })) {
-                        Text("30日").tag(30)
-                        Text("90日").tag(90)
-                        Text("1年").tag(365)
-                        Text("無期限").tag(0)
+                        Text("処理後削除").tag(LifeLogAudioRetentionPolicy.processedOnly)
+                        Text("7日").tag(LifeLogAudioRetentionPolicy.days(7))
+                        Text("30日").tag(LifeLogAudioRetentionPolicy.days(30))
+                        if ![.processedOnly, .days(7), .days(30)].contains(settings.lifeLogAudioRetentionPolicy) {
+                            Text(legacyRetentionLabel).tag(settings.lifeLogAudioRetentionPolicy)
+                        }
                     }
                     .labelsHidden().pickerStyle(.segmented).fixedSize()
                 }
@@ -89,6 +91,14 @@ struct LifeLogSettingsView: View {
         }
         .toggleStyle(.switch)
         .task { env.refreshLifeLogAudioSize() }
+    }
+
+    private var legacyRetentionLabel: String {
+        switch settings.lifeLogAudioRetentionPolicy {
+        case .processedOnly: "処理後削除"
+        case .days(let days): "\(days)日（旧設定）"
+        case .unlimited: "無期限（旧設定）"
+        }
     }
 
 }

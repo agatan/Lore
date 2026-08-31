@@ -6,6 +6,28 @@ public enum LlmPurpose: String, Sendable, CaseIterable {
     case lifeLog
 }
 
+public enum LifeLogAudioRetentionPolicy: Hashable, Sendable {
+    case processedOnly
+    case days(Int)
+    case unlimited
+
+    public init(storedDays: Int) {
+        switch storedDays {
+        case -1: self = .processedOnly
+        case 0: self = .unlimited
+        default: self = .days(max(1, storedDays))
+        }
+    }
+
+    public var storedDays: Int {
+        switch self {
+        case .processedOnly: -1
+        case .days(let days): max(1, days)
+        case .unlimited: 0
+        }
+    }
+}
+
 /// ユーザー設定。UserDefaults(plist) に 1 つの JSON として保存する(FR-10.2)。
 ///
 /// 全フィールドを 1 つの `Storage` に集約しているので、観測は `storage` の変更 1 点で成立し、
@@ -49,8 +71,8 @@ public final class AppSettings {
         public var lifeLogLmStudioModel: String = "openai/gpt-oss-20b"
         public var lifeLogCaptureEnabled: Bool = false
         public var lifeLogInputDeviceUID: String?
-        /// 音声は発話本文より機微性と容量が大きいので、既定では有限にする。0 = 無期限。
-        public var lifeLogAudioRetentionDays: Int = 30
+        /// -1 = 処理後削除、0 = 旧版の無期限、正数 = 保持日数。
+        public var lifeLogAudioRetentionDays: Int = -1
         /// ライフログが音声ファイルを保存することへの明示同意。
         public var lifeLogAudioStorageConfirmed: Bool = false
         public var lifeLogCalendarTitles: [String] = []
@@ -282,7 +304,14 @@ public final class AppSettings {
 
     public var lifeLogCaptureEnabled: Bool { get { storage.lifeLogCaptureEnabled } set { storage.lifeLogCaptureEnabled = newValue; persist() } }
     public var lifeLogInputDeviceUID: String? { get { storage.lifeLogInputDeviceUID } set { storage.lifeLogInputDeviceUID = newValue; persist() } }
-    public var lifeLogAudioRetentionDays: Int { get { storage.lifeLogAudioRetentionDays } set { storage.lifeLogAudioRetentionDays = max(0, newValue); persist() } }
+    public var lifeLogAudioRetentionPolicy: LifeLogAudioRetentionPolicy {
+        get { LifeLogAudioRetentionPolicy(storedDays: storage.lifeLogAudioRetentionDays) }
+        set { storage.lifeLogAudioRetentionDays = newValue.storedDays; persist() }
+    }
+    public var lifeLogAudioRetentionDays: Int {
+        get { storage.lifeLogAudioRetentionDays }
+        set { lifeLogAudioRetentionPolicy = LifeLogAudioRetentionPolicy(storedDays: newValue) }
+    }
     public var lifeLogAudioStorageConfirmed: Bool { get { storage.lifeLogAudioStorageConfirmed } set { storage.lifeLogAudioStorageConfirmed = newValue; persist() } }
     public var lifeLogCalendarTitles: [String] { get { storage.lifeLogCalendarTitles } set { storage.lifeLogCalendarTitles = newValue; persist() } }
     public var lifeLogParticipatingEventsOnly: Bool { get { storage.lifeLogParticipatingEventsOnly } set { storage.lifeLogParticipatingEventsOnly = newValue; persist() } }
