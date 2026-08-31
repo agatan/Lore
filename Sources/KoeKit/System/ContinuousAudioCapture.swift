@@ -2,7 +2,7 @@ import AVFoundation
 import Foundation
 
 /// ライフログ用の一続きのマイク入力。
-/// SpeechAnalyzer には停止まで同じストリームを渡し、復旧用音声だけをローテーションする。
+/// STT向けの連続signalを渡しつつ、復旧用音声を一定間隔でローテーションする。
 @MainActor
 public final class ContinuousAudioCapture {
     public enum Failure: LocalizedError {

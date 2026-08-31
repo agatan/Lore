@@ -15,7 +15,6 @@ struct MenuBarPanel: View {
 
     var env: AppEnvironment
     @Environment(\.dismiss) private var dismiss
-    @Environment(\.openWindow) private var openWindow
     @State private var tab: Tab = .lifeLog
 
     private var coordinator: DictationCoordinator { env.coordinator }
@@ -184,9 +183,7 @@ struct MenuBarPanel: View {
         HStack(spacing: 6) {
             Button {
                 dismiss()
-                env.settingsSection = tab == .lifeLog ? .lifeLog : .dictation
-                openWindow(id: KoeWindow.settings)
-                NSApp.activate()
+                env.onShowSettings?(tab == .lifeLog ? .lifeLog : .dictation)
             } label: {
                 Label(LocalizedStringKey(tab.settingsTitle), systemImage: "gearshape")
             }
@@ -206,8 +203,7 @@ struct MenuBarPanel: View {
     private func open(_ section: MainSection) {
         dismiss()
         env.mainSection = section
-        openWindow(id: KoeWindow.main)
-        NSApp.activate()
+        env.onShowMainWindow?()
     }
 
     private struct Notice: Identifiable {

@@ -4,7 +4,6 @@ import UniformTypeIdentifiers
 
 public struct LifeLogWindow: View {
     var env: AppEnvironment
-    @Environment(\.openWindow) private var openWindow
     @State private var exportError: String?
     @State private var showsExportSheet = false
     @State private var showsSearchSheet = false
@@ -73,9 +72,27 @@ public struct LifeLogWindow: View {
                     if let summary = env.lifeLog.day.summary, summary.isFinal {
                         Image(systemName: "checkmark.seal.fill").foregroundStyle(KoeTheme.success)
                     }
+                    Button {
+                        Task { await env.lifeLog.refreshSelectedDaySummary() }
+                    } label: {
+                        if env.lifeLog.isDeriving {
+                            ProgressView().controlSize(.small)
+                        } else {
+                            Image(systemName: "arrow.clockwise")
+                        }
+                    }
+                    .buttonStyle(.plain)
+                    .foregroundStyle(KoeTheme.accent)
+                    .disabled(env.lifeLog.isDeriving || !hasSummarySource)
+                    .help("要約とTODO案を更新")
+                    .accessibilityLabel("要約とTODO案を更新")
+                    .accessibilityIdentifier("life-log.refresh-summary")
                 }
                 if let summary = env.lifeLog.day.summary {
-                    Text(summary.summary).font(.system(size: 12.5)).textSelection(.enabled)
+                    ScrollView {
+                        LifeLogMarkdownSummary(markdown: summary.summary)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                    }
                 } else {
                     HStack(spacing: 8) { Image(systemName: "sparkles"); Text("Summary") }
                         .font(.system(size: 11.5, weight: .medium))
@@ -279,8 +296,7 @@ public struct LifeLogWindow: View {
                     let count = env.lifeLog.todos.filter { $0.status == .open }.count
                     if count > 0 { Pill(text: "\(count)", tint: KoeTheme.accent) }
                     Button {
-                        openWindow(id: KoeWindow.lifeLogTodos)
-                        NSApp.activate()
+                        env.onShowLifeLogTodos?()
                     } label: {
                         Image(systemName: "rectangle.stack")
                             .foregroundStyle(.secondary)
@@ -341,15 +357,6 @@ public struct LifeLogWindow: View {
                                     .buttonStyle(.plain).foregroundStyle(.tertiary).help("Delete")
                             }
                         }
-                        if hasSource(todo) {
-                            Button { Task { await env.lifeLog.jumpToSource(of: todo) } } label: {
-                                Label("元の発言へ", systemImage: "quote.bubble")
-                                    .font(.system(size: 10.5, weight: .medium))
-                            }
-                            .buttonStyle(.plain)
-                            .foregroundStyle(KoeTheme.accent)
-                            .accessibilityIdentifier("life-log.todo-source-\(todo.id)")
-                        }
                     }
                     .listRowBackground(todo.status == .draft ? KoeTheme.accent.opacity(0.055) : Color.clear)
                 }
@@ -363,8 +370,10 @@ public struct LifeLogWindow: View {
         env.lifeLog.todos.filter { $0.status != .completed }
     }
 
-    private func hasSource(_ todo: LifeLogTodo) -> Bool {
-        !todo.sourceUtteranceIDs.isEmpty || !todo.sourceMemoIDs.isEmpty
+    private var hasSummarySource: Bool {
+        !env.lifeLog.day.utterances.isEmpty
+            || !env.lifeLog.day.memos.isEmpty
+            || !env.lifeLog.day.calendarEvents.isEmpty
     }
 
     private var insightsPanel: some View {
@@ -488,6 +497,31 @@ public struct LifeLogWindow: View {
         }
     }
 
+}
+
+private struct LifeLogMarkdownSummary: View {
+    let markdown: String
+
+    var body: some View {
+        Text(rendered)
+            .font(.system(size: 12.5))
+            .lineSpacing(4)
+            .textSelection(.enabled)
+            .tint(KoeTheme.accent)
+            .accessibilityIdentifier("life-log.summary-markdown")
+    }
+
+    private var rendered: AttributedString {
+        do {
+            return try AttributedString(
+                markdown: markdown,
+                options: .init(interpretedSyntax: .full)
+            )
+        } catch {
+            // 生成済みデータは表示し続け、Markdown解釈の失敗で本文を失わない。
+            return AttributedString(markdown)
+        }
+    }
 }
 
 struct LiveWaveform: View {

@@ -17,15 +17,18 @@ let package = Package(
         .executable(name: "koe-mcp", targets: ["KoeMCP"]),
         .library(name: "KoeKit", targets: ["KoeKit"]),
     ],
-    // 音声認識と既定の整形はOS内蔵モデルを使う。クラウド／ローカルLLMはURLSessionで接続する。
+    // 通常音声入力はOS内蔵認識を使い、Life Logでは選択時だけローカルWhisperKitを使う。
+    // クラウド／ローカルLLMはURLSessionで接続する。
     dependencies: [
         .package(url: "https://github.com/groue/GRDB.swift.git", from: "7.9.0"),
+        .package(url: "https://github.com/argmaxinc/argmax-oss-swift.git", from: "1.0.0"),
     ],
     targets: [
         .target(
             name: "KoeKit",
             dependencies: [
                 .product(name: "GRDB", package: "GRDB.swift"),
+                .product(name: "WhisperKit", package: "argmax-oss-swift"),
             ],
             resources: [.process("Resources")]
         ),

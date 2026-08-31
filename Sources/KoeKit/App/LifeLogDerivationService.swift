@@ -7,9 +7,20 @@ public enum BuiltinLifeLogPrompts {
     既存TODOと同じ作業や、その言い換えは新しいTODOとして提案しないでください。
     """
 
-    public static let summary = """
+    static let legacySummary = """
     一日の発話・予定・TODOから、重複を避けた簡潔な日次要約を作ってください。
     事実だけを使い、推測や一般論を追加しないでください。
+    """
+
+    public static let summary = """
+    一日を後から振り返れる、日報として読める詳しさの日次レポートをMarkdownで作ってください。
+    次の見出しを基本とし、根拠がある項目だけを書いてください。
+    - `## 今日の概要`: 一日の流れと重要なトピック
+    - `## 会議・会話`: どんな会議や会話で、何を話したか
+    - `## 決まったこと`: 明確に決定・合意したこと
+    - `## 考えたこと`: 本人が話した問題意識、検討、迷い、気づき
+    発話、メモ、予定にない事実や結論は追加せず、不明なことは不明なままにしてください。
+    同じ内容を複数の見出しで繰り返さず、読みやすい箇条書きと短い段落を使ってください。
     """
 }
 
@@ -104,7 +115,7 @@ public struct LifeLogDerivationService: Sendable {
         let directBudget = max(200, llm.inputCharacterBudget - system.count - header.count - 2)
         let directBatches = batches(of: values, characterLimit: directBudget)
         if directBatches.count == 1 {
-            return try await requestSummary(system: system, user: header + "\n" + directBatches[0], expectedOutputCharacters: 1_500)
+            return try await requestSummary(system: system, user: header + "\n" + directBatches[0], expectedOutputCharacters: 4_000)
         }
 
         let partialSystem = system
@@ -116,7 +127,7 @@ public struct LifeLogDerivationService: Sendable {
             let output = try await requestSummary(
                 system: partialSystem,
                 user: "分割 \(index + 1)/\(batches.count):\n" + batch,
-                expectedOutputCharacters: 600
+                expectedOutputCharacters: 1_200
             )
             partials.append(try String(decoding: JSONEncoder().encode(output), as: UTF8.self))
         }

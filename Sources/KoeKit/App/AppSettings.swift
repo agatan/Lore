@@ -6,6 +6,32 @@ public enum LlmPurpose: String, Sendable, CaseIterable {
     case lifeLog
 }
 
+public enum LifeLogSttBackend: String, Codable, Sendable, CaseIterable, Identifiable {
+    case speechAnalyzer
+    case whisperKit
+
+    public var id: String { rawValue }
+    public var displayName: String {
+        switch self {
+        case .speechAnalyzer: "Apple SpeechAnalyzer"
+        case .whisperKit: "WhisperKit"
+        }
+    }
+}
+
+public enum WhisperModel: String, Codable, Sendable, CaseIterable, Identifiable {
+    case small = "small"
+    case largeV3 = "large-v3-v20240930_626MB"
+
+    public var id: String { rawValue }
+    public var displayName: String {
+        switch self {
+        case .small: "Whisper Small"
+        case .largeV3: "Whisper Large v3 (626 MB)"
+        }
+    }
+}
+
 public enum LifeLogAudioRetentionPolicy: Hashable, Sendable {
     case processedOnly
     case days(Int)
@@ -71,6 +97,8 @@ public final class AppSettings {
         public var lifeLogOllamaModel: String = "gpt-oss:20b"
         public var lifeLogLmStudioModel: String = "openai/gpt-oss-20b"
         public var lifeLogCaptureEnabled: Bool = false
+        public var lifeLogSttBackend: LifeLogSttBackend = .speechAnalyzer
+        public var lifeLogWhisperModel: WhisperModel = .largeV3
         public var lifeLogInputDeviceUID: String?
         /// -1 = 処理後削除、0 = 旧版の無期限、正数 = 保持日数。
         public var lifeLogAudioRetentionDays: Int = -1
@@ -123,6 +151,10 @@ public final class AppSettings {
             lifeLogOllamaModel = try container.decodeIfPresent(String.self, forKey: .lifeLogOllamaModel) ?? ollamaModel
             lifeLogLmStudioModel = try container.decodeIfPresent(String.self, forKey: .lifeLogLmStudioModel) ?? lmStudioModel
             lifeLogCaptureEnabled = try container.decodeIfPresent(Bool.self, forKey: .lifeLogCaptureEnabled) ?? false
+            lifeLogSttBackend = (try? container.decodeIfPresent(LifeLogSttBackend.self, forKey: .lifeLogSttBackend))
+                .flatMap { $0 } ?? .speechAnalyzer
+            lifeLogWhisperModel = (try? container.decodeIfPresent(WhisperModel.self, forKey: .lifeLogWhisperModel))
+                .flatMap { $0 } ?? .largeV3
             lifeLogInputDeviceUID = try container.decodeIfPresent(String.self, forKey: .lifeLogInputDeviceUID)
             lifeLogAudioRetentionDays = try container.decodeIfPresent(Int.self, forKey: .lifeLogAudioRetentionDays) ?? fallback.lifeLogAudioRetentionDays
             lifeLogAudioStorageConfirmed = try container.decodeIfPresent(Bool.self, forKey: .lifeLogAudioStorageConfirmed) ?? false
@@ -130,7 +162,10 @@ public final class AppSettings {
             lifeLogParticipatingEventsOnly = try container.decodeIfPresent(Bool.self, forKey: .lifeLogParticipatingEventsOnly) ?? true
             lifeLogSummaryIntervalMinutes = try container.decodeIfPresent(Int.self, forKey: .lifeLogSummaryIntervalMinutes) ?? 60
             lifeLogTodoPrompt = try container.decodeIfPresent(String.self, forKey: .lifeLogTodoPrompt) ?? fallback.lifeLogTodoPrompt
-            lifeLogSummaryPrompt = try container.decodeIfPresent(String.self, forKey: .lifeLogSummaryPrompt) ?? fallback.lifeLogSummaryPrompt
+            let storedSummaryPrompt = try container.decodeIfPresent(String.self, forKey: .lifeLogSummaryPrompt)
+            lifeLogSummaryPrompt = storedSummaryPrompt == BuiltinLifeLogPrompts.legacySummary
+                ? BuiltinLifeLogPrompts.summary
+                : storedSummaryPrompt ?? fallback.lifeLogSummaryPrompt
         }
     }
 
@@ -306,6 +341,8 @@ public final class AppSettings {
     }
 
     public var lifeLogCaptureEnabled: Bool { get { storage.lifeLogCaptureEnabled } set { storage.lifeLogCaptureEnabled = newValue; persist() } }
+    public var lifeLogSttBackend: LifeLogSttBackend { get { storage.lifeLogSttBackend } set { storage.lifeLogSttBackend = newValue; persist() } }
+    public var lifeLogWhisperModel: WhisperModel { get { storage.lifeLogWhisperModel } set { storage.lifeLogWhisperModel = newValue; persist() } }
     public var lifeLogInputDeviceUID: String? { get { storage.lifeLogInputDeviceUID } set { storage.lifeLogInputDeviceUID = newValue; persist() } }
     public var lifeLogAudioRetentionPolicy: LifeLogAudioRetentionPolicy {
         get { LifeLogAudioRetentionPolicy(storedDays: storage.lifeLogAudioRetentionDays) }

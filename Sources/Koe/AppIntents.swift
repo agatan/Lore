@@ -16,7 +16,7 @@ struct StartLifeLogIntent: AppIntent {
 
 struct StopLifeLogIntent: AppIntent {
     static let title: LocalizedStringResource = "ライフログを終了"
-    static let description = IntentDescription("Koeのライフログ記録を終了し、文字起こしと一日の要約が確定するまで待ちます。")
+    static let description = IntentDescription("Koeのライフログ記録を終了し、保存と文字起こしが確定するまで待ちます。")
     static let supportedModes: IntentModes = .background
 
     func perform() async throws -> some IntentResult {
@@ -213,7 +213,7 @@ enum LifeLogIntentError: LocalizedError {
         case .invalidOutputFolder:
             "書き出し先のフォルダを選び直してください。"
         case .finalizationTimedOut:
-            "文字起こしと要約の完了を待てませんでした。保存済み音声は次回起動時に再処理されます。"
+            "保存と文字起こしの完了を待てませんでした。保存済み音声は次回起動時に再処理されます。"
         }
     }
 }

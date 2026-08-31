@@ -15,61 +15,20 @@ public struct KoeApp: App {
                 .tint(KoeTheme.accent)
                 .accentColor(KoeTheme.accent)
         } label: {
-            // ラベルは常駐中ずっと生きているので、ここで初期化を回す。
-            MenuBarRoot(env: env)
+            MenuBarLabel(coordinator: env.coordinator, lifeLog: env.lifeLog, settings: env.settings)
         }
         .menuBarExtraStyle(.window)
-
-        Window("Koe", id: KoeWindow.main) {
-            MainWindowView(env: env)
-                .environment(\.locale, env.settings.applicationLanguage.resolvedLocale())
-                .koeWindow()
-                .tint(KoeTheme.accent)
-                .accentColor(KoeTheme.accent)
-        }
-        .defaultSize(width: 1_480, height: 820)
         .commands { KoeCommands(env: env) }
-
-        Window("Koe 設定", id: KoeWindow.settings) {
-            SettingsWindowView(env: env)
-                .environment(\.locale, env.settings.applicationLanguage.resolvedLocale())
-                .koeWindow()
-                .tint(KoeTheme.accent)
-                .accentColor(KoeTheme.accent)
-        }
-        .defaultSize(width: 980, height: 720)
-
-        Window("ライフログ ミニ", id: KoeWindow.lifeLogMini) {
-            LifeLogMiniWindow(env: env)
-                .environment(\.locale, env.settings.applicationLanguage.resolvedLocale())
-                .koeWindow()
-                .tint(KoeTheme.accent)
-                .accentColor(KoeTheme.accent)
-        }
-        .defaultSize(width: 460, height: 620)
-        .windowStyle(.hiddenTitleBar)
-
-        Window("すべてのTODO", id: KoeWindow.lifeLogTodos) {
-            LifeLogTodoManagerWindow(env: env)
-                .environment(\.locale, env.settings.applicationLanguage.resolvedLocale())
-                .koeWindow()
-                .tint(KoeTheme.accent)
-                .accentColor(KoeTheme.accent)
-        }
-        .defaultSize(width: 680, height: 520)
     }
 }
 
 private struct KoeCommands: Commands {
     var env: AppEnvironment
-    @Environment(\.openWindow) private var openWindow
 
     var body: some Commands {
         CommandGroup(replacing: .appSettings) {
             Button("設定…") {
-                env.settingsSection = .common
-                openWindow(id: KoeWindow.settings)
-                NSApp.activate()
+                env.onShowSettings?(.common)
             }
             .keyboardShortcut(",", modifiers: .command)
         }
@@ -88,58 +47,42 @@ public enum KoeWindow {
     public static let lifeLogTodos = "koe.life-log-todos"
 }
 
-/// メニューバーのアイコン + 起動処理。
-private struct MenuBarRoot: View {
-    var env: AppEnvironment
-    @Environment(\.openWindow) private var openWindow
-    @State private var hud: HudController?
-
-    var body: some View {
-        MenuBarLabel(coordinator: env.coordinator, lifeLog: env.lifeLog, settings: env.settings)
-            .task { await bootstrap() }
-    }
-
-    @MainActor
-    private func bootstrap() async {
-        guard hud == nil else { return }
-        let controller = HudController(coordinator: env.coordinator, settings: env.settings)
-        controller.start()
-        hud = controller
-
-        env.onToggleLifeLogMiniWindow = {
-            if let window = NSApp.windows.first(where: { $0.identifier?.rawValue == KoeWindow.lifeLogMini }), window.isVisible {
-                window.close()
-            } else {
-                openWindow(id: KoeWindow.lifeLogMini)
-                NSApp.activate()
-                DispatchQueue.main.async { env.applyLifeLogMiniWindowLevel() }
-            }
-        }
-        env.onShowMainWindow = {
-            openWindow(id: KoeWindow.main)
-            NSApp.activate()
-        }
-
-        await env.boot()
-
-        if let section = AppEnvironment.uiTestSettingsSection {
-            env.settingsSection = section
-            openWindow(id: KoeWindow.settings)
-            NSApp.activate()
-            return
-        }
-
-        env.mainSection = .lifeLog
-        openWindow(id: KoeWindow.main)
-        NSApp.activate()
-    }
-}
-
 /// `NSApp.terminate`、Cmd+Q、システム終了を同じ非同期の保存境界へ集約する。
 final class KoeApplicationDelegate: NSObject, NSApplicationDelegate {
     static let terminationDeadline: Duration = .seconds(20)
     private var terminationInProgress = false
     private var terminationReplySent = false
+    private var windowPresenter: KoeWindowPresenter?
+    private var hudController: HudController?
+
+    func applicationDidFinishLaunching(_ notification: Notification) {
+        // MenuBarExtraやwindowの生成順にruntime serviceの開始を依存させない。
+        // Hotkey monitorはapp processの起動と同時に必ずbootする。
+        Task { @MainActor in
+            guard let environment = AppEnvironment.current else {
+                KoeLog.ui.error("起動時にAppEnvironmentを取得できませんでした")
+                return
+            }
+            let presenter = KoeWindowPresenter(env: environment)
+            windowPresenter = presenter
+            environment.onShowMainWindow = { [weak presenter] in presenter?.showMain() }
+            environment.onToggleLifeLogMiniWindow = { [weak presenter] in presenter?.toggleLifeLogMini() }
+            environment.onShowSettings = { [weak presenter] section in presenter?.showSettings(section) }
+            environment.onShowLifeLogTodos = { [weak presenter] in presenter?.showLifeLogTodos() }
+
+            let hud = HudController(coordinator: environment.coordinator, settings: environment.settings)
+            hud.start()
+            hudController = hud
+
+            if let section = AppEnvironment.uiTestSettingsSection {
+                presenter.showSettings(section)
+            } else {
+                environment.mainSection = .lifeLog
+                presenter.showMain()
+            }
+            await environment.boot()
+        }
+    }
 
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
         guard !terminationInProgress else { return .terminateLater }

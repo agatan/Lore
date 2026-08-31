@@ -162,7 +162,7 @@ private enum KoeUIE2E {
 
     @MainActor
     private static func runDailyReviewCUJ(appURL: URL) async throws {
-        print("CUJ 1: ライフログのTODO出典を確認し、音声入力へ切り替え、日別書き出しを調整する")
+        print("CUJ 1: ライフログのMarkdown要約を確認し、音声入力へ切り替え、日別書き出しを調整する")
         let app = try await launch(appURL, arguments: ["--koe-screenshot-demo"])
         let ui = AXDriver(pid: app.processIdentifier)
 
@@ -178,7 +178,11 @@ private enum KoeUIE2E {
         try ui.press(identifier: "life-log.search")
         try ui.setValue("オンボーディング", identifier: "life-log.search-input")
         try ui.press(identifier: "life-log.search-result-memo-demo-memo-1")
-        try ui.press(identifier: "life-log.todo-source-demo-todo-1")
+        guard !ui.exists(identifier: "life-log.todo-source-demo-todo-1") else {
+            throw UIE2EError.assertion("廃止したTODO出典移動が残っています")
+        }
+        _ = try ui.waitFor(identifier: "life-log.refresh-summary")
+        _ = try ui.waitFor(identifier: "life-log.summary-markdown")
         try ui.press(identifier: "main.section.history")
         _ = try ui.waitFor(identifier: "history.root")
         try ui.press(identifier: "main.section.lifeLog")

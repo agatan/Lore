@@ -135,7 +135,7 @@ KoeMCP ──┘</pre>
 <td>
 <code>SttEngine</code>, <code>LlmEngine</code>, <code>EngineRegistry</code>
 </td>
-<td>SpeechAnalyzerと各LLM adapter</td>
+<td>SpeechAnalyzer、WhisperKit遅延認識、local model管理、各LLM adapter</td>
 </tr>
 <tr>
 <td>
@@ -159,9 +159,9 @@ KoeMCP ──┘</pre>
 <code>Analysis/</code>
 </td>
 <td>
-<code>VocabularySuggestionJob</code>, <code>ConversationSegmenter</code>
+<code>VocabularySuggestionJob</code>, <code>AdaptiveSpeechSegmenter</code>, <code>ConversationSegmenter</code>
 </td>
-<td>履歴分析、会話分割、export</td>
+<td>履歴分析、発話burst境界、会話分割、export</td>
 </tr>
 <tr>
 <td>
@@ -178,7 +178,7 @@ KoeMCP ──┘</pre>
 </td>
 <td>
 <code>KoeApp</code>、windows、settings、HUD</td>
-<td>SwiftUI sceneと操作</td>
+<td>app lifecycle、window所有、SwiftUI表示・操作</td>
 </tr>
 </tbody>
 </table>
@@ -186,7 +186,7 @@ KoeMCP ──┘</pre>
 <section id="boot">
 <h2>3. Processと起動</h2>
 <p>
-<code>KoeApp</code>はMenuBarExtra、main、settings、life-log mini、all TODOのwindowを定義します。<code>AppEnvironment</code>は<code>@MainActor @Observable</code>のcomposition rootです。</p>
+<code>KoeApp</code>はMenuBarExtraを常設します。<code>KoeApplicationDelegate</code>はwindow sceneの生成有無に依存せずruntimeを起動し、<code>KoeWindowPresenter</code>がmain、settings、life-log mini、all TODOの各windowを一意に所有します。UI、menu、hotkeyは<code>AppEnvironment</code>の同じ表示actionを呼び、同種windowを重複生成しません。<code>AppEnvironment</code>は<code>@MainActor @Observable</code>のcomposition rootです。</p>
 <div class="flow">
 <div class="step">Settings / Engines生成</div>
 <div class="arrow">→</div>
@@ -200,8 +200,9 @@ KoeMCP ──┘</pre>
 <div class="arrow">→</div>
 <div class="step">Pending chunk再処理</div>
 </div>
-<p>UI test用の明示的な遷移がなければ<code>mainSection = .lifeLog</code>としてmain windowを開きます。</p>
-<p><code>LifeLogWindow</code>と<code>LifeLogMiniWindow</code>は表示開始時に<code>LifeLogCoordinator.followCurrentDay()</code>で今日を読み込み、初回だけtimeline末尾へscrollします。以後のreloadでは閲覧位置を動かさず、TODOの出典移動は<code>sourceNavigationRevision</code>で明示的に行います。</p>
+<p>UI test用の明示的なsettings遷移がなければ<code>mainSection = .lifeLog</code>としてmain windowを開きます。</p>
+<p>起動時の<code>captureRequested</code>は必ずfalseです。以前のruntime記録意図を設定から復元せず、明示的なUI、hotkey、App Intentだけが新しい記録意図を作ります。</p>
+<p><code>LifeLogWindow</code>と<code>LifeLogMiniWindow</code>は今日を読み込み、初回だけtimeline末尾へscrollします。TODO provenanceは永続化しますが、出典移動用UI stateは持ちません。</p>
 <p>終了時は進行中操作をinterruptし、audio writerのcommitと必要なDB保存だけを短時間待ちます。派生処理は起動せず、確定済みchunkは次回起動時に再処理します。20秒deadlineは最終保険です。</p>
 </section>
 <section id="dictation">
@@ -244,27 +245,34 @@ KoeMCP ──┘</pre>
 <div class="arrow">→</div>
 <div class="step">AudioChunk保存</div>
 <div class="arrow">→</div>
-<div class="step">連続STTでUtterance保存</div>
+<div class="step">Adaptive発話burst確定</div>
+<div class="arrow">→</div>
+<div class="step">Durable audioを遅延STT</div>
 <div class="arrow">→</div>
 <div class="step">Calendar / Conversation</div>
 <div class="arrow">→</div>
 <div class="step">Summary / draft TODO</div>
 </div>
 <ul>
-<li>音声入力とは独立したcaptureとSpeechAnalyzer sessionを持ちます。</li>
-<li>30秒chunkは復旧単位で、認識sessionは記録開始から停止まで維持します。</li>
+<li>音声入力とは独立してaudioを連続耐久化し、Life Log STTはadaptiveな発話burstごとの遅延jobです。</li>
+<li>30秒chunkは復旧単位で、認識境界ではありません。Burstがchunkをまたいでも対応する全chunkのcommit後に一つのjob入力として扱います。</li>
+<li><code>AdaptiveSpeechSegmenter</code>は正規化input level 0.05未満をnear-silenceとして無視します。累積有声時間が3秒未満、3〜10秒未満、10〜30秒未満、30秒以上の順に30秒、10秒、5秒、3秒の無音でflushし、wall time 5分でも安全flushします。</li>
+<li>Jobは参照audioのcommit後に開始します。Timestampはcapture開始時刻とaudio offsetから導出します。語彙は録音session開始時にsnapshot化し、保存audioの再処理では最新の有効語彙を使います。</li>
 <li>音声入力と重なる区間もraw audioと認識済みutteranceを保存します。成功した<code>SessionRecord</code>をtimeline、検索、exportの正本として重なるlife-log utteranceを除外します。Summary/TODOは通常音声入力も重なるlife-log utteranceも使いません。Cancelled/failed sessionではlife-log utteranceを残します。</li>
 <li>pending chunkは起動後に再処理し、無音はpeak levelで除外します。</li>
 <li>Audio保持policyは「処理後削除」を既定とし、「7日」「30日」を選択可能にします。削除可能なのは<code>transcription_state = transcribed</code>かつ<code>processing_state = extracted</code>のchunkだけです。「処理後削除」は両状態の保存完了後、「7日」「30日」はさらに<code>capture_ended_at</code>から指定日数の経過後にfileを削除します。DBのchunk metadataと派生dataは削除しません。</li>
 <li><code>LifeLogStore</code>が処理状態と保持policyから削除可能なaudio URLを決定し、<code>AppEnvironment</code>はその結果だけをfile systemから削除します。Policy変更時と起動時に同じuse caseを実行し、未処理・失敗chunkを期間だけで削除しない不変条件を一か所に置きます。</li>
-<li><code>ContinuousAudioCapture</code>は実際のaudio writerの開始・停止を<code>onRunningChanged</code>で通知し、<code>LifeLogCoordinator.isCapturing</code>だけを全UIの実録音状態へ投影します。さらに<code>AVAudioEngineConfigurationChange</code>を再接続可能なfailureとして通知します。<code>LifeLogCoordinator</code>は旧writerとSTT sessionの終了を待ち、記録意図が残り、sleepまたはボイスメモによる一時停止中でなければbackoff付きで再接続します。マイク権限拒否だけは再試行しません。</li>
+<li><code>ContinuousAudioCapture</code>は実際のaudio writerの開始・停止を通知します。<code>LifeLogCoordinator</code>は旧writerとSTT sessionの終了を待ち、同じprocessの記録意図が残り、sleepまたはボイスメモによる一時停止中でなければbackoff付きで再接続します。マイク権限拒否だけは再試行しません。</li>
 <li>設定画面のcalendar手動再取得は、選択日のsnapshot保存、timeline再読込、月間activity更新を一つのuse caseとして実行します。発話と予定は前後2分で関連付け、conversationは90秒の無発話で分割します。</li>
-<li>Life-log発話またはmemoの差分検出後、その日のlife-log発話、memo、予定からsummaryとdraft TODOを再生成します。通常音声入力は入力にもtriggerにも使わず、app終了時は派生を開始しません。</li>
-<li><code>LifeLogDerivationService</code>にはsummaryの基準時点を渡します。Timeline入力のcalendar eventを基準時点との比較で<code>終了済み</code>、<code>進行中</code>、<code>これから</code>に分類し、system instructionにも現在日時と未来予定を過去形にしない制約を加えます。日付変更時は前日の差分がなくても全予定を含むfinal summaryを再生成します。</li>
+<li>設定間隔で差分がある場合、またはSummary viewの手動要求時に、その日のlife-log発話、memo、予定からsummaryとdraft TODOをatomicに再生成します。手動要求は差分と間隔を無視します。録音停止、app終了、ボイスメモ、sleep、再接続は派生を開始しません。</li>
+<li>既定promptは根拠のある会議文脈、話題、決定・未決事項、検討の流れ、次の行動をMarkdown日報へ構成し、事実を補いません。JSONのsummary fieldへMarkdownを保持し、UIはMarkdownとして描画します。失敗時は既存summaryとdraft TODOを保持します。</li>
+<li><code>LifeLogDerivationService</code>にはsummaryの基準時点を渡します。予定を<code>終了済み</code>、<code>進行中</code>、<code>これから</code>に分類し、未来予定を過去形にしません。日付変更時の定期finalizeは差分がなくても前日の全予定を含むfinal summaryを再生成します。</li>
 </ul>
 </section>
 <section id="engines">
 <h2>6. Engines</h2>
+<p>通常音声入力とボイスメモは<code>SpeechAnalyzerStt</code>固定です。Life logの遅延jobだけをSpeechAnalyzerまたはlocal download済みWhisperKitから選びます。Audioは送信しません。</p>
+<p><code>WhisperKitStt</code>はaccuracy優先の比較的大きいcurated modelのcatalog、download、cancel、再試行、検証、削除を所有します。検証を通らないmodelは利用可能にせず、実行中jobのmodelは完了またはcancelまで削除しません。Model lifecycleは遅延jobが所有し、download完了だけでは推論engineをloadしません。Model取得requestに利用者dataを含めません。</p>
 <table>
 <thead>
 <tr>
@@ -312,7 +320,7 @@ KoeMCP ──┘</pre>
 </tbody>
 </table>
 <p><code>FormattingPrompt</code>は通常textか、名前とfield型を持つ構造化出力contractを明示します。<code>LifeLogDerivationService</code>はsummary/TODOのJSON contractを宣言し、model判定を持ちません。<code>GroqLlm</code>はこれを温度0、推論本文なし、選択modelが対応する最小の推論量と最も強いJSON制約へ変換します。GPT-OSSは<code>reasoning_effort = low</code>とstrict JSON Schema、reasoningを無効化できるmodelは無効化とJSON Object Mode、それ以外は未対応parameterを送らずJSON Object Modeを使います。全経路で同じapp側decodeを最終検証とし、通常の文章変換は温度0とprovider既定の推論量を維持します。</p>
-<p>音声入力とlife logはprovider/modelを別設定にします。語彙候補の<code>analysisLlm</code>は常にオンデバイスです。</p>
+<p>WhisperKit STT選択はlife logだけに置きます。LLMのprovider/modelは音声入力とlife logで別設定にし、語彙候補の<code>analysisLlm</code>は常にオンデバイスです。</p>
 </section>
 <section id="persistence">
 <h2>7. Persistence</h2>
@@ -365,15 +373,15 @@ KoeMCP ──┘</pre>
 </tbody>
 </table>
 <p>利用状況の録音時間は<code>DailyRecordingDuration.aggregate</code>で重なる区間を先に統合してから日境界で分割します。音声入力は<code>HistoryStore</code>の実録音区間、life logは<code>LifeLogStore</code>のtimelineに採用されたutterance区間を入力とし、<code>LifeLogSpeechProjection</code>と同じ規則で成功した音声入力と重なるutteranceを除外します。復旧用audio chunkの無音区間や同一区間の重複は利用時間へ加算しません。</p>
-<p>DBは<code>Application Support/Koe/koe.sqlite</code>、migrationはv1〜v8です。既存DBはmigration前と1日1回backupし、<code>Backups/</code>の最新7fileを保持します。全data削除はbackupも削除します。</p>
+<p>DBは<code>Application Support/Koe/koe.sqlite</code>、WhisperKit modelと途中downloadは<code>Application Support/Koe/Models/WhisperKit/</code>です。既存DBはmigration前と1日1回backupし、最新7fileを保持します。全data削除はbackup、model、途中fileも削除します。</p>
 </section>
 <section id="settings">
 <h2>8. 設定、秘密、process間同期</h2>
-<ul><li><code>AppSettings.Storage</code>をsuite <code>dev.agatan.Koe</code>のUserDefaults key <code>koe.settings.v1</code>へJSON保存します。</li><li><code>ApplicationLanguage</code>は<code>system</code>、<code>en</code>、<code>ja</code>、<code>zh-Hans</code>の閉じた値として保存し、既定は<code>system</code>です。<code>system</code>はmacOSの優先言語から最初の対応localeを選び、なければ<code>en</code>へ解決します。<code>zh-Hant</code>は<code>zh-Hans</code>へ暗黙変換しません。既存設定にfieldがなければ<code>system</code>で補完し、GRDB migrationは追加しません。</li><li>Provider/modelは音声入力とlife logで分離します。通常音声入力、life-log capture、mini window、ボイスメモのhotkey、保持期間、calendar filter、summary間隔をここに入れます。Mini windowは常時手前を不変条件とし、表示levelの設定は持ちません。Color themeも設定として保持せず、<code>KoeTheme</code>の固定brand tokenを使います。</li><li><code>AppEnvironment</code>の設定から解決した<code>Locale</code>を全SwiftUI sceneへ注入します。Localization resourceの開発言語と欠損keyのfallbackは英語です。表示言語はUI shellだけのvariation pointで、STT locale、mode、prompt、保存data、export、CLI/MCP contractへ伝播させません。</li><li>API keyだけはKeychainへ保存します。</li><li>CLI/MCPによるTODO・prompt変更はDistributed Notificationでappへ通知します。</li></ul>
+<ul><li><code>AppSettings.Storage</code>をUserDefaultsへ保存しますが、runtimeの<code>captureRequested</code>は永続化しません。</li><li>WhisperKit engine/model選択はlife logだけに置き、通常音声入力とボイスメモはSpeechAnalyzer固定です。LLM provider/modelは用途別に分離します。</li><li>WhisperKit model本体と途中downloadは専用directoryへ置き、全data削除に含めます。</li><li>表示言語はUI shellだけへ適用し、STT locale、prompt、保存data、automation contractへ伝播させません。</li><li>API keyだけはKeychainへ保存し、CLI/MCPによるTODO・prompt変更はappへ通知します。</li></ul>
 </section>
 <section id="ui">
 <h2>9. UIとwindow対応</h2>
-<table><thead><tr><th>View</th><th>内容</th></tr></thead><tbody><tr><td><code>KoeTheme</code></td><td>固定brand palette</td></tr><tr><td><code>MenuBarPanel</code></td><td>用途別quick actionと終了導線</td></tr><tr><td><code>MenuBarLabel</code></td><td>音声入力phaseとlife-log capture状態</td></tr><tr><td><code>MainWindowView</code></td><td>Life log/history切替</td></tr><tr><td><code>LifeLogWindow</code></td><td>Event/utterance/dictation/memoを一列の時刻順で表示する。日付選択時はCalendar snapshotを再取得し、予定一覧とtimelineを同じdataから更新する。初回だけ末尾へscrollし、reloadでは閲覧位置を保つ</td></tr><tr><td><code>LifeLogCaptureControl</code></td><td>録音と文字起こしの内部Bool中間状態を露出せず、利用者向け状態を安定表示する</td></tr><tr><td><code>LifeLogExportSheet</code></td><td>表示時snapshotをcancel可能なbackground taskで人間向けMarkdownへ生成し、上限付きpreviewと完全版copy/fileで共有する</td></tr><tr><td><code>LifeLogMemoComposer</code></td><td>手入力とボイスメモを同じmemoとして追加する</td></tr><tr><td><code>HistoryBrowserView</code></td><td>履歴、検索、詳細、copy、削除</td></tr><tr><td><code>LifeLogMiniWindow</code></td><td>予定と記録を一列表示し、初回だけ末尾へscrollする常時手前window</td></tr><tr><td><code>LifeLogTodoManagerWindow</code></td><td>全TODOの編集、確定、完了、再開、削除</td></tr><tr><td><code>LifeLogCalendarSettingsView</code></td><td>Calendar選択、filter、再取得</td></tr><tr><td><code>SettingsWindowView</code></td><td>11 settings section</td></tr><tr><td>HUD</td><td>通常音声入力またはボイスメモの状態表示</td></tr></tbody></table>
+<table><thead><tr><th>View</th><th>内容</th></tr></thead><tbody><tr><td><code>KoeTheme</code></td><td>固定brand palette</td></tr><tr><td><code>MenuBarPanel</code></td><td>用途別quick actionと終了導線</td></tr><tr><td><code>MenuBarLabel</code></td><td>音声入力phaseとlife-log capture状態</td></tr><tr><td><code>MainWindowView</code></td><td>Life log/history切替</td></tr><tr><td><code>LifeLogWindow</code></td><td>一列timeline。左下SummaryはMarkdown描画、summaryとdraft TODOの手動更新、進捗、失敗を扱う。TODO provenanceは表示移動に使わない</td></tr><tr><td><code>LifeLogCaptureControl</code></td><td>利用者向け記録状態を安定表示</td></tr><tr><td><code>LifeLogExportSheet</code></td><td>人間向けMarkdownをbackground生成して共有</td></tr><tr><td><code>LifeLogMemoComposer</code></td><td>手入力とボイスメモを同じmemoとして追加</td></tr><tr><td><code>LifeLogMiniWindow</code></td><td>予定と記録の常時手前window</td></tr><tr><td><code>LifeLogTodoManagerWindow</code></td><td>全TODOの編集、確定、完了、再開、削除</td></tr><tr><td><code>WhisperModelSettingsView</code></td><td>Life log用modelの選択、download進捗・cancel・再試行・削除・使用中状態</td></tr><tr><td><code>SettingsWindowView</code></td><td>11 settings section</td></tr><tr><td>HUD</td><td>通常音声入力またはボイスメモの状態表示</td></tr></tbody></table>
 </section>
 <section id="automation">
 <h2>10. 自動化境界</h2>
@@ -399,6 +407,8 @@ KoeMCP ──┘</pre>
 <td>FormattingBackend、EngineRegistry、ModelsSettings、SecretStore</td>
 <td>privacy、engine test、spec/design</td>
 </tr>
+<tr><td>Life Log発話burst・STT</td><td>AdaptiveSpeechSegmenter、LifeLogCoordinator、SttEngine</td><td>near-silence、30/10/5/3秒tier、5分flush、offset、語彙snapshot、tests</td></tr>
+<tr><td>Whisper model管理</td><td>EngineRegistry、WhisperKitStt、settings</td><td>download/cancel/検証、job中削除防止、全削除、privacy、tests</td></tr>
 <tr>
 <td>永続model</td>
 <td>Domain、migrator、Store</td>
@@ -435,10 +445,10 @@ KoeMCP ──┘</pre>
 <td>
 <code>make ui-test</code>、spec/design</td>
 </tr>
-<tr><td>Life-log timeline・TODO表示</td><td>LifeLogWindow、LifeLogMiniWindow、LifeLogTodoManagerWindow、MonthActivityCalendar</td><td>初回だけのscroll、予定を含む一列timeline、安定した記録状態、UI test、spec/design</td></tr>
+<tr><td>Life-log timeline・TODO表示</td><td>LifeLogWindow、LifeLogMiniWindow、LifeLogTodoManagerWindow、MonthActivityCalendar</td><td>Markdown summaryと手動更新、TODO出典UIなし、一列timeline、UI test、spec/design</td></tr>
 <tr><td>日別export</td><td>LifeLogTextExporter、LifeLogExportSheet、CLI/MCP/App Intents</td><td>音声入力の独立選択、人間向けMarkdown、background生成、snapshot整合、swift test、UI test</td></tr>
 <tr><td>TODO重複防止</td><td>LifeLogDerivationService、LifeLogCoordinator、LifeLogStore</td><td>既存TODOをpromptへ含め、正規化後の同一文言を保存しない。新しいDraftには永続的に一意なIDを割り当て、確定済みの旧Draft IDと衝突しないdomain/persistence test、swift test</td></tr>
-<tr><td>再要約trigger</td><td>LifeLogCoordinator</td><td>設定間隔と明示的停止だけをtriggerとし、ボイスメモ・sleep・再接続では強制更新しないstate test、swift test</td></tr>
+<tr><td>再要約trigger</td><td>LifeLogCoordinator</td><td>設定間隔と手動要求だけをtriggerとし、録音停止・app終了・ボイスメモ・sleep・再接続では更新しないstate test、swift test</td></tr>
 <tr><td>Global hotkeyの対event</td><td>HotkeyMonitor</td><td>修飾キーなしの同一文字key-upを素通しする回帰test、<code>swift test</code></td></tr>
 <tr>
 <td>Menu bar状態表示</td>
@@ -454,7 +464,7 @@ KoeMCP ──┘</pre>
 </section>
 <section id="tests">
 <h2>13. Test配置</h2>
-<p><code>Tests/KoeKitTests</code>がdomain、formatting、engine、persistence、life log、automationを検証します。<code>make ui-test</code>は署名済みappを起動し、<code>Scripts/KoeUIE2E.swift</code>から主要CUJをAccessibility APIで検証します。詳細は<a href="testing.md">testing.md</a>を参照してください。</p>
+<p><code>Tests/KoeKitTests</code>はnear-silence無視、3/10/30秒の有声境界による30/10/5/3秒tier、5分flushをdomain testで固定し、chunk跨ぎoffset timestamp、録音session開始時の語彙snapshot、同一入力の再試行を統合testで検証します。<code>make ui-test</code>は主要CUJを検証します。詳細は<a href="testing.md">testing.md</a>を参照してください。</p>
 </section>
 </main>
 <footer>詳細な型と経路は <a href="design.md">Markdown版</a>、利用者との契約は <a href="spec.html">外部仕様</a> を参照してください。</footer>

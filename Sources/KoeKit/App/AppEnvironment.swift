@@ -56,10 +56,14 @@ public final class AppEnvironment {
     public private(set) var appDataBytes: Int64 = 0
     @ObservationIgnored public var onToggleLifeLogMiniWindow: (() -> Void)?
     @ObservationIgnored public var onShowMainWindow: (() -> Void)?
+    @ObservationIgnored public var onShowSettings: ((SettingsSection) -> Void)?
+    @ObservationIgnored public var onShowLifeLogTodos: (() -> Void)?
 
     /// 音声モデル取得の進捗(0...1)。nil = 実行中でない。
     public private(set) var speechAssetProgress: Double?
     public private(set) var speechAssetError: String?
+    public private(set) var lifeLogWhisperProgress: Double?
+    public private(set) var lifeLogWhisperError: String?
     /// 選択中のクラウドにAPIキーが登録済みか。キーそのものは状態に持たない(NFR-2)。
     public private(set) var hasLlmApiKey = false
     public private(set) var llmModels: [String] = []
@@ -79,6 +83,7 @@ public final class AppEnvironment {
     /// このプロセスが生きている長さ。起動し直すべきかの判断に使う。
     private let launchedAt = ContinuousClock.now
     @ObservationIgnored private var bootTask: Task<Void, Never>?
+    @ObservationIgnored private var lifeLogWhisperInstallTask: Task<Void, Never>?
     private var permissionWatcher: Task<Void, Never>?
     private var analysisTask: Task<Void, Never>?
     @ObservationIgnored private var powerObservers: [any NSObjectProtocol] = []
@@ -222,11 +227,9 @@ public final class AppEnvironment {
         Task { await refreshLoginItem() }
         await applyEngineChange(checkCredentials: false)
         coordinator.prewarmSounds()
-        // SpeechAnalyzerの準備が終わる前に常時録音のAVAudioEngineを起動すると、
-        // macOSの音声基盤内で初期化が競合してtrapする。
-        if database != nil, settings.lifeLogCaptureEnabled, !Self.usesScreenshotDemoData {
-            setLifeLogCaptureEnabled(true)
-        }
+        // 記録開始は必ずこのプロセスでの明示操作から行う。
+        // crash等で残った前回のruntime stateを起動意図として復元しない。
+        settings.lifeLogCaptureEnabled = false
         scheduleBackgroundAnalysis()
     }
 
@@ -402,6 +405,7 @@ public final class AppEnvironment {
     public func startHotkeyMonitor() {
         guard Permissions.isAccessibilityGranted else {
             hotkeyError = HotkeyMonitor.Failure.notTrusted.errorDescription
+            KoeLog.hotkey.error("アクセシビリティ権限がないためホットキー監視を開始できません")
             return
         }
         do {
@@ -414,6 +418,7 @@ public final class AppEnvironment {
             try lifeLogMiniWindowHotkeys.start()
             try voiceMemoHotkeys.start()
             hotkeyError = nil
+            KoeLog.hotkey.info("4本のグローバルホットキー監視を開始しました")
         } catch {
             hotkeyError = error.localizedDescription
             KoeLog.hotkey.error("ホットキー監視を開始できません: \(error.localizedDescription, privacy: .public)")
@@ -790,7 +795,9 @@ public final class AppEnvironment {
             return
         }
         do {
+            cancelLifeLogWhisperDownload()
             try removeLifeLogAudioDirectory()
+            try removeLifeLogWhisperModelsDirectory()
             try SecretStore.deleteAll()
             try database.deleteBackups()
             try await database.deleteAllUserData()
@@ -805,6 +812,7 @@ public final class AppEnvironment {
                 model: settings.model(for: settings.lifeLogFormattingBackend, purpose: .lifeLog),
                 purpose: .lifeLog
             )
+            engines.applyLifeLogStt(backend: settings.lifeLogSttBackend, model: settings.lifeLogWhisperModel)
             try await database.modes.seedBuiltinsIfNeeded()
             try await database.sharedRules.seedOrMigrate()
             await reloadModes()
@@ -869,6 +877,13 @@ public final class AppEnvironment {
 
     private func removeLifeLogAudioDirectory() throws {
         let root = Self.lifeLogAudioRoot
+        if FileManager.default.fileExists(atPath: root.path) {
+            try FileManager.default.removeItem(at: root)
+        }
+    }
+
+    private func removeLifeLogWhisperModelsDirectory() throws {
+        let root = WhisperKitStt.defaultModelRoot
         if FileManager.default.fileExists(atPath: root.path) {
             try FileManager.default.removeItem(at: root)
         }
@@ -982,6 +997,53 @@ public final class AppEnvironment {
         }
     }
 
+    public func applyLifeLogSttChange() async {
+        engines.applyLifeLogStt(backend: settings.lifeLogSttBackend, model: settings.lifeLogWhisperModel)
+        await engines.refreshSttAvailability()
+    }
+
+    public func installLifeLogWhisperModel() {
+        guard lifeLogWhisperProgress == nil else { return }
+        lifeLogWhisperProgress = 0
+        lifeLogWhisperError = nil
+        lifeLogWhisperInstallTask = Task { [weak self] in
+            guard let self else { return }
+            do {
+                try await engines.installLifeLogWhisperModel { progress in
+                    Task { @MainActor [weak self] in self?.lifeLogWhisperProgress = progress }
+                }
+                lifeLogWhisperProgress = nil
+                refreshStorageSizes()
+            } catch is CancellationError {
+                lifeLogWhisperProgress = nil
+            } catch {
+                lifeLogWhisperProgress = nil
+                lifeLogWhisperError = error.localizedDescription
+                KoeLog.engine.error("Whisperモデルの取得に失敗: \(error.localizedDescription, privacy: .public)")
+            }
+            lifeLogWhisperInstallTask = nil
+        }
+    }
+
+    public func cancelLifeLogWhisperDownload() {
+        lifeLogWhisperInstallTask?.cancel()
+        lifeLogWhisperInstallTask = nil
+        lifeLogWhisperProgress = nil
+        lifeLogWhisperError = nil
+    }
+
+    public func deleteLifeLogWhisperModel() async {
+        guard !lifeLog.hasCaptureIntent, !lifeLog.isTranscribing else { return }
+        lifeLogWhisperError = nil
+        do {
+            try await engines.deleteLifeLogWhisperModel()
+            refreshStorageSizes()
+        } catch {
+            lifeLogWhisperError = error.localizedDescription
+            KoeLog.engine.error("Whisperモデルの削除に失敗: \(error.localizedDescription, privacy: .public)")
+        }
+    }
+
     public func reloadMeasuredLatencies() async {
         guard let database else { return }
         measuredLatencies = (try? await database.history.measuredLatencies(limit: 300)) ?? MeasuredLatencies()
@@ -992,6 +1054,7 @@ public final class AppEnvironment {
         checkCredentials: Bool = true,
         resetConnectionState: Bool = false
     ) async {
+        engines.applyLifeLogStt(backend: settings.lifeLogSttBackend, model: settings.lifeLogWhisperModel)
         if purpose == nil || purpose == .dictation {
             await applyEngineChange(for: .dictation, checkCredentials: checkCredentials, resetConnectionState: resetConnectionState)
         }

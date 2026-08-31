@@ -125,7 +125,6 @@
 "完了した項目は、いつでも未実施へ戻せます" = "You can return completed items to Open at any time.";
 "完了にする" = "Mark Complete";
 "未実施に戻す" = "Mark Open";
-"元の発言へ" = "Go to Original Speech";
 "ライフログを検索 (⌘F)" = "Search Life Log (⌘F)";
 "発話、メモ、TODO、要約を検索" = "Search speech, notes, TODOs, and summaries";
 "日本語の部分一致で横断検索します" = "Searches all records using partial matches";
@@ -255,7 +254,7 @@
 "ライフログを開始" = "Start Life Log";
 "Koeのライフログ記録を開始します。" = "Starts Life Log recording in Koe.";
 "ライフログを終了" = "Stop Life Log";
-"Koeのライフログ記録を終了し、文字起こしと一日の要約が確定するまで待ちます。" = "Stops Life Log recording in Koe and waits for transcription and the daily summary to finish.";
+"Koeのライフログ記録を終了し、保存と文字起こしが確定するまで待ちます。" = "Stops Life Log recording in Koe and waits for audio saving and transcription to finish.";
 "ライフログを書き出してコピー" = "Export and Copy Life Log";
 "予定・発話・音声入力・メモを、読みやすいMarkdownとしてクリップボードへコピーします。" = "Copies events, speech, dictation, and notes to the clipboard as readable Markdown.";
 "対象日（未指定なら今日）" = "Date (Today if Not Specified)";
@@ -278,7 +277,7 @@
 "クリップボードへ書き込めませんでした。" = "Could Not Write to the Clipboard.";
 "書き出す項目を1つ以上選んでください。" = "Select at Least One Item to Export.";
 "書き出し先のフォルダを選び直してください。" = "Choose the Export Folder Again.";
-"文字起こしと要約の完了を待てませんでした。保存済み音声は次回起動時に再処理されます。" = "Transcription and summarization did not finish in time. Saved audio will be processed the next time Koe starts.";
+"保存と文字起こしの完了を待てませんでした。保存済み音声は次回起動時に再処理されます。" = "Audio saving and transcription did not finish in time. Saved audio will be processed the next time Koe starts.";
 "表示言語" = "Display Language";
 "システム設定" = "System Settings";
 "ライフログの設定" = "Life Log Settings";

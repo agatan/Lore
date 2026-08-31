@@ -4,7 +4,7 @@ import Observation
 
 /// 推論エンジンの保持と準備。
 ///
-/// 聞き取りは OS 内蔵の SpeechAnalyzer で固定(設計 C-52)。
+/// 通常の音声入力はOS内蔵SpeechAnalyzer、ライフログは明示選択時だけWhisperKitを使う。
 /// 仕上げだけは選べる: 既定はオンデバイスの Foundation Models、
 /// ユーザーが明示的に選んだときだけクラウドまたはローカルLLM(`FormattingBackend`)。
 /// **選択肢はこの 1 箇所に閉じ込める**。どちらが動いているかを知りたい側は
@@ -17,6 +17,7 @@ import Observation
 @Observable
 public final class EngineRegistry {
     @ObservationIgnored public let stt: any SttEngine
+    @ObservationIgnored private var whisperKitStt: WhisperKitStt?
     @ObservationIgnored private let onDeviceLlm: any LlmEngine
     @ObservationIgnored public let groq: GroqLlm
     @ObservationIgnored public let openAI: RemoteLlm
@@ -35,6 +36,7 @@ public final class EngineRegistry {
 
     /// 聞き取りの利用可否。日本語の音声モデルが未取得のことがあるので UI に出す。
     public private(set) var sttAvailability: EngineAvailability = .ready
+    public private(set) var lifeLogSttAvailability: EngineAvailability = .ready
     /// いま選ばれている仕上げの利用可否。
     public private(set) var llmAvailability: EngineAvailability = .ready
     public private(set) var lifeLogLlmAvailability: EngineAvailability = .ready
@@ -91,6 +93,19 @@ public final class EngineRegistry {
         case .groq: lifeLogGroq
         case .ollama: lifeLogOllama
         case .lmStudio: lifeLogLmStudio
+        }
+    }
+
+    public var lifeLogStt: any SttEngine { whisperKitStt ?? stt }
+
+    public func applyLifeLogStt(backend: LifeLogSttBackend, model: WhisperModel) {
+        switch backend {
+        case .speechAnalyzer:
+            whisperKitStt = nil
+        case .whisperKit:
+            if whisperKitStt?.modelName != model.displayName {
+                whisperKitStt = WhisperKitStt(model: model)
+            }
         }
     }
 
@@ -176,7 +191,20 @@ public final class EngineRegistry {
     }
 
     public func refreshSttAvailability(languagePreference: LanguagePreference = .auto) async {
-        sttAvailability = await stt.availability(languagePreference: languagePreference)
+        // Speech frameworkの在庫APIはasyncでも呼び出しthreadを長時間占有することがある。
+        // EngineRegistryはMainActorなので、ここで直接待つとwindowとglobal hotkeyまで止まる。
+        let stt = self.stt
+        sttAvailability = await Task.detached(priority: .utility) {
+            await stt.availability(languagePreference: languagePreference)
+        }.value
+        if let whisperKitStt {
+            lifeLogSttAvailability = await Task.detached(priority: .utility) {
+                await whisperKitStt.availability(languagePreference: languagePreference)
+            }.value
+        } else {
+            // 同じSpeechAnalyzerへ連続で在庫照会すると起動が長時間止まることがある。
+            lifeLogSttAvailability = sttAvailability
+        }
     }
 
     public func refreshLlmAvailability(for purpose: LlmPurpose) async {
@@ -193,10 +221,23 @@ public final class EngineRegistry {
         await refreshSttAvailability()
     }
 
+    public func installLifeLogWhisperModel(progress: @escaping @Sendable (Double) -> Void) async throws {
+        guard let whisperKitStt else { throw EngineError.notReady("WhisperKitを選択してください") }
+        try await whisperKitStt.install(progress: progress)
+        lifeLogSttAvailability = await whisperKitStt.availability(languagePreference: .auto)
+    }
+
+    public func deleteLifeLogWhisperModel() async throws {
+        guard let whisperKitStt else { return }
+        try await whisperKitStt.deleteInstalledModel()
+        lifeLogSttAvailability = await whisperKitStt.availability(languagePreference: .auto)
+    }
+
     /// アイドル時のモデル解放(NFR-5)。
     public func unloadAll() async {
         preparedFormat = nil
         await stt.unload()
+        await whisperKitStt?.unload()
         await llm.unload()
         if backend != .onDevice || lifeLogBackend != .onDevice {
             await lifeLogLlm.unload()

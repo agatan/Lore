@@ -37,6 +37,55 @@ struct LifeLogSettingsView: View {
                 title: "音声",
                 footnote: "音声はこのMacのアプリ用データフォルダだけに保存します。処理に失敗した音声は次回起動時に再処理します。"
             ) {
+                SettingsRow(title: "文字起こし", caption: "WhisperKitは発話区間だけを後追いで高精度に処理します") {
+                    Picker("", selection: Binding(get: { settings.lifeLogSttBackend }, set: { value in
+                        settings.lifeLogSttBackend = value
+                        Task { await env.applyLifeLogSttChange() }
+                    })) {
+                        ForEach(LifeLogSttBackend.allCases) { Text($0.displayName).tag($0) }
+                    }
+                    .labelsHidden()
+                    .frame(width: 220)
+                }
+                if settings.lifeLogSttBackend == .whisperKit {
+                    SettingsRow(title: "Whisperモデル") {
+                        Picker("", selection: Binding(get: { settings.lifeLogWhisperModel }, set: { value in
+                            settings.lifeLogWhisperModel = value
+                            Task { await env.applyLifeLogSttChange() }
+                        })) {
+                            ForEach(WhisperModel.allCases) { Text($0.displayName).tag($0) }
+                        }
+                        .labelsHidden()
+                        .frame(width: 220)
+                    }
+                    SettingsRow(title: "モデル管理", caption: "取得中だけHugging Faceへ接続します。音声は送信しません") {
+                        HStack(spacing: 8) {
+                            if let progress = env.lifeLogWhisperProgress {
+                                ProgressView(value: progress).frame(width: 110)
+                                Text("\(Int(progress * 100))%")
+                                    .font(.system(size: 10.5, design: .rounded)).monospacedDigit()
+                                Button("キャンセル") { env.cancelLifeLogWhisperDownload() }
+                            } else {
+                                switch env.engines.lifeLogSttAvailability {
+                                case .ready:
+                                    Label("取得済み", systemImage: "checkmark.circle")
+                                        .foregroundStyle(KoeTheme.success)
+                                    Button("削除") { Task { await env.deleteLifeLogWhisperModel() } }
+                                        .disabled(env.lifeLog.hasCaptureIntent || env.lifeLog.isTranscribing)
+                                case .needsDownload:
+                                    Button("取得") { env.installLifeLogWhisperModel() }
+                                case .unavailable(let reason):
+                                    Text(reason).foregroundStyle(KoeTheme.recording)
+                                }
+                            }
+                        }
+                        .font(.system(size: 10.5))
+                    }
+                    if let error = env.lifeLogWhisperError {
+                        Text(error).font(.system(size: 11)).foregroundStyle(KoeTheme.recording)
+                    }
+                }
+                Divider()
                 SettingsRow(title: "マイク") {
                     Picker("", selection: Binding(get: { settings.lifeLogInputDeviceUID ?? "" }, set: { value in
                         settings.lifeLogInputDeviceUID = value.isEmpty ? nil : value

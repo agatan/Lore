@@ -42,9 +42,9 @@ struct LifeLogTests {
         #expect(utterances.first?.id == id)
     }
 
-    @Test("録音停止時は差分がなくても一日の全データを再要約する")
+    @Test("手動更新は差分がなくても選択日の全データを再要約する")
     @MainActor
-    func stoppedCaptureForcesWholeDaySummary() async throws {
+    func manualRefreshForcesWholeDaySummary() async throws {
         let database = try await KoeDatabase.inMemory()
         let llm = RecordingLifeLogLlm()
         let coordinator = LifeLogCoordinator()
@@ -52,10 +52,13 @@ struct LifeLogTests {
         let endedAt = startedAt.addingTimeInterval(60)
         try await database.lifeLog.save(audioChunk: LifeLogAudioChunk(
             id: "audio", captureStartedAt: startedAt, captureEndedAt: endedAt,
-            localPath: "/tmp/already-summarized.m4a"
+            localPath: "/tmp/already-summarized.m4a",
+            transcriptionState: .transcribed, processingState: .extracted
         ))
-        let utterance = LifeLogUtterance(id: "already-summarized", startedAt: startedAt, endedAt: endedAt,
-                                         text: "停止前に確定した発話", audioChunkID: "audio")
+        let utterance = LifeLogUtterance(
+            id: "already-summarized", startedAt: startedAt, endedAt: endedAt,
+            text: "前回の要約後に変更されていない発話", audioChunkID: "audio"
+        )
         try await database.lifeLog.save(utterance: utterance)
         try await database.lifeLog.save(summary: DailySummary(
             day: LifeLogDateKey.string(for: startedAt), summary: "前回", commitments: [], topics: [],
@@ -63,16 +66,22 @@ struct LifeLogTests {
             summarizedThrough: endedAt, isFinal: false
         ))
 
-        let derivation = LifeLogDerivationService(llm: llm)
-        try await coordinator.updateSummary(for: startedAt, respectingInterval: false, store: database.lifeLog,
-                                            derivation: derivation)
-        #expect(llm.recordedPrompts.isEmpty)
+        await coordinator.configure(
+            database: database,
+            engines: EngineRegistry(llm: llm),
+            vocabulary: { [] },
+            todoPrompt: { BuiltinLifeLogPrompts.todo },
+            summaryPrompt: { BuiltinLifeLogPrompts.summary },
+            summaryIntervalMinutes: { 60 },
+            participatingEventsOnly: { true },
+            audioProcessingCompleted: {}
+        )
+        await coordinator.select(date: startedAt)
 
-        try await coordinator.updateSummary(for: startedAt, respectingInterval: false, force: true,
-                                            store: database.lifeLog, derivation: derivation)
-        #expect(llm.recordedPrompts.map(\.user).joined().contains("停止前に確定した発話"))
+        await coordinator.refreshSelectedDaySummary()
+
+        #expect(llm.recordedPrompts.map(\.user).joined().contains(utterance.text))
         #expect(try await database.lifeLog.day(startedAt).summary?.summary == "全体")
-        #expect(try await database.lifeLog.todos().first?.sourceUtteranceIDs == [utterance.id])
     }
 
     @Test("再要約の新しいDraft IDは確定済みの旧Draft IDと衝突しない")
@@ -107,18 +116,8 @@ struct LifeLogTests {
         let draft = try #require(todos.first { $0.title == "TODO" })
         #expect(draft.status == .draft)
         #expect(draft.id != confirmedID)
-    }
-
-    @Test("日付をまたぐ録音の停止時は両日を再要約対象にする")
-    @MainActor
-    func stopAcrossMidnightIncludesEveryDay() throws {
-        var calendar = Calendar(identifier: .gregorian)
-        calendar.timeZone = try #require(TimeZone(secondsFromGMT: 0))
-        let start = try #require(calendar.date(from: DateComponents(year: 2026, month: 8, day: 29, hour: 23, minute: 59)))
-        let end = try #require(calendar.date(from: DateComponents(year: 2026, month: 8, day: 30, hour: 0, minute: 1)))
-        #expect(LifeLogCoordinator.daysSpanned(from: start, through: end, calendar: calendar) == [
-            calendar.startOfDay(for: start), calendar.startOfDay(for: end),
-        ])
+        #expect(draft.sourceUtteranceIDs.isEmpty)
+        #expect(draft.sourceMemoIDs.isEmpty)
     }
 
     @Test("スリープ中は再接続せず、復帰後に記録意図を保って再接続する")
@@ -151,12 +150,6 @@ struct LifeLogTests {
         #expect(!coordinator.isSuspendedForVoiceMemo)
         #expect(coordinator.isRecoveringCapture)
         coordinator.setCaptureEnabled(false)
-    }
-
-    @Test("明示的な記録停止だけがsession終了時の強制再要約になる")
-    func onlyExplicitStopForcesSummaryAfterCaptureEnds() {
-        #expect(LifeLogCoordinator.shouldForceSummaryAfterCaptureEnded(captureRequested: false))
-        #expect(!LifeLogCoordinator.shouldForceSummaryAfterCaptureEnded(captureRequested: true))
     }
 
     @Test("音声構成変更は再試行し、マイク権限拒否だけは再試行しない")
@@ -267,7 +260,7 @@ struct LifeLogTests {
         #expect(groups.allSatisfy { group in group.1.allSatisfy { $0.conversationID == group.0.id } })
     }
 
-    @Test("TODOは選択日ではなくglobalに保存し出典へ戻れる")
+    @Test("TODOはglobalに保存し、既存の出典情報を損なわない")
     func todoKeepsProvenance() async throws {
         let database = try await KoeDatabase.inMemory()
         let todo = LifeLogTodo(title: "RFCを書く", sourceConversationID: "conversation",
@@ -277,37 +270,6 @@ struct LifeLogTests {
         #expect(stored.sourceUtteranceIDs == ["utterance"])
         #expect(stored.sourceConversationID == "conversation")
         #expect(stored.sourceMemoIDs == ["memo"])
-    }
-
-    @Test("TODOのmemo出典は対象日を読み込んだ後にtimelineへ案内する")
-    @MainActor
-    func todoMemoSourceNavigation() async throws {
-        let database = try await KoeDatabase.inMemory()
-        let coordinator = LifeLogCoordinator()
-        let sourceDate = Date(timeIntervalSince1970: 1_777_777_700)
-        let memo = LifeLogMemo(id: "source-memo", createdAt: sourceDate, text: "出典メモ")
-        try await database.lifeLog.save(memo: memo)
-        await coordinator.configure(
-            database: database,
-            engines: EngineRegistry(),
-            vocabulary: { [] },
-            todoPrompt: { "" },
-            summaryPrompt: { "" },
-            summaryIntervalMinutes: { 60 },
-            participatingEventsOnly: { true },
-            audioProcessingCompleted: {}
-        )
-
-        let todo = LifeLogTodo(title: "確認する", sourceMemoIDs: [memo.id])
-        await coordinator.jumpToSource(of: todo)
-
-        #expect(Calendar.current.isDate(coordinator.selectedDate, inSameDayAs: sourceDate))
-        #expect(coordinator.day.memos.map(\.id) == [memo.id])
-        #expect(coordinator.highlightedTimelineItemID == "m-\(memo.id)")
-        #expect(coordinator.sourceNavigationRevision == 1)
-
-        await coordinator.jumpToSource(of: todo)
-        #expect(coordinator.sourceNavigationRevision == 2)
     }
 
     @Test("予定時刻は最も近いtimeline項目へ、検索結果は該当項目へ移動する")
@@ -812,6 +774,31 @@ struct LifeLogTests {
         #expect(service.prompt(.summary) == "新しい要約プロンプト")
     }
 
+    @MainActor
+    @Test("旧標準要約プロンプトだけを新標準へ更新し、カスタム値は保つ")
+    func migratesOnlyLegacySummaryPrompt() throws {
+        let legacySuite = #function + ".legacy"
+        let legacyDefaults = try #require(UserDefaults(suiteName: legacySuite))
+        legacyDefaults.removePersistentDomain(forName: legacySuite)
+        var legacyStorage = AppSettings.Storage()
+        legacyStorage.lifeLogSummaryPrompt = BuiltinLifeLogPrompts.legacySummary
+        legacyDefaults.set(try JSONEncoder().encode(legacyStorage), forKey: AppSettings.defaultsKey)
+
+        let migrated = AppSettings(defaults: legacyDefaults)
+        #expect(migrated.lifeLogSummaryPrompt == BuiltinLifeLogPrompts.summary)
+        #expect(migrated.lifeLogSummaryPrompt != BuiltinLifeLogPrompts.legacySummary)
+
+        let customSuite = #function + ".custom"
+        let customDefaults = try #require(UserDefaults(suiteName: customSuite))
+        customDefaults.removePersistentDomain(forName: customSuite)
+        var customStorage = AppSettings.Storage()
+        customStorage.lifeLogSummaryPrompt = "自分用の日報プロンプト"
+        customDefaults.set(try JSONEncoder().encode(customStorage), forKey: AppSettings.defaultsKey)
+
+        let preserved = AppSettings(defaults: customDefaults)
+        #expect(preserved.lifeLogSummaryPrompt == "自分用の日報プロンプト")
+    }
+
     @Test("ライフログ削除はすべての派生データとsource of truthを同時に消す")
     func deleteAllLifeLogData() async throws {
         let database = try await KoeDatabase.inMemory()
@@ -839,6 +826,51 @@ struct LifeLogTests {
         #expect(day.summary == nil)
         #expect(try await database.lifeLog.todos().isEmpty)
         #expect(try await database.lifeLog.pendingAudioChunks().isEmpty)
+    }
+}
+
+@Suite("発話burstの適応的な確定")
+struct AdaptiveSpeechSegmenterTests {
+    @Test("発話量が増えるほど必要な無音を短くする")
+    func silenceThresholdTiers() {
+        #expect(AdaptiveSpeechSegmenter.requiredSilence(afterVoicedDuration: 2.9) == 30)
+        #expect(AdaptiveSpeechSegmenter.requiredSilence(afterVoicedDuration: 3) == 10)
+        #expect(AdaptiveSpeechSegmenter.requiredSilence(afterVoicedDuration: 10) == 5)
+        #expect(AdaptiveSpeechSegmenter.requiredSilence(afterVoicedDuration: 30) == 3)
+    }
+
+    @Test("無音だけでは認識を開始しない")
+    func silenceDoesNotStartBurst() {
+        var segmenter = AdaptiveSpeechSegmenter()
+        #expect(segmenter.consume(level: 0.01, duration: 60) == .ignore)
+        let didFinish = segmenter.finish()
+        #expect(!didFinish)
+    }
+
+    @Test("長い発話は3秒の無音で確定する")
+    func longSpeechFlushesAfterThreeSeconds() {
+        var segmenter = AdaptiveSpeechSegmenter()
+        #expect(segmenter.consume(level: 0.2, duration: 31) == .started)
+        #expect(segmenter.consume(level: 0.01, duration: 2) == .buffer)
+        #expect(segmenter.consume(level: 0.01, duration: 1) == .flush)
+        #expect(!segmenter.isActive)
+    }
+
+    @Test("連続入力は5分で安全に確定する")
+    func maximumBurstDurationFlushes() {
+        var segmenter = AdaptiveSpeechSegmenter()
+        #expect(segmenter.consume(level: 0.2, duration: 299) == .started)
+        #expect(segmenter.consume(level: 0.2, duration: 1) == .flush)
+    }
+
+    @Test("停止時は発話を含む未確定burstだけを処理する")
+    func finishOnlyFlushesSpeech() {
+        var segmenter = AdaptiveSpeechSegmenter()
+        _ = segmenter.consume(level: 0.2, duration: 1)
+        let firstFinish = segmenter.finish()
+        let secondFinish = segmenter.finish()
+        #expect(firstFinish)
+        #expect(!secondFinish)
     }
 }
 

@@ -60,7 +60,7 @@
 </tr>
 <tr>
 <td>STT</td>
-<td>Apple SpeechAnalyzerによるオンデバイス認識。Cloud STTなし</td>
+<td>通常音声入力とボイスメモはApple SpeechAnalyzer。Life logはSpeechAnalyzerまたはlocal downloadしたWhisperKit modelによる遅延認識。Cloud STTなし</td>
 </tr>
 <tr>
 <td>既定LLM</td>
@@ -72,13 +72,14 @@
 </tr>
 </tbody>
 </table>
-<p>対象外はmacOS以外、音声fileの一括文字起こし、音声commandによるapp操作、通常の音声入力audioの保存、cloud STTです。</p>
+<p>対象外はmacOS以外、任意の音声fileの一括文字起こし、音声commandによるapp操作、通常の音声入力audioの保存、cloud STTです。</p>
 </section>
 <section id="onboarding">
 <h2>2. 初回起動と権限</h2>
 <ul>
 <li>Onboardingでmicrophone、入力操作、任意のcalendar権限と保存範囲を説明します。</li>
 <li>通常起動ではmenu bar常駐に加えてmain windowを開き、life logを選択した状態で表示します。</li>
+<li>App起動だけではlife log記録を開始しません。前回processの記録開始意図を復元せず、起動後の明示的なUI、hotkey、Shortcuts操作でだけ開始します。</li>
 <li>Microphone権限がなければ録音できず、accessibility権限がなければ対象appへ挿入できません。Calendar権限は音声入力には不要です。</li>
 <li>Life logの初回開始前に30秒単位の復旧用audioをMac内へ保存する明示同意が必要です。同意前のShortcuts開始はKoeを開くようerrorを返します。</li>
 </ul>
@@ -97,9 +98,11 @@
 </article>
 <article class="card">
 <h3>Audio</h3>
-<p>SpeechAnalyzerへstreamします。通常の音声入力audioはfileやDBへ保存せず、外部へ送りません。</p>
+<p>通常の音声入力とボイスメモはApple SpeechAnalyzerへstreamします。Life logだけはSpeechAnalyzerまたはlocal download済みWhisperKit modelを選び、連続録音から検出した発話burstを保存audioから遅延認識します。数十秒latencyを許容してaccuracy優先の比較的大きいcurated modelを使えます。</p>
 </article>
 </div>
+<p>Near-silenceは正規化input level 0.05未満です。発話burstの累積有声時間が3秒未満、3〜10秒未満、10〜30秒未満、30秒以上の順に、30秒、10秒、5秒、3秒の連続無音でflushします。Wall time 5分でも安全flushします。Jobはaudio commit後に動き、timestampは録音開始時刻とaudio offsetから決めます。語彙は録音session開始時にsnapshot化し、保存audioの再処理では最新の有効語彙を使います。</p>
+<p>WhisperKit設定では進捗と失敗理由を表示してdownloadのcancel、再試行、削除ができます。完了前のmodelは認識に利用できず、実行中jobが使うmodelは完了またはcancelまで削除できません。</p>
 <h3>Mode、rule、語彙</h3>
 <ul>
 <li>録音開始時の前面appからmodeを決め、session中は固定します。手動固定を優先します。</li>
@@ -170,16 +173,18 @@
 <h3>継続記録</h3>
 <ul>
 <li>通常の音声入力と独立し、同時利用できます。Menu bar、main window、専用hotkey、Shortcutsから開始・停止します。</li>
+<li>App起動時は必ず停止状態から始まり、前回終了時の記録開始意図を復元しません。同じprocess内のsleep復帰やdevice再接続だけは、残っている記録意図に従って再開します。</li>
 <li>Life logの全画面とmenu barは、実際のaudio writerの稼働状態を同じ記録状態として表示します。実際に録音している間もmenu barのKoe icon本体はmonochromeで表示し、右下の小さなrose色badgeだけを着色します。開始準備中、停止中、再接続待ちではbadgeを外し、それぞれを録音中とは表示しません。</li>
 <li>音声入力との同時利用中も、復旧可能なlife-log audioの記録は中断しません。音声入力が成功した区間はそのraw transcriptを正本とし、同じ録音時間帯にlife log側で認識した発話はtimeline、検索、書き出し、summary/TODO生成へ重複して出しません。音声入力がcancelまたは失敗した場合は、life log側の発話を残します。</li>
 <li>選択したinput deviceから記録し、30秒ごとに復旧用<code>.m4a</code>をMac内へ確定します。Audioをcloud STTへ送ることはありません。</li>
+<li>30秒chunkは耐久化・復旧単位で、認識境界ではありません。認識はadaptiveな発話burst単位で遅延実行し、持続near-silenceだけではjobを作りません。</li>
 <li>保存済みaudioは文字起こしと派生処理が両方成功するまで必ず保持します。既定の「処理後削除」では成功直後にaudioだけを削除し、保存済みの発話、conversation、summary、TODOは残します。設定は「処理後削除」「7日」「30日」から選べます。</li>
 <li>7日または30日を選んだ場合も、未処理・失敗chunkは期間を超えて保持し、次回起動後の再処理に使います。保持期間を短く変更したときは、新しい条件を満たす処理済みaudioを削除します。</li>
 <li>一時中断と既定マイクの切替・接続解除などの音声構成変更では、現在のchunkを確定して自動再接続します。Sleep前にも閉じ、記録意図が残ればwake後に再開します。マイク権限拒否だけは自動再試行しません。</li>
 <li>App終了時は進行中操作を割り込み、復旧用audioの確定と必要なDB保存だけを短時間待ちます。終了時にsummary/TODO生成は開始せず、未完了chunkは次回起動時に再処理します。</li>
 </ul>
 <h3>日別表示とCalendar</h3>
-<p>通常起動時とmain windowのlife logを開いた時は今日を表示し、dataの読込後にtimeline最下部へ一度だけscrollします。Mini windowも同様です。その後の認識結果や予定の追加では閲覧位置を奪わず、TODOの「元の発言へ」など明示的な移動だけを行います。</p>
+<p>通常起動時とmain windowのlife logを開いた時は今日を表示し、dataの読込後にtimeline最下部へ一度だけscrollします。Mini windowも同様です。その後の認識結果や予定の追加では閲覧位置を奪いません。</p>
 <div class="grid">
 <article class="card">
 <h3>Month</h3>
@@ -187,7 +192,7 @@
 </article>
 <article class="card">
 <h3>Timeline</h3>
-<p>Timeline paneは予定、発話、音声入力、text memoを一列の時刻順で表示し、column headerは置きません。右上の予定buttonは選択日の予定を時刻と件名中心の素朴な一覧で表示し、塗りは使いません。日付を選ぶとその日の予定を読み直し、一覧とtimelineの両方へ反映します。検索buttonまたはCommand-Fで横断検索を開き、検索結果の発話、音声入力、memoは対象項目へ、TODOは出典へ、summaryは対象日へ移動します。Mini windowも予定と記録を一列の時刻順で表示し、進行中の予定を上部に固定します。今日の最下部とmini windowには同じchat形式の入力欄があり、記録状態と開始・停止操作をその直上に置きます。記録意図が続く間は内部の文字起こし状態で文言を切り替えません。</p>
+<p>Timeline paneは予定、発話、音声入力、text memoを一列の時刻順で表示し、column headerは置きません。日付を選ぶと予定一覧とtimelineを更新します。検索buttonまたはCommand-Fで横断検索を開き、発話、音声入力、memoは対象項目へ、summaryは対象日へ移動します。TODOは一覧へ表示しますが出典移動は提供しません。Mini windowも予定と記録を一列表示します。今日の最下部とmini windowにはmemo入力、記録状態、開始・停止操作を置きます。</p>
 </article>
 <article class="card">
 <h3>Conversation</h3>
@@ -200,13 +205,15 @@
 </div>
 <h3>SummaryとTODO</h3>
 <ul>
-<li>30分、1時間、2時間の設定間隔でsummaryとdraft TODOを同時更新します。</li>
-<li>前回更新後にlife-log発話またはmemoが増え、設定間隔が到来した時だけ、その日のlife-log発話、memo、対象予定から作り直します。通常の音声入力履歴はsummary/TODOの入力にもtriggerにも使いません。明示停止時は最終更新しますが、app終了、ボイスメモ、sleep、再接続では強制再要約しません。</li>
+<li>30分、1時間、2時間の設定間隔、または選択日の左下Summary viewの手動更新でsummaryとdraft TODOを同時更新します。手動更新は差分と間隔を無視して選択日全体から作り直します。</li>
+<li>定期更新は前回以降にlife-log発話またはmemoが増えた場合だけ実行します。通常音声入力は入力にもtriggerにも使いません。録音停止、app終了、ボイスメモ、sleep、device変更、再接続では再要約しません。</li>
+<li>既定promptは、記録に根拠がある会議文脈、話題、決定・未決事項、考えていたこと・検討の流れ、次の行動を、見出しと箇条書きのMarkdown日報として整理します。根拠のない参加者、決定、感情、因果は補いません。</li>
+<li>左下Summary viewはMarkdownを見出し、箇条書き、強調、linkとして描画します。手動更新中は進捗を示して重複実行を防ぎ、失敗時は既存summaryとdraft TODOを保持して理由を表示します。</li>
 <li>当日のlive summaryには生成時刻を基準時点として渡し、予定を「終了済み」「進行中」「これから」に区別します。開始前の予定を実施済みの事実として書かず、「このあと予定されている」内容として明示します。</li>
 <li>日付が変わった後のfinal summaryは、発話やmemoの追加がなくても対象日の全予定を含めて作り直し、<code>isFinal</code>として保存します。</li>
-<li>停止時に対象日を最終更新し、audio chunkごとにはLLMを呼びません。</li>
+<li>録音停止時やaudio chunkごとにはLLMを呼びません。</li>
 <li>Draft TODOは編集して確定または棄却できます。再生成で置換するのはdraftだけです。</li>
-<li>TODO状態は<code>draft</code>、<code>open</code>、<code>completed</code>。UI、CLI、MCPから操作できます。TODOが発話またはmemoの出典情報を持つ場合は「元の発言へ」を表示します。選ぶと出典の日へ移動し、該当するtimeline行を中央へscrollして強調します。意味の伝わらない記号だけの操作にはしません。</li>
+<li>TODO状態は<code>draft</code>、<code>open</code>、<code>completed</code>。UI、CLI、MCPから操作できます。発話・memoのprovenanceは監査用に保存しますが、出典移動UIは表示しません。</li>
 <li>Main windowと全TODO windowのTODO本文は複数行へ折り返し、長い文言でも省略せず表示・編集できます。本文に応じて行の高さを広げます。</li>
 <li>Cloud派生処理は対象日の発話、memo、予定の時刻/件名、指示文を送ります。Audio、通常の音声入力履歴、前面app情報は送りません。</li>
 <li>Groqでは選択modelにかかわらず、summaryとTODO案を温度0、modelが対応する最小の推論量、共通のJSON出力contractで生成します。APIが対応する最も強いschema制約を使い、最終的にKoeが同じ型として検証します。推論本文は応答dataへ含めません。</li>
@@ -232,7 +239,7 @@
 </tr>
 <tr>
 <td>Main window</td>
-<td>通常起動時にlife logの今日を選択し、timelineの最新位置を表示。Onboarding、life log、今日のtimeline最下部からの手入力・音声memo追加、音声入力履歴。記録操作はtoolbar右肩ではなくtimeline内の状態表示に置く</td>
+<td>通常起動時にlife logの今日を選択し、timelineの最新位置を表示。左下SummaryはMarkdown描画とsummary＋draft TODOの手動更新を提供。今日のtimeline最下部から手入力・音声memoを追加し、記録操作はtimeline内の状態表示に置く</td>
 </tr>
 <tr>
 <td>Mini window</td>
@@ -248,11 +255,11 @@
 </tr>
 <tr>
 <td>Settings: 音声入力</td>
-<td>Hotkey、feedback、履歴、AI整形、mode</td>
+<td>Hotkey、feedback、履歴、AI整形、mode。STTはSpeechAnalyzer固定</td>
 </tr>
 <tr>
 <td>Settings: Life log</td>
-<td>記録・mini window・ボイスメモhotkey、input device、audio保持、summary間隔、要約/TODO AI、calendar再取得</td>
+<td>記録・mini window・ボイスメモhotkey、input device、STT engineとWhisperKit model、audio保持、summary間隔、要約/TODO AI、calendar再取得</td>
 </tr>
 </tbody>
 </table>
@@ -289,6 +296,11 @@
 <td>app data削除まで</td>
 </tr>
 <tr>
+<td>WhisperKit model</td>
+<td><code>Application Support/Koe/Models/WhisperKit/</code></td>
+<td>個別削除または全data削除まで</td>
+</tr>
+<tr>
 <td>API key</td>
 <td>macOS Keychain</td>
 <td>個別削除まで</td>
@@ -304,7 +316,7 @@
 </table>
 <ul>
 <li>未適用migration直前と、同日重複なしの1日1回にDB backupを作ります。失敗時はmigrationしません。</li>
-<li>「全dataを削除」はDB内利用者data、保存audio、DB backupを削除します。設定とKeychainは画面に示す個別範囲に従います。</li>
+<li>「全dataを削除」はDB内利用者data、保存audio、download済みWhisperKit model、途中download file、DB backupを削除します。設定とKeychainは画面に示す個別範囲に従います。</li>
 <li>語彙候補に複製済みの根拠は、履歴だけの削除では残る場合があります。</li>
 </ul>
 </section>
@@ -324,7 +336,7 @@
 </tr>
 <tr>
 <td>ライフログを終了</td>
-<td>停止し、文字起こしと最終summaryを待つ</td>
+<td>停止し、進行中の文字起こしと保存を待つ。Summary/TODOは更新しない</td>
 </tr>
 <tr>
 <td>ライフログを書き出してcopy</td>
@@ -450,7 +462,7 @@ koe search "検索語" [--limit N]</pre>
 <div class="grid">
 <article class="card">
 <h3>STT</h3>
-<p>確定不能はfailed。Process再起動が必要なら利用者へ案内します。</p>
+<p>確定不能はfailed。SpeechAnalyzerのprocess再起動、WhisperKit modelの未download・破損・容量不足など、engine別の復旧方法を案内します。</p>
 </article>
 <article class="card">
 <h3>LLM / Insert</h3>
@@ -479,19 +491,22 @@ koe search "検索語" [--limit N]</pre>
 <li>CLI、MCP、Shortcutsの公開interfaceが本書と一致する。</li>
 <li>Life logの実録音中だけmenu barのmonochrome Koe icon右下にrose色badgeが表示され、停止または再接続待ちではbadgeなしへ戻る。</li>
 <li>Life log記録中に成功した音声入力は一件だけ表示・検索・書き出しへ現れ、summary/TODOには使われない。Cancelまたは失敗した音声入力の時間帯はlife-log発話が失われない。</li>
-<li>当日のlive summaryは未来の予定を実施済みとして書かず、日付変更後のfinal summaryはその日の全予定を含む。</li>
+<li>Summaryは根拠のある会議、話題、決定、検討の流れ、次の行動をMarkdown日報として表示する。手動更新は選択日のsummaryとdraft TODOを同時更新し、失敗時は既存値を保持する。</li>
 <li>Calendar設定から予定を再取得すると、現在選択日のsnapshot、timeline、月間activityが更新される。</li>
 <li>マイク切替などの音声構成変更後も、記録開始意図が残る限りlife-log captureが自動再開する。</li>
 <li>ボイスメモ一回につきmemoだけが一件作られ、通常の音声入力履歴とlife-log utteranceには同じ内容が追加されない。</li>
 <li>通常起動時にmain windowのlife-log画面が開き、memo入力欄の音声ボタンは専用hotkeyと同じボイスメモを開始・停止する。</li>
 <li>「処理後削除」でも未処理・失敗chunkは残り、文字起こしと派生処理が成功したaudioだけが削除される。</li>
 <li>通常起動時、main windowでlife logを開いた時、mini windowを開いた時は、今日のtimelineの最新項目が表示される。</li>
-<li>Timelineはheaderなしの一列で予定・発話・音声入力・memoを時刻順に表示する。日付選択時に予定一覧とtimelineが更新され、検索はCommand-Fでも開いて結果の項目または出典へ移動する。TODO本文は複数行へ折り返される。</li>
+<li>Timelineは予定・発話・音声入力・memoを時刻順に表示し、検索はCommand-Fでも開く。TODO本文は複数行へ折り返され、出典移動UIは表示しないがprovenanceは保持する。</li>
 <li>Mini windowはtitle barなしの一列timelineで予定と記録を時刻順に表示し、進行中の予定を上部へ固定する。明示的に閉じるまでSpace切替やfull-screen appの利用中も手前に残り、通常の文字入力ではtoggleされない。</li>
 <li>Main window、mini window、menu barの記録状態は実際のaudio writerの稼働状態から同期され、内部の文字起こし状態で文言をちらつかせない。Main/mini windowでは開始・停止をmemo入力欄の直上に配置する。</li>
 <li>継続可能なmessageは<code>×</code>で閉じられ、dismissしても自動再接続や記録開始意図は変わらない。</li>
 <li>月間calendarは今日を塗り、表示中の日を枠線で示し、既存TODOと同じ作業を新しいDraft TODOとして再提案しない。</li>
-<li>ボイスメモなどの内部的な一時停止では強制再要約せず、設定間隔の到来または利用者による明示的な記録停止だけで再要約する。確定済みTODOのIDと新しいDraftのIDは衝突しない。</li>
+<li>Summary/TODO派生は設定間隔またはSummary viewの手動更新だけで実行し、録音停止を含むcapture状態変化では実行しない。</li>
+<li>App起動だけではlife log記録を開始せず、前回processの記録開始意図を復元しない。</li>
+<li>通常音声入力とボイスメモはSpeechAnalyzerを使い、life logだけはSpeechAnalyzerまたはdownload済みWhisperKit modelを選べる。Download・cancel・再試行・削除・容量を設定で管理でき、audioはMac外へ送信しない。</li>
+<li>Life logは正規化input level 0.05未満の持続near-silenceだけでは認識jobを作らない。累積有声時間に応じて30秒、10秒、5秒、3秒の無音tierでflushし、wall time 5分でも安全flushする。Timestampは録音開始時刻とaudio offsetから復元し、語彙は録音session開始時snapshotで固定される。</li>
 </ol>
 </section>
 </main>

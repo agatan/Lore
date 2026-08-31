@@ -32,17 +32,17 @@ public final class LifeLogCoordinator {
     private var summaryIntervalMinutes: @MainActor () -> Int = { 60 }
     private var participatingEventsOnly: @MainActor () -> Bool = { true }
     private var audioProcessingCompleted: @MainActor () async -> Void = {}
-    private var lastCapturedDate: Date?
     private var liveTranscriptionTask: Task<Void, Never>?
     private var liveSessionStartedAt: Date?
     private var liveSessionID: String?
     private var liveChunks: [LifeLogAudioChunk] = []
     private var pendingLiveSegments: [(text: String, start: TimeInterval, end: TimeInterval)] = []
     private var liveFinalTranscript = ""
+    private var liveRecognitionFailed = false
     private var hasLiveSegments = false
     private var transcriptionFinished = false
     private var captureFinished = false
-    private var isDeriving = false
+    public private(set) var isDeriving = false
     private var isFinalizingSession = false
     private var isStartingCapture = false
     private var vocabularyRevision = 0
@@ -54,7 +54,6 @@ public final class LifeLogCoordinator {
     private var derivationScheduleTask: Task<Void, Never>?
     private var followsCurrentDay = true
     private var isSuspendedForSleep = false
-    private var skipsFinalDerivationForTermination = false
 
     public init() {
         capture.onCommitted = { [weak self] chunk in await self?.commitLiveChunk(chunk) }
@@ -120,7 +119,7 @@ public final class LifeLogCoordinator {
         }
     }
 
-    /// アプリ終了時の境界。音声writer、文字起こし、DB保存、停止時の要約が終わるまで待つ。
+    /// アプリ終了時の境界。音声writer、文字起こし、DB保存が終わるまで待つ。
     /// OSや外部エンジンが応答しない場合だけ期限で打ち切り、保存済みチャンクは次回起動時に回収する。
     public func stopAndWait(timeout: Duration = .seconds(15)) async -> Bool {
         setCaptureEnabled(false)
@@ -139,9 +138,6 @@ public final class LifeLogCoordinator {
 
     /// Cmd-Qでは復旧可能なaudio/DB保存を優先し、終了を遅らせるsummary/TODO生成は行わない。
     public func stopForTermination(timeout: Duration = .seconds(3)) async -> Bool {
-        if capture.isRunning || liveTranscriptionTask != nil {
-            skipsFinalDerivationForTermination = true
-        }
         return await stopAndWait(timeout: timeout)
     }
 
@@ -179,8 +175,8 @@ public final class LifeLogCoordinator {
         captureRequested || capture.isRunning || liveTranscriptionTask != nil || isFinalizingSession || isDeriving
     }
 
-    /// SpeechAnalyzerのcontextは解析開始時に固定されるため、録音意図を保ったまま
-    /// 現在のstreamを確定し、次のstreamから更新済み語彙へ切り替える。
+    /// STTの語彙contextは解析開始時に固定されるため、録音意図を保ったまま
+    /// 現在の認識sessionを確定し、次のsessionから更新済み語彙へ切り替える。
     public func vocabularyDidChange() {
         vocabularyRevision += 1
         requestVocabularyRestartIfNeeded()
@@ -198,7 +194,7 @@ public final class LifeLogCoordinator {
         }
     }
 
-    /// スリープ前に音声ファイルとSpeechAnalyzer入力を閉じ、復帰後は同じ記録意図で再開する。
+    /// スリープ前に音声ファイルとSTT入力を閉じ、復帰後は同じ記録意図で再開する。
     public func systemWillSleep() {
         isSuspendedForSleep = true
         guard captureRequested else { return }
@@ -263,7 +259,8 @@ public final class LifeLogCoordinator {
                 vocabularyPrompt: FormattingPolicy.vocabularyHint(enabledVocabulary),
                 languagePreference: .auto
             )
-            let format = try await engines.stt.prepare(hints: hints) ?? AudioFormats.canonical
+            let stt = engines.lifeLogStt
+            let format = try await stt.prepare(hints: hints) ?? AudioFormats.canonical
             guard captureRequested, !isSuspendedForSleep, !isSuspendedForVoiceMemo else { return }
             let startedAt = Date()
             let stream = try capture.start(format: format)
@@ -272,13 +269,14 @@ public final class LifeLogCoordinator {
             liveChunks = []
             pendingLiveSegments = []
             liveFinalTranscript = ""
+            liveRecognitionFailed = false
             hasLiveSegments = false
             transcriptionFinished = false
             captureFinished = false
             isRecoveringCapture = false
             isTranscribing = true
             liveTranscriptionTask = Task { [weak self] in
-                await self?.consumeLiveAudio(stream, hints: hints)
+                await self?.consumeAdaptiveAudio(stream, hints: hints, stt: stt)
             }
             if vocabularyRevision != startingVocabularyRevision {
                 requestVocabularyRestartIfNeeded()
@@ -333,44 +331,147 @@ public final class LifeLogCoordinator {
         }
     }
 
-    private func consumeLiveAudio(_ audio: AsyncStream<AudioChunk>, hints: SttHints) async {
-        guard let engines else { return }
+    private func consumeAdaptiveAudio(
+        _ audio: AsyncStream<AudioChunk>,
+        hints: SttHints,
+        stt: any SttEngine
+    ) async {
+        var segmenter = AdaptiveSpeechSegmenter()
+        var preRoll: [AudioChunk] = []
+        var burst: [AudioChunk] = []
+        var lastVoicedIndex = 0
+
+        for await chunk in audio {
+            if Task.isCancelled { break }
+            let duration = Double(chunk.buffer.frameLength) / chunk.buffer.format.sampleRate
+            let level = AudioCapture.level(of: chunk.buffer)
+            switch segmenter.consume(level: level, duration: duration) {
+            case .ignore:
+                preRoll.append(chunk)
+                Self.trimPreRoll(&preRoll, maximumDuration: 1)
+            case .started:
+                burst = preRoll + [chunk]
+                preRoll = []
+                lastVoicedIndex = burst.endIndex
+            case .buffer:
+                burst.append(chunk)
+                if level >= AdaptiveSpeechSegmenter.speechLevelThreshold {
+                    lastVoicedIndex = burst.endIndex
+                }
+            case .flush:
+                burst.append(chunk)
+                let recognitionBuffers = Self.trimmingTrailingSilence(
+                    from: burst,
+                    lastVoicedIndex: lastVoicedIndex,
+                    retainedDuration: 0.5
+                )
+                await recognizeBurst(recognitionBuffers, hints: hints, stt: stt)
+                burst = []
+                lastVoicedIndex = 0
+            }
+        }
+        if segmenter.finish(), !burst.isEmpty {
+            let recognitionBuffers = Self.trimmingTrailingSilence(
+                from: burst,
+                lastVoicedIndex: lastVoicedIndex,
+                retainedDuration: 0.5
+            )
+            await recognizeBurst(recognitionBuffers, hints: hints, stt: stt)
+        }
+        transcriptionFinished = true
+        await finishLiveSessionIfReady()
+    }
+
+    private func recognizeBurst(_ buffers: [AudioChunk], hints: SttHints, stt: any SttEngine) async {
+        guard let first = buffers.first, let last = buffers.last else { return }
+        let sampleRate = first.buffer.format.sampleRate
+        let burstStartOffset = Double(first.frameOffset) / sampleRate
+        let burstEndOffset = Double(last.frameOffset + AVAudioFramePosition(last.buffer.frameLength)) / sampleRate
         do {
-            for try await event in engines.stt.transcribe(audio: audio, hints: hints) {
+            try await waitUntilAudioIsCommitted(through: burstEndOffset)
+        } catch {
+            liveRecognitionFailed = true
+            fail(error)
+            return
+        }
+        let (stream, continuation) = AsyncStream<AudioChunk>.makeStream()
+        for buffer in buffers { continuation.yield(buffer) }
+        continuation.finish()
+        var burstHasSegments = false
+        do {
+            for try await event in stt.transcribe(audio: stream, hints: hints) {
                 switch event {
                 case .partial(let text):
                     liveTranscript = text
                 case .segment(let text, let start, let end):
-                    pendingLiveSegments.append((text, start, end))
+                    burstHasSegments = true
+                    pendingLiveSegments.append((text, burstStartOffset + start, burstStartOffset + end))
                     liveTranscript = text
                     await flushLiveSegments()
                 case .sessionFinished(let text, _):
-                    liveFinalTranscript = text
-                    liveTranscript = text
+                    let value = text.trimmingCharacters(in: .whitespacesAndNewlines)
+                    if !value.isEmpty {
+                        liveFinalTranscript += (liveFinalTranscript.isEmpty ? "" : " ") + value
+                        liveTranscript = value
+                        if !burstHasSegments {
+                            pendingLiveSegments.append((value, burstStartOffset, burstEndOffset))
+                            await flushLiveSegments()
+                        }
+                    }
                 }
             }
-            transcriptionFinished = true
-            await finishLiveSessionIfReady()
         } catch {
-            transcriptionFinished = true
+            liveRecognitionFailed = true
             fail(error)
-            if capture.isRunning {
-                capture.stop()
-                scheduleCaptureRetry(unless: error)
-            }
-            await finishLiveSessionIfReady()
         }
+    }
+
+    /// 認識結果が必ず復旧可能な音声を参照するよう、対象範囲のfile commitを先に待つ。
+    private func waitUntilAudioIsCommitted(through offset: TimeInterval) async throws {
+        guard let sessionStart = liveSessionStartedAt else {
+            throw EngineError.failed("ライフログ音声の開始時刻を確認できません")
+        }
+        let requiredDate = sessionStart.addingTimeInterval(offset)
+        while (liveChunks.last?.captureEndedAt ?? .distantPast) < requiredDate.addingTimeInterval(-0.25) {
+            if captureFinished {
+                throw EngineError.failed("認識対象のライフログ音声を保存できませんでした")
+            }
+            try Task.checkCancellation()
+            try await Task.sleep(for: .milliseconds(50))
+        }
+    }
+
+    private nonisolated static func trimPreRoll(_ buffers: inout [AudioChunk], maximumDuration: TimeInterval) {
+        var duration = buffers.reduce(0) { $0 + Double($1.buffer.frameLength) / $1.buffer.format.sampleRate }
+        while duration > maximumDuration, buffers.count > 1 {
+            let removed = buffers.removeFirst()
+            duration -= Double(removed.buffer.frameLength) / removed.buffer.format.sampleRate
+        }
+    }
+
+    private nonisolated static func trimmingTrailingSilence(
+        from buffers: [AudioChunk],
+        lastVoicedIndex: Int,
+        retainedDuration: TimeInterval
+    ) -> [AudioChunk] {
+        guard lastVoicedIndex < buffers.count else { return buffers }
+        var end = max(0, lastVoicedIndex)
+        var retained: TimeInterval = 0
+        while end < buffers.count, retained < retainedDuration {
+            retained += Double(buffers[end].buffer.frameLength) / buffers[end].buffer.format.sampleRate
+            end += 1
+        }
+        return Array(buffers[..<end])
     }
 
     private func commitLiveChunk(_ initial: LifeLogAudioChunk) async {
         guard let database else { return }
         var chunk = initial
-        lastCapturedDate = chunk.captureStartedAt
         do {
             try await database.lifeLog.save(audioChunk: chunk)
             liveChunks.append(chunk)
             await flushLiveSegments()
-            if transcriptionFinished {
+            if transcriptionFinished, !liveRecognitionFailed {
                 chunk.transcriptionState = .transcribed
                 chunk.processingState = .extracted
                 try await database.lifeLog.save(audioChunk: chunk)
@@ -430,8 +531,6 @@ public final class LifeLogCoordinator {
         guard transcriptionFinished, captureFinished, !isFinalizingSession, let database else { return }
         isFinalizingSession = true
         defer { isFinalizingSession = false }
-        let startedAt = liveSessionStartedAt
-        let completedAt = liveChunks.last?.captureEndedAt ?? liveSessionStartedAt
         await flushLiveSegments()
         if !hasLiveSegments,
            !liveFinalTranscript.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
@@ -450,31 +549,29 @@ public final class LifeLogCoordinator {
         }
         do {
             for var chunk in liveChunks {
-                chunk.transcriptionState = .transcribed
-                chunk.processingState = .extracted
+                if liveRecognitionFailed {
+                    chunk.transcriptionState = .failed
+                    chunk.processingState = .failed
+                    chunk.failureReason = "後追い音声認識に失敗したため次回起動時に再処理します"
+                } else {
+                    chunk.transcriptionState = .transcribed
+                    chunk.processingState = .extracted
+                    chunk.failureReason = nil
+                }
                 try await database.lifeLog.save(audioChunk: chunk)
             }
-            await audioProcessingCompleted()
+            if !liveRecognitionFailed { await audioProcessingCompleted() }
         } catch { fail(error) }
         isTranscribing = false
         liveTranscript = ""
         liveSessionStartedAt = nil
         liveSessionID = nil
         liveChunks = []
+        liveRecognitionFailed = false
         pendingLiveSegments = []
         transcriptionFinished = false
         captureFinished = false
-        let shouldForceSummary = Self.shouldForceSummaryAfterCaptureEnded(captureRequested: captureRequested)
-            && !skipsFinalDerivationForTermination
-        skipsFinalDerivationForTermination = false
-        if shouldForceSummary,
-           let startedAt, let completedAt {
-            for date in Self.daysSpanned(from: startedAt, through: completedAt) {
-                await refreshDerivedIfDue(for: date, respectingInterval: false, force: true)
-            }
-        }
         await reload()
-        // 終了待ちは、停止時の最終要約と再読込まで含めて完了とみなす。
         liveTranscriptionTask = nil
         if restartForVocabulary, captureRequested, !isSuspendedForSleep, !isSuspendedForVoiceMemo {
             restartForVocabulary = false
@@ -565,27 +662,6 @@ public final class LifeLogCoordinator {
 
     public func update(todo: LifeLogTodo) async { guard let database else { return }; do { try await database.lifeLog.save(todo: todo); await reload() } catch { fail(error) } }
     public func delete(todoID: String) async { guard let database else { return }; do { try await database.lifeLog.deleteTodo(id: todoID); await reload() } catch { fail(error) } }
-    public func jumpToSource(of todo: LifeLogTodo) async {
-        guard let database else { return }
-        do {
-            for id in todo.sourceUtteranceIDs {
-                if let utterance = try await database.lifeLog.utterance(id: id) {
-                    await navigateToSource(date: utterance.startedAt, timelineItemID: "u-\(id)")
-                    return
-                }
-            }
-            for id in todo.sourceMemoIDs {
-                if let memo = try await database.lifeLog.memo(id: id) {
-                    await navigateToSource(date: memo.createdAt, timelineItemID: "m-\(id)")
-                    return
-                }
-            }
-            errorMessage = "元の発言が見つかりませんでした。"
-        } catch {
-            fail(error)
-        }
-    }
-
     public func jumpToSearchResult(_ result: LifeLogSearchResult) async {
         let date = LifeLogDateKey.date(from: result.day) ?? result.occurredAt
         let prefix = "\(result.kind.rawValue)-"
@@ -598,15 +674,7 @@ public final class LifeLogCoordinator {
         case .memo:
             await navigateToSource(date: date, timelineItemID: "m-\(recordID)")
         case .todo:
-            guard let database else { return }
-            do {
-                if let todo = try await database.lifeLog.todo(id: recordID),
-                   !todo.sourceUtteranceIDs.isEmpty || !todo.sourceMemoIDs.isEmpty {
-                    await jumpToSource(of: todo)
-                } else {
-                    await select(date: date)
-                }
-            } catch { fail(error) }
+            await select(date: date)
         case .summary:
             await select(date: date)
         }
@@ -670,11 +738,12 @@ public final class LifeLogCoordinator {
                     vocabularyPrompt: FormattingPolicy.vocabularyHint(enabledVocabulary),
                     languagePreference: .auto
                 )
-                let format = try await engines.stt.prepare(hints: hints) ?? AudioFormats.canonical
+                let stt = engines.lifeLogStt
+                let format = try await stt.prepare(hints: hints) ?? AudioFormats.canonical
                 let audio = try audioStream(url: URL(fileURLWithPath: chunk.localPath), targetFormat: format)
                 var transcript = ""
                 var timedSegments: [(text: String, start: TimeInterval, end: TimeInterval)] = []
-                for try await event in engines.stt.transcribe(audio: audio, hints: hints) {
+                for try await event in stt.transcribe(audio: audio, hints: hints) {
                     switch event {
                     case .segment(let text, let start, let end):
                         timedSegments.append((text, start, end))
@@ -782,7 +851,12 @@ public final class LifeLogCoordinator {
         } catch { fail(error) }
     }
 
-    /// 定期実行は差分の有無を判定し、停止時は対象日のsource of truth全体から必ずsummaryを再構築する。
+    /// 選択日の要約とdraft TODOを、差分や定期間隔にかかわらず再構築する。
+    public func refreshSelectedDaySummary() async {
+        await refreshDerivedIfDue(for: selectedDate, respectingInterval: false, force: true)
+    }
+
+    /// 定期実行は差分の有無を判定し、手動実行は対象日のsource of truth全体から必ず再構築する。
     func updateSummary(
         for date: Date,
         respectingInterval: Bool,
@@ -825,30 +899,10 @@ public final class LifeLogCoordinator {
                                    calendarEventCount: value.calendarEvents.count, capturedDurationSeconds: duration,
                                    utteranceCount: value.utterances.count, summarizedThrough: latest,
                                    isFinal: isPastDay)
-        let sourceIDs = value.utterances.map(\.id)
-        let sourceMemoIDs = value.memos.map(\.id)
         let drafts = derived.todoTitles.map { title in
-            LifeLogTodo(title: title, status: .draft,
-                        sourceUtteranceIDs: sourceIDs, sourceMemoIDs: sourceMemoIDs)
+            LifeLogTodo(title: title, status: .draft)
         }
         try await store.save(summary: summary, replacingDrafts: drafts)
-    }
-
-    /// ボイスメモや再接続の一時停止中は記録意図が残るため、強制再要約しない。
-    nonisolated static func shouldForceSummaryAfterCaptureEnded(captureRequested: Bool) -> Bool {
-        !captureRequested
-    }
-
-    static func daysSpanned(from start: Date, through end: Date, calendar: Calendar = .current) -> [Date] {
-        var dates: [Date] = []
-        var date = calendar.startOfDay(for: start)
-        let last = calendar.startOfDay(for: max(start, end))
-        while date <= last {
-            dates.append(date)
-            guard let next = calendar.date(byAdding: .day, value: 1, to: date) else { break }
-            date = next
-        }
-        return dates
     }
 
     private func audioStream(url: URL, targetFormat: AVAudioFormat) throws -> AsyncStream<AudioChunk> {
