@@ -94,8 +94,9 @@
 </tbody>
 </table>
 <pre>Koe ─────┐
-KoeCLI ──┼──&gt; KoeKit ──&gt; GRDB
+KoeCLI ──┼──&gt; KoeKit ──&gt; GRDB / WhisperKit
 KoeMCP ──┘</pre>
+<p>外部Swift PackageはGRDBとWhisperKitです。<code>Domain</code>、<code>App</code>、<code>Engines</code>などは単一の<code>KoeKit</code> target内の論理モジュールです。</p>
 <p class="callout">
 <code>Domain</code>や<code>App</code>は単一の<code>KoeKit</code> target内の論理moduleです。folder間依存はSwift moduleとして強制されていません。</p>
 </section>
@@ -385,7 +386,7 @@ KoeMCP ──┘</pre>
 </section>
 <section id="automation">
 <h2>10. 自動化境界</h2>
-<p>App Intents、CLI、MCPを公開します。CLI/MCPは<code>KoeAutomationService</code>を共有し、日別export、open TODO export、横断検索、TODO CRUD、summary/TODO prompt更新を提供します。公開commandとtool schemaは外部仕様に列挙します。</p>
+<p>App Intents、CLI、MCPを公開します。CLI/MCPは<code>KoeAutomationService</code>を共有し、日別export、open TODO export、横断検索、TODO CRUD、summary/TODO prompt更新を提供します。App Intentsは<code>AppEnvironment.boot()</code>の完了後に実行します。開始Actionだけはマイクを扱うためforeground mode、その他はbackground modeです。Shortcutsからの実行にはmacOSが検証できるbundle署名が必要なため、buildは有効な<code>Apple Development</code> identityを自己署名より優先します。公開commandとtool schemaは外部仕様に列挙します。</p>
 </section>
 <section id="concurrency">
 <h2>11. 並行実行とerror表示</h2>

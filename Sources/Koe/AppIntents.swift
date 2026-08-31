@@ -6,7 +6,7 @@ import UniformTypeIdentifiers
 struct StartLifeLogIntent: AppIntent {
     static let title: LocalizedStringResource = "ライフログを開始"
     static let description = IntentDescription("Koeのライフログ記録を開始します。")
-    static let supportedModes: IntentModes = .background
+    static let supportedModes: IntentModes = .foreground(.immediate)
 
     func perform() async throws -> some IntentResult {
         try await LifeLogIntentAction.startCapture()
@@ -146,10 +146,8 @@ struct ExportOpenTodosIntent: AppIntent {
 
 enum LifeLogIntentAction {
     @MainActor
-    static func startCapture() throws {
-        guard let environment = AppEnvironment.current else {
-            throw LifeLogIntentError.appNotReady
-        }
+    static func startCapture() async throws {
+        let environment = try await readyEnvironment()
         if !environment.settings.lifeLogAudioStorageConfirmed {
             environment.setLifeLogCaptureEnabled(true)
             throw LifeLogIntentError.audioStorageConsentRequired
@@ -159,9 +157,7 @@ enum LifeLogIntentAction {
 
     @MainActor
     static func stopCaptureAndWait() async throws {
-        guard let environment = AppEnvironment.current else {
-            throw LifeLogIntentError.appNotReady
-        }
+        let environment = try await readyEnvironment()
         environment.setLifeLogCaptureEnabled(false)
         guard await environment.lifeLog.stopAndWait() else {
             throw LifeLogIntentError.finalizationTimedOut
@@ -171,8 +167,8 @@ enum LifeLogIntentAction {
     @MainActor
     static func exportText(for date: Date, options: LifeLogTextExporter.Options) async throws -> String {
         guard options.hasSelection else { throw LifeLogIntentError.emptyExportSelection }
-        guard let environment = AppEnvironment.current,
-              let database = environment.database else {
+        let environment = try await readyEnvironment()
+        guard let database = environment.database else {
             throw LifeLogIntentError.appNotReady
         }
         let day = try await database.lifeLog.day(
@@ -185,10 +181,23 @@ enum LifeLogIntentAction {
 
     @MainActor
     static func exportOpenTodos() async throws -> String {
-        guard let database = AppEnvironment.current?.database else {
+        let environment = try await readyEnvironment()
+        guard let database = environment.database else {
             throw LifeLogIntentError.appNotReady
         }
         return LifeLogTextExporter.renderOpenTodos(try await database.lifeLog.todos())
+    }
+
+    @MainActor
+    private static func readyEnvironment() async throws -> AppEnvironment {
+        guard let environment = AppEnvironment.current else {
+            throw LifeLogIntentError.appNotReady
+        }
+        await environment.boot()
+        guard environment.bootError == nil, environment.database != nil else {
+            throw LifeLogIntentError.appNotReady
+        }
+        return environment
     }
 }
 

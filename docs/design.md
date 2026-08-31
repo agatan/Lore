@@ -14,11 +14,11 @@
 
 ```text
 Koe ─────┐
-KoeCLI ──┼──> KoeKit ──> GRDB
+KoeCLI ──┼──> KoeKit ──> GRDB / WhisperKit
 KoeMCP ──┘
 ```
 
-外部Swift PackageはGRDBだけです。`Domain`、`App`、`Engines`などは単一の`KoeKit` target内の論理モジュールであり、import境界としては強制されません。
+外部Swift PackageはGRDBとWhisperKitです。`Domain`、`App`、`Engines`などは単一の`KoeKit` target内の論理モジュールであり、import境界としては強制されません。
 
 ## 2. KoeKitのモジュール一覧
 
@@ -184,7 +184,7 @@ DBは`~/Library/Application Support/Koe/koe.sqlite`です。`DatabaseQueue`を�
 
 ## 10. 自動化境界
 
-`KoeAutomationService`がCLIとMCPで共有され、日別export、open TODO export、横断検索、TODO CRUD、summary/TODO prompt更新を提供します。App Intentsは起動中の`AppEnvironment`を使い、capture開始・終了とexportを提供します。公開コマンドとtool schemaは外部仕様に列挙します。
+`KoeAutomationService`がCLIとMCPで共有され、日別export、open TODO export、横断検索、TODO CRUD、summary/TODO prompt更新を提供します。App Intentsは`AppEnvironment.boot()`の完了後にcapture開始・終了とexportを実行します。開始Actionだけはマイクを扱うためforeground mode、その他はbackground modeです。Shortcutsからの実行にはmacOSが検証できるbundle署名が必要なため、buildは有効な`Apple Development` identityを自己署名より優先します。公開コマンドとtool schemaは外部仕様に列挙します。
 
 ## 11. 並行実行とエラー表示
 

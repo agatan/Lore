@@ -40,7 +40,9 @@ make run
 
 ### アクセシビリティの許可が毎回外れるとき
 
-ad-hoc 署名ではリビルドのたびに別アプリとして扱われます。固定の自己署名証明書を一度作ると、開発中の許可を維持できます。
+有効なApple Development証明書がKeychainにあれば、buildはそれを優先して使います。macOS ShortcutsのApp Intentを実行するには、Apple DevelopmentまたはDeveloper IDによる検証可能な署名が必要です。
+
+Apple Development証明書がない環境では、ad-hoc署名より許可を維持しやすい固定の自己署名証明書を作れます。自己署名ではShortcutsのApp Intentは実行できません。
 
 ```bash
 make dev-cert

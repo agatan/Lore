@@ -9,11 +9,13 @@ APP := build/Koe.app
 CONTENTS := $(APP)/Contents
 BUNDLE_ID := dev.agatan.Koe
 
-# 署名 identity。「Koe Dev」があればそれを使う(make dev-cert で作れる)。
+# 署名 identity。ShortcutsのApp Intentに必要なApple Developmentを優先する。
+# なければ「Koe Dev」を使う(make dev-cert で作れる)。
 # 自己署名は信頼されない扱い(CSSMERR_TP_NOT_TRUSTED)なので find-identity に -v は付けない。
 # ad-hoc 署名だとリビルドごとに identity が変わり、アクセシビリティの許可が毎回無効になる。
+APPLE_DEV_IDENTITY := $(shell security find-identity -v -p codesigning 2>/dev/null | awk '/"Apple Development:/{print $$2; exit}')
 DEV_IDENTITY := $(shell security find-identity -p codesigning 2>/dev/null | grep -o "Koe Dev" | head -1)
-CODESIGN_ID := $(if $(DEV_IDENTITY),Koe Dev,-)
+CODESIGN_ID := $(if $(APPLE_DEV_IDENTITY),$(APPLE_DEV_IDENTITY),$(if $(DEV_IDENTITY),Koe Dev,-))
 BUILD_DIR = .build/$(CONFIG)
 
 .PHONY: all build tools app run stop test ui-test clean install icon dev-cert reset-permissions

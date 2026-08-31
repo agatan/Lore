@@ -186,6 +186,8 @@ Main window、mini window、menu barのライフログ状態表示は同じ記�
 
 ## 7. macOS Shortcuts / App Intents
 
+Koeは下記のApp Intent ActionをShortcutsへ公開します。各ActionはKoeの起動とDB初期化完了を待ってから実行します。「ライフログを開始」はマイクを扱うためKoeをforegroundで起動し、それ以外はbackgroundで実行します。
+
 | Action | Input / Output |
 |---|---|
 | ライフログを開始 | 冪等に開始。audio保存同意がなければerror |
