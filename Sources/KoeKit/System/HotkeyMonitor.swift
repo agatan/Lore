@@ -46,7 +46,8 @@ private func koeEventTapCallback(
     }
 }
 
-/// 文字keyの組み合わせはmacOSに個別登録し、修飾キー単体だけをevent tapで監視する。
+/// 文字keyの組み合わせは原則macOSに個別登録し、Optionだけを伴う組み合わせと
+/// 修飾キー単体をevent tapで監視する。
 ///
 /// 押下・離上の生イベントだけを流し、トグル / push-to-talk の解釈は
 /// `HotkeyGestureInterpreter`(純粋ドメイン)に任せる。
@@ -102,7 +103,12 @@ public final class HotkeyMonitor {
 
         switch binding {
         case .key(let code, let modifiers):
-            try startRegisteredHotKey(code: code, modifiers: modifiers)
+            if Self.requiresEventTap(modifiers: modifiers) {
+                guard Permissions.isAccessibilityGranted else { throw Failure.notTrusted }
+                try startEventTap()
+            } else {
+                try startRegisteredHotKey(code: code, modifiers: modifiers)
+            }
             if shouldSwallowEscape != nil {
                 startEscapeMonitors()
             }
@@ -116,7 +122,10 @@ public final class HotkeyMonitor {
     private func startEventTap() throws {
         guard tap == nil else { return }
 
-        let mask: CGEventMask = 1 << CGEventType.flagsChanged.rawValue
+        let mask: CGEventMask =
+            (1 << CGEventType.flagsChanged.rawValue)
+            | (1 << CGEventType.keyDown.rawValue)
+            | (1 << CGEventType.keyUp.rawValue)
 
         guard let tap = CGEvent.tapCreate(
             tap: .cgSessionEventTap,
@@ -150,13 +159,14 @@ public final class HotkeyMonitor {
     }
 
     private func startRegisteredHotKey(code: UInt16, modifiers: UInt64) throws {
+        let target = GetEventDispatcherTarget()
         var eventTypes = [
             EventTypeSpec(eventClass: OSType(kEventClassKeyboard), eventKind: UInt32(kEventHotKeyPressed)),
             EventTypeSpec(eventClass: OSType(kEventClassKeyboard), eventKind: UInt32(kEventHotKeyReleased)),
         ]
         var handler: EventHandlerRef?
         let handlerStatus = InstallEventHandler(
-            GetApplicationEventTarget(),
+            target,
             koeRegisteredHotKeyCallback,
             eventTypes.count,
             &eventTypes,
@@ -173,8 +183,8 @@ public final class HotkeyMonitor {
             UInt32(code),
             Self.carbonModifiers(from: modifiers),
             hotKeyID,
-            GetApplicationEventTarget(),
-            OptionBits(kEventHotKeyExclusive),
+            target,
+            OptionBits(kEventHotKeyNoOptions),
             &hotKey
         )
         guard registrationStatus == noErr, let hotKey else {
@@ -262,6 +272,26 @@ public final class HotkeyMonitor {
             // 修飾キーは他アプリの操作に必要なので必ず素通しする。
             return passthrough
 
+        case .keyDown:
+            guard case .key(let code, let modifiers) = binding,
+                  Self.requiresEventTap(modifiers: modifiers),
+                  UInt16(event.getIntegerValueField(.keyboardEventKeycode)) == code,
+                  Self.standardModifiers(from: event.flags.rawValue) == modifiers
+            else { return passthrough }
+            if event.getIntegerValueField(.keyboardEventAutorepeat) == 0, pressStart == nil {
+                beginPress()
+            }
+            return nil
+
+        case .keyUp:
+            guard case .key(let code, let modifiers) = binding,
+                  Self.requiresEventTap(modifiers: modifiers),
+                  UInt16(event.getIntegerValueField(.keyboardEventKeycode)) == code,
+                  pressStart != nil
+            else { return passthrough }
+            endPress()
+            return nil
+
         default:
             return passthrough
         }
@@ -289,6 +319,18 @@ public final class HotkeyMonitor {
         if flags & 0x0002_0000 != 0 { modifiers |= UInt32(shiftKey) }
         if flags & 0x0010_0000 != 0 { modifiers |= UInt32(cmdKey) }
         return modifiers
+    }
+
+    /// macOS 26ではOptionだけ（またはOption+Shift）を伴う文字keyがIMEに消費され、
+    /// `RegisterEventHotKey`の登録が成功しても通知されないことがある。
+    static func requiresEventTap(modifiers: UInt64) -> Bool {
+        let hasOption = modifiers & 0x0008_0000 != 0
+        let hasCommandOrControl = modifiers & (0x0010_0000 | 0x0004_0000) != 0
+        return hasOption && !hasCommandOrControl
+    }
+
+    private static func standardModifiers(from flags: UInt64) -> UInt64 {
+        flags & (0x0010_0000 | 0x0008_0000 | 0x0004_0000 | 0x0002_0000)
     }
 
     private func beginPress() {
