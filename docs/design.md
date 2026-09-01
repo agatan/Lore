@@ -68,7 +68,7 @@ Hotkey/UI
 ```
 
 - 短押しと長押しの解釈は`HotkeyGestureInterpreter`、対象アプリは`FrontmostAppObserver`、mode選択は`ModeResolver`が担当します。
-- `HotkeyMonitor`は文字keyを含む組み合わせを原則`RegisterEventHotKey`で標準event dispatcherへnon-exclusive登録します。macOS 26でIMEに消費されるOptionのみ（Option+Shiftを含む）の文字keyは、`CGPreflightListenEventAccess`で入力監視権限を確認してから`CGEventTap`で監視します。修飾キー単体も`CGEventTap`、登録型hotkeyの録音中EscはAppKit event monitorで扱います。Secure Input中に遮断される経路を別経路へfallbackせず、同じbindingは一方の経路だけで受信します。四つのmonitorは独立して開始します。
+- `HotkeyMonitor`は文字keyを含む組み合わせを`RegisterEventHotKey`で標準event dispatcherへnon-exclusive登録します。macOS 26でdispatcherから通知されないことがあるOptionのみ（Option+Shiftを含む）の文字keyは、`CGPreflightListenEventAccess`で入力監視権限を確認して`CGEventTap`も併用します。`pressStart`を単一の押下状態として二経路をdeduplicateし、最初の押下と離上だけをdomain eventにします。同じtapで修飾キー単体と録音中Escを扱います。四つのmonitorは独立して開始します。
 - `SessionDraft`がrecording、recognizing、formatting、insertingの進捗と計測値を保持し、永続化可能な`SessionRecord`へ確定します。
 - STT確定後、LLMを呼ぶ前にraw transcriptを保存します。
 - LLMのtimeout、利用不可、出力検証エラーではraw transcriptを挿入対象にします。

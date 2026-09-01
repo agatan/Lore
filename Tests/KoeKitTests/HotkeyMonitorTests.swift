@@ -58,6 +58,50 @@ struct HotkeyMonitorTests {
         #expect(up == nil)
     }
 
+    @Test("同じ押下が二つの監視経路から届いても一度だけ通知する")
+    func duplicateOptionKeyDeliveryIsDeduplicated() async {
+        let monitor = HotkeyMonitor()
+        monitor.update(binding: .key(code: 2, modifiers: Self.optionFlag))
+
+        final class Box { var events: [HotkeyPhysicalEvent] = [] }
+        let box = Box()
+        monitor.onEvent = { box.events.append($0) }
+
+        let down = keyEvent(code: 2, keyDown: true, flags: Self.optionFlag)
+        _ = monitor.handle(type: .keyDown, event: down)
+        _ = monitor.handle(type: .keyDown, event: down)
+        await Task.yield()
+        #expect(box.events.count == 1)
+
+        let up = keyEvent(code: 2, keyDown: false, flags: Self.optionFlag)
+        _ = monitor.handle(type: .keyUp, event: up)
+        _ = monitor.handle(type: .keyUp, event: up)
+        await Task.yield()
+        #expect(box.events.count == 2)
+    }
+
+    @Test("録音中のEscをevent tapで消費する")
+    func escapeIsConsumedWhileRecording() {
+        let monitor = HotkeyMonitor()
+        monitor.update(binding: .key(code: 2, modifiers: Self.optionFlag))
+        monitor.shouldSwallowEscape = { true }
+
+        let result = monitor.handle(type: .keyDown, event: keyEvent(code: 0x35, keyDown: true, flags: 0))
+
+        #expect(result == nil)
+    }
+
+    @Test("録音中でなければEscを素通しする")
+    func escapePassesThroughWhileIdle() {
+        let monitor = HotkeyMonitor()
+        monitor.update(binding: .key(code: 2, modifiers: Self.optionFlag))
+        monitor.shouldSwallowEscape = { false }
+
+        let result = monitor.handle(type: .keyDown, event: keyEvent(code: 0x35, keyDown: true, flags: 0))
+
+        #expect(result != nil)
+    }
+
     @Test("修飾キー単体の割り当ては素通しする")
     func modifierBindingPassesThrough() {
         let monitor = HotkeyMonitor()

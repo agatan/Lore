@@ -91,7 +91,7 @@
 <article class="card">
 <h3>Hotkey</h3>
 <p>既定は右Option。短押しはtoggle、500ms以上の長押しはpush-to-talk。Escでcancelします。</p>
-<p>文字keyを含むhotkeyは原則macOSの標準event dispatcherへ個別登録します。macOS 26でIMEに消費されるOptionのみ（Option+Shiftを含む）の文字keyは、利用者が入力監視を許可した場合に限りinput event監視を使います。修飾キー単体と録音中Escはアクセシビリティによるinput event監視を使います。Secure Input中はinput event監視と対象appへのpasteがmacOSに遮断されます。一つの登録失敗や権限不足でほかのhotkeyを停止しません。</p>
+<p>文字keyを含むhotkeyはmacOSの標準event dispatcherへ個別登録します。macOS 26でdispatcherから通知されないことがあるOptionのみ（Option+Shiftを含む）の文字keyは、利用者が入力監視を許可した場合にinput event監視も併用し、先に届いた一組の押下・離上だけを採用します。修飾キー単体と録音中Escもinput event監視を使います。Secure Input中はinput event監視と対象appへのpasteがmacOSに遮断されます。一つの登録失敗や権限不足でほかのhotkeyを停止しません。</p>
 </article>
 <article class="card">
 <h3>状態表示</h3>

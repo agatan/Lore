@@ -46,8 +46,9 @@ private func koeEventTapCallback(
     }
 }
 
-/// 文字keyの組み合わせは原則macOSに個別登録し、Optionだけを伴う組み合わせと
-/// 修飾キー単体をevent tapで監視する。
+/// 文字keyの組み合わせはmacOSに個別登録する。Optionだけを伴う組み合わせは
+/// IMEに登録イベントを奪われることがあるため、event tapでも同時に監視する。
+/// 修飾キー単体と録音中のEscも同じevent tapで監視する。
 ///
 /// 押下・離上の生イベントだけを流し、トグル / push-to-talk の解釈は
 /// `HotkeyGestureInterpreter`(純粋ドメイン)に任せる。
@@ -103,23 +104,30 @@ public final class HotkeyMonitor {
     public func start() throws {
         guard !isRunning else { return }
 
-        switch binding {
-        case .key(let code, let modifiers):
-            if Self.requiresEventTap(modifiers: modifiers) {
-                guard Permissions.isAccessibilityGranted else { throw Failure.notTrusted }
-                guard Permissions.isInputMonitoringGranted else { throw Failure.inputMonitoringRequired }
-                try startEventTap()
-            } else {
+        do {
+            switch binding {
+            case .key(let code, let modifiers):
                 try startRegisteredHotKey(code: code, modifiers: modifiers)
+                if Self.requiresEventTap(modifiers: modifiers) {
+                    guard Permissions.isAccessibilityGranted else { throw Failure.notTrusted }
+                    guard Permissions.isInputMonitoringGranted else { throw Failure.inputMonitoringRequired }
+                    try startEventTap()
+                } else if shouldSwallowEscape != nil,
+                          Permissions.isAccessibilityGranted,
+                          Permissions.isInputMonitoringGranted {
+                    try startEventTap()
+                } else if shouldSwallowEscape != nil {
+                    startEscapeMonitors()
+                }
+            case .modifier:
+                guard Permissions.isAccessibilityGranted else { throw Failure.notTrusted }
+                try startEventTap()
             }
-            if shouldSwallowEscape != nil {
-                startEscapeMonitors()
-            }
-        case .modifier:
-            guard Permissions.isAccessibilityGranted else { throw Failure.notTrusted }
-            try startEventTap()
+            isRunning = true
+        } catch {
+            stop()
+            throw error
         }
-        isRunning = true
     }
 
     private func startEventTap() throws {
@@ -276,9 +284,13 @@ public final class HotkeyMonitor {
             return passthrough
 
         case .keyDown:
+            let eventCode = UInt16(event.getIntegerValueField(.keyboardEventKeycode))
+            if eventCode == 0x35, shouldSwallowEscape?() == true {
+                return nil
+            }
             guard case .key(let code, let modifiers) = binding,
                   Self.requiresEventTap(modifiers: modifiers),
-                  UInt16(event.getIntegerValueField(.keyboardEventKeycode)) == code,
+                  eventCode == code,
                   Self.standardModifiers(from: event.flags.rawValue) == modifiers
             else { return passthrough }
             if event.getIntegerValueField(.keyboardEventAutorepeat) == 0, pressStart == nil {
@@ -337,13 +349,15 @@ public final class HotkeyMonitor {
     }
 
     private func beginPress() {
+        guard pressStart == nil else { return }
         pressStart = ContinuousClock.now
         notify(.pressed)
     }
 
     private func endPress() {
-        let held: Duration = pressStart.map { ContinuousClock.now - $0 } ?? .zero
-        pressStart = nil
+        guard let pressStart else { return }
+        let held = ContinuousClock.now - pressStart
+        self.pressStart = nil
         notify(.released(heldFor: held))
     }
 

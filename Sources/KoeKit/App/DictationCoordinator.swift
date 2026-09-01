@@ -463,6 +463,8 @@ public final class DictationCoordinator {
 
             let transcript = (finalText ?? liveTranscript).trimmingCharacters(in: .whitespacesAndNewlines)
             guard !transcript.isEmpty else {
+                logInputDiagnostics(transcriptLength: 0)
+                KoeLog.session.error("音声認識結果が空")
                 finish(phase: .finished(.failed("音声を認識できませんでした")), detail: nil)
                 sounds.play(.failure)
                 return
@@ -767,7 +769,7 @@ public final class DictationCoordinator {
     private func logInputDiagnostics(transcriptLength: Int) {
         let peak = String(format: "%.3f", audio.lastPeakLevel)
         KoeLog.session.info(
-            "録音完了 chunks=\(self.audio.lastChunkCount, privacy: .public) peak=\(peak, privacy: .public) duration=\(self.audio.capturedDurationMs, privacy: .public)ms chars=\(transcriptLength, privacy: .public)"
+            "録音完了 input=\(self.inputDeviceName ?? "不明", privacy: .public) chunks=\(self.audio.lastChunkCount, privacy: .public) peak=\(peak, privacy: .public) duration=\(self.audio.capturedDurationMs, privacy: .public)ms chars=\(transcriptLength, privacy: .public)"
         )
     }
 

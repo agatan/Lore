@@ -33,7 +33,7 @@
 
 - 既定hotkeyは右Optionです。
 - 短押しは開始・停止のtoggle、長押しはpush-to-talkとして離した時に停止します。既定の長押し判定は500msです。
-- 文字keyを含むhotkeyは原則macOSの標準event dispatcherへ個別登録します。macOS 26でIMEに消費されるOptionのみ（Option+Shiftを含む）の文字keyは、利用者が入力監視を許可した場合に限りinput event監視を使います。修飾キー単体と録音中のEscはアクセシビリティによるinput event監視を使います。Secure Input中はinput event監視と対象appへのpasteがmacOSに遮断されます。一つのhotkeyの登録失敗や権限不足でほかのhotkeyを停止しません。
+- 文字keyを含むhotkeyはmacOSの標準event dispatcherへ個別登録します。macOS 26でdispatcherから通知されないことがあるOptionのみ（Option+Shiftを含む）の文字keyは、利用者が入力監視を許可した場合にinput event監視も併用し、先に届いた一組の押下・離上だけを採用します。修飾キー単体と録音中のEscもinput event監視を使います。Secure Input中はinput event監視と対象appへのpasteがmacOSに遮断されます。一つのhotkeyの登録失敗や権限不足でほかのhotkeyを停止しません。
 - menu barからも開始・停止できます。同時に進行できる音声入力は一つです。
 - 録音中のEscは挿入をcancelします。認識済みtextがあれば`cancelled`履歴として残ります。
 - 録音中、認識中、整形中、挿入中、完了または失敗をHUDとmenu barに表示します。HUD、効果音、入力level表示は設定で切り替えられます。
