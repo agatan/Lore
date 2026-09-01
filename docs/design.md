@@ -94,7 +94,7 @@ capture request
 
 - 初回開始前にローカルaudio保存への明示同意が必要です。
 - 30秒chunkは復旧・保持の単位であり、認識jobの境界ではありません。Burst rangeがchunkをまたぐ場合も、対応する全chunkのcommit後に一つのjob入力として扱います。
-- `AdaptiveSpeechSegmenter`はcaptureやSTT adapterから独立したdomain policyです。正規化input level 0.05未満をnear-silenceとし、有声入力が始まるまでjobを作りません。Burst内の累積有声時間が3秒未満なら30秒、3秒以上10秒未満なら10秒、10秒以上30秒未満なら5秒、30秒以上なら3秒の連続無音でflushします。連続入力でもburstのwall timeが5分に達したら安全flushします。
+- `AdaptiveSpeechSegmenter`はcaptureやSTT adapterから独立したdomain policyです。正規化input level 0.025未満をnear-silenceとし、有声入力が始まるまでjobを作りません。Burst内の累積有声時間が3秒未満なら8秒、3秒以上10秒未満なら5秒、10秒以上30秒未満なら3秒、30秒以上なら2秒の連続無音でflushします。連続入力でもburstのwall timeが5分に達したら安全flushします。
 - Flush後は参照する全audio rangeのcommitを待ってからjobを開始します。Recognition結果のtimestampはcapture開始時刻へaudio offsetを加えて導出し、処理開始時刻やmodel内部clockを正本にしません。Vocabularyは録音session開始時にsnapshot化し、途中の設定変更を混ぜません。保存audioの再処理では最新の有効語彙を使います。
 - 音声入力と重なる区間もraw audioと認識済みutteranceを保存します。読み取り時は音声入力の実録音区間（`startedAt`から`audioDurationMs`）を使って重複を解決し、成功した`SessionRecord`をtimeline、検索、exportの正本として、重なるlife-log utteranceをそれらのprojectionから除外します。summary/TODOは通常音声入力も重なるlife-log utteranceも使いません。cancelled/failed sessionは正本にせず、life-log utteranceを残します。この優先順位はUIや個別adapterではなくdomainの共通projectionに置きます。
 - 未処理・失敗chunkは保存状態を持ち、起動後に古い順で再処理します。明確な無音chunkは`peakLevel`で除外します。
@@ -116,7 +116,7 @@ capture request
 | Apple SpeechAnalyzer | `SpeechAnalyzerStt` | macOS管理 | なし |
 | WhisperKit deferred | `WhisperKitStt` | Koeがlocal downloadを管理するaccuracy優先のcurated model | なし |
 
-`WhisperKitStt`はaccuracy優先でcurateした比較的大きいmodelのcatalog、download、cancel、再試行、検証、削除を一つの境界に置きます。検証を通らないmodelは利用可能modelとして公開しません。実行中jobが参照するmodelは完了またはcancelまで削除しません。Model lifecycleは遅延jobが所有し、download完了だけでは推論engineをloadしません。Model取得通信に音声、文字起こし、利用者dataを含めません。
+`WhisperKitStt`はaccuracy優先でcurateした比較的大きいmodelのcatalog、download、cancel、再試行、検証、削除を一つの境界に置きます。Compiled modelとtokenizerの両方を取得・検証できたmodelだけを利用可能modelとして公開します。複数jobが同時に始まってもmodelとtokenizerの初期化は一つだけ実行し、同じ結果を共有します。実行中jobが参照するmodelは完了またはcancelまで削除しません。Model lifecycleは遅延jobが所有し、download完了だけでは推論engineをloadしません。Model取得通信に音声、文字起こし、利用者dataを含めません。
 
 | Backend | 実装 | 接続先 | Mac外への文字送信 |
 |---|---|---|---|
@@ -198,7 +198,7 @@ DBは`~/Library/Application Support/Koe/koe.sqlite`です。`DatabaseQueue`を�
 | 変更 | 最初に確認する場所 | 同時に更新するもの |
 |---|---|---|
 | provider追加 | `FormattingBackend`, `EngineRegistry`, `ModelsSettingsView`, `SecretStore` | privacy表示、engine tests、spec/design |
-| Life Log発話burst・STT変更 | `AdaptiveSpeechSegmenter`, `LifeLogCoordinator`, `SttEngine` | near-silence無視、30/10/5/3秒tier、5分flush、chunk跨ぎoffset、語彙snapshot、再試行test、`swift test` |
+| Life Log発話burst・STT変更 | `AdaptiveSpeechSegmenter`, `LifeLogCoordinator`, `SttEngine` | near-silence無視、8/5/3/2秒tier、5分flush、chunk跨ぎoffset、語彙snapshot、再試行test、`swift test` |
 | Whisper model管理変更 | `EngineRegistry`, `WhisperKitStt`, settings | download失敗/cancel/検証、job中削除防止、全削除、privacy、`swift test`、`make ui-test` |
 | 永続model変更 | `Domain`, `KoeDatabase.migrator`, 対応Store | migration test、backup/delete test、design |
 | dictation状態変更 | `SessionDraft`, `DictationCoordinator`, `HistoryStore` | HUD/history、state tests、spec/design |
@@ -220,4 +220,4 @@ DBは`~/Library/Application Support/Koe/koe.sqlite`です。`DatabaseQueue`を�
 
 ## 13. テスト配置
 
-`Tests/KoeKitTests`はdomain、formatting、engine、persistence、life log、automationを対象にします。`AdaptiveSpeechSegmenter`はnear-silenceだけではjobを作らないこと、3/10/30秒の有声境界で30/10/5/3秒へ切り替わること、5分で安全flushすることをclock非依存のdomain testで固定します。統合testはchunkをまたぐaudio offset timestamp、録音session開始時の語彙snapshot、失敗後の保存audio再処理を検証します。`make ui-test`は署名済みappを起動し、`Scripts/KoeUIE2E.swift`から主要CUJを検証します。詳細な実行方法とE2E契約は[testing.md](testing.md)を参照してください。
+`Tests/KoeKitTests`はdomain、formatting、engine、persistence、life log、automationを対象にします。`AdaptiveSpeechSegmenter`はnear-silenceだけではjobを作らないこと、3/10/30秒の有声境界で8/5/3/2秒へ切り替わること、5分で安全flushすることをclock非依存のdomain testで固定します。統合testはchunkをまたぐaudio offset timestamp、録音session開始時の語彙snapshot、失敗後の保存audio再処理を検証します。`make ui-test`は署名済みappを起動し、`Scripts/KoeUIE2E.swift`から主要CUJを検証します。詳細な実行方法とE2E契約は[testing.md](testing.md)を参照してください。

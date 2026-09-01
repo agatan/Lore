@@ -41,7 +41,7 @@
 
 - 通常の音声入力とボイスメモはApple SpeechAnalyzerへstreamし、暫定textをHUDへ表示します。通常の音声入力audioはfileやDBへ保存せず、外部へ送信しません。
 - ライフログだけはSpeechAnalyzerまたはローカルへダウンロードしたWhisperKit modelを選べます。連続録音とは分離し、入力signalから検出した発話burstを保存audioから遅延認識します。数十秒の表示latencyを許容し、WhisperKitでは速度より精度を優先したcuratedな比較的大きいlocal modelを選べます。
-- 発話開始後の無音flush閾値は、そのburst内の累積有声時間が3秒未満なら30秒、3秒以上10秒未満なら10秒、10秒以上30秒未満なら5秒、30秒以上なら3秒です。正規化input level 0.05未満が続くnear-silenceだけでは認識jobを作らず、burstのwall timeが5分に達した場合は安全のためflushします。
+- 発話開始後の無音flush閾値は、そのburst内の累積有声時間が3秒未満なら8秒、3秒以上10秒未満なら5秒、10秒以上30秒未満なら3秒、30秒以上なら2秒です。正規化input level 0.025未満が続くnear-silenceだけでは認識jobを作らず、burstのwall timeが5分に達した場合は安全のためflushします。
 - 各遅延認識jobは参照範囲のaudioが永続化された後に実行し、発話timestampを録音開始時刻とaudio offsetから復元します。録音session開始時の語彙snapshotを完了まで固定し、保存audioの再処理では最新の有効語彙を使います。
 - WhisperKit modelは設定画面で一覧、download進捗と失敗理由を確認し、downloadをcancel、再試行、削除できます。Download完了前のmodelは認識に利用できず、使用中のjobがあるmodelは完了またはcancelまで削除できません。
 - 録音開始時の前面appからmodeを一度決め、そのsession内では固定します。手動固定は自動選択より優先します。
@@ -264,4 +264,4 @@ koe search "検索語" [--limit N]
 23. Summary/TODO派生は設定間隔の到来またはSummary viewの手動更新だけで実行し、録音停止を含むcapture状態変化では実行しない。確定済みTODOのIDと新しいDraftのIDは衝突しない。
 24. App起動だけではライフログ記録を開始せず、前回processの記録開始意図を復元しない。
 25. 通常の音声入力とボイスメモはSpeechAnalyzerを使い、ライフログだけはSpeechAnalyzerまたはdownload済みWhisperKit modelを選べる。Download・cancel・再試行・削除の状態と容量が設定に表示され、audioはMac外へ送信されない。
-26. Life Logは正規化input level 0.05未満の持続near-silenceだけでは認識jobを作らない。発話burstは累積有声時間が3秒未満、3秒以上10秒未満、10秒以上30秒未満、30秒以上の順に30秒、10秒、5秒、3秒の無音でflushし、wall time 5分でも安全flushする。Timestampは保存audio offsetに一致し、語彙は録音session開始時のsnapshotで固定される。
+26. Life Logは正規化input level 0.025未満の持続near-silenceだけでは認識jobを作らない。発話burstは累積有声時間が3秒未満、3秒以上10秒未満、10秒以上30秒未満、30秒以上の順に8秒、5秒、3秒、2秒の無音でflushし、wall time 5分でも安全flushする。Timestampは保存audio offsetに一致し、語彙は録音session開始時のsnapshotで固定される。

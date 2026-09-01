@@ -11,6 +11,8 @@ public actor WhisperKitStt: SttEngine {
     private let model: WhisperModel
     private let modelRoot: URL
     private var whisperKit: WhisperKit?
+    private var isLoading = false
+    private var loadWaiters: [CheckedContinuation<Void, Error>] = []
 
     public init(model: WhisperModel, modelRoot: URL? = nil) {
         self.model = model
@@ -51,6 +53,9 @@ public actor WhisperKitStt: SttEngine {
     }
 
     public func unload() async {
+        if isLoading {
+            try? await waitForLoading()
+        }
         await whisperKit?.unloadModels()
         whisperKit = nil
     }
@@ -62,6 +67,10 @@ public actor WhisperKitStt: SttEngine {
             downloadBase: modelRoot,
             progressCallback: { value in progress(value.fractionCompleted) }
         )
+        _ = try await ModelUtilities.loadTokenizer(
+            for: model.whisperKitVariant,
+            tokenizerFolder: modelRoot
+        )
         guard installedModelFolder() != nil else {
             throw EngineError.failed("ダウンロードしたWhisperモデルを検証できませんでした")
         }
@@ -70,8 +79,13 @@ public actor WhisperKitStt: SttEngine {
 
     public func deleteInstalledModel() async throws {
         await unload()
-        guard let folder = installedModelFolder() else { return }
-        try FileManager.default.removeItem(at: folder)
+        if let folder = compiledModelFolder() {
+            try FileManager.default.removeItem(at: folder)
+        }
+        let tokenizerFolder = tokenizerFolder()
+        if FileManager.default.fileExists(atPath: tokenizerFolder.path) {
+            try FileManager.default.removeItem(at: tokenizerFolder)
+        }
     }
 
     public func isInstalled() -> Bool { installedModelFolder() != nil }
@@ -128,22 +142,60 @@ public actor WhisperKitStt: SttEngine {
 
     private func loadedWhisperKit() async throws -> WhisperKit {
         if let whisperKit { return whisperKit }
+        if isLoading {
+            try await waitForLoading()
+            guard let whisperKit else {
+                throw EngineError.failed("WhisperKitの初期化結果を取得できませんでした")
+            }
+            return whisperKit
+        }
         guard let folder = installedModelFolder() else {
             throw EngineError.notReady("ライフログ設定から \(model.displayName) を取得してください")
         }
-        let value = try await WhisperKit(WhisperKitConfig(
-            downloadBase: modelRoot,
-            modelFolder: folder.path,
-            verbose: false,
-            prewarm: true,
-            load: true,
-            download: false
-        ))
-        whisperKit = value
-        return value
+        isLoading = true
+        do {
+            let value = try await WhisperKit(WhisperKitConfig(
+                downloadBase: modelRoot,
+                modelFolder: folder.path,
+                verbose: false,
+                prewarm: true,
+                load: true,
+                download: false
+            ))
+            whisperKit = value
+            finishLoading()
+            return value
+        } catch {
+            finishLoading(throwing: error)
+            throw error
+        }
+    }
+
+    private func waitForLoading() async throws {
+        try await withCheckedThrowingContinuation { continuation in
+            loadWaiters.append(continuation)
+        }
+    }
+
+    private func finishLoading(throwing error: Error? = nil) {
+        isLoading = false
+        let waiters = loadWaiters
+        loadWaiters = []
+        for waiter in waiters {
+            if let error {
+                waiter.resume(throwing: error)
+            } else {
+                waiter.resume()
+            }
+        }
     }
 
     private func installedModelFolder() -> URL? {
+        guard Self.containsTokenizer(tokenizerFolder()) else { return nil }
+        return compiledModelFolder()
+    }
+
+    private func compiledModelFolder() -> URL? {
         guard let enumerator = FileManager.default.enumerator(
             at: modelRoot,
             includingPropertiesForKeys: [.isDirectoryKey],
@@ -155,6 +207,16 @@ public actor WhisperKitStt: SttEngine {
             return url
         }
         return nil
+    }
+
+    private func tokenizerFolder() -> URL {
+        modelRoot.appending(path: "models/openai/\(model.tokenizerRepositoryName)", directoryHint: .isDirectory)
+    }
+
+    private static func containsTokenizer(_ folder: URL) -> Bool {
+        ["tokenizer.json", "tokenizer_config.json"].allSatisfy {
+            FileManager.default.fileExists(atPath: folder.appending(path: $0).path)
+        }
     }
 
     private static func containsCompiledModels(_ folder: URL) -> Bool {
@@ -180,5 +242,21 @@ public actor WhisperKitStt: SttEngine {
     public nonisolated static var defaultModelRoot: URL {
         FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
             .appending(path: "Koe/Models/WhisperKit", directoryHint: .isDirectory)
+    }
+}
+
+private extension WhisperModel {
+    var whisperKitVariant: ModelVariant {
+        switch self {
+        case .small: .small
+        case .largeV3: .largev3
+        }
+    }
+
+    var tokenizerRepositoryName: String {
+        switch self {
+        case .small: "whisper-small"
+        case .largeV3: "whisper-large-v3"
+        }
     }
 }

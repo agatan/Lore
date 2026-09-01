@@ -90,7 +90,8 @@ clean:
 ## /Applications へ配置する (権限を安定させたい場合)
 ## bundle ID が同じコピーが複数あると TCC が混乱するので、build/ のコピーは残さない
 install: CONFIG = release
-install: stop app
+install: app
+	@pkill -x Koe >/dev/null 2>&1 || true
 	@rm -rf /Applications/Koe.app
 	@cp -R "$(APP)" /Applications/
 	@rm -rf "$(APP)"

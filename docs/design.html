@@ -257,7 +257,7 @@ KoeMCP ──┘</pre>
 <ul>
 <li>音声入力とは独立してaudioを連続耐久化し、Life Log STTはadaptiveな発話burstごとの遅延jobです。</li>
 <li>30秒chunkは復旧単位で、認識境界ではありません。Burstがchunkをまたいでも対応する全chunkのcommit後に一つのjob入力として扱います。</li>
-<li><code>AdaptiveSpeechSegmenter</code>は正規化input level 0.05未満をnear-silenceとして無視します。累積有声時間が3秒未満、3〜10秒未満、10〜30秒未満、30秒以上の順に30秒、10秒、5秒、3秒の無音でflushし、wall time 5分でも安全flushします。</li>
+<li><code>AdaptiveSpeechSegmenter</code>は正規化input level 0.025未満をnear-silenceとして無視します。累積有声時間が3秒未満、3〜10秒未満、10〜30秒未満、30秒以上の順に8秒、5秒、3秒、2秒の無音でflushし、wall time 5分でも安全flushします。</li>
 <li>Jobは参照audioのcommit後に開始します。Timestampはcapture開始時刻とaudio offsetから導出します。語彙は録音session開始時にsnapshot化し、保存audioの再処理では最新の有効語彙を使います。</li>
 <li>音声入力と重なる区間もraw audioと認識済みutteranceを保存します。成功した<code>SessionRecord</code>をtimeline、検索、exportの正本として重なるlife-log utteranceを除外します。Summary/TODOは通常音声入力も重なるlife-log utteranceも使いません。Cancelled/failed sessionではlife-log utteranceを残します。</li>
 <li>pending chunkは起動後に再処理し、無音はpeak levelで除外します。</li>
@@ -273,7 +273,7 @@ KoeMCP ──┘</pre>
 <section id="engines">
 <h2>6. Engines</h2>
 <p>通常音声入力とボイスメモは<code>SpeechAnalyzerStt</code>固定です。Life logの遅延jobだけをSpeechAnalyzerまたはlocal download済みWhisperKitから選びます。Audioは送信しません。</p>
-<p><code>WhisperKitStt</code>はaccuracy優先の比較的大きいcurated modelのcatalog、download、cancel、再試行、検証、削除を所有します。検証を通らないmodelは利用可能にせず、実行中jobのmodelは完了またはcancelまで削除しません。Model lifecycleは遅延jobが所有し、download完了だけでは推論engineをloadしません。Model取得requestに利用者dataを含めません。</p>
+<p><code>WhisperKitStt</code>はaccuracy優先の比較的大きいcurated modelのcatalog、download、cancel、再試行、検証、削除を所有します。Compiled modelとtokenizerの両方を取得・検証できたmodelだけを利用可能にし、複数jobが同時に始まってもmodelとtokenizerの初期化は一つだけ実行して結果を共有します。実行中jobのmodelは完了またはcancelまで削除しません。Model lifecycleは遅延jobが所有し、download完了だけでは推論engineをloadしません。Model取得requestに利用者dataを含めません。</p>
 <table>
 <thead>
 <tr>
@@ -408,7 +408,7 @@ KoeMCP ──┘</pre>
 <td>FormattingBackend、EngineRegistry、ModelsSettings、SecretStore</td>
 <td>privacy、engine test、spec/design</td>
 </tr>
-<tr><td>Life Log発話burst・STT</td><td>AdaptiveSpeechSegmenter、LifeLogCoordinator、SttEngine</td><td>near-silence、30/10/5/3秒tier、5分flush、offset、語彙snapshot、tests</td></tr>
+<tr><td>Life Log発話burst・STT</td><td>AdaptiveSpeechSegmenter、LifeLogCoordinator、SttEngine</td><td>near-silence、8/5/3/2秒tier、5分flush、offset、語彙snapshot、tests</td></tr>
 <tr><td>Whisper model管理</td><td>EngineRegistry、WhisperKitStt、settings</td><td>download/cancel/検証、job中削除防止、全削除、privacy、tests</td></tr>
 <tr>
 <td>永続model</td>
@@ -465,7 +465,7 @@ KoeMCP ──┘</pre>
 </section>
 <section id="tests">
 <h2>13. Test配置</h2>
-<p><code>Tests/KoeKitTests</code>はnear-silence無視、3/10/30秒の有声境界による30/10/5/3秒tier、5分flushをdomain testで固定し、chunk跨ぎoffset timestamp、録音session開始時の語彙snapshot、同一入力の再試行を統合testで検証します。<code>make ui-test</code>は主要CUJを検証します。詳細は<a href="testing.md">testing.md</a>を参照してください。</p>
+<p><code>Tests/KoeKitTests</code>はnear-silence無視、3/10/30秒の有声境界による8/5/3/2秒tier、5分flushをdomain testで固定し、chunk跨ぎoffset timestamp、録音session開始時の語彙snapshot、同一入力の再試行を統合testで検証します。<code>make ui-test</code>は主要CUJを検証します。詳細は<a href="testing.md">testing.md</a>を参照してください。</p>
 </section>
 </main>
 <footer>詳細な型と経路は <a href="design.md">Markdown版</a>、利用者との契約は <a href="spec.html">外部仕様</a> を参照してください。</footer>

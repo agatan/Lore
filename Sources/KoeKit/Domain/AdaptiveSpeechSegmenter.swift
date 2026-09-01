@@ -10,7 +10,7 @@ public struct AdaptiveSpeechSegmenter: Sendable {
         case flush
     }
 
-    public static let speechLevelThreshold: Float = 0.05
+    public static let speechLevelThreshold: Float = 0.025
     public static let maximumBurstDuration: TimeInterval = 5 * 60
 
     public private(set) var isActive = false
@@ -56,10 +56,10 @@ public struct AdaptiveSpeechSegmenter: Sendable {
 
     public static func requiredSilence(afterVoicedDuration duration: TimeInterval) -> TimeInterval {
         switch duration {
-        case ..<3: 30
-        case ..<10: 10
-        case ..<30: 5
-        default: 3
+        case ..<3: 8
+        case ..<10: 5
+        case ..<30: 3
+        default: 2
         }
     }
 

@@ -243,7 +243,7 @@ struct LifeLogTests {
         #expect(!LifeLogAudioChunk(captureStartedAt: start, captureEndedAt: start.addingTimeInterval(30),
                                   localPath: "/tmp/silent.m4a", peakLevel: 0.01).isTranscriptionCandidate)
         #expect(LifeLogAudioChunk(captureStartedAt: start, captureEndedAt: start.addingTimeInterval(30),
-                                 localPath: "/tmp/quiet-speech.m4a", peakLevel: 0.2).isTranscriptionCandidate)
+                                 localPath: "/tmp/quiet-speech.m4a", peakLevel: 0.03).isTranscriptionCandidate)
     }
 
     @Test("calendarは参考値として扱い、時間gapだけがconversationを分ける")
@@ -833,10 +833,10 @@ struct LifeLogTests {
 struct AdaptiveSpeechSegmenterTests {
     @Test("発話量が増えるほど必要な無音を短くする")
     func silenceThresholdTiers() {
-        #expect(AdaptiveSpeechSegmenter.requiredSilence(afterVoicedDuration: 2.9) == 30)
-        #expect(AdaptiveSpeechSegmenter.requiredSilence(afterVoicedDuration: 3) == 10)
-        #expect(AdaptiveSpeechSegmenter.requiredSilence(afterVoicedDuration: 10) == 5)
-        #expect(AdaptiveSpeechSegmenter.requiredSilence(afterVoicedDuration: 30) == 3)
+        #expect(AdaptiveSpeechSegmenter.requiredSilence(afterVoicedDuration: 2.9) == 8)
+        #expect(AdaptiveSpeechSegmenter.requiredSilence(afterVoicedDuration: 3) == 5)
+        #expect(AdaptiveSpeechSegmenter.requiredSilence(afterVoicedDuration: 10) == 3)
+        #expect(AdaptiveSpeechSegmenter.requiredSilence(afterVoicedDuration: 30) == 2)
     }
 
     @Test("無音だけでは認識を開始しない")
@@ -847,11 +847,20 @@ struct AdaptiveSpeechSegmenterTests {
         #expect(!didFinish)
     }
 
-    @Test("長い発話は3秒の無音で確定する")
-    func longSpeechFlushesAfterThreeSeconds() {
+    @Test("小さい声も発話として開始し、短い発話は8秒の無音で確定する")
+    func quietShortSpeechFlushesAfterEightSeconds() {
+        var segmenter = AdaptiveSpeechSegmenter()
+        #expect(segmenter.consume(level: 0.03, duration: 1) == .started)
+        #expect(segmenter.consume(level: 0.01, duration: 7) == .buffer)
+        #expect(segmenter.consume(level: 0.01, duration: 1) == .flush)
+        #expect(!segmenter.isActive)
+    }
+
+    @Test("長い発話は2秒の無音で確定する")
+    func longSpeechFlushesAfterTwoSeconds() {
         var segmenter = AdaptiveSpeechSegmenter()
         #expect(segmenter.consume(level: 0.2, duration: 31) == .started)
-        #expect(segmenter.consume(level: 0.01, duration: 2) == .buffer)
+        #expect(segmenter.consume(level: 0.01, duration: 1) == .buffer)
         #expect(segmenter.consume(level: 0.01, duration: 1) == .flush)
         #expect(!segmenter.isActive)
     }
