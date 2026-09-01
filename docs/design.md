@@ -68,7 +68,7 @@ Hotkey/UI
 ```
 
 - 短押しと長押しの解釈は`HotkeyGestureInterpreter`、対象アプリは`FrontmostAppObserver`、mode選択は`ModeResolver`が担当します。
-- `HotkeyMonitor`はControlまたはCommandを含む文字keyを`RegisterEventHotKey`で個別登録します。Carbonが登録成功後も配送しないOption/Shiftだけの文字keyと修飾キー単体は`CGEventTap`へ一意に振り分けます。登録型hotkeyの録音中Escは競合しないAppKit event monitorで扱います。同じbindingを二経路で監視せず、四つのmonitorは独立して開始します。
+- `HotkeyMonitor`は文字keyを含むすべての組み合わせを`RegisterEventHotKey`で個別登録し、修飾キー単体だけを`CGEventTap`で監視します。登録型hotkeyの録音中EscはAppKit event monitorで扱います。これにより組み合わせhotkeyは入力全体の監視やAccessibility権限に依存せず、同じbindingを二経路で受信しません。四つのmonitorは独立して開始します。
 - `SessionDraft`がrecording、recognizing、formatting、insertingの進捗と計測値を保持し、永続化可能な`SessionRecord`へ確定します。
 - STT確定後、LLMを呼ぶ前にraw transcriptを保存します。
 - LLMのtimeout、利用不可、出力検証エラーではraw transcriptを挿入対象にします。

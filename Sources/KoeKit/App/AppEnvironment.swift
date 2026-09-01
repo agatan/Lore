@@ -384,7 +384,7 @@ public final class AppEnvironment {
             self?.coordinator.handle(hotkey: event)
         }
         // 消費するかどうかだけを同期で答え、中止処理は次のターンへ回す
-        // (イベントタップのコールバックを遅くしない、C-57)。
+        // (入力eventのコールバックを遅くしない、C-57)。
         hotkeys.shouldSwallowEscape = { [weak self] in
             guard let self, coordinator.isBusy else { return false }
             DispatchQueue.main.async { [weak self] in self?.coordinator.cancel() }

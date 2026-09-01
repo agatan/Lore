@@ -235,7 +235,7 @@ KoeMCP ──┘</pre>
 <p>通常の音声入力はaudio fileを作りません。履歴にはtext、snapshot、状態、計測値を保存します。</p>
 </article>
 </div>
-<p><code>HotkeyMonitor</code>はControlまたはCommandを含む文字keyを<code>RegisterEventHotKey</code>で個別登録します。Option/Shiftだけの文字keyと修飾キー単体は<code>CGEventTap</code>へ一意に振り分け、登録型hotkeyのEscはAppKit event monitorで扱います。同じbindingを二経路で監視しません。</p>
+<p><code>HotkeyMonitor</code>は文字keyを含むすべての組み合わせを<code>RegisterEventHotKey</code>で個別登録し、修飾キー単体だけを<code>CGEventTap</code>で監視します。登録型hotkeyの録音中EscはAppKit event monitorで扱います。組み合わせhotkeyは入力全体の監視やAccessibility権限に依存せず、同じbindingを二経路で受信しません。</p>
 <p><code>DictationCoordinator</code>のcapture destinationは通常音声入力とボイスメモです。ボイスメモは同じ<code>AudioCapture</code>、STT、HUDを使いますが、<code>SessionDraft</code>、LLM、<code>HistoryStore</code>、<code>TextInserter</code>を通らず、確定した生textを<code>LifeLogCoordinator.addMemo</code>へ一度だけ渡します。<code>AppEnvironment</code>は開始前にlife-log captureの安全な一時停止を待ち、終了結果にかかわらず記録意図に従って再開します。<code>LifeLogMemoComposer</code>の音声ボタンとglobal hotkeyはどちらも<code>AppEnvironment.toggleVoiceMemo</code>を呼び、Viewは準備中と録音中のstateだけを投影します。</p>
 </section>
 <section id="lifelog">
