@@ -4,6 +4,7 @@ import Foundation
 public enum RecognizedLanguage: String, Codable, Sendable, CaseIterable {
     case ja
     case en
+    case zhHans = "zh-Hans"
     case mixed
     case unknown
 
@@ -11,6 +12,7 @@ public enum RecognizedLanguage: String, Codable, Sendable, CaseIterable {
         switch self {
         case .ja: "日本語"
         case .en: "英語"
+        case .zhHans: "簡体字中国語"
         case .mixed: "日英混在"
         case .unknown: "不明"
         }
@@ -22,6 +24,7 @@ public enum LanguagePreference: String, Codable, Sendable, CaseIterable, Identif
     case auto
     case ja
     case en
+    case zhHans = "zh-Hans"
 
     public var id: String { rawValue }
 
@@ -30,6 +33,7 @@ public enum LanguagePreference: String, Codable, Sendable, CaseIterable, Identif
         case .auto: "自動判定"
         case .ja: "日本語に固定"
         case .en: "英語に固定"
+        case .zhHans: "簡体字中国語に固定"
         }
     }
 
@@ -39,6 +43,7 @@ public enum LanguagePreference: String, Codable, Sendable, CaseIterable, Identif
         case .auto: nil
         case .ja: Locale(identifier: "ja-JP")
         case .en: Locale(identifier: "en-US")
+        case .zhHans: Locale(identifier: "zh-CN")
         }
     }
 }

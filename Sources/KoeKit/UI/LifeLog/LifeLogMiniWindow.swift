@@ -42,6 +42,10 @@ struct LifeLogMiniWindow: View {
                 }
             }
 
+            if let startedAt = env.lifeLog.activeTranscriptionStartedAt {
+                Divider().opacity(0.35)
+                LifeLogTranscriptionProgressRow(startedAt: startedAt)
+            }
             Divider().opacity(0.35)
             LifeLogCaptureControl(
                 lifeLog: env.lifeLog,
@@ -134,7 +138,7 @@ struct LifeLogMiniWindow: View {
                 .font(.system(size: 10, weight: .medium, design: .monospaced))
                 .foregroundStyle(.tertiary)
                 .frame(width: 45, alignment: .leading)
-            Text(utterance.text)
+            Text(TranscriptText.sanitized(utterance.text))
                 .font(.system(size: 12.5))
                 .textSelection(.enabled)
             Spacer(minLength: 0)

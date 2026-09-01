@@ -47,6 +47,18 @@ struct LifeLogSettingsView: View {
                     .labelsHidden()
                     .frame(width: 220)
                 }
+                SettingsRow(title: "認識言語", caption: "ライフログだけに適用します") {
+                    Picker("", selection: Binding(get: { settings.lifeLogTranscriptionLanguage }, set: { value in
+                        settings.lifeLogTranscriptionLanguage = value
+                        Task { await env.applyLifeLogTranscriptionLanguageChange() }
+                    })) {
+                        ForEach(LifeLogTranscriptionLanguage.allCases) {
+                            Text(LocalizedStringKey($0.label)).tag($0)
+                        }
+                    }
+                    .labelsHidden()
+                    .frame(width: 220)
+                }
                 if settings.lifeLogSttBackend == .whisperKit {
                     SettingsRow(title: "Whisperモデル") {
                         Picker("", selection: Binding(get: { settings.lifeLogWhisperModel }, set: { value in

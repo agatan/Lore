@@ -1,6 +1,6 @@
 import Foundation
 
-/// Koe の表示だけに適用する言語。音声認識や保存済みデータの言語とは独立している。
+/// Koe の表示言語。Life Logが明示的に「表示言語に合わせる」を選んだ場合だけSTT hintにも使う。
 public enum ApplicationLanguage: String, Codable, CaseIterable, Identifiable, Sendable {
     case system
     case english = "en"
@@ -38,6 +38,41 @@ public enum ApplicationLanguage: String, Codable, CaseIterable, Identifiable, Se
         case "ja": return "ja"
         case "zh" where language.script?.identifier == "Hans": return "zh-Hans"
         default: return nil
+        }
+    }
+}
+
+public enum LifeLogTranscriptionLanguage: String, Codable, CaseIterable, Identifiable, Sendable {
+    case applicationLanguage
+    case auto
+    case japanese
+    case english
+    case simplifiedChinese
+
+    public var id: String { rawValue }
+
+    public var label: String {
+        switch self {
+        case .applicationLanguage: "表示言語に合わせる"
+        case .auto: "自動判定"
+        case .japanese: "日本語"
+        case .english: "English"
+        case .simplifiedChinese: "简体中文"
+        }
+    }
+
+    public func preference(applicationLanguage: ApplicationLanguage) -> LanguagePreference {
+        switch self {
+        case .auto: .auto
+        case .japanese: .ja
+        case .english: .en
+        case .simplifiedChinese: .zhHans
+        case .applicationLanguage:
+            switch applicationLanguage.resolvedIdentifier() {
+            case "ja": .ja
+            case "zh-Hans": .zhHans
+            default: .en
+            }
         }
     }
 }

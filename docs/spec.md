@@ -94,6 +94,9 @@ cloud音声入力で送るのは今回の文字起こし、共通rule、mode指�
 - 音声入力との同時利用中も、復旧可能なライフログaudioの記録は中断しません。音声入力が成功した区間はそのraw transcriptを正本とし、同じ録音時間帯にライフログ側で認識した発話はtimeline、検索、書き出し、summary/TODO生成へ重複して出しません。音声入力がcancelまたは失敗した場合は、ライフログ側の発話を残します。
 - 入力deviceを選択できます。記録中は30秒ごとに復旧用`.m4a`をMac内へ確定します。audioをcloud STTへ送ることはありません。
 - 30秒audio chunkは耐久化・復旧の単位で、認識jobの境界ではありません。認識はadaptiveな発話burst単位で遅延実行し、持続するnear-silenceを文字起こししません。
+- Main windowとmini windowは、発話burstが実際にSTTへ渡されてから完了するまで、記録状態とは別の一行の「文字起こし中」と経過秒をShimmer表示します。表示がない間は発話区間の確定待ち、表示中はmodelの処理中として区別できます。
+- ライフログの認識言語は「表示言語に合わせる」「自動判定」「日本語」「English」「简体中文」から選べ、既定は表示言語に合わせます。表示言語が「システム設定」の場合も解決後の対応言語を使います。この設定はライフログだけに適用し、通常の音声入力、ボイスメモ、modeには伝播しません。
+- WhisperKitのcontrol tokenとtimestamp tokenは認識結果へ含めず、timeline、検索、書き出し、summary/TODO入力へ保存しません。
 - 保存済みaudioは文字起こしと派生処理が両方成功するまで必ず保持します。既定の「処理後削除」では成功直後にaudioだけを削除し、保存済みの発話、conversation、summary、TODOは残します。設定は「処理後削除」「7日」「30日」から選べます。
 - 7日または30日を選んだ場合も、未処理・失敗chunkは期間を超えて保持し、次回起動後の再処理に使います。保持期間を短く変更したときは、新しい条件を満たす処理済みaudioを削除します。
 - 記録中の一時中断と、既定マイクの切替・接続解除などの音声構成変更では、現在のchunkを確定して自動再接続します。sleep時も安全に閉じ、記録意図が残ればwake後に再開します。マイク権限が失われた場合だけ自動再試行しません。
@@ -151,7 +154,7 @@ cloud音声入力で送るのは今回の文字起こし、共通rule、mode指�
 
 Koeのprimary colorはapp icon由来の爽やかなblueに固定し、利用者がcolor themeを切り替える設定は持ちません。録音、成功、警告は同じbrand paletteに合わせたsemantic colorを全画面で共有します。
 
-表示言語は「システム設定」「English」「日本語」「简体中文」から選べ、選択は再起動後も保持します。「システム設定」はmacOSの優先言語から最初の対応言語を使い、対応言語がない場合は英語へfallbackします。繁体字中国語を簡体字中国語へ暗黙に置き換えません。変更はmenu bar、各windowの内容、onboarding、settings、HUD、dialog、noticeへ直ちに反映しますが、音声認識・modeの言語、prompt、保存済みtext、検索、書き出し内容、CLI/MCPの機械向けinterfaceは変更しません。
+表示言語は「システム設定」「English」「日本語」「简体中文」から選べ、選択は再起動後も保持します。「システム設定」はmacOSの優先言語から最初の対応言語を使い、対応言語がない場合は英語へfallbackします。繁体字中国語を簡体字中国語へ暗黙に置き換えません。変更はmenu bar、各windowの内容、onboarding、settings、HUD、dialog、noticeへ直ちに反映します。ライフログの認識言語で「表示言語に合わせる」を明示的に選んだ場合だけSTT hintへ使い、通常の音声入力、ボイスメモ、mode、prompt、保存済みtext、検索、書き出し内容、CLI/MCPの機械向けinterfaceは変更しません。
 
 | 場所 | 公開機能 |
 |---|---|
@@ -161,7 +164,7 @@ Koeのprimary colorはapp icon由来の爽やかなblueに固定し、利用者�
 | 全TODO window | draft確認、編集、確定、完了、再開、削除 |
 | Settings: 共通 | 一般（表示言語を含む）、利用状況、語彙、privacy、連携 |
 | Settings: 音声入力 | hotkey、feedback、履歴、AI整形、mode。STTはSpeechAnalyzer固定 |
-| Settings: ライフログ | 記録・mini window・ボイスメモhotkey、入力device、STT engineとWhisperKit model、audio保持、summary間隔、要約/TODO AI、calendar再取得 |
+| Settings: ライフログ | 記録・mini window・ボイスメモhotkey、入力device、STT engine・認識言語・WhisperKit model、audio保持、summary間隔、要約/TODO AI、calendar再取得 |
 
 利用状況には音声入力回数・録音時間、ライフログの実発話時間、cloud AIの実測token数、Koe dataのstorage使用量を表示します。ライフログの実発話時間は、無音を含む連続録音時間ではなくtimelineに残る発話区間を日ごとに重複なく集計し、成功した音声入力と重なる発話は二重計上しません。local modelはcloud token集計に含みません。
 

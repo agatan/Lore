@@ -282,3 +282,8 @@
 "システム設定" = "System Settings";
 "ライフログの設定" = "Life Log Settings";
 "音声入力の設定" = "Dictation Settings";
+"認識言語" = "Recognition Language";
+"ライフログだけに適用します" = "Applies only to Life Log.";
+"表示言語に合わせる" = "Match Display Language";
+"自動判定" = "Detect Automatically";
+"文字起こし中" = "Transcribing";

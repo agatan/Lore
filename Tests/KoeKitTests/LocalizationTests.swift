@@ -37,6 +37,14 @@ struct LocalizationTests {
         #expect(KoeLocalization.string("表示言語", language: .simplifiedChinese) == "显示语言")
     }
 
+    @Test("ライフログ認識言語は表示言語を固定hintへ解決する")
+    func lifeLogLanguageFollowsDisplayLanguage() {
+        #expect(LifeLogTranscriptionLanguage.applicationLanguage.preference(applicationLanguage: .japanese) == .ja)
+        #expect(LifeLogTranscriptionLanguage.applicationLanguage.preference(applicationLanguage: .english) == .en)
+        #expect(LifeLogTranscriptionLanguage.applicationLanguage.preference(applicationLanguage: .simplifiedChinese) == .zhHans)
+        #expect(LifeLogTranscriptionLanguage.auto.preference(applicationLanguage: .japanese) == .auto)
+    }
+
     @Test("欠けた翻訳は英語へfallbackする")
     func missingTranslationFallsBackToEnglish() {
         #expect(KoeLocalization.string("missing-key", language: .simplifiedChinese) == "missing-key")
@@ -50,6 +58,7 @@ struct LocalizationTests {
         defaults.set(try JSONEncoder().encode(AppSettings.Storage()), forKey: AppSettings.defaultsKey)
 
         #expect(AppSettings(defaults: defaults).applicationLanguage == .system)
+        #expect(AppSettings(defaults: defaults).lifeLogTranscriptionLanguage == .applicationLanguage)
     }
 
     @MainActor

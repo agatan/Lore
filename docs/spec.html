@@ -179,6 +179,9 @@
 <li>音声入力との同時利用中も、復旧可能なlife-log audioの記録は中断しません。音声入力が成功した区間はそのraw transcriptを正本とし、同じ録音時間帯にlife log側で認識した発話はtimeline、検索、書き出し、summary/TODO生成へ重複して出しません。音声入力がcancelまたは失敗した場合は、life log側の発話を残します。</li>
 <li>選択したinput deviceから記録し、30秒ごとに復旧用<code>.m4a</code>をMac内へ確定します。Audioをcloud STTへ送ることはありません。</li>
 <li>30秒chunkは耐久化・復旧単位で、認識境界ではありません。認識はadaptiveな発話burst単位で遅延実行し、持続near-silenceだけではjobを作りません。</li>
+<li>Main windowとmini windowは、発話burstを実際にSTTへ渡してから完了するまで、記録状態とは別の一行の「文字起こし中」と経過秒をShimmer表示します。</li>
+<li>Life logの認識言語は「表示言語に合わせる」「自動判定」「日本語」「English」「简体中文」から選べ、既定は表示言語に合わせます。この設定はlife logだけに適用します。</li>
+<li>WhisperKitのcontrol tokenとtimestamp tokenは認識結果へ含めず、保存しません。</li>
 <li>保存済みaudioは文字起こしと派生処理が両方成功するまで必ず保持します。既定の「処理後削除」では成功直後にaudioだけを削除し、保存済みの発話、conversation、summary、TODOは残します。設定は「処理後削除」「7日」「30日」から選べます。</li>
 <li>7日または30日を選んだ場合も、未処理・失敗chunkは期間を超えて保持し、次回起動後の再処理に使います。保持期間を短く変更したときは、新しい条件を満たす処理済みaudioを削除します。</li>
 <li>一時中断と既定マイクの切替・接続解除などの音声構成変更では、現在のchunkを確定して自動再接続します。Sleep前にも閉じ、記録意図が残ればwake後に再開します。マイク権限拒否だけは自動再試行しません。</li>
@@ -225,7 +228,7 @@
 <section id="ui">
 <h2>5. 画面と設定</h2>
 <p>Koeのprimary colorはapp icon由来の爽やかなblueに固定し、color theme切替設定は持ちません。録音、成功、警告は同じbrand paletteに合わせたsemantic colorを全画面で共有します。</p>
-<p>表示言語は「システム設定」「English」「日本語」「简体中文」から選べ、選択は再起動後も保持します。「システム設定」はmacOSの優先言語から最初の対応言語を使い、対応言語がない場合は英語へfallbackします。繁体字中国語を簡体字中国語へ暗黙に置き換えません。変更はmenu bar、各windowの内容、onboarding、settings、HUD、dialog、noticeへ直ちに反映しますが、音声認識・modeの言語、prompt、保存済みtext、検索、書き出し内容、CLI/MCPの機械向けinterfaceは変更しません。</p>
+<p>表示言語は「システム設定」「English」「日本語」「简体中文」から選べ、選択は再起動後も保持します。「システム設定」はmacOSの優先言語から最初の対応言語を使い、対応言語がない場合は英語へfallbackします。繁体字中国語を簡体字中国語へ暗黙に置き換えません。変更はmenu bar、各windowの内容、onboarding、settings、HUD、dialog、noticeへ直ちに反映します。Life logの認識言語で「表示言語に合わせる」を明示的に選んだ場合だけSTT hintへ使います。</p>
 <table>
 <thead>
 <tr>
@@ -260,7 +263,7 @@
 </tr>
 <tr>
 <td>Settings: Life log</td>
-<td>記録・mini window・ボイスメモhotkey、input device、STT engineとWhisperKit model、audio保持、summary間隔、要約/TODO AI、calendar再取得</td>
+<td>記録・mini window・ボイスメモhotkey、input device、STT engine・認識言語・WhisperKit model、audio保持、summary間隔、要約/TODO AI、calendar再取得</td>
 </tr>
 </tbody>
 </table>

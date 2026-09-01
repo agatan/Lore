@@ -110,8 +110,9 @@ public actor WhisperKitStt: SttEngine {
         case .auto: nil
         case .ja: "ja"
         case .en: "en"
+        case .zhHans: "zh"
         }
-        var decodeOptions = DecodingOptions(language: language, wordTimestamps: true)
+        var decodeOptions = DecodingOptions(language: language, skipSpecialTokens: true, wordTimestamps: true)
         if let prompt = hints.vocabularyPrompt?.trimmingCharacters(in: .whitespacesAndNewlines),
            !prompt.isEmpty,
            let tokenizer = engine.tokenizer {
@@ -122,7 +123,7 @@ public actor WhisperKitStt: SttEngine {
         let results = try await engine.transcribe(audioArray: samples, decodeOptions: decodeOptions)
         let segments = results.flatMap(\.segments).sorted { $0.start < $1.start }
         for segment in segments {
-            let text = segment.text.trimmingCharacters(in: .whitespacesAndNewlines)
+            let text = TranscriptText.sanitized(segment.text)
             guard !text.isEmpty else { continue }
             continuation.yield(.segment(
                 text: text,
@@ -130,11 +131,12 @@ public actor WhisperKitStt: SttEngine {
                 endOffset: Double(segment.end)
             ))
         }
-        let text = results.map(\.text).joined(separator: " ").trimmingCharacters(in: .whitespacesAndNewlines)
+        let text = TranscriptText.sanitized(results.map(\.text).joined(separator: " "))
         continuation.yield(.partial(text: text))
         let recognizedLanguage: RecognizedLanguage = switch results.first?.language {
         case "ja": .ja
         case "en": .en
+        case "zh": .zhHans
         default: .unknown
         }
         continuation.yield(.sessionFinished(text: text, language: recognizedLanguage))

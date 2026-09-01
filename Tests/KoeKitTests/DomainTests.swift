@@ -254,6 +254,13 @@ struct LanguageDetectorTests {
     func noLetters() {
         #expect(LanguageDetector.detect("123 456", preference: .auto) == .unknown)
         #expect(LanguageDetector.detect("123", preference: .ja) == .ja)
+        #expect(LanguageDetector.detect("123", preference: .zhHans) == .zhHans)
+    }
+
+    @Test("Whisper制御tokenを本文から除去する")
+    func stripsWhisperSpecialTokens() {
+        #expect(TranscriptText.sanitized("<|startoftranscript|><|en|><|transcribe|><|0.00|> hello <|20.00|><|endoftext|>") == "hello")
+        #expect(TranscriptText.sanitized("通常の本文") == "通常の本文")
     }
 }
 

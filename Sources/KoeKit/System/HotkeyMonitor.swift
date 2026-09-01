@@ -91,6 +91,8 @@ public final class HotkeyMonitor {
     private var runLoopSource: CFRunLoopSource?
     private var registeredHotKey: EventHotKeyRef?
     private var registeredHotKeyHandler: EventHandlerRef?
+    private var globalEscapeMonitor: Any?
+    private var localEscapeMonitor: Any?
     private var pressStart: ContinuousClock.Instant?
     private let registrationID: UInt32
     private static var nextRegistrationID: UInt32 = 1
@@ -106,14 +108,10 @@ public final class HotkeyMonitor {
         switch binding {
         case .key(let code, let modifiers):
             try startRegisteredHotKey(code: code, modifiers: modifiers)
-            // 組み合わせhotkey自体は登録APIで受ける。通常音声入力だけはEsc cancel用に
-            // event tapも併設するが、作れなくても登録済みhotkeyは利用できる。
-            if shouldSwallowEscape != nil, Permissions.isAccessibilityGranted {
-                do {
-                    try startEventTap()
-                } catch {
-                    KoeLog.hotkey.error("Esc監視を開始できません: \(error.localizedDescription, privacy: .public)")
-                }
+            // 登録型hotkeyとactive event tapを同じmonitorへ併設すると、Option単独を含む
+            // 組み合わせだけCarbon eventが届かない環境がある。EscはAppKit monitorへ分離する。
+            if shouldSwallowEscape != nil {
+                startEscapeMonitors()
             }
         case .modifier:
             guard Permissions.isAccessibilityGranted else { throw Failure.notTrusted }
@@ -147,6 +145,18 @@ public final class HotkeyMonitor {
 
         self.tap = tap
         self.runLoopSource = source
+    }
+
+    private func startEscapeMonitors() {
+        guard globalEscapeMonitor == nil, localEscapeMonitor == nil else { return }
+        globalEscapeMonitor = NSEvent.addGlobalMonitorForEvents(matching: .keyDown) { [weak self] event in
+            guard event.keyCode == 0x35 else { return }
+            _ = self?.shouldSwallowEscape?()
+        }
+        localEscapeMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
+            guard event.keyCode == 0x35, self?.shouldSwallowEscape?() == true else { return event }
+            return nil
+        }
     }
 
     private func startRegisteredHotKey(code: UInt16, modifiers: UInt64) throws {
@@ -186,6 +196,8 @@ public final class HotkeyMonitor {
     }
 
     public func stop() {
+        if let globalEscapeMonitor { NSEvent.removeMonitor(globalEscapeMonitor) }
+        if let localEscapeMonitor { NSEvent.removeMonitor(localEscapeMonitor) }
         if let registeredHotKey {
             UnregisterEventHotKey(registeredHotKey)
         }
@@ -202,6 +214,8 @@ public final class HotkeyMonitor {
         runLoopSource = nil
         registeredHotKey = nil
         registeredHotKeyHandler = nil
+        globalEscapeMonitor = nil
+        localEscapeMonitor = nil
         pressStart = nil
         isRunning = false
     }

@@ -9,6 +9,7 @@ public enum LanguageDetector {
     static let mixedThreshold = 0.15
 
     public static func detect(_ text: String, preference: LanguagePreference = .auto) -> RecognizedLanguage {
+        if preference == .zhHans { return .zhHans }
         var japanese = 0
         var latin = 0
 
@@ -26,6 +27,7 @@ public enum LanguageDetector {
             switch preference {
             case .ja: return .ja
             case .en: return .en
+            case .zhHans: return .zhHans
             case .auto: return .unknown
             }
         }

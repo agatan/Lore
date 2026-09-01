@@ -166,6 +166,10 @@ public struct LifeLogWindow: View {
                 .padding(8)
                 .accessibilityIdentifier("life-log.notice")
             }
+            if let startedAt = env.lifeLog.activeTranscriptionStartedAt {
+                Divider().opacity(0.35)
+                LifeLogTranscriptionProgressRow(startedAt: startedAt)
+            }
             Divider().opacity(0.35)
             LifeLogCaptureControl(
                 lifeLog: env.lifeLog,
@@ -219,7 +223,7 @@ public struct LifeLogWindow: View {
                 Text(value.startedAt.formatted(date: .omitted, time: .shortened))
                     .font(.system(size: 10.5, weight: .medium, design: .monospaced))
                     .foregroundStyle(.tertiary).frame(width: 64, alignment: .leading)
-                Text(value.text).font(.system(size: 13)).textSelection(.enabled)
+                Text(TranscriptText.sanitized(value.text)).font(.system(size: 13)).textSelection(.enabled)
                 Spacer(minLength: 0)
             }
             .padding(.horizontal, 16).padding(.vertical, 11)

@@ -197,6 +197,12 @@ public final class AppEnvironment {
                 database: database,
                 engines: engines,
                 vocabulary: { [weak self] in self?.vocabulary ?? [] },
+                transcriptionLanguage: { [weak self] in
+                    guard let self else { return .auto }
+                    return settings.lifeLogTranscriptionLanguage.preference(
+                        applicationLanguage: settings.applicationLanguage
+                    )
+                },
                 todoPrompt: { [weak self] in self?.settings.lifeLogTodoPrompt ?? BuiltinLifeLogPrompts.todo },
                 summaryPrompt: { [weak self] in self?.settings.lifeLogSummaryPrompt ?? BuiltinLifeLogPrompts.summary },
                 summaryIntervalMinutes: { [weak self] in self?.settings.lifeLogSummaryIntervalMinutes ?? 60 },
@@ -1006,6 +1012,16 @@ public final class AppEnvironment {
     public func applyLifeLogSttChange() async {
         engines.applyLifeLogStt(backend: settings.lifeLogSttBackend, model: settings.lifeLogWhisperModel)
         await engines.refreshSttAvailability()
+        lifeLog.transcriptionConfigurationDidChange()
+    }
+
+    public func applyLifeLogTranscriptionLanguageChange() async {
+        await engines.refreshSttAvailability(
+            languagePreference: settings.lifeLogTranscriptionLanguage.preference(
+                applicationLanguage: settings.applicationLanguage
+            )
+        )
+        lifeLog.transcriptionConfigurationDidChange()
     }
 
     public func installLifeLogWhisperModel() {

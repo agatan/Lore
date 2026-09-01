@@ -68,7 +68,7 @@ Hotkey/UI
 ```
 
 - 短押しと長押しの解釈は`HotkeyGestureInterpreter`、対象アプリは`FrontmostAppObserver`、mode選択は`ModeResolver`が担当します。
-- `HotkeyMonitor`は文字キーとの組み合わせを`RegisterEventHotKey`で個別登録し、Secure Inputの影響を受ける全入力監視へ依存しません。修飾キー単体と録音中Escだけを`CGEventTap`で扱います。四つのmonitorは独立して開始し、一つの競合や権限不足でほかを停止しません。
+- `HotkeyMonitor`は文字キーとの組み合わせを`RegisterEventHotKey`で個別登録し、Secure Inputの影響を受ける全入力監視へ依存しません。修飾キー単体は`CGEventTap`、録音中Escは登録型hotkeyと競合しないAppKit event monitorで扱います。四つのmonitorは独立して開始し、一つの競合や権限不足でほかを停止しません。
 - `SessionDraft`がrecording、recognizing、formatting、insertingの進捗と計測値を保持し、永続化可能な`SessionRecord`へ確定します。
 - STT確定後、LLMを呼ぶ前にraw transcriptを保存します。
 - LLMのtimeout、利用不可、出力検証エラーではraw transcriptを挿入対象にします。
@@ -117,7 +117,7 @@ capture request
 | Apple SpeechAnalyzer | `SpeechAnalyzerStt` | macOS管理 | なし |
 | WhisperKit deferred | `WhisperKitStt` | Koeがlocal downloadを管理するaccuracy優先のcurated model | なし |
 
-`WhisperKitStt`はaccuracy優先でcurateした比較的大きいmodelのcatalog、download、cancel、再試行、検証、削除を一つの境界に置きます。Compiled modelとtokenizerの両方を取得・検証できたmodelだけを利用可能modelとして公開します。複数jobが同時に始まってもmodelとtokenizerの初期化は一つだけ実行し、同じ結果を共有します。実行中jobが参照するmodelは完了またはcancelまで削除しません。Model lifecycleは遅延jobが所有し、download完了だけでは推論engineをloadしません。Model取得通信に音声、文字起こし、利用者dataを含めません。
+`WhisperKitStt`はaccuracy優先でcurateした比較的大きいmodelのcatalog、download、cancel、再試行、検証、削除を一つの境界に置きます。Compiled modelとtokenizerの両方を取得・検証できたmodelだけを利用可能modelとして公開します。複数jobが同時に始まってもmodelとtokenizerの初期化は一つだけ実行し、同じ結果を共有します。実行中jobが参照するmodelは完了またはcancelまで削除しません。Model lifecycleは遅延jobが所有し、download完了だけでは推論engineをloadしません。Decode時はspecial tokenをskipし、engine境界でもcontrol/timestamp tokenを除去してからdomain eventへ渡します。Model取得通信に音声、文字起こし、利用者dataを含めません。
 
 | Backend | 実装 | 接続先 | Mac外への文字送信 |
 |---|---|---|---|
@@ -157,8 +157,8 @@ DBは`~/Library/Application Support/Koe/koe.sqlite`です。`DatabaseQueue`を�
 - `AppSettings.Storage`はsuite `dev.agatan.Koe`のUserDefaults key `koe.settings.v1`へJSONで保存します。
 - `ApplicationLanguage`は`system`、`en`、`ja`、`zh-Hans`の閉じた値として保存し、既定は`system`です。`system`はmacOSの優先言語から最初の対応localeを選び、なければ`en`へ解決します。`zh-Hant`は`zh-Hans`へ暗黙変換しません。既存設定にfieldがなければ`system`で補完し、GRDB migrationは追加しません。
 - provider/modelは音声入力とライフログで別設定です。通常音声入力、ライフログcapture、mini window、ボイスメモのhotkey、保持期間、calendar filter、summary間隔をここに入れます。Mini windowは常時手前を不変条件とし、表示levelの設定は持ちません。Color themeも設定として保持せず、`KoeTheme`の固定brand tokenを使います。
-- WhisperKit engine/model選択はライフログ設定だけに置き、通常の音声入力とボイスメモはSpeechAnalyzer固定です。Runtimeの`captureRequested`は設定として永続化しません。WhisperKit model本体と途中downloadは`Application Support/Koe/Models/WhisperKit/`へ置き、全データ削除に含めます。
-- `AppEnvironment`の設定から解決した`Locale`を全SwiftUI表示へ注入します。localization resourceの開発言語と欠損keyのfallbackは英語です。表示言語はUI shellだけのvariation pointで、STT locale、mode、prompt、保存data、export、CLI/MCP contractへ伝播させません。
+- WhisperKit engine/model選択と`LifeLogTranscriptionLanguage`はライフログ設定だけに置き、通常の音声入力とボイスメモはSpeechAnalyzer固定です。認識言語の既定値`applicationLanguage`は`ApplicationLanguage`を`ja`、`en`、`zh-Hans`の固定hintへ解決し、明示的な`auto`も選べます。Runtimeの`captureRequested`は設定として永続化しません。WhisperKit model本体と途中downloadは`Application Support/Koe/Models/WhisperKit/`へ置き、全データ削除に含めます。
+- `AppEnvironment`の設定から解決した`Locale`を全SwiftUI表示へ注入します。localization resourceの開発言語と欠損keyのfallbackは英語です。表示言語はUI shellだけのvariation pointで、ライフログ設定が明示する`applicationLanguage`解決以外はSTT locale、mode、prompt、保存data、export、CLI/MCP contractへ伝播させません。
 - API keyはUserDefaultsやDBには入れずKeychainへ保存します。
 - CLI/MCPによるTODOまたはprompt変更は`DistributedNotificationCenter`でアプリへ通知し、`AppEnvironment`が再読込します。
 
@@ -172,6 +172,7 @@ DBは`~/Library/Application Support/Koe/koe.sqlite`です。`DatabaseQueue`を�
 | `MainWindowView` | `lifeLog` / `history`のsegmented切替。初回はonboarding、通常起動は`lifeLog`を開く |
 | `LifeLogWindow` | 月間activity、日別timeline、Markdown summary、global TODO。Timeline本体はevent/utterance/dictation/memoを一列の時刻順で表示し、column headerを持たない。日付選択時はsnapshotを再取得し、予定一覧とtimelineを同じdataから更新する。検索buttonは`Command-F`も受け、発話・音声入力・memoの検索結果だけをtimeline itemへ移動する。表示開始時だけ今日を読み込んで末尾へscrollし、その後のreloadでは閲覧位置を保つ。左下Summary viewはMarkdownを描画し、summaryとdraft TODOの手動更新、進捗、失敗を扱う。TODO本文は複数行入力にするが、保存済みprovenanceへの移動UIは持たない |
 | `LifeLogCaptureControl` | Main、mini、menu barで共有するcapture状態と開始・停止操作。停止中の開始はblue/cyanのrecord、記録開始意図がある間の停止はroseのstopとして、symbol、文言、semantic colorを一か所で決める。録音と文字起こしの内部Boolの中間状態を文言へ直接投影せず、利用者向け状態を安定させる。Main/miniでは状態textの隣へ配置する |
+| `LifeLogTranscriptionProgressRow` | `LifeLogCoordinator.activeTranscriptionStartedAt`がある間だけMain/miniのcapture状態直上へ一行表示し、1秒ごとの経過時間とShimmerで実際のSTT job実行中を示す。発話burstの確定待ちや録音状態は表現しない |
 | `LifeLogExportSheet` | 表示開始時のdate/day/TODOをsnapshotとして保持し、cancel可能なbackground taskで人間向けMarkdownを一度だけ生成する。previewは折り返し可能な上限付きtextとし、完全版をcopy/fileへ再利用する。生成中と書込中はprogressを表示し、MainActorではclipboardとpanel操作だけを行う |
 | `HistoryBrowserView` | 音声入力履歴、検索、詳細、コピー、削除 |
 | `LifeLogMiniWindow` | title barを隠し、予定、utterance、dictation、memoを一列の時刻順で表示する。`CurrentCalendarEventStrip`をtimeline上部へ固定し、表示時は今日を読み込んで末尾へscrollする。Mainと同じ`LifeLogCaptureControl`を`LifeLogMemoComposer`の直上に置く。`AppEnvironment`がwindow levelを常に`.floating`、collection behaviorを`.canJoinAllSpaces`と`.fullScreenAuxiliary`に固定し、利用者がclose操作またはtoggle hotkeyを使うまで非表示にしない。`HotkeyMonitor`は成立したkey-downを保持し、対応するkey-upだけでreleaseを通知するため、修飾キーなしの同じ文字入力はtoggleしない |

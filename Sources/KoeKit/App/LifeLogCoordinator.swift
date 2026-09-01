@@ -16,6 +16,7 @@ public final class LifeLogCoordinator {
     public private(set) var monthActivity: [String: LifeLogDayActivity] = [:]
     public private(set) var liveTranscript = ""
     public private(set) var isTranscribing = false
+    public private(set) var activeTranscriptionStartedAt: Date?
     public private(set) var isRecoveringCapture = false
     public private(set) var isSuspendedForVoiceMemo = false
     public private(set) var isRefreshingCalendar = false
@@ -27,6 +28,7 @@ public final class LifeLogCoordinator {
     private var database: KoeDatabase?
     private var engines: EngineRegistry?
     private var vocabulary: @MainActor () -> [VocabularyEntry] = { [] }
+    private var transcriptionLanguage: @MainActor () -> LanguagePreference = { .auto }
     private var todoPrompt: @MainActor () -> String = { BuiltinLifeLogPrompts.todo }
     private var summaryPrompt: @MainActor () -> String = { BuiltinLifeLogPrompts.summary }
     private var summaryIntervalMinutes: @MainActor () -> Int = { 60 }
@@ -46,7 +48,8 @@ public final class LifeLogCoordinator {
     private var isFinalizingSession = false
     private var isStartingCapture = false
     private var vocabularyRevision = 0
-    private var restartForVocabulary = false
+    private var restartForTranscriptionConfiguration = false
+    private var activeTranscriptionCount = 0
     private var captureRequested = false
     private var captureRetryAttempt = 0
     private var captureRetryTask: Task<Void, Never>?
@@ -66,6 +69,7 @@ public final class LifeLogCoordinator {
         database: KoeDatabase,
         engines: EngineRegistry,
         vocabulary: @MainActor @escaping () -> [VocabularyEntry],
+        transcriptionLanguage: @MainActor @escaping () -> LanguagePreference = { .auto },
         todoPrompt: @MainActor @escaping () -> String,
         summaryPrompt: @MainActor @escaping () -> String,
         summaryIntervalMinutes: @MainActor @escaping () -> Int,
@@ -73,6 +77,7 @@ public final class LifeLogCoordinator {
         audioProcessingCompleted: @MainActor @escaping () async -> Void
     ) async {
         self.database = database; self.engines = engines; self.vocabulary = vocabulary
+        self.transcriptionLanguage = transcriptionLanguage
         self.todoPrompt = todoPrompt
         self.summaryPrompt = summaryPrompt
         self.summaryIntervalMinutes = summaryIntervalMinutes
@@ -107,7 +112,7 @@ public final class LifeLogCoordinator {
             Task { await startLiveCapture() }
             scheduleDayRollover()
         } else {
-            restartForVocabulary = false
+            restartForTranscriptionConfiguration = false
             captureRetryTask?.cancel()
             captureRetryTask = nil
             isRecoveringCapture = false
@@ -179,16 +184,20 @@ public final class LifeLogCoordinator {
     /// 現在の認識sessionを確定し、次のsessionから更新済み語彙へ切り替える。
     public func vocabularyDidChange() {
         vocabularyRevision += 1
-        requestVocabularyRestartIfNeeded()
+        requestTranscriptionRestartIfNeeded(reason: "語彙変更")
     }
 
-    private func requestVocabularyRestartIfNeeded() {
+    public func transcriptionConfigurationDidChange() {
+        requestTranscriptionRestartIfNeeded(reason: "音声認識設定変更")
+    }
+
+    private func requestTranscriptionRestartIfNeeded(reason: String) {
         guard captureRequested else { return }
         guard capture.isRunning || liveTranscriptionTask != nil else { return }
-        guard !restartForVocabulary else { return }
-        restartForVocabulary = true
+        guard !restartForTranscriptionConfiguration else { return }
+        restartForTranscriptionConfiguration = true
         isRecoveringCapture = true
-        KoeLog.session.info("語彙変更を反映するためライフログ解析streamを切り替えます")
+        KoeLog.session.info("\(reason, privacy: .public)を反映するためライフログ解析streamを切り替えます")
         if capture.isRunning {
             capture.stop()
         }
@@ -257,7 +266,7 @@ public final class LifeLogCoordinator {
             let hints = SttHints(
                 contextualStrings: FormattingPolicy.contextualStrings(enabledVocabulary),
                 vocabularyPrompt: FormattingPolicy.vocabularyHint(enabledVocabulary),
-                languagePreference: .auto
+                languagePreference: transcriptionLanguage()
             )
             let stt = engines.lifeLogStt
             let format = try await stt.prepare(hints: hints) ?? AudioFormats.canonical
@@ -279,7 +288,7 @@ public final class LifeLogCoordinator {
                 await self?.consumeAdaptiveAudio(stream, hints: hints, stt: stt)
             }
             if vocabularyRevision != startingVocabularyRevision {
-                requestVocabularyRestartIfNeeded()
+                requestTranscriptionRestartIfNeeded(reason: "語彙変更")
             }
         } catch {
             fail(error)
@@ -398,6 +407,8 @@ public final class LifeLogCoordinator {
         for buffer in buffers { continuation.yield(buffer) }
         continuation.finish()
         var burstHasSegments = false
+        beginActiveTranscription()
+        defer { endActiveTranscription() }
         do {
             for try await event in stt.transcribe(audio: stream, hints: hints) {
                 switch event {
@@ -573,8 +584,8 @@ public final class LifeLogCoordinator {
         captureFinished = false
         await reload()
         liveTranscriptionTask = nil
-        if restartForVocabulary, captureRequested, !isSuspendedForSleep, !isSuspendedForVoiceMemo {
-            restartForVocabulary = false
+        if restartForTranscriptionConfiguration, captureRequested, !isSuspendedForSleep, !isSuspendedForVoiceMemo {
+            restartForTranscriptionConfiguration = false
             await startLiveCapture()
         } else if captureRequested, isRecoveringCapture, !isSuspendedForSleep, !isSuspendedForVoiceMemo {
             scheduleCaptureRetry(unless: EngineError.failed("音声streamの終了後に再接続します"))
@@ -731,12 +742,16 @@ public final class LifeLogCoordinator {
                 try await database.lifeLog.deleteUtterances(audioChunkID: chunk.id)
                 isTranscribing = true
                 liveTranscript = ""
-                defer { isTranscribing = false }
+                beginActiveTranscription()
+                defer {
+                    endActiveTranscription()
+                    isTranscribing = false
+                }
                 let enabledVocabulary = vocabulary().filter(\.enabled)
                 let hints = SttHints(
                     contextualStrings: FormattingPolicy.contextualStrings(enabledVocabulary),
                     vocabularyPrompt: FormattingPolicy.vocabularyHint(enabledVocabulary),
-                    languagePreference: .auto
+                    languagePreference: transcriptionLanguage()
                 )
                 let stt = engines.lifeLogStt
                 let format = try await stt.prepare(hints: hints) ?? AudioFormats.canonical
@@ -922,6 +937,20 @@ public final class LifeLogCoordinator {
         for chunk in chunks { continuation.yield(chunk) }
         continuation.finish()
         return stream
+    }
+
+    private func beginActiveTranscription() {
+        activeTranscriptionCount += 1
+        if activeTranscriptionCount == 1 {
+            activeTranscriptionStartedAt = Date()
+        }
+    }
+
+    private func endActiveTranscription() {
+        activeTranscriptionCount = max(0, activeTranscriptionCount - 1)
+        if activeTranscriptionCount == 0 {
+            activeTranscriptionStartedAt = nil
+        }
     }
 
     private func fail(_ error: Error) { errorMessage = error.localizedDescription; KoeLog.session.error("ライフログ処理に失敗: \(error.localizedDescription, privacy: .public)") }

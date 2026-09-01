@@ -235,7 +235,7 @@ KoeMCP ──┘</pre>
 <p>通常の音声入力はaudio fileを作りません。履歴にはtext、snapshot、状態、計測値を保存します。</p>
 </article>
 </div>
-<p><code>HotkeyMonitor</code>は文字キーとの組み合わせを<code>RegisterEventHotKey</code>で個別登録し、Secure Inputの影響を受ける全入力監視へ依存しません。修飾キー単体と録音中Escだけを<code>CGEventTap</code>で扱います。四つのmonitorは独立して開始し、一つの競合や権限不足でほかを停止しません。</p>
+<p><code>HotkeyMonitor</code>は文字キーとの組み合わせを<code>RegisterEventHotKey</code>で個別登録し、Secure Inputの影響を受ける全入力監視へ依存しません。修飾キー単体は<code>CGEventTap</code>、録音中Escは登録型hotkeyと競合しないAppKit event monitorで扱います。四つのmonitorは独立して開始し、一つの競合や権限不足でほかを停止しません。</p>
 <p><code>DictationCoordinator</code>のcapture destinationは通常音声入力とボイスメモです。ボイスメモは同じ<code>AudioCapture</code>、STT、HUDを使いますが、<code>SessionDraft</code>、LLM、<code>HistoryStore</code>、<code>TextInserter</code>を通らず、確定した生textを<code>LifeLogCoordinator.addMemo</code>へ一度だけ渡します。<code>AppEnvironment</code>は開始前にlife-log captureの安全な一時停止を待ち、終了結果にかかわらず記録意図に従って再開します。<code>LifeLogMemoComposer</code>の音声ボタンとglobal hotkeyはどちらも<code>AppEnvironment.toggleVoiceMemo</code>を呼び、Viewは準備中と録音中のstateだけを投影します。</p>
 </section>
 <section id="lifelog">
@@ -274,7 +274,7 @@ KoeMCP ──┘</pre>
 <section id="engines">
 <h2>6. Engines</h2>
 <p>通常音声入力とボイスメモは<code>SpeechAnalyzerStt</code>固定です。Life logの遅延jobだけをSpeechAnalyzerまたはlocal download済みWhisperKitから選びます。Audioは送信しません。</p>
-<p><code>WhisperKitStt</code>はaccuracy優先の比較的大きいcurated modelのcatalog、download、cancel、再試行、検証、削除を所有します。Compiled modelとtokenizerの両方を取得・検証できたmodelだけを利用可能にし、複数jobが同時に始まってもmodelとtokenizerの初期化は一つだけ実行して結果を共有します。実行中jobのmodelは完了またはcancelまで削除しません。Model lifecycleは遅延jobが所有し、download完了だけでは推論engineをloadしません。Model取得requestに利用者dataを含めません。</p>
+<p><code>WhisperKitStt</code>はaccuracy優先の比較的大きいcurated modelのcatalog、download、cancel、再試行、検証、削除を所有します。Compiled modelとtokenizerの両方を取得・検証できたmodelだけを利用可能にし、複数jobが同時に始まってもmodelとtokenizerの初期化は一つだけ実行して結果を共有します。実行中jobのmodelは完了またはcancelまで削除しません。Decode時はspecial tokenをskipし、engine境界でもcontrol/timestamp tokenを除去します。Model lifecycleは遅延jobが所有し、download完了だけでは推論engineをloadしません。Model取得requestに利用者dataを含めません。</p>
 <table>
 <thead>
 <tr>
@@ -379,11 +379,11 @@ KoeMCP ──┘</pre>
 </section>
 <section id="settings">
 <h2>8. 設定、秘密、process間同期</h2>
-<ul><li><code>AppSettings.Storage</code>をUserDefaultsへ保存しますが、runtimeの<code>captureRequested</code>は永続化しません。</li><li>WhisperKit engine/model選択はlife logだけに置き、通常音声入力とボイスメモはSpeechAnalyzer固定です。LLM provider/modelは用途別に分離します。</li><li>WhisperKit model本体と途中downloadは専用directoryへ置き、全data削除に含めます。</li><li>表示言語はUI shellだけへ適用し、STT locale、prompt、保存data、automation contractへ伝播させません。</li><li>API keyだけはKeychainへ保存し、CLI/MCPによるTODO・prompt変更はappへ通知します。</li></ul>
+<ul><li><code>AppSettings.Storage</code>をUserDefaultsへ保存しますが、runtimeの<code>captureRequested</code>は永続化しません。</li><li>WhisperKit engine/modelとlife log認識言語はlife logだけに置き、通常音声入力とボイスメモはSpeechAnalyzer固定です。</li><li>認識言語の既定値は表示言語を固定hintへ解決し、明示的な自動判定も選べます。</li><li>WhisperKit model本体と途中downloadは専用directoryへ置き、全data削除に含めます。</li><li>表示言語はlife log設定が明示する解決以外ではSTT locale、prompt、保存data、automation contractへ伝播させません。</li><li>API keyだけはKeychainへ保存し、CLI/MCPによるTODO・prompt変更はappへ通知します。</li></ul>
 </section>
 <section id="ui">
 <h2>9. UIとwindow対応</h2>
-<table><thead><tr><th>View</th><th>内容</th></tr></thead><tbody><tr><td><code>KoeTheme</code></td><td>固定brand palette</td></tr><tr><td><code>MenuBarPanel</code></td><td>用途別quick actionと終了導線</td></tr><tr><td><code>MenuBarLabel</code></td><td>音声入力phaseとlife-log capture状態</td></tr><tr><td><code>MainWindowView</code></td><td>Life log/history切替</td></tr><tr><td><code>LifeLogWindow</code></td><td>一列timeline。左下SummaryはMarkdown描画、summaryとdraft TODOの手動更新、進捗、失敗を扱う。TODO provenanceは表示移動に使わない</td></tr><tr><td><code>LifeLogCaptureControl</code></td><td>利用者向け記録状態を安定表示</td></tr><tr><td><code>LifeLogExportSheet</code></td><td>人間向けMarkdownをbackground生成して共有</td></tr><tr><td><code>LifeLogMemoComposer</code></td><td>手入力とボイスメモを同じmemoとして追加</td></tr><tr><td><code>LifeLogMiniWindow</code></td><td>予定と記録の常時手前window</td></tr><tr><td><code>LifeLogTodoManagerWindow</code></td><td>全TODOの編集、確定、完了、再開、削除</td></tr><tr><td><code>WhisperModelSettingsView</code></td><td>Life log用modelの選択、download進捗・cancel・再試行・削除・使用中状態</td></tr><tr><td><code>SettingsWindowView</code></td><td>11 settings section</td></tr><tr><td>HUD</td><td>通常音声入力またはボイスメモの状態表示</td></tr></tbody></table>
+<table><thead><tr><th>View</th><th>内容</th></tr></thead><tbody><tr><td><code>KoeTheme</code></td><td>固定brand palette</td></tr><tr><td><code>MenuBarPanel</code></td><td>用途別quick actionと終了導線</td></tr><tr><td><code>MenuBarLabel</code></td><td>音声入力phaseとlife-log capture状態</td></tr><tr><td><code>MainWindowView</code></td><td>Life log/history切替</td></tr><tr><td><code>LifeLogWindow</code></td><td>一列timeline。左下SummaryはMarkdown描画、summaryとdraft TODOの手動更新、進捗、失敗を扱う。TODO provenanceは表示移動に使わない</td></tr><tr><td><code>LifeLogCaptureControl</code></td><td>利用者向け記録状態を安定表示</td></tr><tr><td><code>LifeLogTranscriptionProgressRow</code></td><td>実際のSTT job中だけShimmerと経過秒を表示</td></tr><tr><td><code>LifeLogExportSheet</code></td><td>人間向けMarkdownをbackground生成して共有</td></tr><tr><td><code>LifeLogMemoComposer</code></td><td>手入力とボイスメモを同じmemoとして追加</td></tr><tr><td><code>LifeLogMiniWindow</code></td><td>予定と記録の常時手前window</td></tr><tr><td><code>LifeLogTodoManagerWindow</code></td><td>全TODOの編集、確定、完了、再開、削除</td></tr><tr><td><code>WhisperModelSettingsView</code></td><td>Life log用modelの選択、download進捗・cancel・再試行・削除・使用中状態</td></tr><tr><td><code>SettingsWindowView</code></td><td>11 settings section</td></tr><tr><td>HUD</td><td>通常音声入力またはボイスメモの状態表示</td></tr></tbody></table>
 </section>
 <section id="automation">
 <h2>10. 自動化境界</h2>
