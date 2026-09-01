@@ -35,7 +35,7 @@ KoeMCP ──┘
 
 ## 3. プロセス構成と起動
 
-`KoeApp`は`MenuBarExtra`を常設します。`KoeApplicationDelegate`はwindow sceneの生成有無に依存せずruntimeを起動し、`KoeWindowPresenter`がメイン、設定、ライフログミニ、全TODOの各windowを一意に所有します。Presenterはwindowを表示してkey windowにした後、activation policyの切替がwindow serverへ反映されるまで短く待ってappをactivateし、通常起動を含む明示的な表示要求では対象windowを前面にします。UI、menu、hotkeyは`AppEnvironment`の同じ表示actionを呼び、同種windowを重複生成しません。`AppEnvironment`は`@MainActor @Observable`のcomposition rootで、設定、DB、engine、hotkey、二つのcoordinator、画面投影用stateを所有します。
+`KoeApp`は`MenuBarExtra`を常設します。`KoeApplicationDelegate`はwindow sceneの生成有無に依存せずruntimeを起動し、`KoeWindowPresenter`がメイン、設定、ライフログミニ、全TODOの各windowを一意に所有します。Main windowは3ペインの最低幅1200 ptを満たす1680×960 ptで生成します。Presenterはwindowを表示してkey windowにした後、activation policyの切替がwindow serverへ反映されるまで短く待ち、activeになるまで最大1秒だけactivateを再要求します。通常起動を含む明示的な表示要求では対象windowを前面にします。UI、menu、hotkeyは`AppEnvironment`の同じ表示actionを呼び、同種windowを重複生成しません。`AppEnvironment`は`@MainActor @Observable`のcomposition rootで、設定、DB、engine、hotkey、二つのcoordinator、画面投影用stateを所有します。
 
 起動時の主要順序は次です。
 

@@ -76,6 +76,24 @@ private struct AXDriver {
         return attribute(kAXValueAttribute as String, of: element) ?? ""
     }
 
+    func mainWindowSize() throws -> CGSize {
+        guard let window = elements(kAXWindowsAttribute as String, of: application).first else {
+            throw UIE2EError.missing("main window")
+        }
+        var value: CFTypeRef?
+        guard AXUIElementCopyAttributeValue(window, kAXSizeAttribute as CFString, &value) == .success,
+              let value,
+              CFGetTypeID(value) == AXValueGetTypeID() else {
+            throw UIE2EError.missing("main window size")
+        }
+        let axValue = unsafeBitCast(value, to: AXValue.self)
+        var size = CGSize.zero
+        guard AXValueGetValue(axValue, .cgSize, &size) else {
+            throw UIE2EError.missing("main window size value")
+        }
+        return size
+    }
+
     private func waitFor(
         _ description: String,
         timeout: TimeInterval,
@@ -163,10 +181,23 @@ private enum KoeUIE2E {
     @MainActor
     private static func runDailyReviewCUJ(appURL: URL) async throws {
         print("CUJ 1: ライフログのMarkdown要約を確認し、音声入力へ切り替え、日別書き出しを調整する")
-        let app = try await launch(appURL, arguments: ["--koe-screenshot-demo"])
+        let app = try await launch(appURL, arguments: ["--koe-screenshot-demo"], activates: false)
         let ui = AXDriver(pid: app.processIdentifier)
 
         _ = try ui.waitFor(identifier: "main.section-picker")
+        let activationDeadline = Date().addingTimeInterval(3)
+        while !app.isActive, Date() < activationDeadline {
+            try await Task.sleep(for: .milliseconds(100))
+        }
+        guard app.isActive else {
+            throw UIE2EError.assertion("通常起動したmain windowがactiveになっていません")
+        }
+        let mainWindowSize = try ui.mainWindowSize()
+        guard mainWindowSize.width >= 1_680, mainWindowSize.height >= 960 else {
+            throw UIE2EError.assertion(
+                "main windowが3ペインを表示できる初期サイズではありません: \(mainWindowSize)"
+            )
+        }
         _ = try ui.waitFor(identifier: "life-log.voice-memo")
         _ = try ui.waitFor(identifier: "life-log.capture-toggle")
         guard !ui.exists(identifier: "life-log.timeline-divider") else {
@@ -258,11 +289,15 @@ private enum KoeUIE2E {
     }
 
     @MainActor
-    private static func launch(_ url: URL, arguments: [String]) async throws -> NSRunningApplication {
+    private static func launch(
+        _ url: URL,
+        arguments: [String],
+        activates: Bool = true
+    ) async throws -> NSRunningApplication {
         terminateKoe()
         let configuration = NSWorkspace.OpenConfiguration()
         configuration.arguments = arguments
-        configuration.activates = true
+        configuration.activates = activates
         configuration.createsNewApplicationInstance = true
         configuration.allowsRunningApplicationSubstitution = false
         do {

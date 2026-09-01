@@ -16,7 +16,7 @@ struct GeneralSettingsView: View {
                         }
                     }
                     .labelsHidden()
-                    .frame(width: 180)
+                    .frame(width: 180, alignment: .trailing)
                 }
             }
             SettingsCard(title: "起動") {

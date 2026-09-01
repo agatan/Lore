@@ -151,7 +151,7 @@ struct ModelsSettingsView: View {
             } else {
                 Picker("", selection: modelBinding) {
                     ForEach(modelChoices, id: \.self) { Text($0).tag($0) }
-                }.labelsHidden().frame(width: 230)
+                }.labelsHidden().frame(width: 230, alignment: .trailing)
             }
         }
 

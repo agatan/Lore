@@ -45,7 +45,7 @@ struct LifeLogSettingsView: View {
                         ForEach(LifeLogSttBackend.allCases) { Text($0.displayName).tag($0) }
                     }
                     .labelsHidden()
-                    .frame(width: 220)
+                    .frame(width: 220, alignment: .trailing)
                 }
                 SettingsRow(title: "認識言語", caption: "ライフログだけに適用します") {
                     Picker("", selection: Binding(get: { settings.lifeLogTranscriptionLanguage }, set: { value in
@@ -57,7 +57,7 @@ struct LifeLogSettingsView: View {
                         }
                     }
                     .labelsHidden()
-                    .frame(width: 220)
+                    .frame(width: 220, alignment: .trailing)
                 }
                 if settings.lifeLogSttBackend == .whisperCpp {
                     SettingsRow(title: "Whisperモデル") {
@@ -68,7 +68,7 @@ struct LifeLogSettingsView: View {
                             ForEach(WhisperModel.allCases) { Text($0.displayName).tag($0) }
                         }
                         .labelsHidden()
-                        .frame(width: 220)
+                        .frame(width: 220, alignment: .trailing)
                     }
                     SettingsRow(title: "モデル管理", caption: "取得中だけHugging Faceへ接続します。音声は送信しません") {
                         HStack(spacing: 8) {
@@ -107,7 +107,7 @@ struct LifeLogSettingsView: View {
                         ForEach(AudioDevices.inputs()) { Text($0.name).tag($0.uid) }
                     }
                     .labelsHidden()
-                    .frame(width: 240)
+                    .frame(width: 240, alignment: .trailing)
                 }
                 SettingsRow(title: "音声の保持期間") {
                     Picker("", selection: Binding(get: { settings.lifeLogAudioRetentionPolicy }, set: {

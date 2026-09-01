@@ -134,6 +134,8 @@ extension View {
 /// `LabeledContent` はコントロールをラベルの直後に置くため、行ごとに操作部の
 /// 左端がずれて視線が拾いにくい。設定行はここを通して、右端で縦に揃える。
 struct SettingsRow<Control: View>: View {
+    private static var controlColumnWidth: CGFloat { 280 }
+
     var title: String
     var caption: String?
     @ViewBuilder var control: () -> Control
@@ -151,6 +153,7 @@ struct SettingsRow<Control: View>: View {
             }
             Spacer(minLength: 12)
             control()
+                .frame(minWidth: Self.controlColumnWidth, alignment: .trailing)
         }
         .frame(maxWidth: .infinity)
     }

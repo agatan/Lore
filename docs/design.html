@@ -187,7 +187,7 @@ KoeMCP ──┘</pre>
 <section id="boot">
 <h2>3. Processと起動</h2>
 <p>
-<code>KoeApp</code>はMenuBarExtraを常設します。<code>KoeApplicationDelegate</code>はwindow sceneの生成有無に依存せずruntimeを起動し、<code>KoeWindowPresenter</code>がmain、settings、life-log mini、all TODOの各windowを一意に所有します。Presenterはwindowをkey windowにした後、activation policyの切替がwindow serverへ反映されるまで短く待ってappをactivateし、明示的な表示要求では対象windowを前面にします。UI、menu、hotkeyは<code>AppEnvironment</code>の同じ表示actionを呼び、同種windowを重複生成しません。<code>AppEnvironment</code>は<code>@MainActor @Observable</code>のcomposition rootです。</p>
+<code>KoeApp</code>はMenuBarExtraを常設します。<code>KoeApplicationDelegate</code>はwindow sceneの生成有無に依存せずruntimeを起動し、<code>KoeWindowPresenter</code>がmain、settings、life-log mini、all TODOの各windowを一意に所有します。Main windowは3ペインの最低幅1200 ptを満たす1680×960 ptで生成します。Presenterはwindowをkey windowにした後、activation policyの切替がwindow serverへ反映されるまで短く待ち、activeになるまで最大1秒だけactivateを再要求します。明示的な表示要求では対象windowを前面にします。UI、menu、hotkeyは<code>AppEnvironment</code>の同じ表示actionを呼び、同種windowを重複生成しません。<code>AppEnvironment</code>は<code>@MainActor @Observable</code>のcomposition rootです。</p>
 <div class="flow">
 <div class="step">Settings / Engines生成</div>
 <div class="arrow">→</div>

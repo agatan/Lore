@@ -15,7 +15,7 @@ final class KoeWindowPresenter {
         show(
             id: KoeWindow.main,
             title: "Koe",
-            size: NSSize(width: 1_480, height: 820),
+            size: NSSize(width: 1_680, height: 960),
             root: AnyView(
                 MainWindowView(env: env)
                     .environment(\.locale, env.settings.applicationLanguage.resolvedLocale())
@@ -90,8 +90,7 @@ final class KoeWindowPresenter {
         NSApp.setActivationPolicy(.regular)
         if let controller = controllers[id], let window = controller.window {
             controller.showWindow(nil)
-            window.makeKeyAndOrderFront(nil)
-            NSApp.activate()
+            activate(window)
             return
         }
 
@@ -103,6 +102,9 @@ final class KoeWindowPresenter {
             defer: false
         )
         window.contentViewController = controller
+        // NSHostingControllerを設定するとSwiftUIのfitting sizeへ縮むため、
+        // window種別ごとの初期content sizeは設定後に確定する。
+        window.setContentSize(size)
         window.identifier = NSUserInterfaceItemIdentifier(id)
         window.title = title
         window.isReleasedWhenClosed = false
@@ -115,8 +117,24 @@ final class KoeWindowPresenter {
         let windowController = NSWindowController(window: window)
         controllers[id] = windowController
         windowController.showWindow(nil)
-        window.makeKeyAndOrderFront(nil)
-        NSApp.activate()
+        activate(window)
         KoeLog.ui.info("windowを表示しました: \(id, privacy: .public), visible=\(window.isVisible, privacy: .public)")
+    }
+
+    private func activate(_ window: NSWindow) {
+        window.makeKeyAndOrderFront(nil)
+        // accessory -> regularの切替は同期APIでもwindow serverへの反映に時間がかかる。
+        // 切替直後のactivate要求が落ちることがあるため、activeになるまで短時間だけ再要求する。
+        requestActivation(of: window, attemptsRemaining: 10)
+    }
+
+    private func requestActivation(of window: NSWindow, attemptsRemaining: Int) {
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { [weak window] in
+            guard let window, window.isVisible else { return }
+            NSApp.activate(ignoringOtherApps: true)
+            window.makeKeyAndOrderFront(nil)
+            guard !NSApp.isActive, attemptsRemaining > 1 else { return }
+            self.requestActivation(of: window, attemptsRemaining: attemptsRemaining - 1)
+        }
     }
 }

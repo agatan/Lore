@@ -37,7 +37,7 @@ public struct MainWindowView: View {
                 detail
             }
         }
-            .frame(minWidth: 1_080, minHeight: 680)
+            .frame(minWidth: 1_200, minHeight: 680)
             .toolbar {
                 if !showsOnboarding {
                     ToolbarItem(placement: .principal) {
