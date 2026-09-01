@@ -39,6 +39,7 @@ public final class AppEnvironment {
 
     public private(set) var bootError: String?
     public private(set) var isAccessibilityGranted = false
+    public private(set) var isInputMonitoringGranted = false
     public private(set) var isMicrophoneGranted = false
     /// ログイン項目の状態。問い合わせが同期 XPC なので、UI は必ずこのキャッシュを読む。
     public private(set) var loginItemState: LoginItem.State = .unknown
@@ -415,6 +416,10 @@ public final class AppEnvironment {
             ("ミニウィンドウ", lifeLogMiniWindowHotkeys, settings.lifeLogMiniWindowHotkey),
             ("ボイスメモ", voiceMemoHotkeys, settings.voiceMemoHotkey),
         ]
+        if requiresInputMonitoring, !Permissions.isInputMonitoringGranted {
+            _ = Permissions.requestInputMonitoring()
+        }
+        isInputMonitoringGranted = Permissions.isInputMonitoringGranted
         var failures: [String] = []
         var started = 0
         for (name, monitor, binding) in registrations {
@@ -533,11 +538,24 @@ public final class AppEnvironment {
 
     // MARK: 権限
 
+    public var requiresInputMonitoring: Bool {
+        [
+            settings.hotkey,
+            settings.lifeLogCaptureHotkey,
+            settings.lifeLogMiniWindowHotkey,
+            settings.voiceMemoHotkey,
+        ].contains { binding in
+            guard case .key(_, let modifiers) = binding else { return false }
+            return HotkeyMonitor.requiresEventTap(modifiers: modifiers)
+        }
+    }
+
     public func refreshPermissions() {
         isAccessibilityGranted = Permissions.isAccessibilityGranted
+        isInputMonitoringGranted = Permissions.isInputMonitoringGranted
         isMicrophoneGranted = Permissions.isMicrophoneGranted
         // 画面を開いたタイミングは「権限を付与した直後」の可能性が高いので、監視を焚き直す。
-        if !isAccessibilityGranted || !isMicrophoneGranted {
+        if !isAccessibilityGranted || !isMicrophoneGranted || (requiresInputMonitoring && !isInputMonitoringGranted) {
             startPermissionWatcher()
         }
     }
@@ -549,6 +567,14 @@ public final class AppEnvironment {
 
     public func requestAccessibility() {
         Permissions.requestAccessibility()
+    }
+
+    public func requestInputMonitoring() {
+        _ = Permissions.requestInputMonitoring()
+        refreshPermissions()
+        if isInputMonitoringGranted {
+            startHotkeyMonitor()
+        }
     }
 
     // MARK: ログイン項目
@@ -575,7 +601,7 @@ public final class AppEnvironment {
     static let permissionWatchInterval: Duration = .seconds(3)
 
     private func startPermissionWatcher() {
-        guard !isAccessibilityGranted || !isMicrophoneGranted else { return }
+        guard !isAccessibilityGranted || !isMicrophoneGranted || (requiresInputMonitoring && !isInputMonitoringGranted) else { return }
         guard permissionWatcher == nil else { return }
         permissionWatcher = Task { [weak self] in
             defer { Task { @MainActor [weak self] in self?.permissionWatcher = nil } }
@@ -583,12 +609,19 @@ public final class AppEnvironment {
                 try? await Task.sleep(for: Self.permissionWatchInterval)
                 guard let self, !Task.isCancelled else { return }
                 let hadAccessibility = isAccessibilityGranted
+                let hadInputMonitoring = isInputMonitoringGranted
                 isAccessibilityGranted = Permissions.isAccessibilityGranted
+                isInputMonitoringGranted = Permissions.isInputMonitoringGranted
                 isMicrophoneGranted = Permissions.isMicrophoneGranted
-                if !hadAccessibility, isAccessibilityGranted {
+                if (!hadAccessibility && isAccessibilityGranted)
+                    || (!hadInputMonitoring && isInputMonitoringGranted)
+                {
                     startHotkeyMonitor()
                 }
-                if isAccessibilityGranted, isMicrophoneGranted { return }
+                if isAccessibilityGranted,
+                   isMicrophoneGranted,
+                   !requiresInputMonitoring || isInputMonitoringGranted
+                { return }
             }
         }
     }

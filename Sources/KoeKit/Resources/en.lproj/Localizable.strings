@@ -244,6 +244,8 @@
 "システム設定を開く" = "Open System Settings";
 "マイクが未許可" = "Microphone Access Not Granted";
 "アクセシビリティが未許可" = "Accessibility Access Not Granted";
+"入力監視が未許可" = "Input Monitoring Not Granted";
+"Option+文字keyのホットキーに必要です。Secure Input中は利用できません。" = "Required for Option+letter hotkeys. Unavailable while Secure Input is active.";
 "ホットキーとテキスト挿入に必要です。" = "Required for hotkeys and text insertion.";
 "音声を取り込めません。" = "Could Not Capture Audio.";
 "不明なエラー" = "Unknown Error";

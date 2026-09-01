@@ -56,12 +56,14 @@ private func koeEventTapCallback(
 public final class HotkeyMonitor {
     public enum Failure: LocalizedError {
         case notTrusted
+        case inputMonitoringRequired
         case tapCreationFailed
         case registrationFailed(OSStatus)
 
         public var errorDescription: String? {
             switch self {
             case .notTrusted: "アクセシビリティの許可が必要です"
+            case .inputMonitoringRequired: "Option+文字keyには入力監視の許可が必要です"
             case .tapCreationFailed: "キーボード監視を開始できませんでした"
             case .registrationFailed(let status) where status == eventHotKeyExistsErr:
                 "このホットキーは別のアプリが使用しています"
@@ -105,6 +107,7 @@ public final class HotkeyMonitor {
         case .key(let code, let modifiers):
             if Self.requiresEventTap(modifiers: modifiers) {
                 guard Permissions.isAccessibilityGranted else { throw Failure.notTrusted }
+                guard Permissions.isInputMonitoringGranted else { throw Failure.inputMonitoringRequired }
                 try startEventTap()
             } else {
                 try startRegisteredHotKey(code: code, modifiers: modifiers)

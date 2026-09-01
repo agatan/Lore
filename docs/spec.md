@@ -9,7 +9,7 @@
 | OS | macOS 26以降 |
 | CPU | Apple Silicon |
 | 配布形態 | メニューバー常駐macOS app。Dockには常駐しない |
-| 必須権限 | マイク。カーソル位置への挿入にはアクセシビリティ |
+| 必須権限 | マイク。カーソル位置への挿入にはアクセシビリティ。Option+文字keyのhotkeyには入力監視 |
 | 任意権限 | ライフログに予定を表示する場合のcalendar |
 | 音声認識 | 通常の音声入力とボイスメモはApple SpeechAnalyzer。ライフログはSpeechAnalyzer、またはlocal downloadしたWhisperKit modelによる遅延認識 |
 | 既定の文章処理 | Apple Foundation Modelsによるオンデバイス処理 |
@@ -23,7 +23,7 @@
 - 初回はonboardingを表示し、マイク、入力操作、任意のcalendar権限と保存範囲を説明します。
 - 通常起動ではメニューバー常駐に加えてmain windowを開き、ライフログを選択した状態で表示します。
 - app起動だけではライフログ記録を開始しません。前回processの記録開始意図は復元せず、起動後の明示的なUI、hotkey、Shortcuts操作でだけ開始します。
-- マイク権限がなければ録音できません。アクセシビリティ権限がなければ結果を対象appへ挿入できません。
+- マイク権限がなければ録音できません。アクセシビリティ権限がなければ結果を対象appへ挿入できません。Option+文字keyのhotkeyは入力監視権限がなければ開始しません。
 - calendar権限は音声入力には不要です。
 - ライフログ開始時は、30秒単位の復旧用audioをMac内へ保存することを初回だけ確認します。同意前にShortcutsから開始した場合は、Koeを開いて同意するようエラーを返します。
 
@@ -33,7 +33,7 @@
 
 - 既定hotkeyは右Optionです。
 - 短押しは開始・停止のtoggle、長押しはpush-to-talkとして離した時に停止します。既定の長押し判定は500msです。
-- 文字keyを含むhotkeyは原則macOSの標準event dispatcherへ個別登録します。macOS 26でIMEに消費されるOptionのみ（Option+Shiftを含む）の文字keyと、修飾キー単体、録音中のEscはinput event監視を使います。一つのhotkeyの登録失敗や権限不足でほかのhotkeyを停止しません。
+- 文字keyを含むhotkeyは原則macOSの標準event dispatcherへ個別登録します。macOS 26でIMEに消費されるOptionのみ（Option+Shiftを含む）の文字keyは、利用者が入力監視を許可した場合に限りinput event監視を使います。修飾キー単体と録音中のEscはアクセシビリティによるinput event監視を使います。Secure Input中はinput event監視と対象appへのpasteがmacOSに遮断されます。一つのhotkeyの登録失敗や権限不足でほかのhotkeyを停止しません。
 - menu barからも開始・停止できます。同時に進行できる音声入力は一つです。
 - 録音中のEscは挿入をcancelします。認識済みtextがあれば`cancelled`履歴として残ります。
 - 録音中、認識中、整形中、挿入中、完了または失敗をHUDとmenu barに表示します。HUD、効果音、入力level表示は設定で切り替えられます。

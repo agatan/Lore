@@ -221,6 +221,18 @@ struct MenuBarPanel: View {
                 env.requestAccessibility(); Permissions.openAccessibilitySettings()
             }))
         }
+        if env.requiresInputMonitoring, !env.isInputMonitoringGranted {
+            values.append(Notice(
+                id: "input-monitoring",
+                title: "入力監視が未許可",
+                message: "Option+文字keyのホットキーに必要です。Secure Input中は利用できません。",
+                actionTitle: "許可する",
+                action: {
+                    env.requestInputMonitoring()
+                    Permissions.openInputMonitoringSettings()
+                }
+            ))
+        }
         if !env.isMicrophoneGranted {
             values.append(Notice(id: "mic", title: "マイクが未許可", message: "音声を取り込めません。", actionTitle: "許可する", action: {
                 Task { await env.requestMicrophone() }

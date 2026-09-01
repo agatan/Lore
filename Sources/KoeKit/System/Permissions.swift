@@ -10,14 +10,27 @@ public enum Permissions {
         AXIsProcessTrusted()
     }
 
+    public static var isInputMonitoringGranted: Bool {
+        CGPreflightListenEventAccess()
+    }
+
     /// システムのアクセシビリティ許可ダイアログを出す。
     public static func requestAccessibility() {
         // kAXTrustedCheckOptionPrompt はグローバル var で並行安全でないため、キー名を直接使う。
         _ = AXIsProcessTrustedWithOptions(["AXTrustedCheckOptionPrompt": true] as CFDictionary)
     }
 
+    @discardableResult
+    public static func requestInputMonitoring() -> Bool {
+        CGRequestListenEventAccess()
+    }
+
     public static func openAccessibilitySettings() {
         openSettings("x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility")
+    }
+
+    public static func openInputMonitoringSettings() {
+        openSettings("x-apple.systempreferences:com.apple.preference.security?Privacy_ListenEvent")
     }
 
     public static func openMicrophoneSettings() {

@@ -52,7 +52,7 @@
 </tr>
 <tr>
 <td>必須権限</td>
-<td>録音にmicrophone、cursor位置への挿入にaccessibility</td>
+<td>録音にmicrophone、cursor位置への挿入にaccessibility、Option+文字keyのhotkeyに入力監視</td>
 </tr>
 <tr>
 <td>任意権限</td>
@@ -80,7 +80,7 @@
 <li>Onboardingでmicrophone、入力操作、任意のcalendar権限と保存範囲を説明します。</li>
 <li>通常起動ではmenu bar常駐に加えてmain windowを開き、life logを選択した状態で表示します。</li>
 <li>App起動だけではlife log記録を開始しません。前回processの記録開始意図を復元せず、起動後の明示的なUI、hotkey、Shortcuts操作でだけ開始します。</li>
-<li>Microphone権限がなければ録音できず、accessibility権限がなければ対象appへ挿入できません。Calendar権限は音声入力には不要です。</li>
+<li>Microphone権限がなければ録音できず、accessibility権限がなければ対象appへ挿入できません。Option+文字keyのhotkeyは入力監視権限がなければ開始しません。Calendar権限は音声入力には不要です。</li>
 <li>Life logの初回開始前に30秒単位の復旧用audioをMac内へ保存する明示同意が必要です。同意前のShortcuts開始はKoeを開くようerrorを返します。</li>
 </ul>
 </section>
@@ -91,7 +91,7 @@
 <article class="card">
 <h3>Hotkey</h3>
 <p>既定は右Option。短押しはtoggle、500ms以上の長押しはpush-to-talk。Escでcancelします。</p>
-<p>文字keyを含むhotkeyは原則macOSの標準event dispatcherへ個別登録します。macOS 26でIMEに消費されるOptionのみ（Option+Shiftを含む）の文字keyと、修飾キー単体、録音中Escはinput event監視を使います。一つの登録失敗や権限不足でほかのhotkeyを停止しません。</p>
+<p>文字keyを含むhotkeyは原則macOSの標準event dispatcherへ個別登録します。macOS 26でIMEに消費されるOptionのみ（Option+Shiftを含む）の文字keyは、利用者が入力監視を許可した場合に限りinput event監視を使います。修飾キー単体と録音中Escはアクセシビリティによるinput event監視を使います。Secure Input中はinput event監視と対象appへのpasteがmacOSに遮断されます。一つの登録失敗や権限不足でほかのhotkeyを停止しません。</p>
 </article>
 <article class="card">
 <h3>状態表示</h3>

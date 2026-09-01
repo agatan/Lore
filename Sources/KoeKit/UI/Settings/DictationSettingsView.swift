@@ -6,7 +6,10 @@ struct DictationSettingsView: View {
 
     var body: some View {
         LazyVStack(alignment: .leading, spacing: 20) {
-            if !env.isAccessibilityGranted || !env.isMicrophoneGranted { permissionSection }
+            if !env.isAccessibilityGranted
+                || !env.isMicrophoneGranted
+                || (env.requiresInputMonitoring && !env.isInputMonitoringGranted)
+            { permissionSection }
 
             SettingsCard(title: "ホットキー", footnote: "短押しでトグル録音、長押しでpush-to-talk。") {
                 SettingsRow(title: "録音キー") {
@@ -91,6 +94,17 @@ struct DictationSettingsView: View {
                     message: "音声を取り込めません。",
                     actionTitle: "許可する",
                     action: { Task { await env.requestMicrophone() } }
+                )
+            }
+            if env.requiresInputMonitoring, !env.isInputMonitoringGranted {
+                NoticeBanner(
+                    title: "入力監視が未許可",
+                    message: "Option+文字keyのホットキーに必要です。Secure Input中は利用できません。",
+                    actionTitle: "システム設定を開く",
+                    action: {
+                        env.requestInputMonitoring()
+                        Permissions.openInputMonitoringSettings()
+                    }
                 )
             }
         }
