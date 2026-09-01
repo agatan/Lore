@@ -29,6 +29,14 @@ struct HotkeyMonitorTests {
         #expect(HotkeyMonitor.carbonModifiers(from: 0) == 0)
     }
 
+    @Test("Optionだけの文字hotkeyはevent tap、ControlまたはCommand付きは登録APIを使う")
+    func routesOptionOnlyBindingToEventTap() {
+        #expect(!HotkeyMonitor.usesRegisteredHotKey(modifiers: Self.optionFlag))
+        #expect(!HotkeyMonitor.usesRegisteredHotKey(modifiers: Self.shiftFlag))
+        #expect(HotkeyMonitor.usesRegisteredHotKey(modifiers: Self.controlFlag | Self.optionFlag))
+        #expect(HotkeyMonitor.usesRegisteredHotKey(modifiers: Self.commandFlag | Self.optionFlag))
+    }
+
     @Test("⌥D を割り当てたら押下・離上の両方を飲み込む")
     func swallowsBoundKeyEvents() {
         let monitor = HotkeyMonitor()

@@ -33,7 +33,7 @@
 
 - 既定hotkeyは右Optionです。
 - 短押しは開始・停止のtoggle、長押しはpush-to-talkとして離した時に停止します。既定の長押し判定は500msです。
-- 文字キーとの組み合わせhotkeyはmacOSへ個別登録し、ほかのappがSecure Inputを有効にしていても動作します。別のappが同じ組み合わせを占有している場合は、そのhotkeyだけを利用不可としてほかのhotkeyを継続します。修飾キー単体と録音中のEscはinput event監視を使うため、Secure Input中はmacOSにより一時的に遮断されます。
+- ControlまたはCommandを含む文字key hotkeyはmacOSへ個別登録し、ほかのappがSecure Inputを有効にしていても動作します。OptionまたはShiftだけの文字key、修飾キー単体、録音中のEscはinput event監視を使います。別のappが同じ登録型組み合わせを占有している場合は、そのhotkeyだけを利用不可としてほかのhotkeyを継続します。
 - menu barからも開始・停止できます。同時に進行できる音声入力は一つです。
 - 録音中のEscは挿入をcancelします。認識済みtextがあれば`cancelled`履歴として残ります。
 - 録音中、認識中、整形中、挿入中、完了または失敗をHUDとmenu barに表示します。HUD、効果音、入力level表示は設定で切り替えられます。
@@ -42,7 +42,7 @@
 
 - 通常の音声入力とボイスメモはApple SpeechAnalyzerへstreamし、暫定textをHUDへ表示します。通常の音声入力audioはfileやDBへ保存せず、外部へ送信しません。
 - ライフログだけはSpeechAnalyzerまたはローカルへダウンロードしたWhisperKit modelを選べます。連続録音とは分離し、入力signalから検出した発話burstを保存audioから遅延認識します。数十秒の表示latencyを許容し、WhisperKitでは速度より精度を優先したcuratedな比較的大きいlocal modelを選べます。
-- 発話開始後の無音flush閾値は、そのburst内の累積有声時間が3秒未満なら8秒、3秒以上10秒未満なら5秒、10秒以上30秒未満なら3秒、30秒以上なら2秒です。正規化input level 0.025未満が続くnear-silenceだけでは認識jobを作らず、burstのwall timeが5分に達した場合は安全のためflushします。
+- 発話開始後の無音flush閾値は、そのburst内の累積有声時間が3秒未満なら8秒、3秒以上10秒未満なら5秒、10秒以上30秒未満なら3秒、30秒以上なら2秒です。発話開始は校正したbackground noise floorとの差と継続時間で判定し、burstのwall timeが5分に達した場合は安全のためflushします。
 - 各遅延認識jobは参照範囲のaudioが永続化された後に実行し、発話timestampを録音開始時刻とaudio offsetから復元します。録音session開始時の語彙snapshotを完了まで固定し、保存audioの再処理では最新の有効語彙を使います。
 - WhisperKit modelは設定画面で一覧、download進捗と失敗理由を確認し、downloadをcancel、再試行、削除できます。Download完了前のmodelは認識に利用できず、使用中のjobがあるmodelは完了またはcancelまで削除できません。
 - 録音開始時の前面appからmodeを一度決め、そのsession内では固定します。手動固定は自動選択より優先します。
@@ -94,9 +94,10 @@ cloud音声入力で送るのは今回の文字起こし、共通rule、mode指�
 - 音声入力との同時利用中も、復旧可能なライフログaudioの記録は中断しません。音声入力が成功した区間はそのraw transcriptを正本とし、同じ録音時間帯にライフログ側で認識した発話はtimeline、検索、書き出し、summary/TODO生成へ重複して出しません。音声入力がcancelまたは失敗した場合は、ライフログ側の発話を残します。
 - 入力deviceを選択できます。記録中は30秒ごとに復旧用`.m4a`をMac内へ確定します。audioをcloud STTへ送ることはありません。
 - 30秒audio chunkは耐久化・復旧の単位で、認識jobの境界ではありません。認識はadaptiveな発話burst単位で遅延実行し、持続するnear-silenceを文字起こししません。
-- Main windowとmini windowは、発話burstが実際にSTTへ渡されてから完了するまで、記録状態とは別の一行の「文字起こし中」と経過秒をShimmer表示します。表示がない間は発話区間の確定待ち、表示中はmodelの処理中として区別できます。
+- Main windowとmini windowは、発話burstが実際にSTTへ渡されてから完了するまで、記録状態とは別の一行の「文字起こし中」、認識対象audioの長さ、処理経過時間をShimmer表示します。表示がない間は発話区間の確定待ち、表示中はmodelの処理中として区別できます。
 - ライフログの認識言語は「表示言語に合わせる」「自動判定」「日本語」「English」「简体中文」から選べ、既定は表示言語に合わせます。表示言語が「システム設定」の場合も解決後の対応言語を使います。この設定はライフログだけに適用し、通常の音声入力、ボイスメモ、modeには伝播しません。
-- WhisperKitのcontrol tokenとtimestamp tokenは認識結果へ含めず、timeline、検索、書き出し、summary/TODO入力へ保存しません。
+- WhisperKitのcontrol tokenとtimestamp tokenはSTT engine境界で認識結果から除き、timeline、検索、書き出し、summary/TODO入力へ新しく保存しません。過去に保存されたtextへ表示時の補正や自動書換えは行いません。
+- WhisperKitの既定modelはWhisper Large v3 Turbo (632 MB)です。非TurboのLarge v3も明示的に選べます。
 - 保存済みaudioは文字起こしと派生処理が両方成功するまで必ず保持します。既定の「処理後削除」では成功直後にaudioだけを削除し、保存済みの発話、conversation、summary、TODOは残します。設定は「処理後削除」「7日」「30日」から選べます。
 - 7日または30日を選んだ場合も、未処理・失敗chunkは期間を超えて保持し、次回起動後の再処理に使います。保持期間を短く変更したときは、新しい条件を満たす処理済みaudioを削除します。
 - 記録中の一時中断と、既定マイクの切替・接続解除などの音声構成変更では、現在のchunkを確定して自動再接続します。sleep時も安全に閉じ、記録意図が残ればwake後に再開します。マイク権限が失われた場合だけ自動再試行しません。
@@ -268,4 +269,4 @@ koe search "検索語" [--limit N]
 23. Summary/TODO派生は設定間隔の到来またはSummary viewの手動更新だけで実行し、録音停止を含むcapture状態変化では実行しない。確定済みTODOのIDと新しいDraftのIDは衝突しない。
 24. App起動だけではライフログ記録を開始せず、前回processの記録開始意図を復元しない。
 25. 通常の音声入力とボイスメモはSpeechAnalyzerを使い、ライフログだけはSpeechAnalyzerまたはdownload済みWhisperKit modelを選べる。Download・cancel・再試行・削除の状態と容量が設定に表示され、audioはMac外へ送信されない。
-26. Life Logは正規化input level 0.025未満の持続near-silenceだけでは認識jobを作らない。発話burstは累積有声時間が3秒未満、3秒以上10秒未満、10秒以上30秒未満、30秒以上の順に8秒、5秒、3秒、2秒の無音でflushし、wall time 5分でも安全flushする。Timestampは保存audio offsetに一致し、語彙は録音session開始時のsnapshotで固定される。
+26. Life Logは起動直後に背景noise floorを校正し、その後も非発話中の入力から更新する。直近のnoise floorに対する十分な上昇が短時間継続した場合だけ発話burstを開始し、持続する空調音など一定のbackground noiseだけでは認識jobを作らない。発話burstは累積有声時間が3秒未満、3秒以上10秒未満、10秒以上30秒未満、30秒以上の順に8秒、5秒、3秒、2秒の無音でflushし、wall time 5分でも安全flushする。Timestampは保存audio offsetに一致し、語彙は録音session開始時のsnapshotで固定される。

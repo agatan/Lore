@@ -831,6 +831,14 @@ struct LifeLogTests {
 
 @Suite("発話burstの適応的な確定")
 struct AdaptiveSpeechSegmenterTests {
+    private func calibrated(noiseLevel: Float = 0.01) -> AdaptiveSpeechSegmenter {
+        var segmenter = AdaptiveSpeechSegmenter()
+        for _ in 0..<10 {
+            #expect(segmenter.consume(level: noiseLevel, duration: 0.1) == .ignore)
+        }
+        return segmenter
+    }
+
     @Test("発話量が増えるほど必要な無音を短くする")
     func silenceThresholdTiers() {
         #expect(AdaptiveSpeechSegmenter.requiredSilence(afterVoicedDuration: 2.9) == 8)
@@ -841,7 +849,7 @@ struct AdaptiveSpeechSegmenterTests {
 
     @Test("無音だけでは認識を開始しない")
     func silenceDoesNotStartBurst() {
-        var segmenter = AdaptiveSpeechSegmenter()
+        var segmenter = calibrated()
         #expect(segmenter.consume(level: 0.01, duration: 60) == .ignore)
         let didFinish = segmenter.finish()
         #expect(!didFinish)
@@ -849,8 +857,9 @@ struct AdaptiveSpeechSegmenterTests {
 
     @Test("小さい声も発話として開始し、短い発話は8秒の無音で確定する")
     func quietShortSpeechFlushesAfterEightSeconds() {
-        var segmenter = AdaptiveSpeechSegmenter()
-        #expect(segmenter.consume(level: 0.03, duration: 1) == .started)
+        var segmenter = calibrated(noiseLevel: 0.005)
+        #expect(segmenter.consume(level: 0.025, duration: 0.15) == .ignore)
+        #expect(segmenter.consume(level: 0.04, duration: 0.1) == .started)
         #expect(segmenter.consume(level: 0.01, duration: 7) == .buffer)
         #expect(segmenter.consume(level: 0.01, duration: 1) == .flush)
         #expect(!segmenter.isActive)
@@ -858,8 +867,10 @@ struct AdaptiveSpeechSegmenterTests {
 
     @Test("長い発話は2秒の無音で確定する")
     func longSpeechFlushesAfterTwoSeconds() {
-        var segmenter = AdaptiveSpeechSegmenter()
-        #expect(segmenter.consume(level: 0.2, duration: 31) == .started)
+        var segmenter = calibrated()
+        #expect(segmenter.consume(level: 0.05, duration: 0.15) == .ignore)
+        #expect(segmenter.consume(level: 0.2, duration: 0.1) == .started)
+        #expect(segmenter.consume(level: 0.2, duration: 30.75) == .buffer)
         #expect(segmenter.consume(level: 0.01, duration: 1) == .buffer)
         #expect(segmenter.consume(level: 0.01, duration: 1) == .flush)
         #expect(!segmenter.isActive)
@@ -867,19 +878,57 @@ struct AdaptiveSpeechSegmenterTests {
 
     @Test("連続入力は5分で安全に確定する")
     func maximumBurstDurationFlushes() {
-        var segmenter = AdaptiveSpeechSegmenter()
-        #expect(segmenter.consume(level: 0.2, duration: 299) == .started)
-        #expect(segmenter.consume(level: 0.2, duration: 1) == .flush)
+        var segmenter = calibrated()
+        #expect(segmenter.consume(level: 0.05, duration: 0.15) == .ignore)
+        #expect(segmenter.consume(level: 0.2, duration: 0.1) == .started)
+        #expect(segmenter.consume(level: 0.2, duration: 299.75) == .flush)
     }
 
     @Test("停止時は発話を含む未確定burstだけを処理する")
     func finishOnlyFlushesSpeech() {
-        var segmenter = AdaptiveSpeechSegmenter()
-        _ = segmenter.consume(level: 0.2, duration: 1)
+        var segmenter = calibrated()
+        _ = segmenter.consume(level: 0.05, duration: 0.15)
+        _ = segmenter.consume(level: 0.2, duration: 0.1)
         let firstFinish = segmenter.finish()
         let secondFinish = segmenter.finish()
         #expect(firstFinish)
         #expect(!secondFinish)
+    }
+
+    @Test("一定のbackground noiseは閾値を超えても発話にしない")
+    func stableBackgroundNoiseDoesNotStartBurst() {
+        var segmenter = calibrated(noiseLevel: 0.01)
+        for _ in 0..<10 {
+            #expect(segmenter.consume(level: 0.04, duration: 0.1) == .ignore)
+        }
+        #expect(segmenter.noiseFloor > 0.03)
+        let didFinish = segmenter.finish()
+        #expect(!didFinish)
+    }
+
+    @Test("background noiseとの差がある入力が250ms続くと発話を開始する")
+    func speechAboveBackgroundStartsBurst() {
+        var segmenter = calibrated(noiseLevel: 0.04)
+        #expect(segmenter.consume(level: 0.07, duration: 0.15) == .ignore)
+        #expect(segmenter.consume(level: 0.1, duration: 0.1) == .started)
+    }
+
+    @Test("一瞬のlevel上昇だけでは発話を開始しない")
+    func transientNoiseDoesNotStartBurst() {
+        var segmenter = calibrated()
+        #expect(segmenter.consume(level: 0.08, duration: 0.1) == .ignore)
+        #expect(segmenter.consume(level: 0.01, duration: 0.1) == .ignore)
+        let didFinish = segmenter.finish()
+        #expect(!didFinish)
+    }
+}
+
+@Suite("Life Log Whisper設定")
+struct LifeLogWhisperSettingsTests {
+    @Test("既定modelはLarge v3 Turbo 632 MB")
+    func turboIsDefault() {
+        #expect(AppSettings.Storage().lifeLogWhisperModel == .largeV3Turbo)
+        #expect(WhisperModel.largeV3Turbo.rawValue == "large-v3-v20240930_turbo_632MB")
     }
 }
 

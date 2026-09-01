@@ -235,7 +235,7 @@ KoeMCP ──┘</pre>
 <p>通常の音声入力はaudio fileを作りません。履歴にはtext、snapshot、状態、計測値を保存します。</p>
 </article>
 </div>
-<p><code>HotkeyMonitor</code>は文字キーとの組み合わせを<code>RegisterEventHotKey</code>で個別登録し、Secure Inputの影響を受ける全入力監視へ依存しません。修飾キー単体は<code>CGEventTap</code>、録音中Escは登録型hotkeyと競合しないAppKit event monitorで扱います。四つのmonitorは独立して開始し、一つの競合や権限不足でほかを停止しません。</p>
+<p><code>HotkeyMonitor</code>はControlまたはCommandを含む文字keyを<code>RegisterEventHotKey</code>で個別登録します。Option/Shiftだけの文字keyと修飾キー単体は<code>CGEventTap</code>へ一意に振り分け、登録型hotkeyのEscはAppKit event monitorで扱います。同じbindingを二経路で監視しません。</p>
 <p><code>DictationCoordinator</code>のcapture destinationは通常音声入力とボイスメモです。ボイスメモは同じ<code>AudioCapture</code>、STT、HUDを使いますが、<code>SessionDraft</code>、LLM、<code>HistoryStore</code>、<code>TextInserter</code>を通らず、確定した生textを<code>LifeLogCoordinator.addMemo</code>へ一度だけ渡します。<code>AppEnvironment</code>は開始前にlife-log captureの安全な一時停止を待ち、終了結果にかかわらず記録意図に従って再開します。<code>LifeLogMemoComposer</code>の音声ボタンとglobal hotkeyはどちらも<code>AppEnvironment.toggleVoiceMemo</code>を呼び、Viewは準備中と録音中のstateだけを投影します。</p>
 </section>
 <section id="lifelog">
@@ -258,7 +258,7 @@ KoeMCP ──┘</pre>
 <ul>
 <li>音声入力とは独立してaudioを連続耐久化し、Life Log STTはadaptiveな発話burstごとの遅延jobです。</li>
 <li>30秒chunkは復旧単位で、認識境界ではありません。Burstがchunkをまたいでも対応する全chunkのcommit後に一つのjob入力として扱います。</li>
-<li><code>AdaptiveSpeechSegmenter</code>は正規化input level 0.025未満をnear-silenceとして無視します。累積有声時間が3秒未満、3〜10秒未満、10〜30秒未満、30秒以上の順に8秒、5秒、3秒、2秒の無音でflushし、wall time 5分でも安全flushします。</li>
+<li><code>AdaptiveSpeechSegmenter</code>は起動直後にbackground noise floorを校正し、非発話中も更新します。Noise floorに対するlevel差と倍率が250ms継続した場合だけburstを開始します。累積有声時間に応じて8秒、5秒、3秒、2秒の無音でflushします。</li>
 <li>Jobは参照audioのcommit後に開始します。Timestampはcapture開始時刻とaudio offsetから導出します。語彙は録音session開始時にsnapshot化し、保存audioの再処理では最新の有効語彙を使います。</li>
 <li>音声入力と重なる区間もraw audioと認識済みutteranceを保存します。成功した<code>SessionRecord</code>をtimeline、検索、exportの正本として重なるlife-log utteranceを除外します。Summary/TODOは通常音声入力も重なるlife-log utteranceも使いません。Cancelled/failed sessionではlife-log utteranceを残します。</li>
 <li>pending chunkは起動後に再処理し、無音はpeak levelで除外します。</li>
@@ -274,7 +274,7 @@ KoeMCP ──┘</pre>
 <section id="engines">
 <h2>6. Engines</h2>
 <p>通常音声入力とボイスメモは<code>SpeechAnalyzerStt</code>固定です。Life logの遅延jobだけをSpeechAnalyzerまたはlocal download済みWhisperKitから選びます。Audioは送信しません。</p>
-<p><code>WhisperKitStt</code>はaccuracy優先の比較的大きいcurated modelのcatalog、download、cancel、再試行、検証、削除を所有します。Compiled modelとtokenizerの両方を取得・検証できたmodelだけを利用可能にし、複数jobが同時に始まってもmodelとtokenizerの初期化は一つだけ実行して結果を共有します。実行中jobのmodelは完了またはcancelまで削除しません。Decode時はspecial tokenをskipし、engine境界でもcontrol/timestamp tokenを除去します。Model lifecycleは遅延jobが所有し、download完了だけでは推論engineをloadしません。Model取得requestに利用者dataを含めません。</p>
+<p><code>WhisperKitStt</code>はLarge v3 Turbo 632 MBを既定とし、非Turbo Large v3も選べるcatalog、download、cancel、再試行、検証、削除を所有します。Decode時はspecial tokenをskipし、engine境界でもcontrol/timestamp tokenを除去します。Read/UI側の補正や既存dataの自動書換えは持ちません。</p>
 <table>
 <thead>
 <tr>
@@ -383,7 +383,7 @@ KoeMCP ──┘</pre>
 </section>
 <section id="ui">
 <h2>9. UIとwindow対応</h2>
-<table><thead><tr><th>View</th><th>内容</th></tr></thead><tbody><tr><td><code>KoeTheme</code></td><td>固定brand palette</td></tr><tr><td><code>MenuBarPanel</code></td><td>用途別quick actionと終了導線</td></tr><tr><td><code>MenuBarLabel</code></td><td>音声入力phaseとlife-log capture状態</td></tr><tr><td><code>MainWindowView</code></td><td>Life log/history切替</td></tr><tr><td><code>LifeLogWindow</code></td><td>一列timeline。左下SummaryはMarkdown描画、summaryとdraft TODOの手動更新、進捗、失敗を扱う。TODO provenanceは表示移動に使わない</td></tr><tr><td><code>LifeLogCaptureControl</code></td><td>利用者向け記録状態を安定表示</td></tr><tr><td><code>LifeLogTranscriptionProgressRow</code></td><td>実際のSTT job中だけShimmerと経過秒を表示</td></tr><tr><td><code>LifeLogExportSheet</code></td><td>人間向けMarkdownをbackground生成して共有</td></tr><tr><td><code>LifeLogMemoComposer</code></td><td>手入力とボイスメモを同じmemoとして追加</td></tr><tr><td><code>LifeLogMiniWindow</code></td><td>予定と記録の常時手前window</td></tr><tr><td><code>LifeLogTodoManagerWindow</code></td><td>全TODOの編集、確定、完了、再開、削除</td></tr><tr><td><code>WhisperModelSettingsView</code></td><td>Life log用modelの選択、download進捗・cancel・再試行・削除・使用中状態</td></tr><tr><td><code>SettingsWindowView</code></td><td>11 settings section</td></tr><tr><td>HUD</td><td>通常音声入力またはボイスメモの状態表示</td></tr></tbody></table>
+<table><thead><tr><th>View</th><th>内容</th></tr></thead><tbody><tr><td><code>KoeTheme</code></td><td>固定brand palette</td></tr><tr><td><code>MenuBarPanel</code></td><td>用途別quick actionと終了導線</td></tr><tr><td><code>MenuBarLabel</code></td><td>音声入力phaseとlife-log capture状態</td></tr><tr><td><code>MainWindowView</code></td><td>Life log/history切替</td></tr><tr><td><code>LifeLogWindow</code></td><td>一列timeline。左下SummaryはMarkdown描画、summaryとdraft TODOの手動更新、進捗、失敗を扱う。TODO provenanceは表示移動に使わない</td></tr><tr><td><code>LifeLogCaptureControl</code></td><td>利用者向け記録状態を安定表示</td></tr><tr><td><code>LifeLogTranscriptionProgressRow</code></td><td>実際のSTT job中だけShimmer、対象audio長、処理経過時間を表示</td></tr><tr><td><code>LifeLogExportSheet</code></td><td>人間向けMarkdownをbackground生成して共有</td></tr><tr><td><code>LifeLogMemoComposer</code></td><td>手入力とボイスメモを同じmemoとして追加</td></tr><tr><td><code>LifeLogMiniWindow</code></td><td>予定と記録の常時手前window</td></tr><tr><td><code>LifeLogTodoManagerWindow</code></td><td>全TODOの編集、確定、完了、再開、削除</td></tr><tr><td><code>WhisperModelSettingsView</code></td><td>Life log用modelの選択、download進捗・cancel・再試行・削除・使用中状態</td></tr><tr><td><code>SettingsWindowView</code></td><td>11 settings section</td></tr><tr><td>HUD</td><td>通常音声入力またはボイスメモの状態表示</td></tr></tbody></table>
 </section>
 <section id="automation">
 <h2>10. 自動化境界</h2>
@@ -409,7 +409,7 @@ KoeMCP ──┘</pre>
 <td>FormattingBackend、EngineRegistry、ModelsSettings、SecretStore</td>
 <td>privacy、engine test、spec/design</td>
 </tr>
-<tr><td>Life Log発話burst・STT</td><td>AdaptiveSpeechSegmenter、LifeLogCoordinator、SttEngine</td><td>near-silence、8/5/3/2秒tier、5分flush、offset、語彙snapshot、tests</td></tr>
+<tr><td>Life Log発話burst・STT</td><td>AdaptiveSpeechSegmenter、LifeLogCoordinator、SttEngine</td><td>noise floor校正、相対level差、8/5/3/2秒tier、5分flush、offset、tests</td></tr>
 <tr><td>Whisper model管理</td><td>EngineRegistry、WhisperKitStt、settings</td><td>download/cancel/検証、job中削除防止、全削除、privacy、tests</td></tr>
 <tr>
 <td>永続model</td>
@@ -466,7 +466,7 @@ KoeMCP ──┘</pre>
 </section>
 <section id="tests">
 <h2>13. Test配置</h2>
-<p><code>Tests/KoeKitTests</code>はnear-silence無視、3/10/30秒の有声境界による8/5/3/2秒tier、5分flushをdomain testで固定し、chunk跨ぎoffset timestamp、録音session開始時の語彙snapshot、同一入力の再試行を統合testで検証します。<code>make ui-test</code>は主要CUJを検証します。詳細は<a href="testing.md">testing.md</a>を参照してください。</p>
+<p><code>Tests/KoeKitTests</code>はnoise floor校正と追従、相対level差による発話開始、8/5/3/2秒tier、5分flushをdomain testで固定します。<code>make ui-test</code>は主要CUJを検証します。</p>
 </section>
 </main>
 <footer>詳細な型と経路は <a href="design.md">Markdown版</a>、利用者との契約は <a href="spec.html">外部仕様</a> を参照してください。</footer>

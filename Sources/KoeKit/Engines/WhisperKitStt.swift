@@ -251,14 +251,14 @@ private extension WhisperModel {
     var whisperKitVariant: ModelVariant {
         switch self {
         case .small: .small
-        case .largeV3: .largev3
+        case .largeV3, .largeV3Turbo: .largev3
         }
     }
 
     var tokenizerRepositoryName: String {
         switch self {
         case .small: "whisper-small"
-        case .largeV3: "whisper-large-v3"
+        case .largeV3, .largeV3Turbo: "whisper-large-v3"
         }
     }
 }

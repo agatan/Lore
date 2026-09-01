@@ -22,12 +22,14 @@ public enum LifeLogSttBackend: String, Codable, Sendable, CaseIterable, Identifi
 public enum WhisperModel: String, Codable, Sendable, CaseIterable, Identifiable {
     case small = "small"
     case largeV3 = "large-v3-v20240930_626MB"
+    case largeV3Turbo = "large-v3-v20240930_turbo_632MB"
 
     public var id: String { rawValue }
     public var displayName: String {
         switch self {
         case .small: "Whisper Small"
         case .largeV3: "Whisper Large v3 (626 MB)"
+        case .largeV3Turbo: "Whisper Large v3 Turbo (632 MB)"
         }
     }
 }
@@ -99,7 +101,7 @@ public final class AppSettings {
         public var lifeLogCaptureEnabled: Bool = false
         public var lifeLogSttBackend: LifeLogSttBackend = .speechAnalyzer
         public var lifeLogTranscriptionLanguage: LifeLogTranscriptionLanguage = .applicationLanguage
-        public var lifeLogWhisperModel: WhisperModel = .largeV3
+        public var lifeLogWhisperModel: WhisperModel = .largeV3Turbo
         public var lifeLogInputDeviceUID: String?
         /// -1 = 処理後削除、0 = 旧版の無期限、正数 = 保持日数。
         public var lifeLogAudioRetentionDays: Int = -1
@@ -157,7 +159,7 @@ public final class AppSettings {
             lifeLogTranscriptionLanguage = (try? container.decodeIfPresent(LifeLogTranscriptionLanguage.self, forKey: .lifeLogTranscriptionLanguage))
                 .flatMap { $0 } ?? .applicationLanguage
             lifeLogWhisperModel = (try? container.decodeIfPresent(WhisperModel.self, forKey: .lifeLogWhisperModel))
-                .flatMap { $0 } ?? .largeV3
+                .flatMap { $0 } ?? .largeV3Turbo
             lifeLogInputDeviceUID = try container.decodeIfPresent(String.self, forKey: .lifeLogInputDeviceUID)
             lifeLogAudioRetentionDays = try container.decodeIfPresent(Int.self, forKey: .lifeLogAudioRetentionDays) ?? fallback.lifeLogAudioRetentionDays
             lifeLogAudioStorageConfirmed = try container.decodeIfPresent(Bool.self, forKey: .lifeLogAudioStorageConfirmed) ?? false

@@ -107,11 +107,16 @@ public final class HotkeyMonitor {
 
         switch binding {
         case .key(let code, let modifiers):
-            try startRegisteredHotKey(code: code, modifiers: modifiers)
-            // 登録型hotkeyとactive event tapを同じmonitorへ併設すると、Option単独を含む
-            // 組み合わせだけCarbon eventが届かない環境がある。EscはAppKit monitorへ分離する。
-            if shouldSwallowEscape != nil {
-                startEscapeMonitors()
+            if Self.usesRegisteredHotKey(modifiers: modifiers) {
+                try startRegisteredHotKey(code: code, modifiers: modifiers)
+                if shouldSwallowEscape != nil {
+                    startEscapeMonitors()
+                }
+            } else {
+                // CarbonはOption/Shiftだけの文字keyを登録できても押下を通知しない環境がある。
+                // その組み合わせだけevent tapへ振り分け、二重配送を作らない。
+                guard Permissions.isAccessibilityGranted else { throw Failure.notTrusted }
+                try startEventTap()
             }
         case .modifier:
             guard Permissions.isAccessibilityGranted else { throw Failure.notTrusted }
@@ -322,6 +327,11 @@ public final class HotkeyMonitor {
         if flags & 0x0002_0000 != 0 { modifiers |= UInt32(shiftKey) }
         if flags & 0x0010_0000 != 0 { modifiers |= UInt32(cmdKey) }
         return modifiers
+    }
+
+    static func usesRegisteredHotKey(modifiers: UInt64) -> Bool {
+        let controlOrCommand = UInt64(0x0004_0000 | 0x0010_0000)
+        return modifiers & controlOrCommand != 0
     }
 
     private func beginPress() {

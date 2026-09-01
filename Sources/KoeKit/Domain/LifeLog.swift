@@ -35,7 +35,8 @@ public struct LifeLogAudioChunk: Identifiable, Codable, Sendable, Hashable {
 
     public var isTranscriptionCandidate: Bool {
         captureEndedAt.timeIntervalSince(captureStartedAt) >= 1
-            && (peakLevel == nil || peakLevel! >= AdaptiveSpeechSegmenter.speechLevelThreshold)
+            && (peakLevel == nil || peakLevel! >= AdaptiveSpeechSegmenter.minimumSpeechLevel
+                + AdaptiveSpeechSegmenter.minimumRiseAboveNoise)
     }
 }
 

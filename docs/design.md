@@ -68,7 +68,7 @@ Hotkey/UI
 ```
 
 - 短押しと長押しの解釈は`HotkeyGestureInterpreter`、対象アプリは`FrontmostAppObserver`、mode選択は`ModeResolver`が担当します。
-- `HotkeyMonitor`は文字キーとの組み合わせを`RegisterEventHotKey`で個別登録し、Secure Inputの影響を受ける全入力監視へ依存しません。修飾キー単体は`CGEventTap`、録音中Escは登録型hotkeyと競合しないAppKit event monitorで扱います。四つのmonitorは独立して開始し、一つの競合や権限不足でほかを停止しません。
+- `HotkeyMonitor`はControlまたはCommandを含む文字keyを`RegisterEventHotKey`で個別登録します。Carbonが登録成功後も配送しないOption/Shiftだけの文字keyと修飾キー単体は`CGEventTap`へ一意に振り分けます。登録型hotkeyの録音中Escは競合しないAppKit event monitorで扱います。同じbindingを二経路で監視せず、四つのmonitorは独立して開始します。
 - `SessionDraft`がrecording、recognizing、formatting、insertingの進捗と計測値を保持し、永続化可能な`SessionRecord`へ確定します。
 - STT確定後、LLMを呼ぶ前にraw transcriptを保存します。
 - LLMのtimeout、利用不可、出力検証エラーではraw transcriptを挿入対象にします。
@@ -95,7 +95,7 @@ capture request
 
 - 初回開始前にローカルaudio保存への明示同意が必要です。
 - 30秒chunkは復旧・保持の単位であり、認識jobの境界ではありません。Burst rangeがchunkをまたぐ場合も、対応する全chunkのcommit後に一つのjob入力として扱います。
-- `AdaptiveSpeechSegmenter`はcaptureやSTT adapterから独立したdomain policyです。正規化input level 0.025未満をnear-silenceとし、有声入力が始まるまでjobを作りません。Burst内の累積有声時間が3秒未満なら8秒、3秒以上10秒未満なら5秒、10秒以上30秒未満なら3秒、30秒以上なら2秒の連続無音でflushします。連続入力でもburstのwall timeが5分に達したら安全flushします。
+- `AdaptiveSpeechSegmenter`はcaptureやSTT adapterから独立したdomain policyです。開始直後の1秒をbackground noise floorの校正に使い、非発話中も緩やかに更新します。絶対下限に加えてnoise floorからのlevel差と倍率を満たす入力が250ms継続した場合だけburstを始め、一定のbackground noiseをjobにしません。Burst内の累積有声時間が3秒未満なら8秒、3秒以上10秒未満なら5秒、10秒以上30秒未満なら3秒、30秒以上なら2秒の連続無音でflushします。連続入力でもburstのwall timeが5分に達したら安全flushします。
 - Flush後は参照する全audio rangeのcommitを待ってからjobを開始します。Recognition結果のtimestampはcapture開始時刻へaudio offsetを加えて導出し、処理開始時刻やmodel内部clockを正本にしません。Vocabularyは録音session開始時にsnapshot化し、途中の設定変更を混ぜません。保存audioの再処理では最新の有効語彙を使います。
 - 音声入力と重なる区間もraw audioと認識済みutteranceを保存します。読み取り時は音声入力の実録音区間（`startedAt`から`audioDurationMs`）を使って重複を解決し、成功した`SessionRecord`をtimeline、検索、exportの正本として、重なるlife-log utteranceをそれらのprojectionから除外します。summary/TODOは通常音声入力も重なるlife-log utteranceも使いません。cancelled/failed sessionは正本にせず、life-log utteranceを残します。この優先順位はUIや個別adapterではなくdomainの共通projectionに置きます。
 - 未処理・失敗chunkは保存状態を持ち、起動後に古い順で再処理します。明確な無音chunkは`peakLevel`で除外します。
@@ -117,7 +117,7 @@ capture request
 | Apple SpeechAnalyzer | `SpeechAnalyzerStt` | macOS管理 | なし |
 | WhisperKit deferred | `WhisperKitStt` | Koeがlocal downloadを管理するaccuracy優先のcurated model | なし |
 
-`WhisperKitStt`はaccuracy優先でcurateした比較的大きいmodelのcatalog、download、cancel、再試行、検証、削除を一つの境界に置きます。Compiled modelとtokenizerの両方を取得・検証できたmodelだけを利用可能modelとして公開します。複数jobが同時に始まってもmodelとtokenizerの初期化は一つだけ実行し、同じ結果を共有します。実行中jobが参照するmodelは完了またはcancelまで削除しません。Model lifecycleは遅延jobが所有し、download完了だけでは推論engineをloadしません。Decode時はspecial tokenをskipし、engine境界でもcontrol/timestamp tokenを除去してからdomain eventへ渡します。Model取得通信に音声、文字起こし、利用者dataを含めません。
+`WhisperKitStt`はLarge v3 Turbo 632 MBを既定とし、accuracy優先の非Turbo Large v3も選べるmodel catalog、download、cancel、再試行、検証、削除を一つの境界に置きます。Compiled modelとtokenizerの両方を取得・検証できたmodelだけを利用可能modelとして公開します。複数jobが同時に始まってもmodelとtokenizerの初期化は一つだけ実行し、同じ結果を共有します。実行中jobが参照するmodelは完了またはcancelまで削除しません。Model lifecycleは遅延jobが所有し、download完了だけでは推論engineをloadしません。Decode時はspecial tokenをskipし、engine境界でもcontrol/timestamp tokenを除去してからdomain eventへ渡します。Read/UI側の補正や既存dataの自動書換えは持ちません。Model取得通信に音声、文字起こし、利用者dataを含めません。
 
 | Backend | 実装 | 接続先 | Mac外への文字送信 |
 |---|---|---|---|
@@ -172,7 +172,7 @@ DBは`~/Library/Application Support/Koe/koe.sqlite`です。`DatabaseQueue`を�
 | `MainWindowView` | `lifeLog` / `history`のsegmented切替。初回はonboarding、通常起動は`lifeLog`を開く |
 | `LifeLogWindow` | 月間activity、日別timeline、Markdown summary、global TODO。Timeline本体はevent/utterance/dictation/memoを一列の時刻順で表示し、column headerを持たない。日付選択時はsnapshotを再取得し、予定一覧とtimelineを同じdataから更新する。検索buttonは`Command-F`も受け、発話・音声入力・memoの検索結果だけをtimeline itemへ移動する。表示開始時だけ今日を読み込んで末尾へscrollし、その後のreloadでは閲覧位置を保つ。左下Summary viewはMarkdownを描画し、summaryとdraft TODOの手動更新、進捗、失敗を扱う。TODO本文は複数行入力にするが、保存済みprovenanceへの移動UIは持たない |
 | `LifeLogCaptureControl` | Main、mini、menu barで共有するcapture状態と開始・停止操作。停止中の開始はblue/cyanのrecord、記録開始意図がある間の停止はroseのstopとして、symbol、文言、semantic colorを一か所で決める。録音と文字起こしの内部Boolの中間状態を文言へ直接投影せず、利用者向け状態を安定させる。Main/miniでは状態textの隣へ配置する |
-| `LifeLogTranscriptionProgressRow` | `LifeLogCoordinator.activeTranscriptionStartedAt`がある間だけMain/miniのcapture状態直上へ一行表示し、1秒ごとの経過時間とShimmerで実際のSTT job実行中を示す。発話burstの確定待ちや録音状態は表現しない |
+| `LifeLogTranscriptionProgressRow` | `LifeLogCoordinator.activeTranscriptionStartedAt`がある間だけMain/miniのcapture状態直上へ一行表示し、認識対象audio長、1秒ごとの処理経過時間、Shimmerで実際のSTT job実行中を示す。発話burstの確定待ちや録音状態は表現しない |
 | `LifeLogExportSheet` | 表示開始時のdate/day/TODOをsnapshotとして保持し、cancel可能なbackground taskで人間向けMarkdownを一度だけ生成する。previewは折り返し可能な上限付きtextとし、完全版をcopy/fileへ再利用する。生成中と書込中はprogressを表示し、MainActorではclipboardとpanel操作だけを行う |
 | `HistoryBrowserView` | 音声入力履歴、検索、詳細、コピー、削除 |
 | `LifeLogMiniWindow` | title barを隠し、予定、utterance、dictation、memoを一列の時刻順で表示する。`CurrentCalendarEventStrip`をtimeline上部へ固定し、表示時は今日を読み込んで末尾へscrollする。Mainと同じ`LifeLogCaptureControl`を`LifeLogMemoComposer`の直上に置く。`AppEnvironment`がwindow levelを常に`.floating`、collection behaviorを`.canJoinAllSpaces`と`.fullScreenAuxiliary`に固定し、利用者がclose操作またはtoggle hotkeyを使うまで非表示にしない。`HotkeyMonitor`は成立したkey-downを保持し、対応するkey-upだけでreleaseを通知するため、修飾キーなしの同じ文字入力はtoggleしない |
@@ -200,7 +200,7 @@ DBは`~/Library/Application Support/Koe/koe.sqlite`です。`DatabaseQueue`を�
 | 変更 | 最初に確認する場所 | 同時に更新するもの |
 |---|---|---|
 | provider追加 | `FormattingBackend`, `EngineRegistry`, `ModelsSettingsView`, `SecretStore` | privacy表示、engine tests、spec/design |
-| Life Log発話burst・STT変更 | `AdaptiveSpeechSegmenter`, `LifeLogCoordinator`, `SttEngine` | near-silence無視、8/5/3/2秒tier、5分flush、chunk跨ぎoffset、語彙snapshot、再試行test、`swift test` |
+| Life Log発話burst・STT変更 | `AdaptiveSpeechSegmenter`, `LifeLogCoordinator`, `SttEngine` | background noise floor校正、相対level差と継続時間、8/5/3/2秒tier、5分flush、chunk跨ぎoffset、語彙snapshot、再試行test、`swift test` |
 | Whisper model管理変更 | `EngineRegistry`, `WhisperKitStt`, settings | download失敗/cancel/検証、job中削除防止、全削除、privacy、`swift test`、`make ui-test` |
 | 永続model変更 | `Domain`, `KoeDatabase.migrator`, 対応Store | migration test、backup/delete test、design |
 | dictation状態変更 | `SessionDraft`, `DictationCoordinator`, `HistoryStore` | HUD/history、state tests、spec/design |
@@ -222,4 +222,4 @@ DBは`~/Library/Application Support/Koe/koe.sqlite`です。`DatabaseQueue`を�
 
 ## 13. テスト配置
 
-`Tests/KoeKitTests`はdomain、formatting、engine、persistence、life log、automationを対象にします。`AdaptiveSpeechSegmenter`はnear-silenceだけではjobを作らないこと、3/10/30秒の有声境界で8/5/3/2秒へ切り替わること、5分で安全flushすることをclock非依存のdomain testで固定します。統合testはchunkをまたぐaudio offset timestamp、録音session開始時の語彙snapshot、失敗後の保存audio再処理を検証します。`make ui-test`は署名済みappを起動し、`Scripts/KoeUIE2E.swift`から主要CUJを検証します。詳細な実行方法とE2E契約は[testing.md](testing.md)を参照してください。
+`Tests/KoeKitTests`はdomain、formatting、engine、persistence、life log、automationを対象にします。`AdaptiveSpeechSegmenter`はbackground noiseの校正と追従、一定noiseだけではjobを作らないこと、相対的な発話levelが250ms続けば開始すること、3/10/30秒の有声境界で8/5/3/2秒へ切り替わること、5分で安全flushすることをclock非依存のdomain testで固定します。統合testはchunkをまたぐaudio offset timestamp、録音session開始時の語彙snapshot、失敗後の保存audio再処理を検証します。`make ui-test`は署名済みappを起動し、`Scripts/KoeUIE2E.swift`から主要CUJを検証します。詳細な実行方法とE2E契約は[testing.md](testing.md)を参照してください。

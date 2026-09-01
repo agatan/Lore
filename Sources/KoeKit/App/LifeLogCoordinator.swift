@@ -17,6 +17,7 @@ public final class LifeLogCoordinator {
     public private(set) var liveTranscript = ""
     public private(set) var isTranscribing = false
     public private(set) var activeTranscriptionStartedAt: Date?
+    public private(set) var activeTranscriptionAudioDuration: TimeInterval?
     public private(set) var isRecoveringCapture = false
     public private(set) var isSuspendedForVoiceMemo = false
     public private(set) var isRefreshingCalendar = false
@@ -354,6 +355,7 @@ public final class LifeLogCoordinator {
             if Task.isCancelled { break }
             let duration = Double(chunk.buffer.frameLength) / chunk.buffer.format.sampleRate
             let level = AudioCapture.level(of: chunk.buffer)
+            let wasVoiced = segmenter.isActive && segmenter.considersSpeech(level: level)
             switch segmenter.consume(level: level, duration: duration) {
             case .ignore:
                 preRoll.append(chunk)
@@ -364,7 +366,7 @@ public final class LifeLogCoordinator {
                 lastVoicedIndex = burst.endIndex
             case .buffer:
                 burst.append(chunk)
-                if level >= AdaptiveSpeechSegmenter.speechLevelThreshold {
+                if wasVoiced {
                     lastVoicedIndex = burst.endIndex
                 }
             case .flush:
@@ -407,7 +409,7 @@ public final class LifeLogCoordinator {
         for buffer in buffers { continuation.yield(buffer) }
         continuation.finish()
         var burstHasSegments = false
-        beginActiveTranscription()
+        beginActiveTranscription(audioDuration: burstEndOffset - burstStartOffset)
         defer { endActiveTranscription() }
         do {
             for try await event in stt.transcribe(audio: stream, hints: hints) {
@@ -742,7 +744,7 @@ public final class LifeLogCoordinator {
                 try await database.lifeLog.deleteUtterances(audioChunkID: chunk.id)
                 isTranscribing = true
                 liveTranscript = ""
-                beginActiveTranscription()
+                beginActiveTranscription(audioDuration: chunk.captureEndedAt.timeIntervalSince(chunk.captureStartedAt))
                 defer {
                     endActiveTranscription()
                     isTranscribing = false
@@ -939,10 +941,13 @@ public final class LifeLogCoordinator {
         return stream
     }
 
-    private func beginActiveTranscription() {
+    private func beginActiveTranscription(audioDuration: TimeInterval) {
         activeTranscriptionCount += 1
         if activeTranscriptionCount == 1 {
             activeTranscriptionStartedAt = Date()
+            activeTranscriptionAudioDuration = max(0, audioDuration)
+        } else {
+            activeTranscriptionAudioDuration = (activeTranscriptionAudioDuration ?? 0) + max(0, audioDuration)
         }
     }
 
@@ -950,6 +955,7 @@ public final class LifeLogCoordinator {
         activeTranscriptionCount = max(0, activeTranscriptionCount - 1)
         if activeTranscriptionCount == 0 {
             activeTranscriptionStartedAt = nil
+            activeTranscriptionAudioDuration = nil
         }
     }
 

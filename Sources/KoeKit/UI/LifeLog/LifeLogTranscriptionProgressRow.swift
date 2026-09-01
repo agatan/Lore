@@ -2,6 +2,7 @@ import SwiftUI
 
 struct LifeLogTranscriptionProgressRow: View {
     let startedAt: Date
+    let audioDuration: TimeInterval
 
     var body: some View {
         TimelineView(.animation(minimumInterval: 1.0 / 30.0)) { context in
@@ -11,10 +12,16 @@ struct LifeLogTranscriptionProgressRow: View {
                     .font(.system(size: 12, weight: .semibold))
                 shimmerText
                 Spacer(minLength: 8)
-                Text(Self.elapsedText(elapsed))
-                    .font(.system(size: 10.5, weight: .medium, design: .monospaced))
-                    .monospacedDigit()
-                    .foregroundStyle(.secondary)
+                HStack(spacing: 4) {
+                    Text("音声")
+                    Text(Self.elapsedText(Int(audioDuration.rounded())))
+                    Text("·")
+                    Text("処理")
+                    Text(Self.elapsedText(elapsed))
+                }
+                .font(.system(size: 10.5, weight: .medium, design: .monospaced))
+                .monospacedDigit()
+                .foregroundStyle(.secondary)
             }
             .foregroundStyle(KoeTheme.accent)
             .padding(.horizontal, 16)
