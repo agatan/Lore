@@ -37,7 +37,7 @@ struct LifeLogSettingsView: View {
                 title: "音声",
                 footnote: "音声はこのMacのアプリ用データフォルダだけに保存します。処理に失敗した音声は次回起動時に再処理します。"
             ) {
-                SettingsRow(title: "文字起こし", caption: "WhisperKitは発話区間だけを後追いで高精度に処理します") {
+                SettingsRow(title: "文字起こし", caption: "whisper.cppは発話区間だけをMac内で後追い処理します") {
                     Picker("", selection: Binding(get: { settings.lifeLogSttBackend }, set: { value in
                         settings.lifeLogSttBackend = value
                         Task { await env.applyLifeLogSttChange() }
@@ -59,7 +59,7 @@ struct LifeLogSettingsView: View {
                     .labelsHidden()
                     .frame(width: 220)
                 }
-                if settings.lifeLogSttBackend == .whisperKit {
+                if settings.lifeLogSttBackend == .whisperCpp {
                     SettingsRow(title: "Whisperモデル") {
                         Picker("", selection: Binding(get: { settings.lifeLogWhisperModel }, set: { value in
                             settings.lifeLogWhisperModel = value

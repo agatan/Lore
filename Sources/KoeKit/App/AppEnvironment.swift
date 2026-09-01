@@ -842,7 +842,7 @@ public final class AppEnvironment {
         do {
             cancelLifeLogWhisperDownload()
             try removeLifeLogAudioDirectory()
-            try removeLifeLogWhisperModelsDirectory()
+            try removeLifeLogWhisperModelsDirectories()
             try SecretStore.deleteAll()
             try database.deleteBackups()
             try await database.deleteAllUserData()
@@ -927,10 +927,11 @@ public final class AppEnvironment {
         }
     }
 
-    private func removeLifeLogWhisperModelsDirectory() throws {
-        let root = WhisperKitStt.defaultModelRoot
-        if FileManager.default.fileExists(atPath: root.path) {
-            try FileManager.default.removeItem(at: root)
+    private func removeLifeLogWhisperModelsDirectories() throws {
+        for root in [WhisperCppStt.defaultModelRoot, WhisperCppStt.legacyModelRoot] {
+            if FileManager.default.fileExists(atPath: root.path) {
+                try FileManager.default.removeItem(at: root)
+            }
         }
     }
 
@@ -1074,7 +1075,7 @@ public final class AppEnvironment {
             } catch {
                 lifeLogWhisperProgress = nil
                 lifeLogWhisperError = error.localizedDescription
-                KoeLog.engine.error("Whisperモデルの取得に失敗: \(error.localizedDescription, privacy: .public)")
+                KoeLog.engine.error("whisper.cppモデルの取得に失敗: \(error.localizedDescription, privacy: .public)")
             }
             lifeLogWhisperInstallTask = nil
         }
@@ -1095,7 +1096,7 @@ public final class AppEnvironment {
             refreshStorageSizes()
         } catch {
             lifeLogWhisperError = error.localizedDescription
-            KoeLog.engine.error("Whisperモデルの削除に失敗: \(error.localizedDescription, privacy: .public)")
+            KoeLog.engine.error("whisper.cppモデルの削除に失敗: \(error.localizedDescription, privacy: .public)")
         }
     }
 

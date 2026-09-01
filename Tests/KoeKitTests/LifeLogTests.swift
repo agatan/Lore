@@ -925,10 +925,44 @@ struct AdaptiveSpeechSegmenterTests {
 
 @Suite("Life Log Whisper設定")
 struct LifeLogWhisperSettingsTests {
-    @Test("既定modelはLarge v3 Turbo 632 MB")
+    @Test("取得済みwhisper.cpp modelを設定から削除できる")
+    func installedModelCanBeDeleted() async throws {
+        let root = FileManager.default.temporaryDirectory
+            .appending(path: "koe-whisper-delete-\(UUID().uuidString)", directoryHint: .isDirectory)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        let modelURL = root.appending(path: WhisperModel.largeV3Turbo.fileName)
+        #expect(FileManager.default.createFile(atPath: modelURL.path, contents: Data()))
+        let handle = try FileHandle(forWritingTo: modelURL)
+        try handle.truncate(atOffset: UInt64(WhisperModel.largeV3Turbo.byteCount))
+        try handle.close()
+
+        let engine = WhisperCppStt(model: .largeV3Turbo, modelRoot: root)
+        #expect(await engine.availability(languagePreference: .ja) == .ready)
+        try await engine.deleteInstalledModel()
+        #expect(!FileManager.default.fileExists(atPath: modelURL.path))
+    }
+
+    @Test("既存設定のWhisperKit選択はwhisper.cppへ引き継ぐ")
+    func legacyBackendSelectionUsesWhisperCpp() throws {
+        let backend = try JSONDecoder().decode(
+            LifeLogSttBackend.self,
+            from: Data(#""whisperKit""#.utf8)
+        )
+        #expect(backend == .whisperCpp)
+    }
+
+    @Test("既定modelはLarge v3 Turbo Q5_0 574 MB")
     func turboIsDefault() {
         #expect(AppSettings.Storage().lifeLogWhisperModel == .largeV3Turbo)
-        #expect(WhisperModel.largeV3Turbo.rawValue == "large-v3-v20240930_turbo_632MB")
+        #expect(WhisperModel.largeV3Turbo.fileName == "ggml-large-v3-turbo-q5_0.bin")
+        #expect(WhisperModel.largeV3Turbo.byteCount == 574_041_195)
+    }
+
+    @Test("whisper.cpp modelは固定hashで検証する")
+    func whisperCppModelHasPinnedDigest() {
+        #expect(WhisperModel.largeV3Turbo.sha256 == "394221709cd5ad1f40c46e6031ca61bce88931e6e088c188294c6d5a55ffa7e2")
     }
 }
 

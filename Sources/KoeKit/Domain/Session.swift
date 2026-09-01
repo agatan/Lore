@@ -10,6 +10,7 @@ public struct EngineIdentifier: RawRepresentable, Codable, Sendable, Hashable, E
 
     public static let speechAnalyzer = EngineIdentifier("speech_analyzer")
     public static let whisperKit = EngineIdentifier("whisper_kit")
+    public static let whisperCpp = EngineIdentifier("whisper_cpp")
     public static let foundationModels = EngineIdentifier("foundation_models")
     public static let mlx = EngineIdentifier("mlx")
     public static let groq = EngineIdentifier("groq")
@@ -25,6 +26,7 @@ public struct EngineIdentifier: RawRepresentable, Codable, Sendable, Hashable, E
         switch self {
         case .speechAnalyzer: "SpeechAnalyzer"
         case .whisperKit: "WhisperKit"
+        case .whisperCpp: "whisper.cpp"
         case .foundationModels: "Foundation Models"
         case .mlx: "MLX"
         case .groq: "Groq"

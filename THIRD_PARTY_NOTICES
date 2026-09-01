@@ -21,12 +21,12 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
-WhisperKit / argmax-oss-swift
-https://github.com/argmaxinc/argmax-oss-swift
+whisper.cpp
+https://github.com/ggml-org/whisper.cpp
 
 MIT License
 
-Copyright (c) 2024 argmax, inc.
+Copyright (c) 2023-2026 The ggml authors
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal

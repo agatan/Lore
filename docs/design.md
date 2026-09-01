@@ -14,11 +14,11 @@
 
 ```text
 Koe ─────┐
-KoeCLI ──┼──> KoeKit ──> GRDB / WhisperKit
+KoeCLI ──┼──> KoeKit ──> GRDB / whisper.cpp
 KoeMCP ──┘
 ```
 
-外部Swift PackageはGRDBとWhisperKitです。`Domain`、`App`、`Engines`などは単一の`KoeKit` target内の論理モジュールであり、import境界としては強制されません。
+外部依存はGRDB Swift Packageと公式whisper.cpp XCFrameworkです。`Domain`、`App`、`Engines`などは単一の`KoeKit` target内の論理モジュールであり、import境界としては強制されません。
 
 ## 2. KoeKitのモジュール一覧
 
@@ -26,7 +26,7 @@ KoeMCP ──┘
 |---|---|---|
 | `Domain/` | `SessionDraft`, `SessionRecord`, `Mode`, `FormattingPolicy`, `LifeLogDay`, `LifeLogTodo` | 永続化やUIに依存しない状態、値、遷移、整形規則 |
 | `App/` | `AppEnvironment`, `DictationCoordinator`, `LifeLogCoordinator`, `AppSettings`, `LifeLogDerivationService` | composition rootと二つの実行パイプライン |
-| `Engines/` | `SttEngine`, `SpeechAnalyzerStt`, `WhisperKitStt`, `LlmEngine`, `EngineRegistry` | 音声認識、local model管理、LLMの共通境界とprovider実装 |
+| `Engines/` | `SttEngine`, `SpeechAnalyzerStt`, `WhisperCppStt`, `LlmEngine`, `EngineRegistry` | 音声認識、local model管理、LLMの共通境界とprovider実装 |
 | `Persistence/` | `KoeDatabase`, `HistoryStore`, `LifeLogStore`, `ModeStore`, `VocabularyStore` | GRDB schema、migration、query、backup |
 | `System/` | `AudioCapture`, `ContinuousAudioCapture`, `TextInserter`, `HotkeyMonitor`, `CalendarProvider`, `SecretStore` | AVFoundation、Accessibility、EventKit、Keychain等のmacOS境界 |
 | `Analysis/` | `VocabularySuggestionJob`, `AdaptiveSpeechSegmenter`, `ConversationSegmenter`, `LifeLogTextExporter` | 履歴分析、発話burst境界、会話分割、外部向けテキスト生成 |
@@ -35,7 +35,7 @@ KoeMCP ──┘
 
 ## 3. プロセス構成と起動
 
-`KoeApp`は`MenuBarExtra`を常設します。`KoeApplicationDelegate`はwindow sceneの生成有無に依存せずruntimeを起動し、`KoeWindowPresenter`がメイン、設定、ライフログミニ、全TODOの各windowを一意に所有します。UI、menu、hotkeyは`AppEnvironment`の同じ表示actionを呼び、同種windowを重複生成しません。`AppEnvironment`は`@MainActor @Observable`のcomposition rootで、設定、DB、engine、hotkey、二つのcoordinator、画面投影用stateを所有します。
+`KoeApp`は`MenuBarExtra`を常設します。`KoeApplicationDelegate`はwindow sceneの生成有無に依存せずruntimeを起動し、`KoeWindowPresenter`がメイン、設定、ライフログミニ、全TODOの各windowを一意に所有します。Presenterはwindowを表示してkey windowにした後、activation policyの切替がwindow serverへ反映されるまで短く待ってappをactivateし、通常起動を含む明示的な表示要求では対象windowを前面にします。UI、menu、hotkeyは`AppEnvironment`の同じ表示actionを呼び、同種windowを重複生成しません。`AppEnvironment`は`@MainActor @Observable`のcomposition rootで、設定、DB、engine、hotkey、二つのcoordinator、画面投影用stateを所有します。
 
 起動時の主要順序は次です。
 
@@ -110,14 +110,14 @@ capture request
 
 ## 6. Engine構成
 
-`EngineRegistry`は通常の音声入力・ボイスメモを`SpeechAnalyzerStt`へ固定し、ライフログの遅延jobだけを`SpeechAnalyzerStt`または`WhisperKitStt`から選びます。音声入力整形用とライフログ派生用の`LlmEngine`選択は分離します。
+`EngineRegistry`は通常の音声入力・ボイスメモを`SpeechAnalyzerStt`へ固定し、ライフログの遅延jobだけを`SpeechAnalyzerStt`または`WhisperCppStt`から選びます。音声入力整形用とライフログ派生用の`LlmEngine`選択は分離します。
 
 | STT | 実装 | Model | Audio送信 |
 |---|---|---|---|
 | Apple SpeechAnalyzer | `SpeechAnalyzerStt` | macOS管理 | なし |
-| WhisperKit deferred | `WhisperKitStt` | Koeがlocal downloadを管理するaccuracy優先のcurated model | なし |
+| whisper.cpp deferred | `WhisperCppStt` | Koeがlocal downloadを管理するaccuracy優先のcurated GGML model | なし |
 
-`WhisperKitStt`はLarge v3 Turbo 632 MBを既定とし、accuracy優先の非Turbo Large v3も選べるmodel catalog、download、cancel、再試行、検証、削除を一つの境界に置きます。Compiled modelとtokenizerの両方を取得・検証できたmodelだけを利用可能modelとして公開します。複数jobが同時に始まってもmodelとtokenizerの初期化は一つだけ実行し、同じ結果を共有します。実行中jobが参照するmodelは完了またはcancelまで削除しません。Model lifecycleは遅延jobが所有し、download完了だけでは推論engineをloadしません。Decode時はspecial tokenをskipし、engine境界でもcontrol/timestamp tokenを除去してからdomain eventへ渡します。Read/UI側の補正や既存dataの自動書換えは持ちません。Model取得通信に音声、文字起こし、利用者dataを含めません。
+`WhisperCppStt`はLarge v3 Turbo Q5_0 574 MBを既定とし、accuracy優先の非Turbo Large v3 Q5_0も選べるmodel catalog、download、cancel、SHA-256検証、削除を一つの境界に置きます。推論contextは同じmodelを使うjob間で共有し、actor境界で直列実行します。実行中jobが参照するmodelは完了またはcancelまで削除しません。Model lifecycleは遅延jobが所有し、download完了だけでは推論contextをloadしません。公式XCFrameworkのC APIをprocess内から直接呼び、GGML modelをMetalとCPUで実行します。Core ML modelとANE specialization、Homebrewや外部CLIへの依存は持ちません。Decode時はspecial tokenを出力せず、engine境界でもcontrol/timestamp tokenを除去してからdomain eventへ渡します。Read/UI側の補正や既存dataの自動書換えは持ちません。Model取得通信に音声、文字起こし、利用者dataを含めません。
 
 | Backend | 実装 | 接続先 | Mac外への文字送信 |
 |---|---|---|---|
@@ -150,14 +150,14 @@ DBは`~/Library/Application Support/Koe/koe.sqlite`です。`DatabaseQueue`を�
 
 利用状況の録音時間は`DailyRecordingDuration.aggregate`で重なる区間を先に統合してから日境界で分割します。音声入力は`HistoryStore`の実録音区間、ライフログは`LifeLogStore`のtimelineに採用されたutterance区間を入力とし、`LifeLogSpeechProjection`と同じ規則で成功した音声入力と重なるutteranceを除外します。復旧用audio chunkの無音区間や同一区間の重複は利用時間へ加算しません。
 
-既存DBを開くと、未適用migrationの直前に`Backups/pre-migration-*.sqlite`を作ります。migrationがなくても1日1回`Backups/daily-*.sqlite`を作り、両種を合わせて更新日時が新しい7ファイルを保持します。backupはGRDBのonline backupで整合した単一SQLiteへ固定します。全データ削除はDB内利用者データ、保存audio、WhisperKit modelと途中download、backupを削除します。
+既存DBを開くと、未適用migrationの直前に`Backups/pre-migration-*.sqlite`を作ります。migrationがなくても1日1回`Backups/daily-*.sqlite`を作り、両種を合わせて更新日時が新しい7ファイルを保持します。backupはGRDBのonline backupで整合した単一SQLiteへ固定します。全データ削除はDB内利用者データ、保存audio、whisper.cpp modelと途中download、旧WhisperKit model、backupを削除します。
 
 ## 8. 設定、秘密、プロセス間同期
 
 - `AppSettings.Storage`はsuite `dev.agatan.Koe`のUserDefaults key `koe.settings.v1`へJSONで保存します。
 - `ApplicationLanguage`は`system`、`en`、`ja`、`zh-Hans`の閉じた値として保存し、既定は`system`です。`system`はmacOSの優先言語から最初の対応localeを選び、なければ`en`へ解決します。`zh-Hant`は`zh-Hans`へ暗黙変換しません。既存設定にfieldがなければ`system`で補完し、GRDB migrationは追加しません。
 - provider/modelは音声入力とライフログで別設定です。通常音声入力、ライフログcapture、mini window、ボイスメモのhotkey、保持期間、calendar filter、summary間隔をここに入れます。Mini windowは常時手前を不変条件とし、表示levelの設定は持ちません。Color themeも設定として保持せず、`KoeTheme`の固定brand tokenを使います。
-- WhisperKit engine/model選択と`LifeLogTranscriptionLanguage`はライフログ設定だけに置き、通常の音声入力とボイスメモはSpeechAnalyzer固定です。認識言語の既定値`applicationLanguage`は`ApplicationLanguage`を`ja`、`en`、`zh-Hans`の固定hintへ解決し、明示的な`auto`も選べます。Runtimeの`captureRequested`は設定として永続化しません。WhisperKit model本体と途中downloadは`Application Support/Koe/Models/WhisperKit/`へ置き、全データ削除に含めます。
+- whisper.cpp engine/model選択と`LifeLogTranscriptionLanguage`はライフログ設定だけに置き、通常の音声入力とボイスメモはSpeechAnalyzer固定です。認識言語の既定値`applicationLanguage`は`ApplicationLanguage`を`ja`、`en`、`zh-Hans`の固定hintへ解決し、明示的な`auto`も選べます。Runtimeの`captureRequested`は設定として永続化しません。GGML model本体と途中downloadは`Application Support/Koe/Models/WhisperCpp/`へ置き、全データ削除に含めます。
 - `AppEnvironment`の設定から解決した`Locale`を全SwiftUI表示へ注入します。localization resourceの開発言語と欠損keyのfallbackは英語です。表示言語はUI shellだけのvariation pointで、ライフログ設定が明示する`applicationLanguage`解決以外はSTT locale、mode、prompt、保存data、export、CLI/MCP contractへ伝播させません。
 - API keyはUserDefaultsやDBには入れずKeychainへ保存します。
 - CLI/MCPによるTODOまたはprompt変更は`DistributedNotificationCenter`でアプリへ通知し、`AppEnvironment`が再読込します。
@@ -179,7 +179,7 @@ DBは`~/Library/Application Support/Koe/koe.sqlite`です。`DatabaseQueue`を�
 | `LifeLogMemoComposer` | main/mini windowで共有するchat形式のmemo入力。空白を除外し、送信済みtextをclearして`LifeLogCoordinator.addMemo`へ渡す。送信と音声は同じ直径の円形controlにし、音声ボタンは`AppEnvironment.toggleVoiceMemo`と同じactionを受け、準備中、録音中、別処理中の状態だけを描画する |
 | `LifeLogTodoManagerWindow` | 全TODOの編集、確定、完了、再開、削除。TODO本文はvertical axisを持つ複数行入力とし、本文量に応じてrowを広げる |
 | `LifeLogCalendarSettingsView` | calendar選択、参加filter、選択日の予定を明示的に再取得する操作と進行状態 |
-| `SettingsWindowView` | 一般（表示言語を含む）、利用状況、語彙、privacy、連携、音声入力、AI整形、mode、ライフログ、要約とTODO、calendar |
+| `SettingsWindowView` | 一般（表示言語を含む）、利用状況、語彙、privacy、連携、音声入力、AI整形、mode、ライフログ、要約とTODO、calendar。各設定行は操作列を共通幅で確保し、Pickerなど可変幅controlの右端を揃える |
 | `WhisperModelSettingsView` | ライフログ用にcurateしたlocal modelを列挙し、選択、download進捗・cancel・再試行・削除・job使用中状態を表示する |
 | `DismissibleNoticeBanner` | 継続可能なmessageと明示的な`×`を表示する。Dismiss actionは表示stateだけをclearし、capture requestやretry taskを変更しない |
 | `HudController` / `HudView` | 通常音声入力またはボイスメモのrecordingから終了までの一時表示 |
@@ -201,7 +201,7 @@ DBは`~/Library/Application Support/Koe/koe.sqlite`です。`DatabaseQueue`を�
 |---|---|---|
 | provider追加 | `FormattingBackend`, `EngineRegistry`, `ModelsSettingsView`, `SecretStore` | privacy表示、engine tests、spec/design |
 | Life Log発話burst・STT変更 | `AdaptiveSpeechSegmenter`, `LifeLogCoordinator`, `SttEngine` | background noise floor校正、相対level差と継続時間、8/5/3/2秒tier、5分flush、chunk跨ぎoffset、語彙snapshot、再試行test、`swift test` |
-| Whisper model管理変更 | `EngineRegistry`, `WhisperKitStt`, settings | download失敗/cancel/検証、job中削除防止、全削除、privacy、`swift test`、`make ui-test` |
+| Whisper model管理変更 | `EngineRegistry`, `WhisperCppStt`, settings | download失敗/cancel/検証、job中削除防止、全削除、privacy、`swift test`、`make ui-test` |
 | 永続model変更 | `Domain`, `KoeDatabase.migrator`, 対応Store | migration test、backup/delete test、design |
 | dictation状態変更 | `SessionDraft`, `DictationCoordinator`, `HistoryStore` | HUD/history、state tests、spec/design |
 | 音声入力とlife-logの重複解決 | domainの共通projection, `LifeLogStore`, search/export/derivation | 成功・cancel・失敗・時間境界test、`make ui-test`、spec/design |

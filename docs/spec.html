@@ -60,7 +60,7 @@
 </tr>
 <tr>
 <td>STT</td>
-<td>通常音声入力とボイスメモはApple SpeechAnalyzer。Life logはSpeechAnalyzerまたはlocal downloadしたWhisperKit modelによる遅延認識。Cloud STTなし</td>
+<td>通常音声入力とボイスメモはApple SpeechAnalyzer。Life logはSpeechAnalyzerまたはlocal downloadしたwhisper.cpp GGML modelによる遅延認識。Cloud STTなし</td>
 </tr>
 <tr>
 <td>既定LLM</td>
@@ -99,11 +99,11 @@
 </article>
 <article class="card">
 <h3>Audio</h3>
-<p>通常の音声入力とボイスメモはApple SpeechAnalyzerへstreamします。Life logだけはSpeechAnalyzerまたはlocal download済みWhisperKit modelを選び、連続録音から検出した発話burstを保存audioから遅延認識します。数十秒latencyを許容してaccuracy優先の比較的大きいcurated modelを使えます。</p>
+<p>通常の音声入力とボイスメモはApple SpeechAnalyzerへstreamします。Life logだけはSpeechAnalyzerまたはlocal download済みwhisper.cpp GGML modelを選び、連続録音から検出した発話burstを保存audioから遅延認識します。数十秒latencyを許容してaccuracy優先の比較的大きいcurated modelを使えます。</p>
 </article>
 </div>
 <p>起動直後にbackground noise floorを校正し、非発話中も更新します。Noise floorに対する十分なlevel差が短時間継続した場合だけ発話burstを開始します。累積有声時間が3秒未満、3〜10秒未満、10〜30秒未満、30秒以上の順に、8秒、5秒、3秒、2秒の連続無音でflushします。Wall time 5分でも安全flushします。</p>
-<p>WhisperKit設定では進捗と失敗理由を表示してdownloadのcancel、再試行、削除ができます。完了前のmodelは認識に利用できず、実行中jobが使うmodelは完了またはcancelまで削除できません。</p>
+<p>whisper.cpp設定では進捗と失敗理由を表示してdownloadのcancel、再試行、削除ができます。完了前のmodelは認識に利用できず、実行中jobが使うmodelは完了またはcancelまで削除できません。</p>
 <h3>Mode、rule、語彙</h3>
 <ul>
 <li>録音開始時の前面appからmodeを決め、session中は固定します。手動固定を優先します。</li>
@@ -181,8 +181,8 @@
 <li>30秒chunkは耐久化・復旧単位で、認識境界ではありません。認識はadaptiveな発話burst単位で遅延実行し、持続near-silenceだけではjobを作りません。</li>
 <li>Main windowとmini windowは、発話burstを実際にSTTへ渡してから完了するまで、「文字起こし中」、認識対象audio長、処理経過時間をShimmer表示します。</li>
 <li>Life logの認識言語は「表示言語に合わせる」「自動判定」「日本語」「English」「简体中文」から選べ、既定は表示言語に合わせます。この設定はlife logだけに適用します。</li>
-<li>WhisperKitのcontrol tokenとtimestamp tokenはengine境界で除去します。過去のtextを表示時に補正しません。</li>
-<li>WhisperKitの既定modelはWhisper Large v3 Turbo (632 MB)です。非Turbo版も選べます。</li>
+<li>whisper.cppのcontrol tokenとtimestamp tokenはengine境界で除去します。過去のtextを表示時に補正しません。</li>
+<li>whisper.cppの既定modelはWhisper Large v3 Turbo Q5_0 (574 MB)です。非TurboのLarge v3 Q5_0も選べます。</li>
 <li>保存済みaudioは文字起こしと派生処理が両方成功するまで必ず保持します。既定の「処理後削除」では成功直後にaudioだけを削除し、保存済みの発話、conversation、summary、TODOは残します。設定は「処理後削除」「7日」「30日」から選べます。</li>
 <li>7日または30日を選んだ場合も、未処理・失敗chunkは期間を超えて保持し、次回起動後の再処理に使います。保持期間を短く変更したときは、新しい条件を満たす処理済みaudioを削除します。</li>
 <li>一時中断と既定マイクの切替・接続解除などの音声構成変更では、現在のchunkを確定して自動再接続します。Sleep前にも閉じ、記録意図が残ればwake後に再開します。マイク権限拒否だけは自動再試行しません。</li>
@@ -244,7 +244,7 @@
 </tr>
 <tr>
 <td>Main window</td>
-<td>通常起動時にlife logの今日を選択し、timelineの最新位置を表示。左下SummaryはMarkdown描画とsummary＋draft TODOの手動更新を提供。今日のtimeline最下部から手入力・音声memoを追加し、記録操作はtimeline内の状態表示に置く</td>
+<td>通常起動時に前面のkey windowとして開き、life logの今日を選択してtimelineの最新位置を表示。左下SummaryはMarkdown描画とsummary＋draft TODOの手動更新を提供。今日のtimeline最下部から手入力・音声memoを追加し、記録操作はtimeline内の状態表示に置く</td>
 </tr>
 <tr>
 <td>Mini window</td>
@@ -264,7 +264,7 @@
 </tr>
 <tr>
 <td>Settings: Life log</td>
-<td>記録・mini window・ボイスメモhotkey、input device、STT engine・認識言語・WhisperKit model、audio保持、summary間隔、要約/TODO AI、calendar再取得</td>
+<td>記録・mini window・ボイスメモhotkey、input device、STT engine・認識言語・whisper.cpp model、audio保持、summary間隔、要約/TODO AI、calendar再取得</td>
 </tr>
 </tbody>
 </table>
@@ -301,8 +301,8 @@
 <td>app data削除まで</td>
 </tr>
 <tr>
-<td>WhisperKit model</td>
-<td><code>Application Support/Koe/Models/WhisperKit/</code></td>
+<td>whisper.cpp model</td>
+<td><code>Application Support/Koe/Models/WhisperCpp/</code></td>
 <td>個別削除または全data削除まで</td>
 </tr>
 <tr>
@@ -321,7 +321,7 @@
 </table>
 <ul>
 <li>未適用migration直前と、同日重複なしの1日1回にDB backupを作ります。失敗時はmigrationしません。</li>
-<li>「全dataを削除」はDB内利用者data、保存audio、download済みWhisperKit model、途中download file、DB backupを削除します。設定とKeychainは画面に示す個別範囲に従います。</li>
+<li>「全dataを削除」はDB内利用者data、保存audio、download済みwhisper.cpp model、途中download file、旧WhisperKit model、DB backupを削除します。設定とKeychainは画面に示す個別範囲に従います。</li>
 <li>語彙候補に複製済みの根拠は、履歴だけの削除では残る場合があります。</li>
 </ul>
 </section>
@@ -468,7 +468,7 @@ koe search "検索語" [--limit N]</pre>
 <div class="grid">
 <article class="card">
 <h3>STT</h3>
-<p>確定不能はfailed。SpeechAnalyzerのprocess再起動、WhisperKit modelの未download・破損・容量不足など、engine別の復旧方法を案内します。</p>
+<p>確定不能はfailed。SpeechAnalyzerのprocess再起動、whisper.cpp modelの未download・破損・容量不足など、engine別の復旧方法を案内します。</p>
 </article>
 <article class="card">
 <h3>LLM / Insert</h3>
@@ -501,7 +501,7 @@ koe search "検索語" [--limit N]</pre>
 <li>Calendar設定から予定を再取得すると、現在選択日のsnapshot、timeline、月間activityが更新される。</li>
 <li>マイク切替などの音声構成変更後も、記録開始意図が残る限りlife-log captureが自動再開する。</li>
 <li>ボイスメモ一回につきmemoだけが一件作られ、通常の音声入力履歴とlife-log utteranceには同じ内容が追加されない。</li>
-<li>通常起動時にmain windowのlife-log画面が開き、memo入力欄の音声ボタンは専用hotkeyと同じボイスメモを開始・停止する。</li>
+<li>通常起動時にmain windowのlife-log画面が前面のkey windowとして開き、memo入力欄の音声ボタンは専用hotkeyと同じボイスメモを開始・停止する。</li>
 <li>「処理後削除」でも未処理・失敗chunkは残り、文字起こしと派生処理が成功したaudioだけが削除される。</li>
 <li>通常起動時、main windowでlife logを開いた時、mini windowを開いた時は、今日のtimelineの最新項目が表示される。</li>
 <li>Timelineは予定・発話・音声入力・memoを時刻順に表示し、検索はCommand-Fでも開く。TODO本文は複数行へ折り返され、出典移動UIは表示しないがprovenanceは保持する。</li>
@@ -511,7 +511,7 @@ koe search "検索語" [--limit N]</pre>
 <li>月間calendarは今日を塗り、表示中の日を枠線で示し、既存TODOと同じ作業を新しいDraft TODOとして再提案しない。</li>
 <li>Summary/TODO派生は設定間隔またはSummary viewの手動更新だけで実行し、録音停止を含むcapture状態変化では実行しない。</li>
 <li>App起動だけではlife log記録を開始せず、前回processの記録開始意図を復元しない。</li>
-<li>通常音声入力とボイスメモはSpeechAnalyzerを使い、life logだけはSpeechAnalyzerまたはdownload済みWhisperKit modelを選べる。Download・cancel・再試行・削除・容量を設定で管理でき、audioはMac外へ送信しない。</li>
+<li>通常音声入力とボイスメモはSpeechAnalyzerを使い、life logだけはSpeechAnalyzerまたはdownload済みwhisper.cpp modelを選べる。Download・cancel・再試行・削除・容量を設定で管理でき、audioはMac外へ送信しない。</li>
 <li>Life logはbackground noise floorに対する相対level差が短時間継続した場合だけ認識jobを作る。累積有声時間に応じて8秒、5秒、3秒、2秒の無音tierでflushし、wall time 5分でも安全flushする。</li>
 </ol>
 </section>

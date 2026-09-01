@@ -94,9 +94,9 @@
 </tbody>
 </table>
 <pre>Koe ─────┐
-KoeCLI ──┼──&gt; KoeKit ──&gt; GRDB / WhisperKit
+KoeCLI ──┼──&gt; KoeKit ──&gt; GRDB / whisper.cpp
 KoeMCP ──┘</pre>
-<p>外部Swift PackageはGRDBとWhisperKitです。<code>Domain</code>、<code>App</code>、<code>Engines</code>などは単一の<code>KoeKit</code> target内の論理モジュールです。</p>
+<p>外部依存はGRDB Swift Packageと公式whisper.cpp XCFrameworkです。<code>Domain</code>、<code>App</code>、<code>Engines</code>などは単一の<code>KoeKit</code> target内の論理モジュールです。</p>
 <p class="callout">
 <code>Domain</code>や<code>App</code>は単一の<code>KoeKit</code> target内の論理moduleです。folder間依存はSwift moduleとして強制されていません。</p>
 </section>
@@ -136,7 +136,7 @@ KoeMCP ──┘</pre>
 <td>
 <code>SttEngine</code>, <code>LlmEngine</code>, <code>EngineRegistry</code>
 </td>
-<td>SpeechAnalyzer、WhisperKit遅延認識、local model管理、各LLM adapter</td>
+<td>SpeechAnalyzer、whisper.cpp遅延認識、local model管理、各LLM adapter</td>
 </tr>
 <tr>
 <td>
@@ -187,7 +187,7 @@ KoeMCP ──┘</pre>
 <section id="boot">
 <h2>3. Processと起動</h2>
 <p>
-<code>KoeApp</code>はMenuBarExtraを常設します。<code>KoeApplicationDelegate</code>はwindow sceneの生成有無に依存せずruntimeを起動し、<code>KoeWindowPresenter</code>がmain、settings、life-log mini、all TODOの各windowを一意に所有します。UI、menu、hotkeyは<code>AppEnvironment</code>の同じ表示actionを呼び、同種windowを重複生成しません。<code>AppEnvironment</code>は<code>@MainActor @Observable</code>のcomposition rootです。</p>
+<code>KoeApp</code>はMenuBarExtraを常設します。<code>KoeApplicationDelegate</code>はwindow sceneの生成有無に依存せずruntimeを起動し、<code>KoeWindowPresenter</code>がmain、settings、life-log mini、all TODOの各windowを一意に所有します。Presenterはwindowをkey windowにした後、activation policyの切替がwindow serverへ反映されるまで短く待ってappをactivateし、明示的な表示要求では対象windowを前面にします。UI、menu、hotkeyは<code>AppEnvironment</code>の同じ表示actionを呼び、同種windowを重複生成しません。<code>AppEnvironment</code>は<code>@MainActor @Observable</code>のcomposition rootです。</p>
 <div class="flow">
 <div class="step">Settings / Engines生成</div>
 <div class="arrow">→</div>
@@ -273,8 +273,8 @@ KoeMCP ──┘</pre>
 </section>
 <section id="engines">
 <h2>6. Engines</h2>
-<p>通常音声入力とボイスメモは<code>SpeechAnalyzerStt</code>固定です。Life logの遅延jobだけをSpeechAnalyzerまたはlocal download済みWhisperKitから選びます。Audioは送信しません。</p>
-<p><code>WhisperKitStt</code>はLarge v3 Turbo 632 MBを既定とし、非Turbo Large v3も選べるcatalog、download、cancel、再試行、検証、削除を所有します。Decode時はspecial tokenをskipし、engine境界でもcontrol/timestamp tokenを除去します。Read/UI側の補正や既存dataの自動書換えは持ちません。</p>
+<p>通常音声入力とボイスメモは<code>SpeechAnalyzerStt</code>固定です。Life logの遅延jobだけをSpeechAnalyzerまたはlocal download済みwhisper.cppから選びます。Audioは送信しません。</p>
+<p><code>WhisperCppStt</code>はLarge v3 Turbo Q5_0 574 MBを既定とし、非Turbo Large v3 Q5_0も選べるcatalog、download、cancel、SHA-256検証、削除を所有します。公式XCFrameworkのC APIをprocess内から直接呼び、GGML modelをMetalとCPUで実行します。Core ML modelとANE specialization、Homebrewや外部CLIへの依存は持ちません。Decode時はspecial tokenを出力せず、engine境界でもcontrol/timestamp tokenを除去します。Read/UI側の補正や既存dataの自動書換えは持ちません。</p>
 <table>
 <thead>
 <tr>
@@ -322,7 +322,7 @@ KoeMCP ──┘</pre>
 </tbody>
 </table>
 <p><code>FormattingPrompt</code>は通常textか、名前とfield型を持つ構造化出力contractを明示します。<code>LifeLogDerivationService</code>はsummary/TODOのJSON contractを宣言し、model判定を持ちません。<code>GroqLlm</code>はこれを温度0、推論本文なし、選択modelが対応する最小の推論量と最も強いJSON制約へ変換します。GPT-OSSは<code>reasoning_effort = low</code>とstrict JSON Schema、reasoningを無効化できるmodelは無効化とJSON Object Mode、それ以外は未対応parameterを送らずJSON Object Modeを使います。全経路で同じapp側decodeを最終検証とし、通常の文章変換は温度0とprovider既定の推論量を維持します。</p>
-<p>WhisperKit STT選択はlife logだけに置きます。LLMのprovider/modelは音声入力とlife logで別設定にし、語彙候補の<code>analysisLlm</code>は常にオンデバイスです。</p>
+<p>whisper.cpp STT選択はlife logだけに置きます。LLMのprovider/modelは音声入力とlife logで別設定にし、語彙候補の<code>analysisLlm</code>は常にオンデバイスです。</p>
 </section>
 <section id="persistence">
 <h2>7. Persistence</h2>
@@ -375,15 +375,15 @@ KoeMCP ──┘</pre>
 </tbody>
 </table>
 <p>利用状況の録音時間は<code>DailyRecordingDuration.aggregate</code>で重なる区間を先に統合してから日境界で分割します。音声入力は<code>HistoryStore</code>の実録音区間、life logは<code>LifeLogStore</code>のtimelineに採用されたutterance区間を入力とし、<code>LifeLogSpeechProjection</code>と同じ規則で成功した音声入力と重なるutteranceを除外します。復旧用audio chunkの無音区間や同一区間の重複は利用時間へ加算しません。</p>
-<p>DBは<code>Application Support/Koe/koe.sqlite</code>、WhisperKit modelと途中downloadは<code>Application Support/Koe/Models/WhisperKit/</code>です。既存DBはmigration前と1日1回backupし、最新7fileを保持します。全data削除はbackup、model、途中fileも削除します。</p>
+<p>DBは<code>Application Support/Koe/koe.sqlite</code>、whisper.cpp modelと途中downloadは<code>Application Support/Koe/Models/WhisperCpp/</code>です。既存DBはmigration前と1日1回backupし、最新7fileを保持します。全data削除はbackup、新旧model、途中fileも削除します。</p>
 </section>
 <section id="settings">
 <h2>8. 設定、秘密、process間同期</h2>
-<ul><li><code>AppSettings.Storage</code>をUserDefaultsへ保存しますが、runtimeの<code>captureRequested</code>は永続化しません。</li><li>WhisperKit engine/modelとlife log認識言語はlife logだけに置き、通常音声入力とボイスメモはSpeechAnalyzer固定です。</li><li>認識言語の既定値は表示言語を固定hintへ解決し、明示的な自動判定も選べます。</li><li>WhisperKit model本体と途中downloadは専用directoryへ置き、全data削除に含めます。</li><li>表示言語はlife log設定が明示する解決以外ではSTT locale、prompt、保存data、automation contractへ伝播させません。</li><li>API keyだけはKeychainへ保存し、CLI/MCPによるTODO・prompt変更はappへ通知します。</li></ul>
+<ul><li><code>AppSettings.Storage</code>をUserDefaultsへ保存しますが、runtimeの<code>captureRequested</code>は永続化しません。</li><li>whisper.cpp engine/modelとlife log認識言語はlife logだけに置き、通常の音声入力とボイスメモはSpeechAnalyzer固定です。</li><li>認識言語の既定値は表示言語を固定hintへ解決し、明示的な自動判定も選べます。</li><li>GGML model本体と途中downloadは専用directoryへ置き、全data削除に含めます。</li><li>表示言語はlife log設定が明示する解決以外ではSTT locale、prompt、保存data、automation contractへ伝播させません。</li><li>API keyだけはKeychainへ保存し、CLI/MCPによるTODO・prompt変更はappへ通知します。</li></ul>
 </section>
 <section id="ui">
 <h2>9. UIとwindow対応</h2>
-<table><thead><tr><th>View</th><th>内容</th></tr></thead><tbody><tr><td><code>KoeTheme</code></td><td>固定brand palette</td></tr><tr><td><code>MenuBarPanel</code></td><td>用途別quick actionと終了導線</td></tr><tr><td><code>MenuBarLabel</code></td><td>音声入力phaseとlife-log capture状態</td></tr><tr><td><code>MainWindowView</code></td><td>Life log/history切替</td></tr><tr><td><code>LifeLogWindow</code></td><td>一列timeline。左下SummaryはMarkdown描画、summaryとdraft TODOの手動更新、進捗、失敗を扱う。TODO provenanceは表示移動に使わない</td></tr><tr><td><code>LifeLogCaptureControl</code></td><td>利用者向け記録状態を安定表示</td></tr><tr><td><code>LifeLogTranscriptionProgressRow</code></td><td>実際のSTT job中だけShimmer、対象audio長、処理経過時間を表示</td></tr><tr><td><code>LifeLogExportSheet</code></td><td>人間向けMarkdownをbackground生成して共有</td></tr><tr><td><code>LifeLogMemoComposer</code></td><td>手入力とボイスメモを同じmemoとして追加</td></tr><tr><td><code>LifeLogMiniWindow</code></td><td>予定と記録の常時手前window</td></tr><tr><td><code>LifeLogTodoManagerWindow</code></td><td>全TODOの編集、確定、完了、再開、削除</td></tr><tr><td><code>WhisperModelSettingsView</code></td><td>Life log用modelの選択、download進捗・cancel・再試行・削除・使用中状態</td></tr><tr><td><code>SettingsWindowView</code></td><td>11 settings section</td></tr><tr><td>HUD</td><td>通常音声入力またはボイスメモの状態表示</td></tr></tbody></table>
+<table><thead><tr><th>View</th><th>内容</th></tr></thead><tbody><tr><td><code>KoeTheme</code></td><td>固定brand palette</td></tr><tr><td><code>MenuBarPanel</code></td><td>用途別quick actionと終了導線</td></tr><tr><td><code>MenuBarLabel</code></td><td>音声入力phaseとlife-log capture状態</td></tr><tr><td><code>MainWindowView</code></td><td>Life log/history切替</td></tr><tr><td><code>LifeLogWindow</code></td><td>一列timeline。左下SummaryはMarkdown描画、summaryとdraft TODOの手動更新、進捗、失敗を扱う。TODO provenanceは表示移動に使わない</td></tr><tr><td><code>LifeLogCaptureControl</code></td><td>利用者向け記録状態を安定表示</td></tr><tr><td><code>LifeLogTranscriptionProgressRow</code></td><td>実際のSTT job中だけShimmer、対象audio長、処理経過時間を表示</td></tr><tr><td><code>LifeLogExportSheet</code></td><td>人間向けMarkdownをbackground生成して共有</td></tr><tr><td><code>LifeLogMemoComposer</code></td><td>手入力とボイスメモを同じmemoとして追加</td></tr><tr><td><code>LifeLogMiniWindow</code></td><td>予定と記録の常時手前window</td></tr><tr><td><code>LifeLogTodoManagerWindow</code></td><td>全TODOの編集、確定、完了、再開、削除</td></tr><tr><td><code>WhisperModelSettingsView</code></td><td>Life log用modelの選択、download進捗・cancel・再試行・削除・使用中状態</td></tr><tr><td><code>SettingsWindowView</code></td><td>11 settings section。各設定行は操作列を共通幅で確保し、可変幅controlの右端を揃える</td></tr><tr><td>HUD</td><td>通常音声入力またはボイスメモの状態表示</td></tr></tbody></table>
 </section>
 <section id="automation">
 <h2>10. 自動化境界</h2>
@@ -410,7 +410,7 @@ KoeMCP ──┘</pre>
 <td>privacy、engine test、spec/design</td>
 </tr>
 <tr><td>Life Log発話burst・STT</td><td>AdaptiveSpeechSegmenter、LifeLogCoordinator、SttEngine</td><td>noise floor校正、相対level差、8/5/3/2秒tier、5分flush、offset、tests</td></tr>
-<tr><td>Whisper model管理</td><td>EngineRegistry、WhisperKitStt、settings</td><td>download/cancel/検証、job中削除防止、全削除、privacy、tests</td></tr>
+<tr><td>Whisper model管理</td><td>EngineRegistry、WhisperCppStt、settings</td><td>download/cancel/検証、job中削除防止、全削除、privacy、tests</td></tr>
 <tr>
 <td>永続model</td>
 <td>Domain、migrator、Store</td>

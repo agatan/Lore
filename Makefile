@@ -17,6 +17,7 @@ APPLE_DEV_IDENTITY := $(shell security find-identity -v -p codesigning 2>/dev/nu
 DEV_IDENTITY := $(shell security find-identity -p codesigning 2>/dev/null | grep -o "Koe Dev" | head -1)
 CODESIGN_ID := $(if $(APPLE_DEV_IDENTITY),$(APPLE_DEV_IDENTITY),$(if $(DEV_IDENTITY),Koe Dev,-))
 BUILD_DIR = .build/$(CONFIG)
+WHISPER_FRAMEWORK = .build/artifacts/koe/WhisperFramework/whisper.xcframework/macos-arm64_x86_64/whisper.framework
 
 .PHONY: all build tools app run stop test ui-test clean install icon dev-cert reset-permissions
 
@@ -39,10 +40,11 @@ tools:
 ## Koe.app を組み立てて署名する
 app: build tools
 	@rm -rf "$(APP)"
-	@mkdir -p "$(CONTENTS)/MacOS" "$(CONTENTS)/Helpers" "$(CONTENTS)/Resources/Skills"
+	@mkdir -p "$(CONTENTS)/MacOS" "$(CONTENTS)/Helpers" "$(CONTENTS)/Frameworks" "$(CONTENTS)/Resources/Skills"
 	@cp "$(BUILD_DIR)/Koe" "$(CONTENTS)/MacOS/Koe"
 	@cp build/tools/koe "$(CONTENTS)/Helpers/koe"
 	@cp build/tools/koe-mcp "$(CONTENTS)/Helpers/koe-mcp"
+	@cp -R "$(WHISPER_FRAMEWORK)" "$(CONTENTS)/Frameworks/whisper.framework"
 	@cp -R Resources/Skills/koe "$(CONTENTS)/Resources/Skills/koe"
 	@cp Resources/Info.plist "$(CONTENTS)/Info.plist"
 	@cp THIRD_PARTY_NOTICES "$(CONTENTS)/Resources/THIRD_PARTY_NOTICES.txt"
@@ -55,6 +57,8 @@ app: build tools
 		[ -e "$$l" ] && cp -R "$$l" "$(CONTENTS)/Resources/" || true; \
 	done
 	@zsh Scripts/extract-app-intents.sh "$(BUILD_DIR)" "$(CONTENTS)"
+	@codesign --force --sign "$(CODESIGN_ID)" --timestamp=none \
+		"$(CONTENTS)/Frameworks/whisper.framework"
 	@codesign --force --sign "$(CODESIGN_ID)" --identifier $(BUNDLE_ID).cli \
 		--timestamp=none "$(CONTENTS)/Helpers/koe"
 	@codesign --force --sign "$(CODESIGN_ID)" --identifier $(BUNDLE_ID).mcp \

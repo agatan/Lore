@@ -3,7 +3,7 @@ import Foundation
 /// 文字種から発話言語を推定する。
 ///
 /// SpeechAnalyzer は言語を報告しないため、判定は文字構成から行う(設計 §4.3)。
-/// WhisperKit のように自前で判定できるエンジンは、その結果をそのまま使う。
+/// whisper.cpp のように自前で判定できるエンジンは、その結果をそのまま使う。
 public enum LanguageDetector {
     /// 日英混在と見なす少数側の比率のしきい値。
     static let mixedThreshold = 0.15

@@ -11,7 +11,7 @@
 | 配布形態 | メニューバー常駐macOS app。Dockには常駐しない |
 | 必須権限 | マイク。カーソル位置への挿入にはアクセシビリティ。Option+文字keyのhotkeyには入力監視 |
 | 任意権限 | ライフログに予定を表示する場合のcalendar |
-| 音声認識 | 通常の音声入力とボイスメモはApple SpeechAnalyzer。ライフログはSpeechAnalyzer、またはlocal downloadしたWhisperKit modelによる遅延認識 |
+| 音声認識 | 通常の音声入力とボイスメモはApple SpeechAnalyzer。ライフログはSpeechAnalyzer、またはlocal downloadしたwhisper.cpp GGML modelによる遅延認識 |
 | 既定の文章処理 | Apple Foundation Modelsによるオンデバイス処理 |
 | 表示言語 | システム設定、英語、日本語、簡体字中国語から選択可能。既定はシステム設定 |
 | 保存 | Mac内のSQLite、UserDefaults、Keychain、ライフログaudio file |
@@ -41,10 +41,10 @@
 ### 3.2 認識、mode、語彙
 
 - 通常の音声入力とボイスメモはApple SpeechAnalyzerへstreamし、暫定textをHUDへ表示します。通常の音声入力audioはfileやDBへ保存せず、外部へ送信しません。
-- ライフログだけはSpeechAnalyzerまたはローカルへダウンロードしたWhisperKit modelを選べます。連続録音とは分離し、入力signalから検出した発話burstを保存audioから遅延認識します。数十秒の表示latencyを許容し、WhisperKitでは速度より精度を優先したcuratedな比較的大きいlocal modelを選べます。
+- ライフログだけはSpeechAnalyzerまたはローカルへダウンロードしたwhisper.cpp GGML modelを選べます。連続録音とは分離し、入力signalから検出した発話burstを保存audioから遅延認識します。数十秒の表示latencyを許容し、速度より精度を優先したcuratedな比較的大きいlocal modelを選べます。
 - 発話開始後の無音flush閾値は、そのburst内の累積有声時間が3秒未満なら8秒、3秒以上10秒未満なら5秒、10秒以上30秒未満なら3秒、30秒以上なら2秒です。発話開始は校正したbackground noise floorとの差と継続時間で判定し、burstのwall timeが5分に達した場合は安全のためflushします。
 - 各遅延認識jobは参照範囲のaudioが永続化された後に実行し、発話timestampを録音開始時刻とaudio offsetから復元します。録音session開始時の語彙snapshotを完了まで固定し、保存audioの再処理では最新の有効語彙を使います。
-- WhisperKit modelは設定画面で一覧、download進捗と失敗理由を確認し、downloadをcancel、再試行、削除できます。Download完了前のmodelは認識に利用できず、使用中のjobがあるmodelは完了またはcancelまで削除できません。
+- whisper.cpp modelは設定画面で一覧、download進捗と失敗理由を確認し、downloadをcancel、再試行、削除できます。Download完了前のmodelは認識に利用できず、使用中のjobがあるmodelは完了またはcancelまで削除できません。
 - 録音開始時の前面appからmodeを一度決め、そのsession内では固定します。手動固定は自動選択より優先します。
 - modeは名前、対象bundle ID pattern、文章化の指示、言語、任意のmodel指定を持ち、作成、編集、削除、並べ替えができます。
 - 共通ruleは全modeへ適用されます。
@@ -96,8 +96,8 @@ cloud音声入力で送るのは今回の文字起こし、共通rule、mode指�
 - 30秒audio chunkは耐久化・復旧の単位で、認識jobの境界ではありません。認識はadaptiveな発話burst単位で遅延実行し、持続するnear-silenceを文字起こししません。
 - Main windowとmini windowは、発話burstが実際にSTTへ渡されてから完了するまで、記録状態とは別の一行の「文字起こし中」、認識対象audioの長さ、処理経過時間をShimmer表示します。表示がない間は発話区間の確定待ち、表示中はmodelの処理中として区別できます。
 - ライフログの認識言語は「表示言語に合わせる」「自動判定」「日本語」「English」「简体中文」から選べ、既定は表示言語に合わせます。表示言語が「システム設定」の場合も解決後の対応言語を使います。この設定はライフログだけに適用し、通常の音声入力、ボイスメモ、modeには伝播しません。
-- WhisperKitのcontrol tokenとtimestamp tokenはSTT engine境界で認識結果から除き、timeline、検索、書き出し、summary/TODO入力へ新しく保存しません。過去に保存されたtextへ表示時の補正や自動書換えは行いません。
-- WhisperKitの既定modelはWhisper Large v3 Turbo (632 MB)です。非TurboのLarge v3も明示的に選べます。
+- whisper.cppのcontrol tokenとtimestamp tokenはSTT engine境界で認識結果から除き、timeline、検索、書き出し、summary/TODO入力へ新しく保存しません。過去に保存されたtextへ表示時の補正や自動書換えは行いません。
+- whisper.cppの既定modelは量子化済みWhisper Large v3 Turbo Q5_0 (574 MB)です。非TurboのLarge v3 Q5_0も明示的に選べます。
 - 保存済みaudioは文字起こしと派生処理が両方成功するまで必ず保持します。既定の「処理後削除」では成功直後にaudioだけを削除し、保存済みの発話、conversation、summary、TODOは残します。設定は「処理後削除」「7日」「30日」から選べます。
 - 7日または30日を選んだ場合も、未処理・失敗chunkは期間を超えて保持し、次回起動後の再処理に使います。保持期間を短く変更したときは、新しい条件を満たす処理済みaudioを削除します。
 - 記録中の一時中断と、既定マイクの切替・接続解除などの音声構成変更では、現在のchunkを確定して自動再接続します。sleep時も安全に閉じ、記録意図が残ればwake後に再開します。マイク権限が失われた場合だけ自動再試行しません。
@@ -160,12 +160,12 @@ Koeのprimary colorはapp icon由来の爽やかなblueに固定し、利用者�
 | 場所 | 公開機能 |
 |---|---|
 | Menu bar | ライフログ/音声入力の用途別quick action。ライフログは記録切替、今日の画面、mini window、音声入力は録音、mode、直前結果、履歴を各tab内にまとめ、共通footerは設定と終了だけを置く。「今日を開く」「ミニウィンドウ」はsystem fontを直接描画するcompact buttonとする |
-| Main window | 通常起動時にライフログの今日を選択し、timelineの最新位置を表示。onboarding、ライフログ、今日のtimeline最下部からの手入力・音声memo追加、音声入力履歴。記録操作はtoolbar右肩ではなくtimeline内の状態表示に置く |
+| Main window | 通常起動時に前面のkey windowとして開き、ライフログの今日を選択してtimelineの最新位置を表示。onboarding、ライフログ、今日のtimeline最下部からの手入力・音声memo追加、音声入力履歴。記録操作はtoolbar右肩ではなくtimeline内の状態表示に置く |
 | Mini window | ライフログ状態、今日のtimelineへの手入力・音声memo追加。一度開いたら明示的に閉じるまで、ほかのapp、desktop Space、full-screen Spaceより手前に表示し続ける。記録操作はwindow右肩ではなく状態表示に置く |
 | 全TODO window | draft確認、編集、確定、完了、再開、削除 |
 | Settings: 共通 | 一般（表示言語を含む）、利用状況、語彙、privacy、連携 |
 | Settings: 音声入力 | hotkey、feedback、履歴、AI整形、mode。STTはSpeechAnalyzer固定 |
-| Settings: ライフログ | 記録・mini window・ボイスメモhotkey、入力device、STT engine・認識言語・WhisperKit model、audio保持、summary間隔、要約/TODO AI、calendar再取得 |
+| Settings: ライフログ | 記録・mini window・ボイスメモhotkey、入力device、STT engine・認識言語・whisper.cpp model、audio保持、summary間隔、要約/TODO AI、calendar再取得 |
 
 利用状況には音声入力回数・録音時間、ライフログの実発話時間、cloud AIの実測token数、Koe dataのstorage使用量を表示します。ライフログの実発話時間は、無音を含む連続録音時間ではなくtimelineに残る発話区間を日ごとに重複なく集計し、成功した音声入力と重なる発話は二重計上しません。local modelはcloud token集計に含みません。
 
@@ -179,14 +179,14 @@ Main window、mini window、menu barのライフログ状態表示は同じ記�
 |---|---|---|
 | 履歴、mode、語彙、ライフログ、TODO、利用量 | `~/Library/Application Support/Koe/koe.sqlite` | 履歴は無期限、各設定に従う |
 | ライフログaudio | Application Support配下 | 文字起こし・派生処理の成功後に削除。7日または30日へ変更可能 |
-| WhisperKit model | `~/Library/Application Support/Koe/Models/WhisperKit/` | 利用者が個別に削除、または全データ削除まで |
+| whisper.cpp model | `~/Library/Application Support/Koe/Models/WhisperCpp/` | 利用者が個別に削除、または全データ削除まで |
 | 一般設定（表示言語を含む） | app UserDefaults | app data削除まで |
 | API key | macOS Keychain | 個別削除まで |
 | DB backup | `~/Library/Application Support/Koe/Backups/` | 最新7file |
 
 - 既存DBは未適用migrationの直前にbackupします。通常起動でも同日重複なしで1日1回backupします。
 - backupに失敗した場合はmigrationを開始しません。
-- 「全データを削除」は履歴、mode、語彙、ライフログ、TODO、保存audio、download済みWhisperKit model、途中のdownload file、DB backupを削除します。設定とKeychainは画面で示す個別範囲に従います。
+- 「全データを削除」は履歴、mode、語彙、ライフログ、TODO、保存audio、download済みwhisper.cpp model、途中のdownload file、旧WhisperKit model、DB backupを削除します。設定とKeychainは画面で示す個別範囲に従います。
 - 履歴から語彙候補へ複製済みの短い根拠は履歴とは別dataであり、履歴だけの削除では残る場合があります。
 
 ## 7. macOS Shortcuts / App Intents
@@ -236,7 +236,7 @@ koe search "検索語" [--limit N]
 
 ## 10. 障害時の外部挙動
 
-- STTを確定できない場合は`failed`として理由を表示します。process再起動が必要なSpeechAnalyzer状態は利用者へ再起動を案内し、WhisperKit modelの未download・破損・容量不足は設定画面で復旧方法を示します。
+- STTを確定できない場合は`failed`として理由を表示します。process再起動が必要なSpeechAnalyzer状態は利用者へ再起動を案内し、whisper.cpp modelの未download・破損・容量不足は設定画面で復旧方法を示します。
 - 整形失敗はraw transcriptへのfallback、挿入失敗はclipboard退避になります。
 - DB初期化、保存、検索、backupの失敗は成功として扱わず、画面、CLI、MCPまたはlogへ理由を出します。
 - ライフログcapture中断は記録が有効な間だけ自動再接続し、保存済みchunkを失いません。
@@ -258,7 +258,7 @@ koe search "検索語" [--limit N]
 12. Calendar設定から予定を再取得すると、現在選択日のsnapshot、timeline、月間activityが更新される。
 13. マイク切替などの音声構成変更後も、記録開始意図が残る限りライフログcaptureが自動再開する。
 14. ボイスメモ一回につきmemoだけが一件作られ、通常の音声入力履歴とライフログutteranceには同じ内容が追加されない。
-15. 通常起動時にmain windowのライフログ画面が開き、memo入力欄の音声ボタンは専用hotkeyと同じボイスメモを開始・停止する。
+15. 通常起動時にmain windowのライフログ画面が前面のkey windowとして開き、memo入力欄の音声ボタンは専用hotkeyと同じボイスメモを開始・停止する。
 16. 「処理後削除」でも未処理・失敗chunkは残り、文字起こしと派生処理が成功したaudioだけが削除される。
 17. 通常起動時、main windowでライフログを開いた時、mini windowを開いた時は、今日のtimelineの最新項目が表示される。
 18. Timelineはheaderなしの一列で予定・発話・音声入力・memoを時刻順に表示する。日付選択時に予定一覧とtimelineが更新され、検索は`Command-F`でも開く。TODO本文は複数行へ折り返され、出典移動UIは表示しないがprovenance dataは保持する。
@@ -268,5 +268,5 @@ koe search "検索語" [--limit N]
 22. 月間calendarは今日を塗り、表示中の日を枠線で示し、既存TODOと同じ作業を新しいDraft TODOとして再提案しない。
 23. Summary/TODO派生は設定間隔の到来またはSummary viewの手動更新だけで実行し、録音停止を含むcapture状態変化では実行しない。確定済みTODOのIDと新しいDraftのIDは衝突しない。
 24. App起動だけではライフログ記録を開始せず、前回processの記録開始意図を復元しない。
-25. 通常の音声入力とボイスメモはSpeechAnalyzerを使い、ライフログだけはSpeechAnalyzerまたはdownload済みWhisperKit modelを選べる。Download・cancel・再試行・削除の状態と容量が設定に表示され、audioはMac外へ送信されない。
+25. 通常の音声入力とボイスメモはSpeechAnalyzerを使い、ライフログだけはSpeechAnalyzerまたはdownload済みwhisper.cpp modelを選べる。Download・cancel・再試行・削除の状態と容量が設定に表示され、audioはMac外へ送信されない。
 26. Life Logは起動直後に背景noise floorを校正し、その後も非発話中の入力から更新する。直近のnoise floorに対する十分な上昇が短時間継続した場合だけ発話burstを開始し、持続する空調音など一定のbackground noiseだけでは認識jobを作らない。発話burstは累積有声時間が3秒未満、3秒以上10秒未満、10秒以上30秒未満、30秒以上の順に8秒、5秒、3秒、2秒の無音でflushし、wall time 5分でも安全flushする。Timestampは保存audio offsetに一致し、語彙は録音session開始時のsnapshotで固定される。

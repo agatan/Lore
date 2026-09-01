@@ -8,13 +8,14 @@ public enum LlmPurpose: String, Sendable, CaseIterable {
 
 public enum LifeLogSttBackend: String, Codable, Sendable, CaseIterable, Identifiable {
     case speechAnalyzer
-    case whisperKit
+    /// Raw value is retained because it is persisted in released user settings.
+    case whisperCpp = "whisperKit"
 
     public var id: String { rawValue }
     public var displayName: String {
         switch self {
         case .speechAnalyzer: "Apple SpeechAnalyzer"
-        case .whisperKit: "WhisperKit"
+        case .whisperCpp: "whisper.cpp"
         }
     }
 }
@@ -27,9 +28,9 @@ public enum WhisperModel: String, Codable, Sendable, CaseIterable, Identifiable 
     public var id: String { rawValue }
     public var displayName: String {
         switch self {
-        case .small: "Whisper Small"
-        case .largeV3: "Whisper Large v3 (626 MB)"
-        case .largeV3Turbo: "Whisper Large v3 Turbo (632 MB)"
+        case .small: "Whisper Small Q5_1 (190 MB)"
+        case .largeV3: "Whisper Large v3 Q5_0 (1.08 GB)"
+        case .largeV3Turbo: "Whisper Large v3 Turbo Q5_0 (574 MB)"
         }
     }
 }
