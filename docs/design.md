@@ -222,4 +222,4 @@ DBは`~/Library/Application Support/Koe/koe.sqlite`です。`DatabaseQueue`を�
 
 ## 13. テスト配置
 
-`Tests/KoeKitTests`はdomain、formatting、engine、persistence、life log、automationを対象にします。`AdaptiveSpeechSegmenter`はbackground noiseの校正と追従、一定noiseだけではjobを作らないこと、相対的な発話levelが250ms続けば開始すること、3/10/30秒の有声境界で8/5/3/2秒へ切り替わること、5分で安全flushすることをclock非依存のdomain testで固定します。統合testはchunkをまたぐaudio offset timestamp、録音session開始時の語彙snapshot、失敗後の保存audio再処理を検証します。`make ui-test`は署名済みappを起動し、`Scripts/KoeUIE2E.swift`から主要CUJを検証します。詳細な実行方法とE2E契約は[testing.md](testing.md)を参照してください。
+`Tests/KoeKitTests`はdomain、formatting、engine、persistence、life log、automationを対象にします。`AdaptiveSpeechSegmenter`はbackground noiseの校正と追従、一定noiseだけではjobを作らないこと、相対的な発話levelが250ms続けば開始すること、3/10/30秒の有声境界で8/5/3/2秒へ切り替わること、5分で安全flushすることをclock非依存のdomain testで固定します。統合testはchunkをまたぐaudio offset timestamp、録音session開始時の語彙snapshot、失敗後の保存audio再処理を検証します。`make ui-test`は本番と別のbundle IDを持つ署名済み`KoeUITests.app`を別process instanceとして起動し、`Scripts/KoeUIE2E.swift`から主要CUJを検証します。UI test bundleは常に専用UserDefaultsとインメモリDBを使い、global hotkeyと権限監視を起動しません。E2E runnerは専用bundle ID以外のappを終了せず、本番bundle IDを指定された場合は実行を拒否します。詳細な実行方法とE2E契約は[testing.md](testing.md)を参照してください。

@@ -227,8 +227,10 @@ public final class AppEnvironment {
             KoeLog.persistence.error("DB の初期化に失敗: \(error.localizedDescription, privacy: .public)")
         }
 
-        startHotkeyMonitor()
-        startPermissionWatcher()
+        if !Self.isUITestBundle {
+            startHotkeyMonitor()
+            startPermissionWatcher()
+        }
 
         // 起動中に済ませておく。設定を開いた瞬間に問い合わせると、その待ちが表示の遅れになる。
         Task { await refreshLoginItem() }
@@ -295,10 +297,14 @@ public final class AppEnvironment {
 
     static var usesScreenshotDemoData: Bool {
 #if DEBUG
-        ProcessInfo.processInfo.arguments.contains("--koe-screenshot-demo") || usesEmptyUITestData
+        isUITestBundle || ProcessInfo.processInfo.arguments.contains("--koe-screenshot-demo") || usesEmptyUITestData
 #else
         false
 #endif
+    }
+
+    static var isUITestBundle: Bool {
+        Bundle.main.bundleIdentifier == "dev.agatan.Koe.UIE2E"
     }
 
     static var usesEmptyUITestData: Bool {

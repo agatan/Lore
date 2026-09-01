@@ -3,9 +3,9 @@
 Koeの自動テストは二層に分けます。
 
 - `make test`: ドメイン状態遷移、永続化、音声・LLM境界、書き出し形式を高速に検証する。
-- `make ui-test`: 署名済みのKoe.appをテスト専用インメモリDBで起動し、macOS Accessibility APIで実画面を操作する。
+- `make ui-test`: 署名済みのKoeUITests.appをテスト専用インモリDBで起動し、macOS Accessibility APIで実画面を操作する。
 
-UI E2Eは内部のView構造ではなく、利用者が認識する操作とアクセシビリティ識別子だけに依存します。テストデータは実際のKoe DBへ保存しません。
+UI E2Eは内部のView構造ではなく、利用者が認識する操作とアクセシビリティ識別子だけに依存します。`KoeUITests.app`は本番と別のbundle ID、process instance、UserDefaultsドメインを持ち、常にインメモリDBを開きます。global hotkeyと権限監視を起動しないため、起動中の本番Koeのプロセス、設定、利用者DBに干渉しません。E2E runnerが終了するのはテスト用bundle IDだけで、本番の`Koe.app`を渡すと実行を拒否します。
 
 ## 変更の進め方
 

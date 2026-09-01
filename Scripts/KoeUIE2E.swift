@@ -161,19 +161,26 @@ private struct AXDriver {
 
 @main
 private enum KoeUIE2E {
+    private static let uiTestBundleIdentifier = "dev.agatan.Koe.UIE2E"
+
     @MainActor
     static func main() async {
         do {
+            let appURL = URL(fileURLWithPath: CommandLine.arguments.dropFirst().first ?? "build/KoeUITests.app")
+            guard Bundle(url: appURL)?.bundleIdentifier == uiTestBundleIdentifier else {
+                throw UIE2EError.assertion(
+                    "UI E2Eはテスト専用bundleでのみ実行できます: \(appURL.path)"
+                )
+            }
             guard AXIsProcessTrusted() else { throw UIE2EError.accessibilityPermission }
-            let appURL = URL(fileURLWithPath: CommandLine.arguments.dropFirst().first ?? "build/Koe.app")
             try await runDailyReviewCUJ(appURL: appURL)
             try await runEmptyTodoCUJ(appURL: appURL)
             try await runAISettingsCUJ(appURL: appURL)
-            terminateKoe()
+            terminateTestApp()
             print("✓ UI E2E: 3 CUJs passed")
         } catch {
             fputs("✗ UI E2E: \(error.localizedDescription)\n", stderr)
-            terminateKoe()
+            terminateTestApp()
             exit(1)
         }
     }
@@ -246,7 +253,7 @@ private enum KoeUIE2E {
         try ui.press(identifier: "export.include.voice-input")
         _ = try ui.waitForString(identifier: "export.preview") { !$0.contains("レビューで確認したい観点を三つに整理する") }
         try ui.press(identifier: "export.close")
-        terminateKoe()
+        terminateTestApp()
     }
 
     @MainActor
@@ -294,34 +301,40 @@ private enum KoeUIE2E {
         arguments: [String],
         activates: Bool = true
     ) async throws -> NSRunningApplication {
-        terminateKoe()
+        terminateTestApp()
         let configuration = NSWorkspace.OpenConfiguration()
         configuration.arguments = arguments
         configuration.activates = activates
         configuration.createsNewApplicationInstance = true
         configuration.allowsRunningApplicationSubstitution = false
         do {
-            return try await NSWorkspace.shared.openApplication(at: url, configuration: configuration)
+            let app = try await NSWorkspace.shared.openApplication(at: url, configuration: configuration)
+            guard app.bundleIdentifier == uiTestBundleIdentifier else {
+                throw UIE2EError.launch(
+                    "テスト専用bundleではないprocessが返されました: \(app.bundleIdentifier ?? "不明")"
+                )
+            }
+            return app
         } catch {
-            throw UIE2EError.launch("Koeを起動できません: \(error.localizedDescription)")
+            throw UIE2EError.launch("KoeUITestsを起動できません: \(error.localizedDescription)")
         }
     }
 
     @MainActor
-    private static func terminateKoe() {
-        for app in NSRunningApplication.runningApplications(withBundleIdentifier: "dev.agatan.Koe") {
+    private static func terminateTestApp() {
+        for app in NSRunningApplication.runningApplications(withBundleIdentifier: uiTestBundleIdentifier) {
             app.terminate()
         }
         let gracefulDeadline = Date().addingTimeInterval(2)
-        while !NSRunningApplication.runningApplications(withBundleIdentifier: "dev.agatan.Koe").isEmpty,
+        while !NSRunningApplication.runningApplications(withBundleIdentifier: uiTestBundleIdentifier).isEmpty,
               Date() < gracefulDeadline {
             RunLoop.current.run(until: Date().addingTimeInterval(0.1))
         }
-        for app in NSRunningApplication.runningApplications(withBundleIdentifier: "dev.agatan.Koe") where !app.isTerminated {
+        for app in NSRunningApplication.runningApplications(withBundleIdentifier: uiTestBundleIdentifier) where !app.isTerminated {
             app.forceTerminate()
         }
         let forcedDeadline = Date().addingTimeInterval(2)
-        while !NSRunningApplication.runningApplications(withBundleIdentifier: "dev.agatan.Koe").isEmpty,
+        while !NSRunningApplication.runningApplications(withBundleIdentifier: uiTestBundleIdentifier).isEmpty,
               Date() < forcedDeadline {
             RunLoop.current.run(until: Date().addingTimeInterval(0.1))
         }

@@ -8,6 +8,8 @@ CONFIG ?= debug
 APP := build/Koe.app
 CONTENTS := $(APP)/Contents
 BUNDLE_ID := dev.agatan.Koe
+UI_TEST_APP := build/KoeUITests.app
+UI_TEST_BUNDLE_ID := dev.agatan.Koe.UIE2E
 
 # 署名 identity。ShortcutsのApp Intentに必要なApple Developmentを優先する。
 # なければ「Koe Dev」を使う(make dev-cert で作れる)。
@@ -19,7 +21,7 @@ CODESIGN_ID := $(if $(APPLE_DEV_IDENTITY),$(APPLE_DEV_IDENTITY),$(if $(DEV_IDENT
 BUILD_DIR = .build/$(CONFIG)
 WHISPER_FRAMEWORK = .build/artifacts/koe/WhisperFramework/whisper.xcframework/macos-arm64_x86_64/whisper.framework
 
-.PHONY: all build tools app run stop test ui-test clean install icon dev-cert reset-permissions
+.PHONY: all build tools app ui-test-app run stop test ui-test clean install icon dev-cert reset-permissions
 
 all: app
 
@@ -71,6 +73,16 @@ ifeq ($(CODESIGN_ID),-)
 	@echo "note: ad-hoc 署名です。リビルドごとにアクセシビリティの許可が外れます → make dev-cert"
 endif
 
+## 本番Koeとbundle ID、UserDefaults、process instanceを共有しないUI E2E専用app
+ui-test-app: app
+	@rm -rf "$(UI_TEST_APP)"
+	@cp -R "$(APP)" "$(UI_TEST_APP)"
+	@/usr/libexec/PlistBuddy -c "Set :CFBundleIdentifier $(UI_TEST_BUNDLE_ID)" "$(UI_TEST_APP)/Contents/Info.plist"
+	@codesign --force --sign "$(CODESIGN_ID)" --identifier $(UI_TEST_BUNDLE_ID) \
+		--timestamp=none "$(UI_TEST_APP)" 2>/dev/null \
+		|| codesign --force --sign "$(CODESIGN_ID)" --identifier $(UI_TEST_BUNDLE_ID) "$(UI_TEST_APP)"
+	@echo "built $(UI_TEST_APP) (signed with: $(CODESIGN_ID))"
+
 ## 起動中の Koe を落としてから再起動する
 run: stop app
 	@open "$(APP)"
@@ -83,10 +95,10 @@ test:
 	swift test
 
 ## 署名済みアプリを実際に操作する主要CUJのUI E2E
-ui-test: stop app
+ui-test: ui-test-app
 	@mkdir -p .build/ui-e2e
 	@xcrun swiftc -parse-as-library Scripts/KoeUIE2E.swift -o .build/ui-e2e/KoeUIE2E
-	@.build/ui-e2e/KoeUIE2E "$(abspath $(APP))"
+	@.build/ui-e2e/KoeUIE2E "$(abspath $(UI_TEST_APP))"
 
 clean:
 	rm -rf .build build

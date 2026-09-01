@@ -466,7 +466,7 @@ KoeMCP ──┘</pre>
 </section>
 <section id="tests">
 <h2>13. Test配置</h2>
-<p><code>Tests/KoeKitTests</code>はnoise floor校正と追従、相対level差による発話開始、8/5/3/2秒tier、5分flushをdomain testで固定します。<code>make ui-test</code>は主要CUJを検証します。</p>
+<p><code>Tests/KoeKitTests</code>はnoise floor校正と追従、相対level差による発話開始、8/5/3/2秒tier、5分flushをdomain testで固定します。<code>make ui-test</code>は本番と別のbundle IDを持つ署名済み<code>KoeUITests.app</code>を別process instanceとして起動して主要CUJを検証します。UI test bundleは専用UserDefaultsとインモリDBを使い、global hotkeyと権限監視を起動しません。E2E runnerは専用bundle ID以外のappを終了せず、本番bundle IDを指定された場合は実行を拒否します。</p>
 </section>
 </main>
 <footer>詳細な型と経路は <a href="design.md">Markdown版</a>、利用者との契約は <a href="spec.html">外部仕様</a> を参照してください。</footer>
