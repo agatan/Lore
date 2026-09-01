@@ -403,34 +403,40 @@ public final class AppEnvironment {
     }
 
     public func startHotkeyMonitor() {
-        guard Permissions.isAccessibilityGranted else {
-            hotkeyError = HotkeyMonitor.Failure.notTrusted.errorDescription
-            KoeLog.hotkey.error("アクセシビリティ権限がないためホットキー監視を開始できません")
-            return
+        let registrations: [(String, HotkeyMonitor, HotkeyBinding)] = [
+            ("音声入力", hotkeys, settings.hotkey),
+            ("ライフログ", lifeLogCaptureHotkeys, settings.lifeLogCaptureHotkey),
+            ("ミニウィンドウ", lifeLogMiniWindowHotkeys, settings.lifeLogMiniWindowHotkey),
+            ("ボイスメモ", voiceMemoHotkeys, settings.voiceMemoHotkey),
+        ]
+        var failures: [String] = []
+        var started = 0
+        for (name, monitor, binding) in registrations {
+            monitor.stop()
+            monitor.update(binding: binding)
+            do {
+                try monitor.start()
+                started += 1
+            } catch {
+                let message = "\(name): \(error.localizedDescription)"
+                failures.append(message)
+                KoeLog.hotkey.error("ホットキー監視を開始できません: \(message, privacy: .public)")
+            }
         }
-        do {
-            hotkeys.update(binding: settings.hotkey)
-            lifeLogCaptureHotkeys.update(binding: settings.lifeLogCaptureHotkey)
-            lifeLogMiniWindowHotkeys.update(binding: settings.lifeLogMiniWindowHotkey)
-            voiceMemoHotkeys.update(binding: settings.voiceMemoHotkey)
-            try hotkeys.start()
-            try lifeLogCaptureHotkeys.start()
-            try lifeLogMiniWindowHotkeys.start()
-            try voiceMemoHotkeys.start()
-            hotkeyError = nil
-            KoeLog.hotkey.info("4本のグローバルホットキー監視を開始しました")
-        } catch {
-            hotkeyError = error.localizedDescription
-            KoeLog.hotkey.error("ホットキー監視を開始できません: \(error.localizedDescription, privacy: .public)")
-        }
+        hotkeyError = failures.isEmpty ? nil : failures.joined(separator: " / ")
+        KoeLog.hotkey.info("\(started, privacy: .public)/4本のグローバルホットキー監視を開始しました")
     }
 
     /// ホットキーを記録している間はグローバル監視を止める(録音が始まらないように)。
     public func setHotkeyCaptureMode(_ capturing: Bool) {
-        hotkeys.setSuspended(capturing)
-        lifeLogCaptureHotkeys.setSuspended(capturing)
-        lifeLogMiniWindowHotkeys.setSuspended(capturing)
-        voiceMemoHotkeys.setSuspended(capturing)
+        if capturing {
+            hotkeys.stop()
+            lifeLogCaptureHotkeys.stop()
+            lifeLogMiniWindowHotkeys.stop()
+            voiceMemoHotkeys.stop()
+        } else {
+            startHotkeyMonitor()
+        }
     }
 
     public func updateHotkey(_ binding: HotkeyBinding) {
@@ -442,7 +448,7 @@ public final class AppEnvironment {
         }
         settings.hotkey = binding
         hotkeys.update(binding: binding)
-        if !hotkeys.isRunning { startHotkeyMonitor() }
+        startHotkeyMonitor()
     }
 
     public func updateLifeLogCaptureHotkey(_ binding: HotkeyBinding) {
@@ -455,7 +461,7 @@ public final class AppEnvironment {
         settings.lifeLogCaptureHotkey = binding
         lifeLogCaptureHotkeys.update(binding: binding)
         hotkeyError = nil
-        if !lifeLogCaptureHotkeys.isRunning { startHotkeyMonitor() }
+        startHotkeyMonitor()
     }
 
     public func updateLifeLogMiniWindowHotkey(_ binding: HotkeyBinding) {
@@ -468,7 +474,7 @@ public final class AppEnvironment {
         settings.lifeLogMiniWindowHotkey = binding
         lifeLogMiniWindowHotkeys.update(binding: binding)
         hotkeyError = nil
-        if !lifeLogMiniWindowHotkeys.isRunning { startHotkeyMonitor() }
+        startHotkeyMonitor()
     }
 
     public func updateVoiceMemoHotkey(_ binding: HotkeyBinding) {
@@ -481,7 +487,7 @@ public final class AppEnvironment {
         settings.voiceMemoHotkey = binding
         voiceMemoHotkeys.update(binding: binding)
         hotkeyError = nil
-        if !voiceMemoHotkeys.isRunning { startHotkeyMonitor() }
+        startHotkeyMonitor()
     }
 
     public func toggleVoiceMemo() {

@@ -68,6 +68,7 @@ Hotkey/UI
 ```
 
 - 短押しと長押しの解釈は`HotkeyGestureInterpreter`、対象アプリは`FrontmostAppObserver`、mode選択は`ModeResolver`が担当します。
+- `HotkeyMonitor`は文字キーとの組み合わせを`RegisterEventHotKey`で個別登録し、Secure Inputの影響を受ける全入力監視へ依存しません。修飾キー単体と録音中Escだけを`CGEventTap`で扱います。四つのmonitorは独立して開始し、一つの競合や権限不足でほかを停止しません。
 - `SessionDraft`がrecording、recognizing、formatting、insertingの進捗と計測値を保持し、永続化可能な`SessionRecord`へ確定します。
 - STT確定後、LLMを呼ぶ前にraw transcriptを保存します。
 - LLMのtimeout、利用不可、出力検証エラーではraw transcriptを挿入対象にします。
@@ -211,7 +212,7 @@ DBは`~/Library/Application Support/Koe/koe.sqlite`です。`DatabaseQueue`を�
 | 日別export変更 | `LifeLogTextExporter`, `LifeLogExportSheet`, CLI/MCP/App Intents | 音声入力の独立選択、人間向けMarkdown、background生成、snapshot整合、`swift test`、`make ui-test`、spec/design |
 | TODO重複防止 | `LifeLogDerivationService`, `LifeLogCoordinator`, `LifeLogStore` | 既存TODOをpromptへ含め、正規化後の同一文言を保存しない。新しいDraftには永続的に一意なIDを割り当て、確定済みの旧Draft IDと衝突しないdomain/persistence test、`swift test` |
 | 再要約trigger | `LifeLogCoordinator` | 設定間隔と手動要求だけをtriggerとし、録音停止・app終了・ボイスメモ・sleep・再接続では更新しないstate test、`swift test` |
-| global hotkeyの対イベント | `HotkeyMonitor` | 修飾キーなしの同一文字key-upを素通しする回帰test、`swift test` |
+| global hotkeyの対イベント | `HotkeyMonitor` | 登録型hotkeyのmodifier変換と競合分離、修飾キーなしの同一文字key-upを素通しする回帰test、`swift test` |
 | menu bar状態表示変更 | `MenuBarLabel`, `DictationCoordinator`, `LifeLogCoordinator` | 状態別表示test、`make ui-test`、spec/design |
 | 音声構成変更時の再接続 | `ContinuousAudioCapture`, `LifeLogCoordinator` | retry policyと一時停止状態test、`swift test`、spec/design |
 | life-log audio保持policy | `AppSettings`, `LifeLogStore`, `AppEnvironment`, `LifeLogSettingsView` | 処理成功・未処理・失敗・7日/30日境界test、`swift test`、spec/design |

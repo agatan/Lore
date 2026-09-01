@@ -235,6 +235,7 @@ KoeMCP ──┘</pre>
 <p>通常の音声入力はaudio fileを作りません。履歴にはtext、snapshot、状態、計測値を保存します。</p>
 </article>
 </div>
+<p><code>HotkeyMonitor</code>は文字キーとの組み合わせを<code>RegisterEventHotKey</code>で個別登録し、Secure Inputの影響を受ける全入力監視へ依存しません。修飾キー単体と録音中Escだけを<code>CGEventTap</code>で扱います。四つのmonitorは独立して開始し、一つの競合や権限不足でほかを停止しません。</p>
 <p><code>DictationCoordinator</code>のcapture destinationは通常音声入力とボイスメモです。ボイスメモは同じ<code>AudioCapture</code>、STT、HUDを使いますが、<code>SessionDraft</code>、LLM、<code>HistoryStore</code>、<code>TextInserter</code>を通らず、確定した生textを<code>LifeLogCoordinator.addMemo</code>へ一度だけ渡します。<code>AppEnvironment</code>は開始前にlife-log captureの安全な一時停止を待ち、終了結果にかかわらず記録意図に従って再開します。<code>LifeLogMemoComposer</code>の音声ボタンとglobal hotkeyはどちらも<code>AppEnvironment.toggleVoiceMemo</code>を呼び、Viewは準備中と録音中のstateだけを投影します。</p>
 </section>
 <section id="lifelog">
@@ -450,7 +451,7 @@ KoeMCP ──┘</pre>
 <tr><td>日別export</td><td>LifeLogTextExporter、LifeLogExportSheet、CLI/MCP/App Intents</td><td>音声入力の独立選択、人間向けMarkdown、background生成、snapshot整合、swift test、UI test</td></tr>
 <tr><td>TODO重複防止</td><td>LifeLogDerivationService、LifeLogCoordinator、LifeLogStore</td><td>既存TODOをpromptへ含め、正規化後の同一文言を保存しない。新しいDraftには永続的に一意なIDを割り当て、確定済みの旧Draft IDと衝突しないdomain/persistence test、swift test</td></tr>
 <tr><td>再要約trigger</td><td>LifeLogCoordinator</td><td>設定間隔と手動要求だけをtriggerとし、録音停止・app終了・ボイスメモ・sleep・再接続では更新しないstate test、swift test</td></tr>
-<tr><td>Global hotkeyの対event</td><td>HotkeyMonitor</td><td>修飾キーなしの同一文字key-upを素通しする回帰test、<code>swift test</code></td></tr>
+<tr><td>Global hotkeyの対event</td><td>HotkeyMonitor</td><td>登録型hotkeyのmodifier変換と競合分離、修飾キーなしの同一文字key-upを素通しする回帰test、<code>swift test</code></td></tr>
 <tr>
 <td>Menu bar状態表示</td>
 <td>MenuBarLabel、DictationCoordinator、LifeLogCoordinator</td>

@@ -1,6 +1,33 @@
 import AppKit
 @preconcurrency import CoreGraphics
+@preconcurrency import Carbon
 import Foundation
+
+private let koeHotKeySignature: OSType = 0x4B_6F_65_00 // "Koe\0"
+
+private func koeRegisteredHotKeyCallback(
+    nextHandler: EventHandlerCallRef?,
+    event: EventRef?,
+    userInfo: UnsafeMutableRawPointer?
+) -> OSStatus {
+    guard let event, let userInfo else { return OSStatus(eventNotHandledErr) }
+    var hotKeyID = EventHotKeyID()
+    let status = GetEventParameter(
+        event,
+        EventParamName(kEventParamDirectObject),
+        EventParamType(typeEventHotKeyID),
+        nil,
+        MemoryLayout<EventHotKeyID>.size,
+        nil,
+        &hotKeyID
+    )
+    guard status == noErr else { return status }
+    let kind = GetEventKind(event)
+    let monitor = Unmanaged<HotkeyMonitor>.fromOpaque(userInfo).takeUnretainedValue()
+    return MainActor.assumeIsolated {
+        monitor.handleRegisteredHotKey(id: hotKeyID.id, kind: kind)
+    }
+}
 
 /// イベントタップのコールバック。
 ///
@@ -34,11 +61,16 @@ public final class HotkeyMonitor {
     public enum Failure: LocalizedError {
         case notTrusted
         case tapCreationFailed
+        case registrationFailed(OSStatus)
 
         public var errorDescription: String? {
             switch self {
             case .notTrusted: "アクセシビリティの許可が必要です"
             case .tapCreationFailed: "キーボード監視を開始できませんでした"
+            case .registrationFailed(let status) where status == eventHotKeyExistsErr:
+                "このホットキーは別のアプリが使用しています"
+            case .registrationFailed(let status):
+                "ホットキーを登録できませんでした (\(status))"
             }
         }
     }
@@ -57,13 +89,41 @@ public final class HotkeyMonitor {
 
     private var tap: CFMachPort?
     private var runLoopSource: CFRunLoopSource?
+    private var registeredHotKey: EventHotKeyRef?
+    private var registeredHotKeyHandler: EventHandlerRef?
     private var pressStart: ContinuousClock.Instant?
+    private let registrationID: UInt32
+    private static var nextRegistrationID: UInt32 = 1
 
-    public init() {}
+    public init() {
+        registrationID = Self.nextRegistrationID
+        Self.nextRegistrationID &+= 1
+    }
 
     public func start() throws {
         guard !isRunning else { return }
-        guard Permissions.isAccessibilityGranted else { throw Failure.notTrusted }
+
+        switch binding {
+        case .key(let code, let modifiers):
+            try startRegisteredHotKey(code: code, modifiers: modifiers)
+            // 組み合わせhotkey自体は登録APIで受ける。通常音声入力だけはEsc cancel用に
+            // event tapも併設するが、作れなくても登録済みhotkeyは利用できる。
+            if shouldSwallowEscape != nil, Permissions.isAccessibilityGranted {
+                do {
+                    try startEventTap()
+                } catch {
+                    KoeLog.hotkey.error("Esc監視を開始できません: \(error.localizedDescription, privacy: .public)")
+                }
+            }
+        case .modifier:
+            guard Permissions.isAccessibilityGranted else { throw Failure.notTrusted }
+            try startEventTap()
+        }
+        isRunning = true
+    }
+
+    private func startEventTap() throws {
+        guard tap == nil else { return }
 
         let mask: CGEventMask =
             (1 << CGEventType.keyDown.rawValue)
@@ -87,10 +147,51 @@ public final class HotkeyMonitor {
 
         self.tap = tap
         self.runLoopSource = source
-        isRunning = true
+    }
+
+    private func startRegisteredHotKey(code: UInt16, modifiers: UInt64) throws {
+        var eventTypes = [
+            EventTypeSpec(eventClass: OSType(kEventClassKeyboard), eventKind: UInt32(kEventHotKeyPressed)),
+            EventTypeSpec(eventClass: OSType(kEventClassKeyboard), eventKind: UInt32(kEventHotKeyReleased)),
+        ]
+        var handler: EventHandlerRef?
+        let handlerStatus = InstallEventHandler(
+            GetApplicationEventTarget(),
+            koeRegisteredHotKeyCallback,
+            eventTypes.count,
+            &eventTypes,
+            Unmanaged.passUnretained(self).toOpaque(),
+            &handler
+        )
+        guard handlerStatus == noErr, let handler else {
+            throw Failure.registrationFailed(handlerStatus)
+        }
+
+        var hotKey: EventHotKeyRef?
+        let hotKeyID = EventHotKeyID(signature: koeHotKeySignature, id: registrationID)
+        let registrationStatus = RegisterEventHotKey(
+            UInt32(code),
+            Self.carbonModifiers(from: modifiers),
+            hotKeyID,
+            GetApplicationEventTarget(),
+            OptionBits(kEventHotKeyExclusive),
+            &hotKey
+        )
+        guard registrationStatus == noErr, let hotKey else {
+            RemoveEventHandler(handler)
+            throw Failure.registrationFailed(registrationStatus)
+        }
+        registeredHotKeyHandler = handler
+        registeredHotKey = hotKey
     }
 
     public func stop() {
+        if let registeredHotKey {
+            UnregisterEventHotKey(registeredHotKey)
+        }
+        if let registeredHotKeyHandler {
+            RemoveEventHandler(registeredHotKeyHandler)
+        }
         if let tap {
             CGEvent.tapEnable(tap: tap, enable: false)
         }
@@ -99,6 +200,8 @@ public final class HotkeyMonitor {
         }
         tap = nil
         runLoopSource = nil
+        registeredHotKey = nil
+        registeredHotKeyHandler = nil
         pressStart = nil
         isRunning = false
     }
@@ -120,9 +223,9 @@ public final class HotkeyMonitor {
     }
 
     /// 権限が付与された直後などに呼び直す。
-    public func restart() {
+    public func restart() throws {
         stop()
-        try? start()
+        try start()
     }
 
     /// テストから消費判定を検証するため internal。
@@ -149,7 +252,9 @@ public final class HotkeyMonitor {
             if code == 0x35, shouldSwallowEscape?() == true {
                 return nil
             }
-            guard case .key(let bound, let modifiers) = binding, code == bound else { return passthrough }
+            guard registeredHotKey == nil,
+                  case .key(let bound, let modifiers) = binding,
+                  code == bound else { return passthrough }
             guard event.flags.rawValue & modifiers == modifiers else { return passthrough }
             guard event.getIntegerValueField(.keyboardEventAutorepeat) == 0 else { return nil }
             beginPress()
@@ -157,7 +262,9 @@ public final class HotkeyMonitor {
 
         case .keyUp:
             let code = UInt16(event.getIntegerValueField(.keyboardEventKeycode))
-            guard case .key(let bound, _) = binding, code == bound else { return passthrough }
+            guard registeredHotKey == nil,
+                  case .key(let bound, _) = binding,
+                  code == bound else { return passthrough }
             guard pressStart != nil else { return passthrough }
             endPress()
             return nil
@@ -177,6 +284,30 @@ public final class HotkeyMonitor {
         default:
             return passthrough
         }
+    }
+
+    func handleRegisteredHotKey(id: UInt32, kind: UInt32) -> OSStatus {
+        guard id == registrationID, !isSuspended else { return OSStatus(eventNotHandledErr) }
+        switch kind {
+        case UInt32(kEventHotKeyPressed):
+            beginPress()
+            return noErr
+        case UInt32(kEventHotKeyReleased):
+            guard pressStart != nil else { return OSStatus(eventNotHandledErr) }
+            endPress()
+            return noErr
+        default:
+            return OSStatus(eventNotHandledErr)
+        }
+    }
+
+    static func carbonModifiers(from flags: UInt64) -> UInt32 {
+        var modifiers: UInt32 = 0
+        if flags & 0x0004_0000 != 0 { modifiers |= UInt32(controlKey) }
+        if flags & 0x0008_0000 != 0 { modifiers |= UInt32(optionKey) }
+        if flags & 0x0002_0000 != 0 { modifiers |= UInt32(shiftKey) }
+        if flags & 0x0010_0000 != 0 { modifiers |= UInt32(cmdKey) }
+        return modifiers
     }
 
     private func beginPress() {

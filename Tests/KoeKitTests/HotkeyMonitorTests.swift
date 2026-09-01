@@ -11,12 +11,22 @@ import Testing
 @Suite("ホットキーのイベント消費")
 struct HotkeyMonitorTests {
     static let optionFlag: UInt64 = 0x0008_0000
+    static let controlFlag: UInt64 = 0x0004_0000
+    static let shiftFlag: UInt64 = 0x0002_0000
+    static let commandFlag: UInt64 = 0x0010_0000
     static let keyD: UInt16 = 0x02
 
     private func keyEvent(_ code: UInt16, down: Bool, flags: UInt64) -> CGEvent {
         let event = CGEvent(keyboardEventSource: nil, virtualKey: code, keyDown: down)!
         event.flags = CGEventFlags(rawValue: flags)
         return event
+    }
+
+    @Test("CGEventの修飾キーを登録型hotkeyへ変換する")
+    func convertsModifiersForRegisteredHotKey() {
+        #expect(HotkeyMonitor.carbonModifiers(from: Self.controlFlag | Self.optionFlag) == 0x1800)
+        #expect(HotkeyMonitor.carbonModifiers(from: Self.shiftFlag | Self.commandFlag) == 0x0300)
+        #expect(HotkeyMonitor.carbonModifiers(from: 0) == 0)
     }
 
     @Test("⌥D を割り当てたら押下・離上の両方を飲み込む")
