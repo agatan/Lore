@@ -3,6 +3,8 @@ import SwiftUI
 struct LifeLogMiniWindow: View {
     var env: AppEnvironment
     @State private var memoDraft = ""
+    @State private var timelineIsAtBottom = true
+    @State private var timelineFollowsLatest = true
 
     var body: some View {
         VStack(spacing: 0) {
@@ -29,6 +31,28 @@ struct LifeLogMiniWindow: View {
                     await Task.yield()
                     proxy.scrollTo("bottom", anchor: .bottom)
                 }
+                .onChange(of: items.last?.id) { _, _ in
+                    guard timelineFollowsLatest else { return }
+                    Task { @MainActor in
+                        await Task.yield()
+                        withAnimation(.easeOut(duration: 0.2)) {
+                            proxy.scrollTo("bottom", anchor: .bottom)
+                        }
+                    }
+                }
+                .onScrollGeometryChange(for: Bool.self) { geometry in
+                    LifeLogTimelineScrollPolicy.isAtBottom(
+                        contentOffsetY: geometry.contentOffset.y,
+                        contentHeight: geometry.contentSize.height,
+                        containerHeight: geometry.containerSize.height
+                    )
+                } action: { _, isAtBottom in
+                    timelineIsAtBottom = isAtBottom
+                }
+                .onScrollPhaseChange { oldPhase, newPhase in
+                    guard oldPhase.isScrolling, newPhase == .idle else { return }
+                    timelineFollowsLatest = timelineIsAtBottom
+                }
                 .overlay {
                     if items.isEmpty && !env.lifeLog.isCapturing && !env.lifeLog.isTranscribing {
                         VStack(spacing: 10) {
@@ -42,11 +66,13 @@ struct LifeLogMiniWindow: View {
                 }
             }
 
-            if let startedAt = env.lifeLog.activeTranscriptionStartedAt {
+            if let startedAt = env.lifeLog.liveActivityStartedAt {
                 Divider().opacity(0.35)
                 LifeLogTranscriptionProgressRow(
                     startedAt: startedAt,
-                    audioDuration: env.lifeLog.activeTranscriptionAudioDuration ?? 0
+                    audioDuration: env.lifeLog.liveActivityAudioDuration,
+                    isListening: env.lifeLog.isHearingSpeech,
+                    transcript: env.lifeLog.liveTranscript
                 )
             }
             Divider().opacity(0.35)

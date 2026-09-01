@@ -16,6 +16,9 @@ public final class LifeLogCoordinator {
     public private(set) var monthActivity: [String: LifeLogDayActivity] = [:]
     public private(set) var liveTranscript = ""
     public private(set) var isTranscribing = false
+    public private(set) var isHearingSpeech = false
+    public private(set) var liveSpeechStartedAt: Date?
+    public private(set) var liveSpeechAudioDuration: TimeInterval = 0
     public private(set) var activeTranscriptionStartedAt: Date?
     public private(set) var activeTranscriptionAudioDuration: TimeInterval?
     public private(set) var isRecoveringCapture = false
@@ -36,6 +39,8 @@ public final class LifeLogCoordinator {
     private var participatingEventsOnly: @MainActor () -> Bool = { true }
     private var audioProcessingCompleted: @MainActor () async -> Void = {}
     private var liveTranscriptionTask: Task<Void, Never>?
+    private var livePreviewTask: Task<Void, Never>?
+    private var livePreviewRevision = 0
     private var liveSessionStartedAt: Date?
     private var liveSessionID: String?
     private var liveChunks: [LifeLogAudioChunk] = []
@@ -58,6 +63,10 @@ public final class LifeLogCoordinator {
     private var derivationScheduleTask: Task<Void, Never>?
     private var followsCurrentDay = true
     private var isSuspendedForSleep = false
+
+    nonisolated static let livePreviewInitialDelay: TimeInterval = 1.5
+    nonisolated static let livePreviewRefreshInterval: TimeInterval = 1.5
+    nonisolated static let livePreviewWindowDuration: TimeInterval = 5
 
     public init() {
         capture.onCommitted = { [weak self] chunk in await self?.commitLiveChunk(chunk) }
@@ -171,6 +180,17 @@ public final class LifeLogCoordinator {
 
     public var hasCaptureIntent: Bool { captureRequested }
 
+    public var liveActivityStartedAt: Date? {
+        if isHearingSpeech { return liveSpeechStartedAt }
+        return activeTranscriptionStartedAt ?? liveSpeechStartedAt
+    }
+
+    public var liveActivityAudioDuration: TimeInterval {
+        liveSpeechStartedAt == nil
+            ? (activeTranscriptionAudioDuration ?? 0)
+            : liveSpeechAudioDuration
+    }
+
     public func dismissError() {
         errorMessage = nil
     }
@@ -279,6 +299,10 @@ public final class LifeLogCoordinator {
             liveChunks = []
             pendingLiveSegments = []
             liveFinalTranscript = ""
+            liveTranscript = ""
+            isHearingSpeech = false
+            liveSpeechStartedAt = nil
+            liveSpeechAudioDuration = 0
             liveRecognitionFailed = false
             hasLiveSegments = false
             transcriptionFinished = false
@@ -350,6 +374,8 @@ public final class LifeLogCoordinator {
         var preRoll: [AudioChunk] = []
         var burst: [AudioChunk] = []
         var lastVoicedIndex = 0
+        var lastPreviewDuration: TimeInterval?
+        var hasQualifiedBurst = false
 
         for await chunk in audio {
             if Task.isCancelled { break }
@@ -369,25 +395,61 @@ public final class LifeLogCoordinator {
                 if wasVoiced {
                     lastVoicedIndex = burst.endIndex
                 }
+                if let evidence = segmenter.currentBurstEvidence,
+                   evidence.isTranscriptionCandidate {
+                    if !hasQualifiedBurst {
+                        hasQualifiedBurst = true
+                        beginLiveSpeechActivity()
+                    }
+                    updateLiveSpeechActivity(duration: evidence.burstDuration)
+                    if Self.shouldScheduleLivePreview(
+                        evidence: evidence,
+                        lastPreviewDuration: lastPreviewDuration,
+                        engineIdentifier: stt.identifier
+                    ) {
+                        lastPreviewDuration = evidence.burstDuration
+                        scheduleLivePreview(Self.trailingBuffers(
+                            from: burst,
+                            maximumDuration: Self.livePreviewWindowDuration
+                        ), hints: hints, stt: stt)
+                    }
+                }
             case .flush:
                 burst.append(chunk)
+                isHearingSpeech = false
+                await cancelLivePreview()
+                if segmenter.completedBurstEvidence?.isTranscriptionCandidate == true {
+                    let recognitionBuffers = Self.trimmingTrailingSilence(
+                        from: burst,
+                        lastVoicedIndex: lastVoicedIndex,
+                        retainedDuration: 0.5
+                    )
+                    capture.checkpoint()
+                    await recognizeBurst(recognitionBuffers, hints: hints, stt: stt)
+                }
+                finishLiveSpeechActivity()
+                burst = []
+                lastVoicedIndex = 0
+                lastPreviewDuration = nil
+                hasQualifiedBurst = false
+            }
+        }
+        if segmenter.finish(), !burst.isEmpty {
+            isHearingSpeech = false
+            await cancelLivePreview()
+            if segmenter.completedBurstEvidence?.isTranscriptionCandidate == true {
                 let recognitionBuffers = Self.trimmingTrailingSilence(
                     from: burst,
                     lastVoicedIndex: lastVoicedIndex,
                     retainedDuration: 0.5
                 )
+                capture.checkpoint()
                 await recognizeBurst(recognitionBuffers, hints: hints, stt: stt)
-                burst = []
-                lastVoicedIndex = 0
             }
-        }
-        if segmenter.finish(), !burst.isEmpty {
-            let recognitionBuffers = Self.trimmingTrailingSilence(
-                from: burst,
-                lastVoicedIndex: lastVoicedIndex,
-                retainedDuration: 0.5
-            )
-            await recognizeBurst(recognitionBuffers, hints: hints, stt: stt)
+            finishLiveSpeechActivity()
+        } else {
+            await cancelLivePreview()
+            finishLiveSpeechActivity()
         }
         transcriptionFinished = true
         await finishLiveSessionIfReady()
@@ -437,6 +499,97 @@ public final class LifeLogCoordinator {
             liveRecognitionFailed = true
             fail(error)
         }
+    }
+
+    private func beginLiveSpeechActivity() {
+        isHearingSpeech = true
+        liveSpeechStartedAt = Date()
+        liveSpeechAudioDuration = 0
+        liveTranscript = ""
+    }
+
+    private func updateLiveSpeechActivity(duration: TimeInterval) {
+        liveSpeechAudioDuration = max(0, duration)
+    }
+
+    private func finishLiveSpeechActivity() {
+        isHearingSpeech = false
+        liveSpeechStartedAt = nil
+        liveSpeechAudioDuration = 0
+        liveTranscript = ""
+    }
+
+    private func scheduleLivePreview(
+        _ buffers: [AudioChunk],
+        hints: SttHints,
+        stt: any SttEngine
+    ) {
+        livePreviewRevision += 1
+        let revision = livePreviewRevision
+        livePreviewTask?.cancel()
+        let (stream, continuation) = AsyncStream<AudioChunk>.makeStream()
+        for buffer in buffers { continuation.yield(buffer) }
+        continuation.finish()
+        livePreviewTask = Task { [weak self] in
+            do {
+                var preview = ""
+                for try await event in stt.transcribe(audio: stream, hints: hints) {
+                    switch event {
+                    case .partial(let text), .sessionFinished(let text, _):
+                        preview = text
+                    case .segment:
+                        break
+                    }
+                }
+                guard !Task.isCancelled else { return }
+                self?.applyLivePreview(preview, revision: revision)
+            } catch EngineError.cancelled {
+                // A newer rolling window or the authoritative final pass superseded this preview.
+            } catch is CancellationError {
+                // A newer rolling window or the authoritative final pass superseded this preview.
+            } catch {
+                KoeLog.engine.error("ライフログ暫定文字起こしに失敗: \(error.localizedDescription, privacy: .public)")
+            }
+        }
+    }
+
+    private func applyLivePreview(_ text: String, revision: Int) {
+        guard revision == livePreviewRevision, isHearingSpeech else { return }
+        liveTranscript = text.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private func cancelLivePreview() async {
+        livePreviewRevision += 1
+        let task = livePreviewTask
+        livePreviewTask = nil
+        task?.cancel()
+        await task?.value
+    }
+
+    nonisolated static func shouldScheduleLivePreview(
+        evidence: SpeechBurstEvidence,
+        lastPreviewDuration: TimeInterval?,
+        engineIdentifier: EngineIdentifier
+    ) -> Bool {
+        guard engineIdentifier == .whisperCpp,
+              evidence.isTranscriptionCandidate,
+              evidence.burstDuration >= livePreviewInitialDelay else { return false }
+        guard let lastPreviewDuration else { return true }
+        return evidence.burstDuration - lastPreviewDuration >= livePreviewRefreshInterval
+    }
+
+    private nonisolated static func trailingBuffers(
+        from buffers: [AudioChunk],
+        maximumDuration: TimeInterval
+    ) -> [AudioChunk] {
+        var start = buffers.endIndex
+        var duration: TimeInterval = 0
+        while start > buffers.startIndex, duration < maximumDuration {
+            start = buffers.index(before: start)
+            let buffer = buffers[start].buffer
+            duration += Double(buffer.frameLength) / buffer.format.sampleRate
+        }
+        return Array(buffers[start...])
     }
 
     /// 認識結果が必ず復旧可能な音声を参照するよう、対象範囲のfile commitを先に待つ。
@@ -577,6 +730,8 @@ public final class LifeLogCoordinator {
         } catch { fail(error) }
         isTranscribing = false
         liveTranscript = ""
+        await cancelLivePreview()
+        finishLiveSpeechActivity()
         liveSessionStartedAt = nil
         liveSessionID = nil
         liveChunks = []
@@ -742,13 +897,6 @@ public final class LifeLogCoordinator {
             } else {
                 // 異常終了前に保存できた暫定発話を、同じ音声からの再認識結果で置き換える。
                 try await database.lifeLog.deleteUtterances(audioChunkID: chunk.id)
-                isTranscribing = true
-                liveTranscript = ""
-                beginActiveTranscription(audioDuration: chunk.captureEndedAt.timeIntervalSince(chunk.captureStartedAt))
-                defer {
-                    endActiveTranscription()
-                    isTranscribing = false
-                }
                 let enabledVocabulary = vocabulary().filter(\.enabled)
                 let hints = SttHints(
                     contextualStrings: FormattingPolicy.contextualStrings(enabledVocabulary),
@@ -756,45 +904,98 @@ public final class LifeLogCoordinator {
                     languagePreference: transcriptionLanguage()
                 )
                 let stt = engines.lifeLogStt
-                let format = try await stt.prepare(hints: hints) ?? AudioFormats.canonical
-                let audio = try audioStream(url: URL(fileURLWithPath: chunk.localPath), targetFormat: format)
-                var transcript = ""
-                var timedSegments: [(text: String, start: TimeInterval, end: TimeInterval)] = []
-                for try await event in stt.transcribe(audio: audio, hints: hints) {
-                    switch event {
-                    case .segment(let text, let start, let end):
-                        timedSegments.append((text, start, end))
-                    case .sessionFinished(let text, _):
-                        transcript = text
-                        liveTranscript = text
-                    case .partial(let text):
-                        liveTranscript = text
+                let gateAudio = try audioChunks(
+                    url: URL(fileURLWithPath: chunk.localPath),
+                    targetFormat: AudioFormats.canonical
+                )
+                let gateBursts = Self.recognizableSpeechBursts(from: gateAudio)
+                var recognized: [LifeLogUtterance] = []
+                if !gateBursts.isEmpty {
+                    // 無音chunkではmodelやSpeechAnalyzerの準備にも到達しない。
+                    let format = try await stt.prepare(hints: hints) ?? AudioFormats.canonical
+                    let audio = try audioChunks(
+                        url: URL(fileURLWithPath: chunk.localPath),
+                        targetFormat: format
+                    )
+                    let bursts = Self.recognizableSpeechBursts(from: audio)
+                    isTranscribing = true
+                    liveTranscript = ""
+                    beginActiveTranscription(audioDuration: bursts.reduce(0) { $0 + $1.duration })
+                    defer {
+                        endActiveTranscription()
+                        isTranscribing = false
+                    }
+                    let capturedDay = try await database.lifeLog.day(
+                        chunk.captureStartedAt,
+                        participatingOnly: participatingEventsOnly()
+                    )
+                    for burst in bursts {
+                        var transcript = ""
+                        var timedSegments: [(text: String, start: TimeInterval, end: TimeInterval)] = []
+                        for try await event in stt.transcribe(
+                            audio: Self.audioStream(from: burst.buffers),
+                            hints: hints
+                        ) {
+                            switch event {
+                            case .segment(let text, let start, let end):
+                                timedSegments.append((text, start, end))
+                            case .sessionFinished(let text, _):
+                                transcript = text
+                                liveTranscript = text
+                            case .partial(let text):
+                                liveTranscript = text
+                            }
+                        }
+                        if timedSegments.isEmpty {
+                            let value = transcript.trimmingCharacters(in: .whitespacesAndNewlines)
+                            guard !value.isEmpty else { continue }
+                            let startedAt = chunk.captureStartedAt.addingTimeInterval(burst.startOffset)
+                            let event = capturedDay.calendarEvents
+                                .filter { $0.contains(startedAt, tolerance: 120) }
+                                .min { $0.endsAt.timeIntervalSince($0.startsAt) < $1.endsAt.timeIntervalSince($1.startsAt) }
+                            recognized.append(LifeLogUtterance(
+                                id: Self.transcriptionSegmentID(
+                                    scopeID: "utterance-\(chunk.id)",
+                                    startOffset: burst.startOffset,
+                                    endOffset: burst.endOffset
+                                ),
+                                startedAt: startedAt,
+                                endedAt: min(chunk.captureEndedAt, chunk.captureStartedAt.addingTimeInterval(burst.endOffset)),
+                                text: value,
+                                audioChunkID: chunk.id,
+                                calendarEventID: event?.id
+                            ))
+                        } else {
+                            recognized.append(contentsOf: timedSegments.map { segment in
+                                let startOffset = burst.startOffset + max(0, segment.start)
+                                let endOffset = burst.startOffset + max(segment.start, segment.end)
+                                let startedAt = chunk.captureStartedAt.addingTimeInterval(startOffset)
+                                let endedAt = min(
+                                    chunk.captureEndedAt,
+                                    chunk.captureStartedAt.addingTimeInterval(endOffset)
+                                )
+                                let event = capturedDay.calendarEvents
+                                    .filter { $0.contains(startedAt, tolerance: 120) }
+                                    .min { $0.endsAt.timeIntervalSince($0.startsAt) < $1.endsAt.timeIntervalSince($1.startsAt) }
+                                return LifeLogUtterance(
+                                    id: Self.transcriptionSegmentID(
+                                        scopeID: "utterance-\(chunk.id)",
+                                        startOffset: startOffset,
+                                        endOffset: endOffset
+                                    ),
+                                    startedAt: startedAt,
+                                    endedAt: endedAt,
+                                    text: segment.text,
+                                    audioChunkID: chunk.id,
+                                    calendarEventID: event?.id
+                                )
+                            })
+                        }
                     }
                 }
                 chunk.transcriptionState = .transcribed
                 try await database.lifeLog.save(audioChunk: chunk)
-                let capturedDay = try await database.lifeLog.day(chunk.captureStartedAt, participatingOnly: participatingEventsOnly())
-                if transcript.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                    utterances = []
-                } else if timedSegments.isEmpty {
-                    let event = capturedDay.calendarEvents.filter { $0.contains(chunk.captureStartedAt, tolerance: 120) }.min { $0.endsAt.timeIntervalSince($0.startsAt) < $1.endsAt.timeIntervalSince($1.startsAt) }
-                    utterances = [LifeLogUtterance(id: "utterance-\(chunk.id)-0", startedAt: chunk.captureStartedAt,
-                                                   endedAt: chunk.captureEndedAt, text: transcript,
-                                                   audioChunkID: chunk.id, calendarEventID: event?.id)]
-                } else {
-                    utterances = timedSegments.map { segment in
-                        let startedAt = chunk.captureStartedAt.addingTimeInterval(max(0, segment.start))
-                        let endedAt = min(chunk.captureEndedAt, chunk.captureStartedAt.addingTimeInterval(max(segment.start, segment.end)))
-                        let event = capturedDay.calendarEvents.filter { $0.contains(startedAt, tolerance: 120) }.min { $0.endsAt.timeIntervalSince($0.startsAt) < $1.endsAt.timeIntervalSince($1.startsAt) }
-                        return LifeLogUtterance(id: Self.transcriptionSegmentID(
-                            scopeID: "utterance-\(chunk.id)",
-                            startOffset: segment.start,
-                            endOffset: segment.end
-                        ), startedAt: startedAt,
-                                                endedAt: endedAt, text: segment.text,
-                                                audioChunkID: chunk.id, calendarEventID: event?.id)
-                    }
-                }
+                utterances = recognized
                 for utterance in utterances { try await database.lifeLog.save(utterance: utterance) }
                 await reload()
                 liveTranscript = ""
@@ -922,7 +1123,71 @@ public final class LifeLogCoordinator {
         try await store.save(summary: summary, replacingDrafts: drafts)
     }
 
-    private func audioStream(url: URL, targetFormat: AVAudioFormat) throws -> AsyncStream<AudioChunk> {
+    struct RecognizableSpeechBurst: Sendable {
+        let buffers: [AudioChunk]
+        let startOffset: TimeInterval
+        let endOffset: TimeInterval
+
+        var duration: TimeInterval { max(0, endOffset - startOffset) }
+    }
+
+    /// 保存audioの復旧時もlive captureと同じ発話境界を使い、30秒chunk全体をSTTへ渡さない。
+    nonisolated static func recognizableSpeechBursts(from audio: [AudioChunk]) -> [RecognizableSpeechBurst] {
+        var segmenter = AdaptiveSpeechSegmenter()
+        var preRoll: [AudioChunk] = []
+        var burst: [AudioChunk] = []
+        var lastVoicedIndex = 0
+        var result: [RecognizableSpeechBurst] = []
+
+        func candidate(from buffers: [AudioChunk], lastVoicedIndex: Int) -> RecognizableSpeechBurst? {
+            let trimmed = Self.trimmingTrailingSilence(
+                from: buffers,
+                lastVoicedIndex: lastVoicedIndex,
+                retainedDuration: 0.5
+            )
+            guard let first = trimmed.first, let last = trimmed.last else { return nil }
+            let sampleRate = first.buffer.format.sampleRate
+            return RecognizableSpeechBurst(
+                buffers: trimmed,
+                startOffset: Double(first.frameOffset) / sampleRate,
+                endOffset: Double(last.frameOffset + AVAudioFramePosition(last.buffer.frameLength)) / sampleRate
+            )
+        }
+
+        for chunk in audio {
+            let duration = Double(chunk.buffer.frameLength) / chunk.buffer.format.sampleRate
+            let level = AudioCapture.level(of: chunk.buffer)
+            let wasVoiced = segmenter.isActive && segmenter.considersSpeech(level: level)
+            switch segmenter.consume(level: level, duration: duration) {
+            case .ignore:
+                preRoll.append(chunk)
+                Self.trimPreRoll(&preRoll, maximumDuration: 1)
+            case .started:
+                burst = preRoll + [chunk]
+                preRoll = []
+                lastVoicedIndex = burst.endIndex
+            case .buffer:
+                burst.append(chunk)
+                if wasVoiced { lastVoicedIndex = burst.endIndex }
+            case .flush:
+                burst.append(chunk)
+                if segmenter.completedBurstEvidence?.isTranscriptionCandidate == true,
+                   let value = candidate(from: burst, lastVoicedIndex: lastVoicedIndex) {
+                    result.append(value)
+                }
+                burst = []
+                lastVoicedIndex = 0
+            }
+        }
+        if segmenter.finish(),
+           segmenter.completedBurstEvidence?.isTranscriptionCandidate == true,
+           let value = candidate(from: burst, lastVoicedIndex: lastVoicedIndex) {
+            result.append(value)
+        }
+        return result
+    }
+
+    private func audioChunks(url: URL, targetFormat: AVAudioFormat) throws -> [AudioChunk] {
         let file = try AVAudioFile(forReading: url)
         let resampler = Resampler(from: file.processingFormat, to: targetFormat)
         var chunks: [AudioChunk] = []
@@ -935,6 +1200,10 @@ public final class LifeLogCoordinator {
             chunks.append(AudioChunk(buffer: converted, frameOffset: offset))
             offset += AVAudioFramePosition(converted.frameLength)
         }
+        return chunks
+    }
+
+    private nonisolated static func audioStream(from chunks: [AudioChunk]) -> AsyncStream<AudioChunk> {
         let (stream, continuation) = AsyncStream<AudioChunk>.makeStream()
         for chunk in chunks { continuation.yield(chunk) }
         continuation.finish()

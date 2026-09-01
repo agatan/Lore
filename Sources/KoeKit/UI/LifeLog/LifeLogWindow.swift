@@ -8,6 +8,8 @@ public struct LifeLogWindow: View {
     @State private var showsExportSheet = false
     @State private var showsSearchSheet = false
     @State private var showsCalendarEvents = false
+    @State private var timelineIsAtBottom = true
+    @State private var timelineFollowsLatest = true
     @State private var memoDraft = ""
 
     public init(env: AppEnvironment) { self.env = env }
@@ -146,11 +148,34 @@ public struct LifeLogWindow: View {
                 }
                 .onChange(of: env.lifeLog.sourceNavigationRevision) { _, _ in
                     guard let id = env.lifeLog.highlightedTimelineItemID else { return }
+                    timelineFollowsLatest = false
                     withAnimation { proxy.scrollTo(id, anchor: .center) }
+                }
+                .onChange(of: timelineItems.last?.id) { _, _ in
+                    guard timelineFollowsLatest else { return }
+                    Task { @MainActor in
+                        await Task.yield()
+                        withAnimation(.easeOut(duration: 0.2)) {
+                            proxy.scrollTo("timeline-bottom", anchor: .bottom)
+                        }
+                    }
                 }
                 .task {
                     await Task.yield()
                     proxy.scrollTo("timeline-bottom", anchor: .bottom)
+                }
+                .onScrollGeometryChange(for: Bool.self) { geometry in
+                    LifeLogTimelineScrollPolicy.isAtBottom(
+                        contentOffsetY: geometry.contentOffset.y,
+                        contentHeight: geometry.contentSize.height,
+                        containerHeight: geometry.containerSize.height
+                    )
+                } action: { _, isAtBottom in
+                    timelineIsAtBottom = isAtBottom
+                }
+                .onScrollPhaseChange { oldPhase, newPhase in
+                    guard oldPhase.isScrolling, newPhase == .idle else { return }
+                    timelineFollowsLatest = timelineIsAtBottom
                 }
                 .overlay { if timelineItems.isEmpty { timelineEmptyState } }
             }
@@ -166,11 +191,13 @@ public struct LifeLogWindow: View {
                 .padding(8)
                 .accessibilityIdentifier("life-log.notice")
             }
-            if let startedAt = env.lifeLog.activeTranscriptionStartedAt {
+            if let startedAt = env.lifeLog.liveActivityStartedAt {
                 Divider().opacity(0.35)
                 LifeLogTranscriptionProgressRow(
                     startedAt: startedAt,
-                    audioDuration: env.lifeLog.activeTranscriptionAudioDuration ?? 0
+                    audioDuration: env.lifeLog.liveActivityAudioDuration,
+                    isListening: env.lifeLog.isHearingSpeech,
+                    transcript: env.lifeLog.liveTranscript
                 )
             }
             Divider().opacity(0.35)

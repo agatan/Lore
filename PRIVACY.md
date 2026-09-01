@@ -1,6 +1,6 @@
 # Koe のデータ取り扱い
 
-Koe は音声認識をMac上で実行し、Cloud STTは使用しません。通常の音声入力とボイスメモはApple SpeechAnalyzerを使います。Daily Life LogだけはSpeechAnalyzer、または利用者がローカルへダウンロードしたwhisper.cpp GGML modelを選べます。Life Logの録音は連続して耐久化しますが、文字起こしはinput signalから検出した発話burstだけを保存audioから遅延処理し、持続するnear-silenceをmodelへ渡しません。通常の口述音声は処理中のメモリだけで扱い、保存も送信もしません。
+Koe は音声認識をMac上で実行し、Cloud STTは使用しません。通常の音声入力とボイスメモはApple SpeechAnalyzerを使います。Daily Life LogだけはSpeechAnalyzer、または利用者がローカルへダウンロードしたwhisper.cpp GGML modelを選べます。Life Logの録音は連続して耐久化します。発話中のrolling暫定textは入力確認のためメモリだけに保持し、DBへ保存しません。発話量と有声比率を満たさない生活音・無音はSTTへ渡さず、有効な発話だけを保存audioから最終認識します。通常の口述音声は処理中のメモリだけで扱い、保存も送信もしません。
 
 Daily Life LogのContinuous Captureを利用者が明示的に有効にした場合は例外です。文字起こしや後段処理に失敗しても発話を回収できるよう、短い音声チャンクを `~/Library/Application Support/Koe/LifeLog/` に保存します。保存音声を外部サービスへ送信しません。
 

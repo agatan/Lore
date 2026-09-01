@@ -80,7 +80,7 @@ Hotkey/UI
 
 ## 5. ライフログパイプライン
 
-`LifeLogCoordinator`は音声入力と状態を共有せず、専用の`ContinuousAudioCapture`で音声を耐久化します。Life Log STTはadaptiveな発話burstごとの遅延jobとして選択engineを実行します。
+`LifeLogCoordinator`は音声入力と状態を共有せず、専用の`ContinuousAudioCapture`で音声を耐久化します。Life Log STTはadaptiveな発話burstごとのrolling previewと確定jobとして選択engineを実行します。
 
 ```text
 capture request
@@ -94,11 +94,11 @@ capture request
 ```
 
 - 初回開始前にローカルaudio保存への明示同意が必要です。
-- 30秒chunkは復旧・保持の単位であり、認識jobの境界ではありません。Burst rangeがchunkをまたぐ場合も、対応する全chunkのcommit後に一つのjob入力として扱います。
-- `AdaptiveSpeechSegmenter`はcaptureやSTT adapterから独立したdomain policyです。開始直後の1秒をbackground noise floorの校正に使い、非発話中も緩やかに更新します。絶対下限に加えてnoise floorからのlevel差と倍率を満たす入力が250ms継続した場合だけburstを始め、一定のbackground noiseをjobにしません。Burst内の累積有声時間が3秒未満なら8秒、3秒以上10秒未満なら5秒、10秒以上30秒未満なら3秒、30秒以上なら2秒の連続無音でflushします。連続入力でもburstのwall timeが5分に達したら安全flushします。
+- Audio chunkは復旧・保持の単位です。30秒ごと、またはburst確定時にcommitし、burst rangeがchunkをまたぐ場合も対応する全chunkのcommit後に一つの確定job入力として扱います。
+- `AdaptiveSpeechSegmenter`はcaptureやSTT adapterから独立したdomain policyです。開始直後の1秒をbackground noise floorの校正に使い、非発話中も緩やかに更新します。絶対下限に加えてnoise floorからのlevel差と倍率を満たす入力が250ms継続した場合だけburstを始め、一定のbackground noiseをjobにしません。Burst内の累積有声時間が30秒未満なら1.5秒、30秒以上なら1秒の連続無音でflushします。Flush時は累積有声時間0.5秒以上かつ有声比率20%以上を`SpeechBurstEvidence`の不変条件とし、満たさない候補はSTTとcheckpointへ渡しません。連続入力でもburstのwall timeが5分に達したら安全flushします。
 - Flush後は参照する全audio rangeのcommitを待ってからjobを開始します。Recognition結果のtimestampはcapture開始時刻へaudio offsetを加えて導出し、処理開始時刻やmodel内部clockを正本にしません。Vocabularyは録音session開始時にsnapshot化し、途中の設定変更を混ぜません。保存audioの再処理では最新の有効語彙を使います。
 - 音声入力と重なる区間もraw audioと認識済みutteranceを保存します。読み取り時は音声入力の実録音区間（`startedAt`から`audioDurationMs`）を使って重複を解決し、成功した`SessionRecord`をtimeline、検索、exportの正本として、重なるlife-log utteranceをそれらのprojectionから除外します。summary/TODOは通常音声入力も重なるlife-log utteranceも使いません。cancelled/failed sessionは正本にせず、life-log utteranceを残します。この優先順位はUIや個別adapterではなくdomainの共通projectionに置きます。
-- 未処理・失敗chunkは保存状態を持ち、起動後に古い順で再処理します。明確な無音chunkは`peakLevel`で除外します。
+- 未処理・失敗chunkは保存状態を持ち、起動後に古い順で再処理します。明確な無音chunkは`peakLevel`で除外し、それ以外も保存audioを同じ`AdaptiveSpeechSegmenter`で発話burstへ戻してから、有効なburstだけを個別にSTTへ渡します。30秒chunk全体や無音区間をLarge modelへ入力しません。
 - Audio保持policyは「処理後削除」を既定とし、「7日」「30日」を選択可能にします。削除可能なのは`transcription_state = transcribed`かつ`processing_state = extracted`のchunkだけです。「処理後削除」は両状態の保存完了後、「7日」「30日」はさらに`capture_ended_at`から指定日数の経過後にfileを削除します。DBのchunk metadataと派生dataは削除しません。
 - `LifeLogStore`が処理状態と保持policyから削除可能なaudio URLを決定し、`AppEnvironment`はその結果だけをfile systemから削除します。Policy変更時と起動時に同じuse caseを実行し、未処理・失敗chunkを期間だけで削除しない不変条件を一か所に置きます。
 - `ContinuousAudioCapture`は実際のaudio writerの開始・停止を`onRunningChanged`で通知し、`LifeLogCoordinator.isCapturing`だけを全UIの実録音状態へ投影します。音声構成変更時はwriterを安全にcommitし、同じprocessの`captureRequested`が残り、sleepまたはボイスメモによる一時停止中でなければbackoff付きで新しい入力構成へ再接続します。マイク権限拒否だけは再試行しません。確定済みburst jobはcapture再接続と独立して継続・再試行します。
@@ -110,14 +110,18 @@ capture request
 
 ## 6. Engine構成
 
-`EngineRegistry`は通常の音声入力・ボイスメモを`SpeechAnalyzerStt`へ固定し、ライフログの遅延jobだけを`SpeechAnalyzerStt`または`WhisperCppStt`から選びます。音声入力整形用とライフログ派生用の`LlmEngine`選択は分離します。
+`EngineRegistry`は通常の音声入力・ボイスメモを`SpeechAnalyzerStt`へ固定し、ライフログのpreview・確定jobだけを`SpeechAnalyzerStt`または`WhisperCppStt`から選びます。音声入力整形用とライフログ派生用の`LlmEngine`選択は分離します。
 
 | STT | 実装 | Model | Audio送信 |
 |---|---|---|---|
 | Apple SpeechAnalyzer | `SpeechAnalyzerStt` | macOS管理 | なし |
 | whisper.cpp deferred | `WhisperCppStt` | Koeがlocal downloadを管理するaccuracy優先のcurated GGML model | なし |
 
-`WhisperCppStt`はLarge v3 Turbo Q5_0 574 MBを既定とし、accuracy優先の非Turbo Large v3 Q5_0も選べるmodel catalog、download、cancel、SHA-256検証、削除を一つの境界に置きます。推論contextは同じmodelを使うjob間で共有し、actor境界で直列実行します。実行中jobが参照するmodelは完了またはcancelまで削除しません。Model lifecycleは遅延jobが所有し、download完了だけでは推論contextをloadしません。公式XCFrameworkのC APIをprocess内から直接呼び、GGML modelをMetalとCPUで実行します。Core ML modelとANE specialization、Homebrewや外部CLIへの依存は持ちません。Decode時はspecial tokenを出力せず、engine境界でもcontrol/timestamp tokenを除去してからdomain eventへ渡します。Read/UI側の補正や既存dataの自動書換えは持ちません。Model取得通信に音声、文字起こし、利用者dataを含めません。
+`WhisperCppStt`はLarge v3 Turbo Q5_0 574 MBを既定とし、accuracy優先の非Turbo Large v3 Q5_0も選べるmodel catalog、download、cancel、SHA-256検証、削除を一つの境界に置きます。推論contextは同じmodelを使うjob間で共有し、actor境界で直列実行します。実行中jobが参照するmodelは完了またはcancelまで削除しません。Model lifecycleはLife Log jobが所有し、download完了だけでは推論contextをloadしません。公式XCFrameworkのC APIをprocess内から直接呼び、GGML modelをMetalとCPUで実行します。Core ML modelとANE specialization、Homebrewや外部CLIへの依存は持ちません。Decode時はspecial tokenを出力せず、engine境界でもcontrol/timestamp tokenを除去してからdomain eventへ渡します。Read/UI側の補正や既存dataの自動書換えは持ちません。Model取得通信に音声、文字起こし、利用者dataを含めません。
+
+`LifeLogCoordinator`は`SpeechBurstEvidence`が有効になった発話だけを対象に、発話検出から1.5秒後、その後1.5秒ごとに直近5秒のsnapshotを同じ`SttEngine`へ渡し、結果をephemeralな`liveTranscript`としてだけ公開します。新しいsnapshotまたはburst確定時は古いpreview jobをcancelし、actorで直列化された最終認識を優先します。Preview失敗は記録済みaudioの再処理状態を変更せずlogへ残し、最終認識の失敗だけをchunkのfailureとして扱います。有効なburst確定時だけ`ContinuousAudioCapture`へcheckpointを要求し、writer queue上の入力を原子的にcommitして次のfileを開始します。確定結果は対象audioのcommit callbackを待ってからtimestamp付きで保存します。Checkpoint後は定期rotationを30秒後へ再設定し、同時rotationによる空chunkを作りません。
+
+Main/mini timelineはそれぞれ、scroll geometryから末尾が見えているかを保持します。初回と追従中のitem追加だけ末尾へscrollし、利用者操作またはsource navigationで末尾を離れた場合は追従を停止します。末尾へ戻った時だけ追従を再開し、更新のたびに過去の閲覧位置を奪いません。
 
 | Backend | 実装 | 接続先 | Mac外への文字送信 |
 |---|---|---|---|
@@ -200,7 +204,7 @@ DBは`~/Library/Application Support/Koe/koe.sqlite`です。`DatabaseQueue`を�
 | 変更 | 最初に確認する場所 | 同時に更新するもの |
 |---|---|---|
 | provider追加 | `FormattingBackend`, `EngineRegistry`, `ModelsSettingsView`, `SecretStore` | privacy表示、engine tests、spec/design |
-| Life Log発話burst・STT変更 | `AdaptiveSpeechSegmenter`, `LifeLogCoordinator`, `SttEngine` | background noise floor校正、相対level差と継続時間、8/5/3/2秒tier、5分flush、chunk跨ぎoffset、語彙snapshot、再試行test、`swift test` |
+| Life Log発話burst・STT変更 | `AdaptiveSpeechSegmenter`, `LifeLogCoordinator`, `SttEngine` | background noise floor校正、0.5秒/20% gate、1.5/1秒tier、1.5秒preview、5秒rolling window、無音時STTなし、5分flush、chunk跨ぎoffset、語彙snapshot、再試行test、`swift test` |
 | Whisper model管理変更 | `EngineRegistry`, `WhisperCppStt`, settings | download失敗/cancel/検証、job中削除防止、全削除、privacy、`swift test`、`make ui-test` |
 | 永続model変更 | `Domain`, `KoeDatabase.migrator`, 対応Store | migration test、backup/delete test、design |
 | dictation状態変更 | `SessionDraft`, `DictationCoordinator`, `HistoryStore` | HUD/history、state tests、spec/design |
@@ -222,4 +226,4 @@ DBは`~/Library/Application Support/Koe/koe.sqlite`です。`DatabaseQueue`を�
 
 ## 13. テスト配置
 
-`Tests/KoeKitTests`はdomain、formatting、engine、persistence、life log、automationを対象にします。`AdaptiveSpeechSegmenter`はbackground noiseの校正と追従、一定noiseだけではjobを作らないこと、相対的な発話levelが250ms続けば開始すること、3/10/30秒の有声境界で8/5/3/2秒へ切り替わること、5分で安全flushすることをclock非依存のdomain testで固定します。統合testはchunkをまたぐaudio offset timestamp、録音session開始時の語彙snapshot、失敗後の保存audio再処理を検証します。`make ui-test`は本番と別のbundle IDを持つ署名済み`KoeUITests.app`を別process instanceとして起動し、`Scripts/KoeUIE2E.swift`から主要CUJを検証します。UI test bundleは常に専用UserDefaultsとインメモリDBを使い、global hotkeyと権限監視を起動しません。E2E runnerは専用bundle ID以外のappを終了せず、本番bundle IDを指定された場合は実行を拒否します。詳細な実行方法とE2E契約は[testing.md](testing.md)を参照してください。
+`Tests/KoeKitTests`はdomain、formatting、engine、persistence、life log、automationを対象にします。`AdaptiveSpeechSegmenter`はbackground noiseの校正と追従、一定noiseだけではjobを作らないこと、相対的な発話levelが250ms続けば開始すること、30秒未満/以上の有声境界で1.5/1秒へ切り替わること、5分で安全flushすることをclock非依存のdomain testで固定します。統合testはwhisper.cppのpreview cadence、chunkをまたぐaudio offset timestamp、録音session開始時の語彙snapshot、失敗後の保存audio再処理を検証します。`make ui-test`は署名済みappを起動し、`Scripts/KoeUIE2E.swift`から主要CUJを検証します。詳細な実行方法とE2E契約は[testing.md](testing.md)を参照してください。

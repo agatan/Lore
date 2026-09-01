@@ -1,5 +1,27 @@
 import Foundation
 
+/// STTへ渡すに足る発話量が一つのburstに含まれるかを表す。
+/// 一瞬の生活音をWhisperへ渡すと無音hallucinationと不要な推論負荷になるため、
+/// 発話開始より強い条件を確定・previewの共通境界にする。
+public struct SpeechBurstEvidence: Sendable, Equatable {
+    public static let minimumVoicedDuration: TimeInterval = 0.5
+    public static let minimumVoicedRatio = 0.2
+
+    public let voicedDuration: TimeInterval
+    public let burstDuration: TimeInterval
+    public let peakSpeechLevel: Float
+
+    public var voicedRatio: Double {
+        guard burstDuration > 0 else { return 0 }
+        return min(1, voicedDuration / burstDuration)
+    }
+
+    public var isTranscriptionCandidate: Bool {
+        voicedDuration + 0.000_001 >= Self.minimumVoicedDuration
+            && voicedRatio + 0.000_001 >= Self.minimumVoicedRatio
+    }
+}
+
 /// 常時録音の入力levelから、背景noiseとの差がある発話burstだけを後追いSTTへ渡す。
 public struct AdaptiveSpeechSegmenter: Sendable {
     public enum Decision: Sendable, Equatable {
@@ -23,6 +45,8 @@ public struct AdaptiveSpeechSegmenter: Sendable {
     public private(set) var voicedDuration: TimeInterval = 0
     public private(set) var silenceDuration: TimeInterval = 0
     public private(set) var burstDuration: TimeInterval = 0
+    public private(set) var peakSpeechLevel: Float = 0
+    public private(set) var completedBurstEvidence: SpeechBurstEvidence?
     private var calibratedDuration: TimeInterval = 0
     private var candidateDuration: TimeInterval = 0
     private var candidateMinimum: Float = .greatestFiniteMagnitude
@@ -67,6 +91,8 @@ public struct AdaptiveSpeechSegmenter: Sendable {
             voicedDuration = candidateDuration
             silenceDuration = 0
             burstDuration = candidateDuration
+            peakSpeechLevel = candidateMaximum
+            completedBurstEvidence = nil
             resetCandidate()
             return .started
         }
@@ -75,12 +101,14 @@ public struct AdaptiveSpeechSegmenter: Sendable {
         if considersSpeech(level: level) {
             voicedDuration += duration
             silenceDuration = 0
+            peakSpeechLevel = max(peakSpeechLevel, level)
         } else {
             silenceDuration += duration
         }
 
         if silenceDuration >= Self.requiredSilence(afterVoicedDuration: voicedDuration)
             || burstDuration >= Self.maximumBurstDuration {
+            completedBurstEvidence = currentBurstEvidence
             reset()
             return .flush
         }
@@ -89,8 +117,18 @@ public struct AdaptiveSpeechSegmenter: Sendable {
 
     public mutating func finish() -> Bool {
         let hadSpeech = isActive && voicedDuration > 0
+        completedBurstEvidence = hadSpeech ? currentBurstEvidence : nil
         reset()
         return hadSpeech
+    }
+
+    public var currentBurstEvidence: SpeechBurstEvidence? {
+        guard isActive else { return nil }
+        return SpeechBurstEvidence(
+            voicedDuration: voicedDuration,
+            burstDuration: burstDuration,
+            peakSpeechLevel: peakSpeechLevel
+        )
     }
 
     public func considersSpeech(level: Float) -> Bool {
@@ -99,10 +137,8 @@ public struct AdaptiveSpeechSegmenter: Sendable {
 
     public static func requiredSilence(afterVoicedDuration duration: TimeInterval) -> TimeInterval {
         switch duration {
-        case ..<3: 8
-        case ..<10: 5
-        case ..<30: 3
-        default: 2
+        case ..<30: 1.5
+        default: 1
         }
     }
 
@@ -111,6 +147,7 @@ public struct AdaptiveSpeechSegmenter: Sendable {
         voicedDuration = 0
         silenceDuration = 0
         burstDuration = 0
+        peakSpeechLevel = 0
         resetCandidate()
         updateSpeechThreshold()
     }

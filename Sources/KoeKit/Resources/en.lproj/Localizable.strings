@@ -289,4 +289,5 @@
 "表示言語に合わせる" = "Match Display Language";
 "自動判定" = "Detect Automatically";
 "文字起こし中" = "Transcribing";
+"聞き取り中" = "Listening";
 "処理" = "Processing";

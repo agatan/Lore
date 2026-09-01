@@ -41,9 +41,10 @@
 ### 3.2 認識、mode、語彙
 
 - 通常の音声入力とボイスメモはApple SpeechAnalyzerへstreamし、暫定textをHUDへ表示します。通常の音声入力audioはfileやDBへ保存せず、外部へ送信しません。
-- ライフログだけはSpeechAnalyzerまたはローカルへダウンロードしたwhisper.cpp GGML modelを選べます。連続録音とは分離し、入力signalから検出した発話burstを保存audioから遅延認識します。数十秒の表示latencyを許容し、速度より精度を優先したcuratedな比較的大きいlocal modelを選べます。
-- 発話開始後の無音flush閾値は、そのburst内の累積有声時間が3秒未満なら8秒、3秒以上10秒未満なら5秒、10秒以上30秒未満なら3秒、30秒以上なら2秒です。発話開始は校正したbackground noise floorとの差と継続時間で判定し、burstのwall timeが5分に達した場合は安全のためflushします。
-- 各遅延認識jobは参照範囲のaudioが永続化された後に実行し、発話timestampを録音開始時刻とaudio offsetから復元します。録音session開始時の語彙snapshotを完了まで固定し、保存audioの再処理では最新の有効語彙を使います。
+- ライフログだけはSpeechAnalyzerまたはローカルへダウンロードしたwhisper.cpp GGML modelを選べます。連続録音とは分離し、入力signalから検出した発話burstを保存audioから認識します。比較的大きいlocal modelでも入力確認を待たせないよう、発話中は暫定textを表示し、発話確定後にtimestamp付きの最終結果へ置き換えます。
+- 発話開始は校正したbackground noise floorとの差と継続時間で判定します。開始候補のうち、累積有声時間が0.5秒未満、またはburst全体に占める有声比率が20%未満の入力は生活音・無音として破棄し、whisper.cppを起動しません。Whisper.cpp選択時は有効な発話の開始から1.5秒後、その後1.5秒ごとに直近5秒を暫定認識します。累積有声時間が30秒未満なら1.5秒、30秒以上なら1秒の連続無音でburstを確定し、wall timeが5分に達した場合も安全のため確定します。
+- 暫定textは入力確認専用で、誤認識や語尾が更新されることがあります。DB、timeline、検索、書き出し、summary/TODOへは保存せず、永続化済みaudioを使った最終認識だけを正本にします。
+- 有効な発話を確定した時点で現在の復旧用audio chunkも原子的に確定し、参照範囲のaudioが永続化された後に最終認識を実行します。破棄した候補のためにはchunkを分割しません。発話timestampは録音開始時刻とaudio offsetから復元します。録音session開始時の語彙snapshotを完了まで固定し、保存audioの再処理でも同じ発話判定で無音区間を除き、最新の有効語彙を使います。
 - whisper.cpp modelは設定画面で一覧、download進捗と失敗理由を確認し、downloadをcancel、再試行、削除できます。Download完了前のmodelは認識に利用できず、使用中のjobがあるmodelは完了またはcancelまで削除できません。
 - 録音開始時の前面appからmodeを一度決め、そのsession内では固定します。手動固定は自動選択より優先します。
 - modeは名前、対象bundle ID pattern、文章化の指示、言語、任意のmodel指定を持ち、作成、編集、削除、並べ替えができます。
@@ -92,9 +93,10 @@ cloud音声入力で送るのは今回の文字起こし、共通rule、mode指�
 - app起動時は常に停止状態から始まり、前回終了時に記録中だった場合も自動開始しません。記録中のsleep復帰や入力device再接続は、同じprocessに残る記録開始意図に限って自動再開します。
 - ライフログの全画面とmenu barは、実際のaudio writerの稼働状態を同じ記録状態として表示します。実際に録音している間もmenu barのKoe icon本体はmonochromeで表示し、右下の小さなrose色badgeだけを着色します。開始準備中、停止中、再接続待ちではbadgeを外し、それぞれを録音中とは表示しません。
 - 音声入力との同時利用中も、復旧可能なライフログaudioの記録は中断しません。音声入力が成功した区間はそのraw transcriptを正本とし、同じ録音時間帯にライフログ側で認識した発話はtimeline、検索、書き出し、summary/TODO生成へ重複して出しません。音声入力がcancelまたは失敗した場合は、ライフログ側の発話を残します。
-- 入力deviceを選択できます。記録中は30秒ごとに復旧用`.m4a`をMac内へ確定します。audioをcloud STTへ送ることはありません。
-- 30秒audio chunkは耐久化・復旧の単位で、認識jobの境界ではありません。認識はadaptiveな発話burst単位で遅延実行し、持続するnear-silenceを文字起こししません。
-- Main windowとmini windowは、発話burstが実際にSTTへ渡されてから完了するまで、記録状態とは別の一行の「文字起こし中」、認識対象audioの長さ、処理経過時間をShimmer表示します。表示がない間は発話区間の確定待ち、表示中はmodelの処理中として区別できます。
+- 入力deviceを選択できます。記録中は30秒ごと、または発話burstの確定時に復旧用`.m4a`をMac内へ確定します。audioをcloud STTへ送ることはありません。
+- audio chunkは耐久化・復旧の単位です。30秒に達する前でも発話確定時にchunkを閉じるため、最終認識は次の定期確定を待ちません。認識はadaptiveな発話burst単位で実行し、持続するnear-silenceを文字起こししません。
+- Main windowとmini windowは有効な発話と判定した時点で、記録状態とは別のlive行を表示します。最初は「聞き取り中」と入力audioの長さを示し、暫定認識が返るたびにrolling textを更新します。発話確定後は「文字起こし中」と処理経過時間へ切り替え、最終結果をtimelineへ保存したらlive行を消します。
+- Main windowとmini windowのtimelineは初回表示時に最新項目を表示し、利用者が最新位置にいる間だけ、新しい発話・メモ・予定へ自動追従します。利用者が過去へscrollした場合や検索・予定から項目へ移動した場合は追従を止め、末尾へ戻ると再開します。
 - ライフログの認識言語は「表示言語に合わせる」「自動判定」「日本語」「English」「简体中文」から選べ、既定は表示言語に合わせます。表示言語が「システム設定」の場合も解決後の対応言語を使います。この設定はライフログだけに適用し、通常の音声入力、ボイスメモ、modeには伝播しません。
 - whisper.cppのcontrol tokenとtimestamp tokenはSTT engine境界で認識結果から除き、timeline、検索、書き出し、summary/TODO入力へ新しく保存しません。過去に保存されたtextへ表示時の補正や自動書換えは行いません。
 - whisper.cppの既定modelは量子化済みWhisper Large v3 Turbo Q5_0 (574 MB)です。非TurboのLarge v3 Q5_0も明示的に選べます。
@@ -269,4 +271,5 @@ koe search "検索語" [--limit N]
 23. Summary/TODO派生は設定間隔の到来またはSummary viewの手動更新だけで実行し、録音停止を含むcapture状態変化では実行しない。確定済みTODOのIDと新しいDraftのIDは衝突しない。
 24. App起動だけではライフログ記録を開始せず、前回processの記録開始意図を復元しない。
 25. 通常の音声入力とボイスメモはSpeechAnalyzerを使い、ライフログだけはSpeechAnalyzerまたはdownload済みwhisper.cpp modelを選べる。Download・cancel・再試行・削除の状態と容量が設定に表示され、audioはMac外へ送信されない。
-26. Life Logは起動直後に背景noise floorを校正し、その後も非発話中の入力から更新する。直近のnoise floorに対する十分な上昇が短時間継続した場合だけ発話burstを開始し、持続する空調音など一定のbackground noiseだけでは認識jobを作らない。発話burstは累積有声時間が3秒未満、3秒以上10秒未満、10秒以上30秒未満、30秒以上の順に8秒、5秒、3秒、2秒の無音でflushし、wall time 5分でも安全flushする。Timestampは保存audio offsetに一致し、語彙は録音session開始時のsnapshotで固定される。
+26. Life Logは起動直後に背景noise floorを校正し、その後も非発話中の入力から更新する。直近のnoise floorに対する十分な上昇が短時間継続した場合だけ発話burstを開始し、持続する空調音など一定のbackground noiseだけでは認識jobを作らない。Whisper.cppでは発話中に1.5秒cadence・直近5秒の暫定textを表示し、30秒未満の発話は1.5秒、30秒以上は1秒の無音でflushする。Burst確定時にaudioをcommitし、timestampは保存audio offsetに一致する。暫定textは永続化せず、語彙は録音session開始時のsnapshotで固定される。
+27. 累積有声時間0.5秒未満または有声比率20%未満の候補はpreview、最終STT、burst checkpointを開始せず、保存audioの再処理でも除外する。Main/mini timelineは末尾表示中だけ新しい項目へ追従し、過去へscrollまたはsource移動した場合は追従を止め、末尾へ戻ると再開する。

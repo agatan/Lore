@@ -1,3 +1,4 @@
+import AVFAudio
 import Foundation
 import Synchronization
 import Testing
@@ -158,6 +159,79 @@ struct LifeLogTests {
         #expect(LifeLogCoordinator.shouldRetryCapture(after: ContinuousAudioCapture.Failure.configurationChanged))
         #expect(!LifeLogCoordinator.shouldRetryCapture(after: ContinuousAudioCapture.Failure.microphoneDenied))
         #expect(LifeLogCoordinator.shouldRetryCapture(after: ContinuousAudioCapture.Failure.noInputDevice))
+    }
+
+    @Test("発話checkpointは現在のaudioを確定して次のchunkを継続する")
+    func audioCheckpointCommitsAndContinues() async throws {
+        let root = FileManager.default.temporaryDirectory
+            .appending(path: "koe-audio-checkpoint-\(UUID().uuidString)", directoryHint: .isDirectory)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let (chunks, continuation) = AsyncStream<LifeLogAudioChunk>.makeStream()
+        let failure = Mutex<String?>(nil)
+        let format = AudioFormats.lifeLogStorage
+        guard let writer = DurableAudioChunkWriter(
+            root: root,
+            inputFormat: format,
+            committed: { continuation.yield($0) },
+            finished: { continuation.finish() },
+            failed: { error in
+                failure.withLock { $0 = error.localizedDescription }
+                continuation.finish()
+            }
+        ) else {
+            Issue.record("audio writerを作成できません")
+            return
+        }
+        let startedAt = Date(timeIntervalSince1970: 1_800_000_000)
+        try writer.start(at: startedAt)
+        writer.append(try Self.audioBuffer(format: format, duration: 0.2))
+        writer.rotate(at: startedAt.addingTimeInterval(0.2))
+        writer.append(try Self.audioBuffer(format: format, duration: 0.2))
+        writer.finish(at: startedAt.addingTimeInterval(0.4))
+
+        var committed: [LifeLogAudioChunk] = []
+        for await chunk in chunks { committed.append(chunk) }
+
+        #expect(failure.withLock { $0 } == nil)
+        #expect(committed.count == 2)
+        #expect(committed.allSatisfy { FileManager.default.fileExists(atPath: $0.localPath) })
+        let partials = try FileManager.default.contentsOfDirectory(
+            at: root.appending(path: LifeLogDateKey.string(for: startedAt)).appending(path: "audio"),
+            includingPropertiesForKeys: nil
+        ).filter { $0.lastPathComponent.contains(".partial.m4a") }
+        #expect(partials.isEmpty)
+    }
+
+    @Test("audio checkpointの保存先失敗を呼び出し元へ返す")
+    func audioCheckpointSurfacesStartFailure() throws {
+        let root = FileManager.default.temporaryDirectory
+            .appending(path: "koe-audio-checkpoint-file-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: root) }
+        #expect(FileManager.default.createFile(atPath: root.path, contents: Data()))
+        guard let writer = DurableAudioChunkWriter(
+            root: root,
+            inputFormat: AudioFormats.lifeLogStorage,
+            committed: { _ in },
+            finished: {},
+            failed: { _ in }
+        ) else {
+            Issue.record("audio writerを作成できません")
+            return
+        }
+        #expect(throws: (any Error).self) {
+            try writer.start(at: Date(timeIntervalSince1970: 1_800_000_000))
+        }
+    }
+
+    private static func audioBuffer(format: AVAudioFormat, duration: TimeInterval) throws -> AVAudioPCMBuffer {
+        let frames = AVAudioFrameCount(format.sampleRate * duration)
+        let buffer = try #require(AVAudioPCMBuffer(pcmFormat: format, frameCapacity: frames))
+        buffer.frameLength = frames
+        guard let channel = buffer.floatChannelData?[0] else {
+            throw EngineError.failed("test audio bufferを作成できません")
+        }
+        channel.initialize(repeating: 0.1, count: Int(frames))
+        return buffer
     }
 
     @Test("終了待ちは記録開始要求の隙間も含み、停止後に解除される")
@@ -839,12 +913,11 @@ struct AdaptiveSpeechSegmenterTests {
         return segmenter
     }
 
-    @Test("発話量が増えるほど必要な無音を短くする")
+    @Test("長い発話だけ確定無音を短くする")
     func silenceThresholdTiers() {
-        #expect(AdaptiveSpeechSegmenter.requiredSilence(afterVoicedDuration: 2.9) == 8)
-        #expect(AdaptiveSpeechSegmenter.requiredSilence(afterVoicedDuration: 3) == 5)
-        #expect(AdaptiveSpeechSegmenter.requiredSilence(afterVoicedDuration: 10) == 3)
-        #expect(AdaptiveSpeechSegmenter.requiredSilence(afterVoicedDuration: 30) == 2)
+        #expect(AdaptiveSpeechSegmenter.requiredSilence(afterVoicedDuration: 2.9) == 1.5)
+        #expect(AdaptiveSpeechSegmenter.requiredSilence(afterVoicedDuration: 10) == 1.5)
+        #expect(AdaptiveSpeechSegmenter.requiredSilence(afterVoicedDuration: 30) == 1)
     }
 
     @Test("無音だけでは認識を開始しない")
@@ -855,24 +928,44 @@ struct AdaptiveSpeechSegmenterTests {
         #expect(!didFinish)
     }
 
-    @Test("小さい声も発話として開始し、短い発話は8秒の無音で確定する")
-    func quietShortSpeechFlushesAfterEightSeconds() {
+    @Test("小さい声も発話として開始し、短い発話は1.5秒の無音で確定する")
+    func quietShortSpeechFlushesAfterOneAndHalfSeconds() {
         var segmenter = calibrated(noiseLevel: 0.005)
         #expect(segmenter.consume(level: 0.025, duration: 0.15) == .ignore)
         #expect(segmenter.consume(level: 0.04, duration: 0.1) == .started)
-        #expect(segmenter.consume(level: 0.01, duration: 7) == .buffer)
-        #expect(segmenter.consume(level: 0.01, duration: 1) == .flush)
+        #expect(segmenter.consume(level: 0.01, duration: 1) == .buffer)
+        #expect(segmenter.consume(level: 0.01, duration: 0.5) == .flush)
         #expect(!segmenter.isActive)
+        #expect(segmenter.completedBurstEvidence?.isTranscriptionCandidate == false)
     }
 
-    @Test("長い発話は2秒の無音で確定する")
-    func longSpeechFlushesAfterTwoSeconds() {
+    @Test("0.5秒以上かつ20%以上の有声区間だけSTT候補にする")
+    func transcriptionEvidenceRequiresEnoughSpeech() {
+        #expect(!SpeechBurstEvidence(
+            voicedDuration: 0.49,
+            burstDuration: 1,
+            peakSpeechLevel: 0.2
+        ).isTranscriptionCandidate)
+        #expect(!SpeechBurstEvidence(
+            voicedDuration: 0.5,
+            burstDuration: 2.51,
+            peakSpeechLevel: 0.2
+        ).isTranscriptionCandidate)
+        #expect(SpeechBurstEvidence(
+            voicedDuration: 0.5,
+            burstDuration: 2.5,
+            peakSpeechLevel: 0.2
+        ).isTranscriptionCandidate)
+    }
+
+    @Test("30秒以上の発話は1秒の無音で確定する")
+    func longSpeechFlushesAfterOneSecond() {
         var segmenter = calibrated()
         #expect(segmenter.consume(level: 0.05, duration: 0.15) == .ignore)
         #expect(segmenter.consume(level: 0.2, duration: 0.1) == .started)
         #expect(segmenter.consume(level: 0.2, duration: 30.75) == .buffer)
-        #expect(segmenter.consume(level: 0.01, duration: 1) == .buffer)
-        #expect(segmenter.consume(level: 0.01, duration: 1) == .flush)
+        #expect(segmenter.consume(level: 0.01, duration: 0.5) == .buffer)
+        #expect(segmenter.consume(level: 0.01, duration: 0.5) == .flush)
         #expect(!segmenter.isActive)
     }
 
@@ -920,6 +1013,120 @@ struct AdaptiveSpeechSegmenterTests {
         #expect(segmenter.consume(level: 0.01, duration: 0.1) == .ignore)
         let didFinish = segmenter.finish()
         #expect(!didFinish)
+    }
+}
+
+@Suite("Life Log rolling preview")
+struct LifeLogRollingPreviewTests {
+    private func evidence(voiced: TimeInterval = 1, duration: TimeInterval) -> SpeechBurstEvidence {
+        SpeechBurstEvidence(voicedDuration: voiced, burstDuration: duration, peakSpeechLevel: 0.2)
+    }
+
+    @Test("whisper.cppは1.5秒後から1.5秒間隔でpreviewする")
+    func previewCadence() {
+        #expect(!LifeLogCoordinator.shouldScheduleLivePreview(
+            evidence: evidence(duration: 1.49),
+            lastPreviewDuration: nil,
+            engineIdentifier: .whisperCpp
+        ))
+        #expect(LifeLogCoordinator.shouldScheduleLivePreview(
+            evidence: evidence(duration: 1.5),
+            lastPreviewDuration: nil,
+            engineIdentifier: .whisperCpp
+        ))
+        #expect(!LifeLogCoordinator.shouldScheduleLivePreview(
+            evidence: evidence(duration: 2.9),
+            lastPreviewDuration: 1.5,
+            engineIdentifier: .whisperCpp
+        ))
+        #expect(LifeLogCoordinator.shouldScheduleLivePreview(
+            evidence: evidence(duration: 3),
+            lastPreviewDuration: 1.5,
+            engineIdentifier: .whisperCpp
+        ))
+    }
+
+    @Test("発話量が足りない候補ではpreviewを起動しない")
+    func rejectedEvidenceDoesNotPreview() {
+        #expect(!LifeLogCoordinator.shouldScheduleLivePreview(
+            evidence: evidence(voiced: 0.25, duration: 1.5),
+            lastPreviewDuration: nil,
+            engineIdentifier: .whisperCpp
+        ))
+    }
+
+    @Test("SpeechAnalyzerでは二重sessionを作らない")
+    func speechAnalyzerDoesNotUseRollingPreview() {
+        #expect(!LifeLogCoordinator.shouldScheduleLivePreview(
+            evidence: evidence(duration: 10),
+            lastPreviewDuration: nil,
+            engineIdentifier: .speechAnalyzer
+        ))
+    }
+}
+
+@Suite("Life Log保存音声の発話回収")
+struct LifeLogSavedAudioSpeechGateTests {
+    @Test("完全な無音は保存audioでもSTTへ渡さない")
+    func silenceIsRejected() throws {
+        let chunks = try makeChunks(amplitudes: Array(repeating: 0, count: 30))
+        #expect(LifeLogCoordinator.recognizableSpeechBursts(from: chunks).isEmpty)
+    }
+
+    @Test("一瞬の生活音だけなら保存audioをSTTへ渡さない")
+    func transientNoiseIsRejected() throws {
+        let chunks = try makeChunks(
+            amplitudes: Array(repeating: 0, count: 10)
+                + [0.03, 0.1]
+                + Array(repeating: 0, count: 15)
+        )
+        #expect(LifeLogCoordinator.recognizableSpeechBursts(from: chunks).isEmpty)
+    }
+
+    @Test("十分な発話だけを30秒chunkから切り出す")
+    func speechIsExtractedWithoutSurroundingSilence() throws {
+        let chunks = try makeChunks(
+            amplitudes: Array(repeating: 0, count: 10)
+                + [0.03, 0.1, 0.1, 0.1, 0.1]
+                + Array(repeating: 0, count: 15)
+        )
+        let bursts = LifeLogCoordinator.recognizableSpeechBursts(from: chunks)
+        #expect(bursts.count == 1)
+        #expect((bursts.first?.duration ?? 0) < 2.5)
+    }
+
+    private func makeChunks(amplitudes: [Float]) throws -> [AudioChunk] {
+        let format = AudioFormats.canonical
+        let frames = AVAudioFrameCount(format.sampleRate / 10)
+        return try amplitudes.enumerated().map { index, amplitude in
+            let buffer = try #require(AVAudioPCMBuffer(pcmFormat: format, frameCapacity: frames))
+            buffer.frameLength = frames
+            let channel = try #require(buffer.floatChannelData?[0])
+            channel.initialize(repeating: amplitude, count: Int(frames))
+            return AudioChunk(buffer: buffer, frameOffset: AVAudioFramePosition(index) * AVAudioFramePosition(frames))
+        }
+    }
+}
+
+@Suite("Life Log timeline追従")
+struct LifeLogTimelineScrollPolicyTests {
+    @Test("末尾付近だけ自動追従対象にする")
+    func bottomTolerance() {
+        #expect(LifeLogTimelineScrollPolicy.isAtBottom(
+            contentOffsetY: 668,
+            contentHeight: 1_000,
+            containerHeight: 300
+        ))
+        #expect(!LifeLogTimelineScrollPolicy.isAtBottom(
+            contentOffsetY: 600,
+            contentHeight: 1_000,
+            containerHeight: 300
+        ))
+        #expect(LifeLogTimelineScrollPolicy.isAtBottom(
+            contentOffsetY: 0,
+            contentHeight: 200,
+            containerHeight: 300
+        ))
     }
 }
 

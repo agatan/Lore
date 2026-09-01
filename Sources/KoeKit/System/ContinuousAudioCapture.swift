@@ -88,6 +88,20 @@ public final class ContinuousAudioCapture {
                 self.recordingFailed(Failure.configurationChanged)
             }
         }
+        scheduleRotation()
+        return stream
+    }
+
+    /// 現在までの音声を原子的に確定し、録音を止めずに次のchunkへ進む。
+    /// 発話確定後のSTTが30秒rotationを待たず、durable audioを参照するために使う。
+    public func checkpoint() {
+        guard isRunning else { return }
+        writer?.rotate(at: Date())
+        scheduleRotation()
+    }
+
+    private func scheduleRotation() {
+        rotationTask?.cancel()
         rotationTask = Task { [weak self] in
             while let self, !Task.isCancelled {
                 do { try await Task.sleep(for: self.chunkDuration) } catch { return }
@@ -95,7 +109,6 @@ public final class ContinuousAudioCapture {
                 self.writer?.rotate(at: Date())
             }
         }
-        return stream
     }
 
     public func stop() {
@@ -138,7 +151,7 @@ public final class ContinuousAudioCapture {
 }
 
 /// リアルタイムスレッドをディスク I/O で止めない直列 writer。
-private final class DurableAudioChunkWriter: @unchecked Sendable {
+final class DurableAudioChunkWriter: @unchecked Sendable {
     private enum Failure: LocalizedError {
         case conversionFailed
         var errorDescription: String? { "ライフログ音声を保存用フォーマットへ変換できません" }
