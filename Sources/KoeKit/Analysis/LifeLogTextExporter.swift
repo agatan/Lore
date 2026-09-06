@@ -49,29 +49,45 @@ public enum LifeLogTextExporter {
                 lines.append("### 主な話題")
                 lines.append(contentsOf: summary.topics.map { "- \($0)" })
             }
-            if !summary.commitments.isEmpty {
-                lines.append("")
-                lines.append("### この日の約束")
-                lines.append(contentsOf: summary.commitments.map { "- \($0)" })
-            }
             lines.append("")
         }
 
         if options.includesCalendarEvents || options.includesUtterances || options.includesDictations || options.includesMemos {
             lines.append("## タイムライン")
             let items = (options.includesCalendarEvents ? day.calendarEvents.map { Item(date: $0.startsAt, line: eventLine($0, calendar: calendar)) } : [])
-                + (options.includesUtterances ? day.utterances.map { Item(date: $0.startedAt, line: utteranceLine($0, calendar: calendar)) } : [])
+                + (options.includesUtterances ? day.utterances.map { Item(date: $0.startedAt, line: $0.text, speechEnd: $0.endedAt) } : [])
                 + (options.includesDictations ? day.dictations.map { Item(date: $0.startedAt, line: dictationLine($0, calendar: calendar)) } : [])
                 + (options.includesMemos ? day.memos.map { Item(date: $0.createdAt, line: memoLine($0, calendar: calendar)) } : [])
             if items.isEmpty {
                 lines.append("記録はありません。")
             } else {
-                lines.append(contentsOf: items.sorted { $0.date < $1.date }.map(\.line))
+                var speechStart: Date?
+                var speechEnd: Date?
+                var speech: [String] = []
+                func flushSpeech() {
+                    guard let start = speechStart, let end = speechEnd else { return }
+                    lines.append("- **\(time(start, calendar: calendar))–\(time(end, calendar: calendar)) 発話** \(readable(speech.joined(separator: " ")))")
+                    speechStart = nil
+                    speechEnd = nil
+                    speech.removeAll(keepingCapacity: true)
+                }
+                for item in items.sorted(by: { $0.date < $1.date }) {
+                    if let end = item.speechEnd {
+                        if let previousEnd = speechEnd, item.date.timeIntervalSince(previousEnd) >= 90 { flushSpeech() }
+                        if speechStart == nil { speechStart = item.date }
+                        speechEnd = max(speechEnd ?? end, end)
+                        speech.append(item.line)
+                    } else {
+                        flushSpeech()
+                        lines.append(item.line)
+                    }
+                }
+                flushSpeech()
             }
         }
 
         let createdTodos = todos.filter {
-            $0.status == .open && calendar.isDate($0.createdAt, inSameDayAs: date)
+            $0.status != .draft && calendar.isDate($0.createdAt, inSameDayAs: date)
         }
         let completedTodos = todos.filter {
             $0.status == .completed && $0.completedAt.map { calendar.isDate($0, inSameDayAs: date) } == true
@@ -79,12 +95,12 @@ public enum LifeLogTextExporter {
         if options.includesTodosForDay {
             if !createdTodos.isEmpty {
                 lines.append("")
-                lines.append("## この日に追加したTODO")
+                lines.append("## この日発生したタスク")
                 lines.append(contentsOf: createdTodos.map { todoLine($0, calendar: calendar) })
             }
             if !completedTodos.isEmpty {
                 lines.append("")
-                lines.append("## この日に完了したTODO")
+                lines.append("## この日完了したタスク")
                 lines.append(contentsOf: completedTodos.map { completedTodoLine($0, calendar: calendar) })
             }
         }
@@ -108,6 +124,7 @@ public enum LifeLogTextExporter {
     private struct Item {
         var date: Date
         var line: String
+        var speechEnd: Date? = nil
     }
 
     private static func eventLine(_ value: CalendarEventSnapshot, calendar: Calendar) -> String {
@@ -115,10 +132,6 @@ public enum LifeLogTextExporter {
             ? "終日"
             : "\(time(value.startsAt, calendar: calendar))–\(time(value.endsAt, calendar: calendar))"
         return "- **\(schedule) 予定** \(readable(value.title))（\(readable(value.calendarTitle))）"
-    }
-
-    private static func utteranceLine(_ value: LifeLogUtterance, calendar: Calendar) -> String {
-        "- **\(time(value.startedAt, calendar: calendar)) 発話** \(readable(value.text))"
     }
 
     private static func dictationLine(_ value: LifeLogDictation, calendar: Calendar) -> String {
@@ -131,7 +144,7 @@ public enum LifeLogTextExporter {
 
     private static func todoLine(_ value: LifeLogTodo, calendar: Calendar) -> String {
         let due = value.dueAt.map { "、期限 \(LifeLogDateKey.string(for: $0, calendar: calendar))" } ?? ""
-        return "- [ ] \(readable(value.title))（\(time(value.createdAt, calendar: calendar))に追加\(due)）"
+        return "- [\(value.status == .completed ? "x" : " ")] \(readable(value.title))（\(time(value.createdAt, calendar: calendar))に追加\(due)）"
     }
 
     private static func completedTodoLine(_ value: LifeLogTodo, calendar: Calendar) -> String {

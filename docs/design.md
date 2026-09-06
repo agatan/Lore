@@ -190,6 +190,8 @@ DBは`~/Library/Application Support/Koe/koe.sqlite`です。`DatabaseQueue`を�
 
 ## 10. 自動化境界
 
+LifeLogTextExporterは90秒未満の連続発話を別種の表示項目で区切ってまとめ、TODOは作成日・完了日から抽出します。LifeLogExportSheetはプレビューもbackgroundで4,000文字に制限します。Day paneは縦scroll、予定rowは塗りなしで描画します。LifeLogStoreから対象日以前90日分の話題名を最大100件取得し、LifeLogDerivationServiceが既存プロジェクト名を優先して最大5件生成します。過去本文の送信、追加LLM call、schema変更は行いません。旧commitments fieldは保存互換性のため残し、新規要約は空配列を保存します。
+
 `KoeAutomationService`がCLIとMCPで共有され、日別export、open TODO export、横断検索、TODO CRUD、summary/TODO prompt更新を提供します。App Intentsは`AppEnvironment.boot()`の完了後にcapture開始・終了とexportを実行します。開始Actionだけはマイクを扱うためforeground mode、その他はbackground modeです。Shortcutsからの実行にはmacOSが検証できるbundle署名が必要なため、buildは有効な`Apple Development` identityを自己署名より優先します。公開コマンドとtool schemaは外部仕様に列挙します。
 
 ## 11. 並行実行とエラー表示

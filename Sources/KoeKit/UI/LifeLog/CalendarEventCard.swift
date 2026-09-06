@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// 予定の開始・終了範囲を一つの色面として示す、main / mini 共通の表示。
+/// 時刻、件名、細い罫線で予定を示す、main / mini 共通の表示。
 struct CalendarEventCard: View {
     var event: CalendarEventSnapshot
     var isCurrent = false
@@ -13,9 +13,7 @@ struct CalendarEventCard: View {
                 if isCurrent {
                     Text("いま")
                         .font(.system(size: 8.5, weight: .bold, design: .rounded))
-                        .padding(.horizontal, 5)
-                        .padding(.vertical, 2)
-                        .background(.white.opacity(0.28), in: Capsule())
+                        .foregroundStyle(KoeTheme.accent)
                 }
             }
             .foregroundStyle(.primary.opacity(0.72))
@@ -30,22 +28,18 @@ struct CalendarEventCard: View {
                 .lineLimit(1)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(.horizontal, 9)
-        .padding(.vertical, 8)
-        .background(tint.opacity(isCurrent ? 0.34 : 0.20), in: RoundedRectangle(cornerRadius: 8))
-        .overlay {
-            RoundedRectangle(cornerRadius: 8)
-                .stroke(tint.opacity(isCurrent ? 0.82 : 0.38), lineWidth: isCurrent ? 1.5 : 1)
+        .padding(.leading, 10)
+        .padding(.vertical, 4)
+        .overlay(alignment: .leading) {
+            Rectangle()
+                .fill(KoeTheme.accent.opacity(isCurrent ? 0.9 : 0.45))
+                .frame(width: isCurrent ? 2 : 1)
         }
     }
 
     private var timeRange: String {
         if event.isAllDay { return "終日" }
         return "\(event.startsAt.formatted(date: .omitted, time: .shortened))–\(event.endsAt.formatted(date: .omitted, time: .shortened))"
-    }
-
-    private var tint: Color {
-        KoeTheme.accent
     }
 }
 

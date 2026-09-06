@@ -338,6 +338,30 @@ public struct LifeLogStore: Sendable {
     }
     public func save(summary value: DailySummary) async throws { try await queue.write { db in try db.execute(sql: "INSERT OR REPLACE INTO daily_summaries VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)", arguments: [value.day, value.summary, try PersistenceCoding.encode(value.commitments), try PersistenceCoding.encode(value.topics), value.calendarEventCount, value.capturedDurationSeconds, value.utteranceCount, date(value.summarizedThrough), value.isFinal]) } }
 
+    /// 対象日と直前90日から、最近使った順に既存の話題名だけを読む。
+    public func existingTopics(for day: Date, calendar: Calendar = .current) async throws -> [String] {
+        let start = calendar.date(byAdding: .day, value: -90, to: calendar.startOfDay(for: day))!
+        let startKey = LifeLogDateKey.string(for: start, calendar: calendar)
+        let endKey = LifeLogDateKey.string(for: day, calendar: calendar)
+        return try await queue.read { db in
+            let rows = try Row.fetchAll(db, sql: """
+                SELECT topics FROM daily_summaries
+                WHERE day >= ? AND day <= ? ORDER BY day DESC
+                """, arguments: [startKey, endKey])
+            var seen = Set<String>()
+            var topics: [String] = []
+            for row in rows {
+                for title in try PersistenceCoding.decode([String].self, from: row["topics"]) {
+                    let title = title.trimmingCharacters(in: .whitespacesAndNewlines)
+                    let key = title.folding(options: [.caseInsensitive, .widthInsensitive], locale: Locale(identifier: "ja_JP"))
+                    if !title.isEmpty && seen.insert(key).inserted { topics.append(title) }
+                    if topics.count == 100 { return topics }
+                }
+            }
+            return topics
+        }
+    }
+
     private func date(_ value: Date) -> String { PersistenceCoding.encode(date: value) }
     private func parse(_ value: String) throws -> Date { try PersistenceCoding.decodeDate(value) }
     private func decodeChunk(_ r: Row) throws -> LifeLogAudioChunk { LifeLogAudioChunk(id: r["id"], captureStartedAt: try parse(r["capture_started_at"]), captureEndedAt: try parse(r["capture_ended_at"]), localPath: r["local_path"], transcriptionState: LifeLogProcessingState(rawValue: r["transcription_state"])!, processingState: LifeLogProcessingState(rawValue: r["processing_state"])!, failureReason: r["failure_reason"], peakLevel: r["peak_level"]) }

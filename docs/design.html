@@ -10,6 +10,7 @@
 <header>
 <p class="eyebrow">Implementation reference</p>
 <h1>Koe 内部設計</h1>
+<p>LifeLogTextExporterは90秒未満の連続発話を別種の表示項目で区切ってまとめ、TODOは作成日・完了日から抽出します。LifeLogExportSheetはプレビューもbackgroundで4,000文字に制限します。Day paneは縦scroll、予定rowは塗りなしで描画します。LifeLogStoreから対象日以前90日分の話題名を最大100件取得し、LifeLogDerivationServiceが既存プロジェクト名を優先して最大5件生成します。過去本文の送信、追加LLM call、schema変更は行いません。旧commitments fieldは保存互換性のため残し、新規要約は空配列を保存します。</p>
 <p class="lead">現在のtarget、論理module、runtime flow、永続化、公開adapterをコードに対応づけた実装俯瞰です。設計思想ではなく、変更時にどこを読むかを示します。</p>
 <p class="links">
 <a href="design.md">Markdown版</a>

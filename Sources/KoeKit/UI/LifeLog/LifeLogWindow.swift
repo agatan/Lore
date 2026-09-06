@@ -414,26 +414,33 @@ public struct LifeLogWindow: View {
         VStack(spacing: 0) {
             panelHeader("Day", symbol: "chart.bar.xaxis") { EmptyView() }
             Divider().opacity(0.4)
-            VStack(alignment: .leading, spacing: 18) {
-                DayRhythmView(day: env.lifeLog.day)
-                    .frame(minHeight: 80, maxHeight: 150)
-                if let summary = env.lifeLog.day.summary, !summary.topics.isEmpty {
-                    FlowLayout(spacing: 6) {
-                        ForEach(summary.topics, id: \.self) { topic in
-                            Pill(text: topic, tint: KoeTheme.accentSecondary)
+            GeometryReader { geometry in
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 18) {
+                        DayRhythmView(day: env.lifeLog.day)
+                            .frame(height: 80)
+                        if let summary = env.lifeLog.day.summary, !summary.topics.isEmpty {
+                            FlowLayout(spacing: 6) {
+                                ForEach(summary.topics, id: \.self) { topic in
+                                    Pill(text: topic, tint: KoeTheme.accentSecondary)
+                                        .frame(maxWidth: max(0, geometry.size.width - 28), alignment: .leading)
+                                        .fixedSize(horizontal: false, vertical: true)
+                                }
+                            }
+                        } else {
+                            HStack(spacing: 7) {
+                                Image(systemName: "circle.hexagongrid")
+                                Text("No signals")
+                            }
+                            .font(.system(size: 10.5, weight: .medium, design: .rounded))
+                            .foregroundStyle(.secondary.opacity(0.35))
                         }
                     }
-                } else {
-                    HStack(spacing: 7) {
-                        Image(systemName: "circle.hexagongrid")
-                        Text("No signals")
-                    }
-                    .font(.system(size: 10.5, weight: .medium, design: .rounded))
-                    .foregroundStyle(.secondary.opacity(0.35))
+                    .padding(14)
+                    .frame(maxWidth: .infinity, alignment: .leading)
                 }
+                .accessibilityIdentifier("life-log.day-insights")
             }
-            .padding(14)
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
         .raisedGlass(cornerRadius: 22)
     }

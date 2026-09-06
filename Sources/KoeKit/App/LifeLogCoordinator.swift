@@ -1108,12 +1108,12 @@ public final class LifeLogCoordinator {
             prompt: summaryPrompt(),
             todoPrompt: todoPrompt(),
             existingTodoTitles: existingTodos.map(\.title),
+            existingTopics: try await store.existingTopics(for: date),
             asOf: asOf
         )
-        let commitments = existingTodos.filter { $0.status != .draft }.map(\.title)
         let duration = value.utterances.reduce(0) { $0 + max(0, Int($1.endedAt.timeIntervalSince($1.startedAt))) }
         let summary = DailySummary(day: LifeLogDateKey.string(for: date), summary: derived.text,
-                                   commitments: Array(Set((previous?.commitments ?? []) + commitments)).sorted(), topics: derived.topics,
+                                   commitments: [], topics: derived.topics,
                                    calendarEventCount: value.calendarEvents.count, capturedDurationSeconds: duration,
                                    utteranceCount: value.utterances.count, summarizedThrough: latest,
                                    isFinal: isPastDay)

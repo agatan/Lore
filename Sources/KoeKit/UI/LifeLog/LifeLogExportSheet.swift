@@ -23,6 +23,7 @@ struct LifeLogExportSheet: View {
     @State private var options = LifeLogTextExporter.Options()
     @State private var didCopy = false
     @State private var renderedText = ""
+    @State private var previewText = ""
     @State private var isPreparing = true
     @State private var isExporting = false
 
@@ -135,29 +136,29 @@ struct LifeLogExportSheet: View {
             isPreparing = true
             let snapshot = snapshot
             let options = options
-            let text = await Task.detached(priority: .userInitiated) {
-                LifeLogTextExporter.render(
+            let result = await Task.detached(priority: .userInitiated) {
+                let text = LifeLogTextExporter.render(
                     date: snapshot.date,
                     day: snapshot.day,
                     todos: snapshot.todos,
                     options: options
                 )
+                let prefix = String(text.prefix(4_001))
+                let preview = prefix.count > 4_000
+                    ? String(prefix.prefix(4_000)) + "\n\n…プレビューは先頭部分だけを表示しています。書き出しには全文が含まれます。"
+                    : prefix
+                return (text, preview)
             }.value
             guard !Task.isCancelled else { return }
-            renderedText = text
+            renderedText = result.0
+            previewText = result.1
             isPreparing = false
         }
     }
 
-    private var previewText: String {
-        let limit = 30_000
-        guard renderedText.count > limit else { return renderedText }
-        return String(renderedText.prefix(limit)) + "\n\n…プレビューは先頭部分だけを表示しています。書き出しには全文が含まれます。"
-    }
-
     private var dayTodoCount: Int {
         snapshot.todos.filter {
-            ($0.status == .open && Calendar.current.isDate($0.createdAt, inSameDayAs: snapshot.date))
+            ($0.status != .draft && Calendar.current.isDate($0.createdAt, inSameDayAs: snapshot.date))
                 || ($0.status == .completed && $0.completedAt.map { Calendar.current.isDate($0, inSameDayAs: snapshot.date) } == true)
         }.count
     }

@@ -612,7 +612,7 @@ struct LifeLogTests {
         let text = LifeLogTextExporter.render(date: date, day: day, todos: [todo], calendar: calendar)
 
         let calendarIndex = try #require(text.range(of: "**09:00–09:01 予定**"))
-        let speechIndex = try #require(text.range(of: "**09:02 発話**"))
+        let speechIndex = try #require(text.range(of: "**09:02–09:02 発話**"))
         let memoIndex = try #require(text.range(of: "**09:03 メモ**"))
         #expect(calendarIndex.lowerBound < speechIndex.lowerBound)
         #expect(speechIndex.lowerBound < memoIndex.lowerBound)
@@ -707,7 +707,7 @@ struct LifeLogTests {
             memos: [.init(createdAt: date, text: "メモ")],
             conversations: [],
             calendarEvents: [.init(title: "予定", startsAt: date, endsAt: date, calendarTitle: "Work")],
-            summary: .init(day: "2026-08-29", summary: "要約", commitments: [], topics: [], calendarEventCount: 1, capturedDurationSeconds: 1, utteranceCount: 1, summarizedThrough: date, isFinal: true)
+            summary: .init(day: "2026-08-29", summary: "要約", commitments: ["古い約束"], topics: [], calendarEventCount: 1, capturedDurationSeconds: 1, utteranceCount: 1, summarizedThrough: date, isFinal: true)
         )
         let todos = [
             LifeLogTodo(title: "対象", createdAt: date),
@@ -736,6 +736,23 @@ struct LifeLogTests {
         #expect(text.contains("完了"))
         #expect(!text.contains("下書き"))
         #expect(!text.contains("別日"))
+        #expect(!text.contains("古い約束"))
+        #expect(text.contains("この日発生したタスク"))
+    }
+
+    @Test("exportは連続発話をまとめ、90秒の無発話とメモで区切る")
+    func exportGroupsSpeech() {
+        let date = Date(timeIntervalSince1970: 1_800_000_000)
+        let speech = [(0.0, 10.0, "一"), (20, 30, "二"), (120, 130, "三"), (140, 150, "四")]
+            .map { start, end, text in
+                LifeLogUtterance(startedAt: date.addingTimeInterval(start), endedAt: date.addingTimeInterval(end), text: text, audioChunkID: "audio")
+            }
+        let day = LifeLogDay(utterances: speech, memos: [.init(createdAt: date.addingTimeInterval(135), text: "区切り")], conversations: [], calendarEvents: [], summary: nil)
+        let text = LifeLogTextExporter.render(date: date, day: day, todos: [])
+        #expect(text.contains("発話** 一 二"))
+        #expect(text.components(separatedBy: "発話**").count == 4)
+        #expect(text.contains("発話** 三"))
+        #expect(text.contains("発話** 四"))
     }
 
     @Test("音声入力だけではsummaryとTODOを生成しない")
