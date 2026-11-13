@@ -1,4 +1,3 @@
-import AppKit
 @preconcurrency import CoreGraphics
 @preconcurrency import Carbon
 import Foundation
@@ -90,8 +89,6 @@ public final class HotkeyMonitor {
     private var runLoopSource: CFRunLoopSource?
     private var registeredHotKey: EventHotKeyRef?
     private var registeredHotKeyHandler: EventHandlerRef?
-    private var globalEscapeMonitor: Any?
-    private var localEscapeMonitor: Any?
     private var pressStart: ContinuousClock.Instant?
     private let registrationID: UInt32
     private static var nextRegistrationID: UInt32 = 1
@@ -108,16 +105,13 @@ public final class HotkeyMonitor {
             switch binding {
             case .key(let code, let modifiers):
                 try startRegisteredHotKey(code: code, modifiers: modifiers)
-                if Self.requiresEventTap(modifiers: modifiers) {
+                if Self.requiresInputMonitoring(modifiers: modifiers) {
                     guard Permissions.isAccessibilityGranted else { throw Failure.notTrusted }
                     guard Permissions.isInputMonitoringGranted else { throw Failure.inputMonitoringRequired }
                     try startEventTap()
                 } else if shouldSwallowEscape != nil,
-                          Permissions.isAccessibilityGranted,
-                          Permissions.isInputMonitoringGranted {
+                          Permissions.isAccessibilityGranted {
                     try startEventTap()
-                } else if shouldSwallowEscape != nil {
-                    startEscapeMonitors()
                 }
             case .modifier:
                 guard Permissions.isAccessibilityGranted else { throw Failure.notTrusted }
@@ -155,18 +149,6 @@ public final class HotkeyMonitor {
 
         self.tap = tap
         self.runLoopSource = source
-    }
-
-    private func startEscapeMonitors() {
-        guard globalEscapeMonitor == nil, localEscapeMonitor == nil else { return }
-        globalEscapeMonitor = NSEvent.addGlobalMonitorForEvents(matching: .keyDown) { [weak self] event in
-            guard event.keyCode == 0x35 else { return }
-            _ = self?.shouldSwallowEscape?()
-        }
-        localEscapeMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
-            guard event.keyCode == 0x35, self?.shouldSwallowEscape?() == true else { return event }
-            return nil
-        }
     }
 
     private func startRegisteredHotKey(code: UInt16, modifiers: UInt64) throws {
@@ -207,8 +189,6 @@ public final class HotkeyMonitor {
     }
 
     public func stop() {
-        if let globalEscapeMonitor { NSEvent.removeMonitor(globalEscapeMonitor) }
-        if let localEscapeMonitor { NSEvent.removeMonitor(localEscapeMonitor) }
         if let registeredHotKey {
             UnregisterEventHotKey(registeredHotKey)
         }
@@ -225,8 +205,6 @@ public final class HotkeyMonitor {
         runLoopSource = nil
         registeredHotKey = nil
         registeredHotKeyHandler = nil
-        globalEscapeMonitor = nil
-        localEscapeMonitor = nil
         pressStart = nil
         isRunning = false
     }
@@ -289,7 +267,7 @@ public final class HotkeyMonitor {
                 return nil
             }
             guard case .key(let code, let modifiers) = binding,
-                  Self.requiresEventTap(modifiers: modifiers),
+                  Self.requiresInputMonitoring(modifiers: modifiers),
                   eventCode == code,
                   Self.standardModifiers(from: event.flags.rawValue) == modifiers
             else { return passthrough }
@@ -300,7 +278,7 @@ public final class HotkeyMonitor {
 
         case .keyUp:
             guard case .key(let code, let modifiers) = binding,
-                  Self.requiresEventTap(modifiers: modifiers),
+                  Self.requiresInputMonitoring(modifiers: modifiers),
                   UInt16(event.getIntegerValueField(.keyboardEventKeycode)) == code,
                   pressStart != nil
             else { return passthrough }
@@ -338,7 +316,7 @@ public final class HotkeyMonitor {
 
     /// macOS 26ではOptionだけ（またはOption+Shift）を伴う文字keyがIMEに消費され、
     /// `RegisterEventHotKey`の登録が成功しても通知されないことがある。
-    static func requiresEventTap(modifiers: UInt64) -> Bool {
+    static func requiresInputMonitoring(modifiers: UInt64) -> Bool {
         let hasOption = modifiers & 0x0008_0000 != 0
         let hasCommandOrControl = modifiers & (0x0010_0000 | 0x0004_0000) != 0
         return hasOption && !hasCommandOrControl

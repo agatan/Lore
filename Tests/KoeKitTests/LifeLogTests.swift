@@ -317,7 +317,7 @@ struct LifeLogTests {
         #expect(!LifeLogAudioChunk(captureStartedAt: start, captureEndedAt: start.addingTimeInterval(30),
                                   localPath: "/tmp/silent.m4a", peakLevel: 0.01).isTranscriptionCandidate)
         #expect(LifeLogAudioChunk(captureStartedAt: start, captureEndedAt: start.addingTimeInterval(30),
-                                 localPath: "/tmp/quiet-speech.m4a", peakLevel: 0.03).isTranscriptionCandidate)
+                                 localPath: "/tmp/quiet-speech.m4a", peakLevel: 0.17).isTranscriptionCandidate)
     }
 
     @Test("calendarは参考値として扱い、時間gapだけがconversationを分ける")
@@ -1018,9 +1018,9 @@ struct AdaptiveSpeechSegmenterTests {
 
     @Test("background noiseとの差がある入力が250ms続くと発話を開始する")
     func speechAboveBackgroundStartsBurst() {
-        var segmenter = calibrated(noiseLevel: 0.04)
-        #expect(segmenter.consume(level: 0.07, duration: 0.15) == .ignore)
-        #expect(segmenter.consume(level: 0.1, duration: 0.1) == .started)
+        var segmenter = calibrated(noiseLevel: 0.004)
+        #expect(segmenter.consume(level: 0.012, duration: 0.15) == .ignore)
+        #expect(segmenter.consume(level: 0.018, duration: 0.1) == .started)
     }
 
     @Test("一瞬のlevel上昇だけでは発話を開始しない")
@@ -1028,6 +1028,16 @@ struct AdaptiveSpeechSegmenterTests {
         var segmenter = calibrated()
         #expect(segmenter.consume(level: 0.08, duration: 0.1) == .ignore)
         #expect(segmenter.consume(level: 0.01, duration: 0.1) == .ignore)
+        let didFinish = segmenter.finish()
+        #expect(!didFinish)
+    }
+
+    @Test("約-50dBFS未満の揺れるnoiseは発話にしない")
+    func subThresholdNoiseDoesNotStartBurst() {
+        var segmenter = calibrated(noiseLevel: 0.000_8)
+        for level: Float in [0.001, 0.002_8, 0.001_2, 0.002_5, 0.000_9] {
+            #expect(segmenter.consume(level: level, duration: 0.1) == .ignore)
+        }
         let didFinish = segmenter.finish()
         #expect(!didFinish)
     }
@@ -1044,21 +1054,25 @@ struct LifeLogRollingPreviewTests {
         #expect(!LifeLogCoordinator.shouldScheduleLivePreview(
             evidence: evidence(duration: 1.49),
             lastPreviewDuration: nil,
+            previewInProgress: false,
             engineIdentifier: .whisperCpp
         ))
         #expect(LifeLogCoordinator.shouldScheduleLivePreview(
             evidence: evidence(duration: 1.5),
             lastPreviewDuration: nil,
+            previewInProgress: false,
             engineIdentifier: .whisperCpp
         ))
         #expect(!LifeLogCoordinator.shouldScheduleLivePreview(
             evidence: evidence(duration: 2.9),
             lastPreviewDuration: 1.5,
+            previewInProgress: false,
             engineIdentifier: .whisperCpp
         ))
         #expect(LifeLogCoordinator.shouldScheduleLivePreview(
             evidence: evidence(duration: 3),
             lastPreviewDuration: 1.5,
+            previewInProgress: false,
             engineIdentifier: .whisperCpp
         ))
     }
@@ -1068,6 +1082,7 @@ struct LifeLogRollingPreviewTests {
         #expect(!LifeLogCoordinator.shouldScheduleLivePreview(
             evidence: evidence(voiced: 0.25, duration: 1.5),
             lastPreviewDuration: nil,
+            previewInProgress: false,
             engineIdentifier: .whisperCpp
         ))
     }
@@ -1077,7 +1092,18 @@ struct LifeLogRollingPreviewTests {
         #expect(!LifeLogCoordinator.shouldScheduleLivePreview(
             evidence: evidence(duration: 10),
             lastPreviewDuration: nil,
+            previewInProgress: false,
             engineIdentifier: .speechAnalyzer
+        ))
+    }
+
+    @Test("前のpreviewが実行中なら次を重ねない")
+    func activePreviewIsNotReplaced() {
+        #expect(!LifeLogCoordinator.shouldScheduleLivePreview(
+            evidence: evidence(duration: 3),
+            lastPreviewDuration: 1.5,
+            previewInProgress: true,
+            engineIdentifier: .whisperCpp
         ))
     }
 }

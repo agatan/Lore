@@ -32,12 +32,12 @@ struct HotkeyMonitorTests {
         #expect(HotkeyMonitor.carbonModifiers(from: 0) == 0)
     }
 
-    @Test("Optionだけを伴う組み合わせはevent tapを使う")
-    func selectsEventTapForOptionOnlyCombination() {
-        #expect(HotkeyMonitor.requiresEventTap(modifiers: Self.optionFlag))
-        #expect(HotkeyMonitor.requiresEventTap(modifiers: Self.optionFlag | Self.shiftFlag))
-        #expect(!HotkeyMonitor.requiresEventTap(modifiers: Self.controlFlag | Self.optionFlag))
-        #expect(!HotkeyMonitor.requiresEventTap(modifiers: Self.commandFlag | Self.optionFlag))
+    @Test("Optionだけを伴う組み合わせだけ入力監視を要求する")
+    func requiresInputMonitoringForOptionOnlyCombination() {
+        #expect(HotkeyMonitor.requiresInputMonitoring(modifiers: Self.optionFlag))
+        #expect(HotkeyMonitor.requiresInputMonitoring(modifiers: Self.optionFlag | Self.shiftFlag))
+        #expect(!HotkeyMonitor.requiresInputMonitoring(modifiers: Self.controlFlag | Self.optionFlag))
+        #expect(!HotkeyMonitor.requiresInputMonitoring(modifiers: Self.commandFlag | Self.optionFlag))
     }
 
     @Test("Option文字keyの押下と離上を消費する")

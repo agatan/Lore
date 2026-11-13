@@ -159,6 +159,14 @@ public final class AudioCapture {
     /// (SpeechAnalyzer の `bestAvailableAudioFormat` は Int16 を返す)。
     /// Float だけを見ていると常に 0 になり、波形が動かなくなる。
     nonisolated static func level(of buffer: AVAudioPCMBuffer) -> Float {
+        let rms = rootMeanSquare(of: buffer)
+        guard rms > 0 else { return 0 }
+        let db = 20 * log10(rms)
+        return max(0, min(1, (db + 60) / 60))
+    }
+
+    /// 発話判定に使う線形RMS。UI用の対数正規化をdomain thresholdへ流用しない。
+    nonisolated static func rootMeanSquare(of buffer: AVAudioPCMBuffer) -> Float {
         let count = Int(buffer.frameLength)
         guard count > 0 else { return 0 }
         let stride = Int(buffer.stride)
@@ -185,10 +193,7 @@ public final class AudioCapture {
             return 0
         }
 
-        let rms = (sum / Float(count)).squareRoot()
-        guard rms > 0 else { return 0 }
-        let db = 20 * log10(rms)
-        return max(0, min(1, (db + 60) / 60))
+        return (sum / Float(count)).squareRoot()
     }
 }
 

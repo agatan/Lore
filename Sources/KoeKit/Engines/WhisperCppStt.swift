@@ -115,7 +115,7 @@ public actor WhisperCppStt: SttEngine {
             return
         }
 
-        let context = try loadedContext().pointer
+        let context = try loadedContext()
         let cancellation = WhisperCancellationFlag()
         let language = switch hints.languagePreference {
         case .auto: "auto"
@@ -143,41 +143,55 @@ public actor WhisperCppStt: SttEngine {
         }
         params.abort_callback_user_data = Unmanaged.passUnretained(cancellation).toOpaque()
 
-        let result = await withTaskCancellationHandler {
-            language.withCString { languagePointer in
-                prompt.withCString { promptPointer in
-                    params.language = languagePointer
-                    params.initial_prompt = prompt.isEmpty ? nil : promptPointer
-                    return samples.withUnsafeBufferPointer { buffer in
-                        whisper_full(context, params, buffer.baseAddress, Int32(buffer.count))
+        let inference = try await withTaskCancellationHandler {
+            try context.withExclusiveAccess { pointer in
+                try Task.checkCancellation()
+                let result = language.withCString { languagePointer in
+                    prompt.withCString { promptPointer in
+                        params.language = languagePointer
+                        params.initial_prompt = prompt.isEmpty ? nil : promptPointer
+                        return samples.withUnsafeBufferPointer { buffer in
+                            whisper_full(pointer, params, buffer.baseAddress, Int32(buffer.count))
+                        }
                     }
                 }
+                if cancellation.isCancelled || Task.isCancelled {
+                    throw CancellationError()
+                }
+                guard result == 0 else {
+                    throw EngineError.failed("whisper.cppが文字起こしを完了できませんでした (code: \(result))")
+                }
+
+                var segments: [WhisperSegment] = []
+                for index in 0..<whisper_full_n_segments(pointer) {
+                    guard let textPointer = whisper_full_get_segment_text(pointer, index) else { continue }
+                    let text = TranscriptText.whisperSanitized(String(cString: textPointer))
+                    guard !text.isEmpty else { continue }
+                    segments.append(WhisperSegment(
+                        text: text,
+                        startOffset: Double(whisper_full_get_segment_t0(pointer, index)) / 100,
+                        endOffset: Double(whisper_full_get_segment_t1(pointer, index)) / 100
+                    ))
+                }
+                return WhisperInference(
+                    segments: segments,
+                    language: Self.recognizedLanguage(pointer)
+                )
             }
         } onCancel: {
             cancellation.cancel()
         }
-        if cancellation.isCancelled || Task.isCancelled {
-            throw CancellationError()
-        }
-        guard result == 0 else {
-            throw EngineError.failed("whisper.cppが文字起こしを完了できませんでした (code: \(result))")
-        }
 
-        var textParts: [String] = []
-        for index in 0..<whisper_full_n_segments(context) {
-            guard let pointer = whisper_full_get_segment_text(context, index) else { continue }
-            let text = TranscriptText.sanitized(String(cString: pointer))
-            guard !text.isEmpty else { continue }
-            textParts.append(text)
+        for segment in inference.segments {
             continuation.yield(.segment(
-                text: text,
-                startOffset: Double(whisper_full_get_segment_t0(context, index)) / 100,
-                endOffset: Double(whisper_full_get_segment_t1(context, index)) / 100
+                text: segment.text,
+                startOffset: segment.startOffset,
+                endOffset: segment.endOffset
             ))
         }
-        let text = TranscriptText.sanitized(textParts.joined(separator: " "))
+        let text = TranscriptText.sanitized(inference.segments.map(\.text).joined(separator: " "))
         continuation.yield(.partial(text: text))
-        continuation.yield(.sessionFinished(text: text, language: recognizedLanguage(context)))
+        continuation.yield(.sessionFinished(text: text, language: inference.language))
     }
 
     private func loadedContext() throws -> WhisperContextHandle {
@@ -196,7 +210,7 @@ public actor WhisperCppStt: SttEngine {
         return handle
     }
 
-    private func recognizedLanguage(_ context: OpaquePointer) -> RecognizedLanguage {
+    private nonisolated static func recognizedLanguage(_ context: OpaquePointer) -> RecognizedLanguage {
         guard let pointer = whisper_lang_str(whisper_full_lang_id(context)) else { return .unknown }
         return switch String(cString: pointer) {
         case "ja": .ja
@@ -248,15 +262,31 @@ private final class WhisperCancellationFlag: @unchecked Sendable {
 }
 
 private final class WhisperContextHandle: @unchecked Sendable {
-    let pointer: OpaquePointer
+    private let pointer: OpaquePointer
+    private let inferenceLock = Mutex(())
 
     init(pointer: OpaquePointer) {
         self.pointer = pointer
     }
 
+    func withExclusiveAccess<Result>(_ body: (OpaquePointer) throws -> Result) rethrows -> Result {
+        try inferenceLock.withLock { _ in try body(pointer) }
+    }
+
     deinit {
         whisper_free(pointer)
     }
+}
+
+private struct WhisperSegment: Sendable {
+    let text: String
+    let startOffset: TimeInterval
+    let endOffset: TimeInterval
+}
+
+private struct WhisperInference: Sendable {
+    let segments: [WhisperSegment]
+    let language: RecognizedLanguage
 }
 
 private final class ModelDownloadProgressDelegate: NSObject, URLSessionDownloadDelegate, @unchecked Sendable {

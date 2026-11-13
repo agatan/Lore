@@ -9,6 +9,9 @@ public enum LifeLogProcessingState: String, Codable, Sendable, CaseIterable {
 }
 
 public struct LifeLogAudioChunk: Identifiable, Codable, Sendable, Hashable {
+    /// UI用の正規化levelで約-50 dBFSに相当する保存chunkの絶対下限。
+    public static let minimumTranscriptionPeakLevel: Float = 1 / 6
+
     public var id: String
     public var captureStartedAt: Date
     public var captureEndedAt: Date
@@ -34,9 +37,8 @@ public struct LifeLogAudioChunk: Identifiable, Codable, Sendable, Hashable {
     }
 
     public var isTranscriptionCandidate: Bool {
-        captureEndedAt.timeIntervalSince(captureStartedAt) >= 1
-            && (peakLevel == nil || peakLevel! >= AdaptiveSpeechSegmenter.minimumSpeechLevel
-                + AdaptiveSpeechSegmenter.minimumRiseAboveNoise)
+        guard captureEndedAt.timeIntervalSince(captureStartedAt) >= 1 else { return false }
+        return peakLevel.map { $0 >= Self.minimumTranscriptionPeakLevel } ?? true
     }
 }
 

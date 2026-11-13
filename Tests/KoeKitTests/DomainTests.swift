@@ -262,6 +262,15 @@ struct LanguageDetectorTests {
         #expect(TranscriptText.sanitized("<|startoftranscript|><|en|><|transcribe|><|0.00|> hello <|20.00|><|endoftext|>") == "hello")
         #expect(TranscriptText.sanitized("通常の本文") == "通常の本文")
     }
+
+    @Test("Whisperの既知の定型hallucinationだけを除去する")
+    func stripsKnownWhisperBoilerplate() {
+        #expect(TranscriptText.whisperSanitized("ご視聴ありがとうございました") == "")
+        #expect(TranscriptText.whisperSanitized("ご視聴ありがとうございました。") == "")
+        #expect(TranscriptText.whisperSanitized("ご視聴ありがとうございました。問題が起きてますね。") == "問題が起きてますね。")
+        #expect(TranscriptText.whisperSanitized("確認しました。ご視聴ありがとうございました。次へ進みます。") == "確認しました。次へ進みます。")
+        #expect(TranscriptText.whisperSanitized("『ご視聴ありがとうございました』という文言") == "『ご視聴ありがとうございました』という文言")
+    }
 }
 
 // MARK: - セッション状態機械

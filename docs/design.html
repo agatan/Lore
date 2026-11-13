@@ -259,10 +259,10 @@ KoeMCP ──┘</pre>
 <ul>
 <li>音声入力とは独立してaudioを連続耐久化し、Life Log STTはadaptiveな発話burstごとのpreviewと確定jobです。</li>
 <li>Audio chunkは復旧単位です。30秒ごとに加えてburst確定時にもwriter queue上の入力を原子的にcommitし、最終認識は対応するcommit callback後に開始します。Checkpoint後は定期rotationを30秒後へ再設定し、同時rotationによる空chunkを作りません。</li>
-<li><code>AdaptiveSpeechSegmenter</code>は起動直後にbackground noise floorを校正し、非発話中も更新します。Noise floorに対するlevel差と倍率が250ms継続した場合だけburstを開始し、30秒未満は1.5秒、30秒以上は1秒の無音でflushします。Flush時は累積有声時間0.5秒以上かつ有声比率20%以上を<code>SpeechBurstEvidence</code>の不変条件とし、満たさない候補はSTTとcheckpointへ渡しません。Whisper.cppでは有効な発話の開始1.5秒後から1.5秒ごとに直近5秒をpreviewし、暫定textは永続化しません。</li>
+<li><code>AdaptiveSpeechSegmenter</code>はUI表示用levelではなく入力signalの線形RMSを使い、起動直後にbackground noise floorを校正して非発話中も更新します。約-50 dBFSの絶対下限とnoise floorに対する差・倍率が250ms継続した場合だけburstを開始し、30秒未満は1.5秒、30秒以上は1秒の無音でflushします。Flush時は累積有声時間0.5秒以上かつ有声比率20%以上を<code>SpeechBurstEvidence</code>の不変条件とし、満たさない候補はSTTとcheckpointへ渡しません。Whisper.cppでは有効な発話の開始1.5秒後から、前のpreviewが完了している場合に1.5秒ごとに直近5秒を認識し、暫定textは永続化しません。</li>
 <li>Jobは参照audioのcommit後に開始します。Timestampはcapture開始時刻とaudio offsetから導出します。語彙は録音session開始時にsnapshot化し、保存audioの再処理では最新の有効語彙を使います。</li>
 <li>音声入力と重なる区間もraw audioと認識済みutteranceを保存します。成功した<code>SessionRecord</code>をtimeline、検索、exportの正本として重なるlife-log utteranceを除外します。Summary/TODOは通常音声入力も重なるlife-log utteranceも使いません。Cancelled/failed sessionではlife-log utteranceを残します。</li>
-<li>pending chunkは起動後に再処理し、無音はpeak levelで除外します。それ以外も保存audioを同じsegmenterで発話burstへ戻し、有効なburstだけを個別にSTTへ渡します。</li>
+<li>pending chunkは起動後に再処理します。保存済みpeak levelはUI用の正規化levelのまま保持し、その尺度で約-50 dBFS未満の明確な無音chunkを除外します。それ以外も保存audioを線形RMSで同じsegmenterへ戻し、有効なburstだけを個別にSTTへ渡します。</li>
 <li>Audio保持policyは「処理後削除」を既定とし、「7日」「30日」を選択可能にします。削除可能なのは<code>transcription_state = transcribed</code>かつ<code>processing_state = extracted</code>のchunkだけです。「処理後削除」は両状態の保存完了後、「7日」「30日」はさらに<code>capture_ended_at</code>から指定日数の経過後にfileを削除します。DBのchunk metadataと派生dataは削除しません。</li>
 <li><code>LifeLogStore</code>が処理状態と保持policyから削除可能なaudio URLを決定し、<code>AppEnvironment</code>はその結果だけをfile systemから削除します。Policy変更時と起動時に同じuse caseを実行し、未処理・失敗chunkを期間だけで削除しない不変条件を一か所に置きます。</li>
 <li><code>ContinuousAudioCapture</code>は実際のaudio writerの開始・停止を通知します。<code>LifeLogCoordinator</code>は旧writerとSTT sessionの終了を待ち、同じprocessの記録意図が残り、sleepまたはボイスメモによる一時停止中でなければbackoff付きで再接続します。マイク権限拒否だけは再試行しません。</li>
@@ -276,7 +276,7 @@ KoeMCP ──┘</pre>
 <h2>6. Engines</h2>
 <p>通常音声入力とボイスメモは<code>SpeechAnalyzerStt</code>固定です。Life logのpreview・確定jobだけをSpeechAnalyzerまたはlocal download済みwhisper.cppから選びます。Audioは送信しません。</p>
 <p><code>WhisperCppStt</code>はLarge v3 Turbo Q5_0 574 MBを既定とし、非Turbo Large v3 Q5_0も選べるcatalog、download、cancel、SHA-256検証、削除を所有します。公式XCFrameworkのC APIをprocess内から直接呼び、GGML modelをMetalとCPUで実行します。Core ML modelとANE specialization、Homebrewや外部CLIへの依存は持ちません。Decode時はspecial tokenを出力せず、engine境界でもcontrol/timestamp tokenを除去します。Read/UI側の補正や既存dataの自動書換えは持ちません。</p>
-<p><code>LifeLogCoordinator</code>は<code>SpeechBurstEvidence</code>が有効になった発話だけを対象に、発話検出から1.5秒後、その後1.5秒ごとに直近5秒のsnapshotを同じengineへ渡し、ephemeralな<code>liveTranscript</code>だけを更新します。新しいsnapshotまたはburst確定時は古いpreviewをcancelします。Preview失敗はlogへ残しますがchunkをfailedにしません。有効なburst確定時だけ<code>ContinuousAudioCapture</code>へcheckpointを要求し、永続化済みaudioによる最終認識だけを正本として保存します。</p>
+<p><code>WhisperCppStt</code>は同じmodelの推論contextを共有し、context handleの排他境界で推論と結果読取りを直列実行します。Control/timestamp tokenと、独立した文として現れる既知の定型hallucination「ご視聴ありがとうございました」はengine境界で除去し、後続する実発話は保持します。<code>LifeLogCoordinator</code>は<code>SpeechBurstEvidence</code>が有効になった発話だけを対象に、発話検出から1.5秒後、前のpreviewが完了していれば1.5秒ごとに直近5秒のsnapshotを同じengineへ渡し、ephemeralな<code>liveTranscript</code>だけを更新します。実行中previewへ新しいsnapshotを重ねず、burst確定時はpreviewのcancel完了後に最終認識を優先します。Preview失敗はlogへ残しますがchunkをfailedにしません。有効なburst確定時だけ<code>ContinuousAudioCapture</code>へcheckpointを要求し、永続化済みaudioによる最終認識だけを正本として保存します。</p>
 <p>Main/mini timelineはscroll geometryから末尾表示を保持し、初回と追従中のitem追加だけ末尾へscrollします。利用者操作またはsource navigationで末尾を離れた場合は追従を止め、末尾へ戻った時だけ再開します。</p>
 <table>
 <thead>
@@ -469,7 +469,7 @@ KoeMCP ──┘</pre>
 </section>
 <section id="tests">
 <h2>13. Test配置</h2>
-<p><code>Tests/KoeKitTests</code>はnoise floor校正と追従、相対level差による発話開始、1.5/1秒tier、whisper.cppの1.5秒preview cadenceと5秒rolling window、5分flushをdomain testで固定します。<code>make ui-test</code>は主要CUJを検証します。</p>
+<p><code>Tests/KoeKitTests</code>はnoise floor校正と追従、相対level差による発話開始、1.5/1秒tier、whisper.cppの1.5秒preview cadenceと5秒rolling window、5分flushをdomain testで固定します。<code>make ui-test</code>は本番と別のbundle IDを持つ署名済み<code>KoeUITests.app</code>を別process instanceとして起動して主要CUJを検証します。UI test bundleは専用UserDefaultsとインモリDBを使い、global hotkeyと権限監視を起動しません。E2E runnerは専用bundle ID以外のappを終了せず、本番bundle IDを指定された場合は実行を拒否します。</p>
 </section>
 </main>
 <footer>詳細な型と経路は <a href="design.md">Markdown版</a>、利用者との契約は <a href="spec.html">外部仕様</a> を参照してください。</footer>

@@ -67,6 +67,20 @@ struct AudioLevelTests {
         #expect(level > 0.05)
     }
 
+    @Test("発話判定用RMSはUI用の対数正規化を行わない")
+    func speechRmsStaysLinear() {
+        let rms = AudioCapture.rootMeanSquare(of: buffer(format: .pcmFormatFloat32, amplitude: 0.01))
+        #expect(abs(rms - 0.007_07) < 0.000_1)
+        #expect(rms < AudioCapture.level(of: buffer(format: .pcmFormatFloat32, amplitude: 0.01)))
+    }
+
+    @Test("発話判定用RMSもformat間で一致する")
+    func speechRmsIsConsistentAcrossFormats() {
+        let float = AudioCapture.rootMeanSquare(of: buffer(format: .pcmFormatFloat32, amplitude: 0.01))
+        let int16 = AudioCapture.rootMeanSquare(of: buffer(format: .pcmFormatInt16, amplitude: 0.01))
+        #expect(abs(float - int16) < 0.000_1)
+    }
+
     @Test("保存音声をSpeechAnalyzerが要求するInt16へ変換する")
     func convertsStoredAudioToRecognizerFormat() throws {
         let source = buffer(format: .pcmFormatFloat32, amplitude: 0.3)

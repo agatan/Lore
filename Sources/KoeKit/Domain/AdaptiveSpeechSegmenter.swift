@@ -31,17 +31,18 @@ public struct AdaptiveSpeechSegmenter: Sendable {
         case flush
     }
 
-    public static let minimumSpeechLevel: Float = 0.015
-    public static let minimumRiseAboveNoise: Float = 0.012
-    public static let speechToNoiseRatio: Float = 1.6
+    /// 約-50 dBFS。これ未満の微小noiseはWhisperへ渡さない。
+    public static let minimumSpeechLevel: Float = 0.003
+    public static let minimumRiseAboveNoise: Float = 0.002
+    public static let speechToNoiseRatio: Float = 2.5
     public static let calibrationDuration: TimeInterval = 1
     public static let onsetDuration: TimeInterval = 0.25
     public static let backgroundAdaptationDuration: TimeInterval = 1
     public static let maximumBurstDuration: TimeInterval = 5 * 60
 
     public private(set) var isActive = false
-    public private(set) var noiseFloor: Float = 0.01
-    public private(set) var speechThreshold: Float = 0.025
+    public private(set) var noiseFloor: Float = 0.001
+    public private(set) var speechThreshold: Float = minimumSpeechLevel
     public private(set) var voicedDuration: TimeInterval = 0
     public private(set) var silenceDuration: TimeInterval = 0
     public private(set) var burstDuration: TimeInterval = 0
@@ -77,7 +78,7 @@ public struct AdaptiveSpeechSegmenter: Sendable {
             candidateMaximum = max(candidateMaximum, level)
             candidateWeightedLevel += Double(level) * duration
             let modulation = candidateMaximum - candidateMinimum
-            let requiredModulation = max(0.004, noiseFloor * 0.2)
+            let requiredModulation = max(0.001, noiseFloor * 0.5)
             if candidateDuration + 0.000_001 < Self.onsetDuration || modulation < requiredModulation {
                 if candidateDuration + 0.000_001 >= Self.backgroundAdaptationDuration {
                     noiseFloor = Float(candidateWeightedLevel / candidateDuration)

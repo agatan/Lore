@@ -380,7 +380,7 @@ public final class LifeLogCoordinator {
         for await chunk in audio {
             if Task.isCancelled { break }
             let duration = Double(chunk.buffer.frameLength) / chunk.buffer.format.sampleRate
-            let level = AudioCapture.level(of: chunk.buffer)
+            let level = AudioCapture.rootMeanSquare(of: chunk.buffer)
             let wasVoiced = segmenter.isActive && segmenter.considersSpeech(level: level)
             switch segmenter.consume(level: level, duration: duration) {
             case .ignore:
@@ -405,6 +405,7 @@ public final class LifeLogCoordinator {
                     if Self.shouldScheduleLivePreview(
                         evidence: evidence,
                         lastPreviewDuration: lastPreviewDuration,
+                        previewInProgress: livePreviewTask != nil,
                         engineIdentifier: stt.identifier
                     ) {
                         lastPreviewDuration = evidence.burstDuration
@@ -524,13 +525,18 @@ public final class LifeLogCoordinator {
         hints: SttHints,
         stt: any SttEngine
     ) {
+        guard livePreviewTask == nil else { return }
         livePreviewRevision += 1
         let revision = livePreviewRevision
-        livePreviewTask?.cancel()
         let (stream, continuation) = AsyncStream<AudioChunk>.makeStream()
         for buffer in buffers { continuation.yield(buffer) }
         continuation.finish()
         livePreviewTask = Task { [weak self] in
+            defer {
+                if self?.livePreviewRevision == revision {
+                    self?.livePreviewTask = nil
+                }
+            }
             do {
                 var preview = ""
                 for try await event in stt.transcribe(audio: stream, hints: hints) {
@@ -569,9 +575,11 @@ public final class LifeLogCoordinator {
     nonisolated static func shouldScheduleLivePreview(
         evidence: SpeechBurstEvidence,
         lastPreviewDuration: TimeInterval?,
+        previewInProgress: Bool,
         engineIdentifier: EngineIdentifier
     ) -> Bool {
         guard engineIdentifier == .whisperCpp,
+              !previewInProgress,
               evidence.isTranscriptionCandidate,
               evidence.burstDuration >= livePreviewInitialDelay else { return false }
         guard let lastPreviewDuration else { return true }
@@ -1156,7 +1164,7 @@ public final class LifeLogCoordinator {
 
         for chunk in audio {
             let duration = Double(chunk.buffer.frameLength) / chunk.buffer.format.sampleRate
-            let level = AudioCapture.level(of: chunk.buffer)
+            let level = AudioCapture.rootMeanSquare(of: chunk.buffer)
             let wasVoiced = segmenter.isActive && segmenter.considersSpeech(level: level)
             switch segmenter.consume(level: level, duration: duration) {
             case .ignore:

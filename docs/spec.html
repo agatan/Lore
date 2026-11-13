@@ -102,8 +102,9 @@
 <p>通常の音声入力とボイスメモはApple SpeechAnalyzerへstreamします。Life logだけはSpeechAnalyzerまたはlocal download済みwhisper.cpp GGML modelを選び、連続録音から検出した発話burstを認識します。比較的大きいlocal modelでも入力確認を待たせないよう、発話中は暫定textを表示し、発話確定後にtimestamp付きの最終結果へ置き換えます。</p>
 </article>
 </div>
-<p>起動直後にbackground noise floorを校正し、非発話中も更新します。Noise floorに対する十分なlevel差が短時間継続した場合だけ発話burstを開始します。累積有声時間0.5秒未満、または有声比率20%未満の候補は生活音・無音として破棄し、whisper.cpp、最終STT、burst checkpointを起動しません。Whisper.cpp選択時は有効な発話の開始から1.5秒後、その後1.5秒ごとに直近5秒を暫定認識します。累積有声時間が30秒未満なら1.5秒、30秒以上なら1秒の連続無音で確定し、wall time 5分でも安全確定します。暫定textはDBへ保存せず、永続化済みaudioによる最終認識だけを正本にします。</p>
+<p>起動直後に入力signalの線形RMSでbackground noise floorを校正し、非発話中も更新します。約-50 dBFSの絶対下限、noise floorに対する十分な差と倍率が短時間継続した場合だけ発話burstを開始します。累積有声時間0.5秒未満、または有声比率20%未満の候補は生活音・無音として破棄し、whisper.cpp、最終STT、burst checkpointを起動しません。Whisper.cpp選択時は有効な発話の開始から1.5秒後、前の暫定認識が完了していれば1.5秒ごとに直近5秒を暫定認識します。累積有声時間が30秒未満なら1.5秒、30秒以上なら1秒の連続無音で確定し、wall time 5分でも安全確定します。暫定textはDBへ保存せず、永続化済みaudioによる最終認識だけを正本にします。</p>
 <p>whisper.cpp設定では進捗と失敗理由を表示してdownloadのcancel、再試行、削除ができます。完了前のmodelは認識に利用できず、実行中jobが使うmodelは完了またはcancelまで削除できません。</p>
+<p>whisper.cppが無音・環境音から生成する既知の定型文「ご視聴ありがとうございました」は、独立した文として認識された場合に限り表示・保存しません。同じsegmentに続く実発話は残します。</p>
 <h3>Mode、rule、語彙</h3>
 <ul>
 <li>録音開始時の前面appからmodeを決め、session中は固定します。手動固定を優先します。</li>
@@ -514,8 +515,9 @@ koe search "検索語" [--limit N]</pre>
 <li>Summary/TODO派生は設定間隔またはSummary viewの手動更新だけで実行し、録音停止を含むcapture状態変化では実行しない。</li>
 <li>App起動だけではlife log記録を開始せず、前回processの記録開始意図を復元しない。</li>
 <li>通常音声入力とボイスメモはSpeechAnalyzerを使い、life logだけはSpeechAnalyzerまたはdownload済みwhisper.cpp modelを選べる。Download・cancel・再試行・削除・容量を設定で管理でき、audioはMac外へ送信しない。</li>
-<li>Life logはbackground noise floorに対する相対level差が短時間継続した場合だけ認識jobを作る。Whisper.cppでは発話中に1.5秒cadence・直近5秒の暫定textを表示し、30秒未満の発話は1.5秒、30秒以上は1秒の無音でflushする。Burst確定時にaudioをcommitし、暫定textは永続化しない。</li>
+<li>Life logは線形RMSが約-50 dBFS以上で、background noise floorに対する相対差も短時間継続した場合だけ認識jobを作る。Whisper.cppでは前のpreviewが完了している場合に限り、発話中に1.5秒cadence・直近5秒の暫定textを表示し、30秒未満の発話は1.5秒、30秒以上は1秒の無音でflushする。Burst確定時にaudioをcommitし、暫定textは永続化しない。</li>
 <li>累積有声時間0.5秒未満または有声比率20%未満の候補はpreview、最終STT、burst checkpointを開始せず、保存audioの再処理でも除外する。Main/mini timelineは末尾表示中だけ新しい項目へ追従し、末尾を離れた場合は追従を止める。</li>
+<li>whisper.cppの既知の定型hallucination「ご視聴ありがとうございました」は独立した文だけをengine境界で除外し、同じsegmentの実発話は保持する。</li>
 </ol>
 </section>
 </main>

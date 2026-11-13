@@ -552,7 +552,7 @@ public final class AppEnvironment {
             settings.voiceMemoHotkey,
         ].contains { binding in
             guard case .key(_, let modifiers) = binding else { return false }
-            return HotkeyMonitor.requiresEventTap(modifiers: modifiers)
+            return HotkeyMonitor.requiresInputMonitoring(modifiers: modifiers)
         }
     }
 
