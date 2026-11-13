@@ -156,7 +156,8 @@ public struct HistoryStore: Sendable {
         since: Date,
         calendar: Calendar = .current
     ) async throws -> [DailyRecordingDuration] {
-        let rows = try queue.read { db in
+        // GRDBの`Row`はSendableではないため、read closure内で値へ変換してから返す。
+        let intervals = try await queue.read { db in
             try Row.fetchAll(
                 db,
                 sql: """
@@ -165,12 +166,11 @@ public struct HistoryStore: Sendable {
                     ORDER BY started_at
                     """,
                 arguments: [PersistenceCoding.encode(date: since)]
-            )
-        }
-        let intervals = try rows.map { row in
-            let startedAt = try PersistenceCoding.decodeDate(row["started_at"])
-            let durationMs: Int = row["audio_duration_ms"]
-            return (start: startedAt, end: startedAt.addingTimeInterval(Double(durationMs) / 1_000))
+            ).map { row in
+                let startedAt = try PersistenceCoding.decodeDate(row["started_at"])
+                let durationMs: Int = row["audio_duration_ms"]
+                return (start: startedAt, end: startedAt.addingTimeInterval(Double(durationMs) / 1_000))
+            }
         }
         return DailyRecordingDuration.aggregate(intervals: intervals, calendar: calendar)
     }
@@ -241,24 +241,30 @@ public struct HistoryStore: Sendable {
                     ORDER BY started_at DESC LIMIT ?
                     """,
                 arguments: [max(0, limit)]
-            )
+            ).map { row in
+                LatencyRow(
+                    sttEngine: row["stt_engine"],
+                    sttModel: row["stt_model"],
+                    sttLatencyMs: row["stt_latency_ms"],
+                    llmEngine: row["llm_engine"],
+                    llmModel: row["llm_model"],
+                    llmLatencyMs: row["llm_latency_ms"],
+                    audioDurationMs: row["audio_duration_ms"]
+                )
+            }
         }
 
         var transcription: [String: Samples] = [:]
         var formatting: [String: Samples] = [:]
 
         for row in rows {
-            let durationMs: Int? = row["audio_duration_ms"]
-            if let latency: Int = row["stt_latency_ms"] {
-                let engine: String = row["stt_engine"]
-                let model: String? = row["stt_model"]
-                transcription[Self.key(engine, model), default: Samples()]
-                    .add(latencyMs: latency, durationMs: durationMs)
+            if let latency = row.sttLatencyMs {
+                transcription[Self.key(row.sttEngine, row.sttModel), default: Samples()]
+                    .add(latencyMs: latency, durationMs: row.audioDurationMs)
             }
-            if let latency: Int = row["llm_latency_ms"], let engine: String? = row["llm_engine"], let engine {
-                let model: String? = row["llm_model"]
-                formatting[Self.key(engine, model), default: Samples()]
-                    .add(latencyMs: latency, durationMs: durationMs)
+            if let latency = row.llmLatencyMs, let engine = row.llmEngine {
+                formatting[Self.key(engine, row.llmModel), default: Samples()]
+                    .add(latencyMs: latency, durationMs: row.audioDurationMs)
             }
         }
 
@@ -270,6 +276,16 @@ public struct HistoryStore: Sendable {
 
     public static func key(_ engine: String, _ model: String?) -> String {
         "\(engine)|\(model ?? "")"
+    }
+
+    private struct LatencyRow: Sendable {
+        let sttEngine: String
+        let sttModel: String?
+        let sttLatencyMs: Int?
+        let llmEngine: String?
+        let llmModel: String?
+        let llmLatencyMs: Int?
+        let audioDurationMs: Int?
     }
 
     /// 1 つのモデルについて集めた実測値。

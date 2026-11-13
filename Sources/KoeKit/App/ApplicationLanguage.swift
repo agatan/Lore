@@ -89,7 +89,9 @@ enum KoeLocalization {
     }
 
     private static func bundle(identifier: String) -> Bundle {
-        guard let path = Bundle.module.path(forResource: identifier.lowercased(), ofType: "lproj"),
+        // build systemによってlproj名の大文字小文字が保たれる場合と小文字化される場合がある。
+        guard let path = Bundle.module.path(forResource: identifier, ofType: "lproj")
+                ?? Bundle.module.path(forResource: identifier.lowercased(), ofType: "lproj"),
               let bundle = Bundle(path: path) else {
             return .module
         }

@@ -199,28 +199,31 @@ public struct LifeLogStore: Sendable {
         let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return [] }
         let fetchLimit = max(1, limit) * 2
-        let rows = try queue.read { db in
+        // GRDBの`Row`はSendableではないため、read closure内で検索結果へ変換してから返す。
+        let storedResults = try await queue.read { db in
+            let rows: [Row]
             if trimmed.count >= 3 {
                 let phrase = "\"\(trimmed.replacingOccurrences(of: "\"", with: "\"\""))\""
-                return try Row.fetchAll(db, sql: Self.ftsSearchSQL, arguments: [phrase, phrase, phrase, phrase, fetchLimit])
+                rows = try Row.fetchAll(db, sql: Self.ftsSearchSQL, arguments: [phrase, phrase, phrase, phrase, fetchLimit])
+            } else {
+                let escaped = trimmed
+                    .replacingOccurrences(of: "\\", with: "\\\\")
+                    .replacingOccurrences(of: "%", with: "\\%")
+                    .replacingOccurrences(of: "_", with: "\\_")
+                let pattern = "%\(escaped)%"
+                rows = try Row.fetchAll(db, sql: Self.likeSearchSQL, arguments: [pattern, pattern, pattern, pattern, pattern, pattern, fetchLimit])
             }
-            let escaped = trimmed
-                .replacingOccurrences(of: "\\", with: "\\\\")
-                .replacingOccurrences(of: "%", with: "\\%")
-                .replacingOccurrences(of: "_", with: "\\_")
-            let pattern = "%\(escaped)%"
-            return try Row.fetchAll(db, sql: Self.likeSearchSQL, arguments: [pattern, pattern, pattern, pattern, pattern, pattern, fetchLimit])
-        }
-        let storedResults = try rows.map { row in
-            let occurredAt = try parse(row["occurred_at"])
-            return LifeLogSearchResult(
-                id: "\(row["kind"] as String)-\(row["id"] as String)",
-                kind: LifeLogSearchResult.Kind(rawValue: row["kind"])!,
-                text: row["text"],
-                occurredAt: occurredAt,
-                day: (row["day"] as String?) ?? LifeLogDateKey.string(for: occurredAt, calendar: calendar),
-                todoStatus: (row["status"] as String?).flatMap(LifeLogTodo.Status.init(rawValue:))
-            )
+            return try rows.map { row in
+                let occurredAt = try PersistenceCoding.decodeDate(row["occurred_at"])
+                return LifeLogSearchResult(
+                    id: "\(row["kind"] as String)-\(row["id"] as String)",
+                    kind: LifeLogSearchResult.Kind(rawValue: row["kind"])!,
+                    text: row["text"],
+                    occurredAt: occurredAt,
+                    day: (row["day"] as String?) ?? LifeLogDateKey.string(for: occurredAt, calendar: calendar),
+                    todoStatus: (row["status"] as String?).flatMap(LifeLogTodo.Status.init(rawValue:))
+                )
+            }
         }
         let utteranceDays = Set(storedResults.filter { $0.kind == .utterance }.map { LifeLogDateKey.string(for: $0.occurredAt, calendar: calendar) })
         var visibleUtteranceIDs: Set<String> = []
@@ -234,10 +237,11 @@ public struct LifeLogStore: Sendable {
     }
 
     private func searchDictations(_ query: String, limit: Int, calendar: Calendar) async throws -> [LifeLogSearchResult] {
-        let rows = try queue.read { db in
+        try await queue.read { db in
+            let rows: [Row]
             if query.count >= 3 {
                 let phrase = "\"\(query.replacingOccurrences(of: "\"", with: "\"\""))\""
-                return try Row.fetchAll(db, sql: """
+                rows = try Row.fetchAll(db, sql: """
                     SELECT s.id, s.raw_transcript text, s.started_at occurred_at
                     FROM sessions s JOIN sessions_fts f ON f.rowid=s.rowid
                     WHERE sessions_fts MATCH ?
@@ -245,28 +249,29 @@ public struct LifeLogStore: Sendable {
                       AND trim(s.raw_transcript) != ''
                     ORDER BY s.started_at DESC LIMIT ?
                     """, arguments: [phrase, limit])
+            } else {
+                let escaped = query
+                    .replacingOccurrences(of: "\\", with: "\\\\")
+                    .replacingOccurrences(of: "%", with: "\\%")
+                    .replacingOccurrences(of: "_", with: "\\_")
+                rows = try Row.fetchAll(db, sql: """
+                    SELECT id, raw_transcript text, started_at occurred_at FROM sessions
+                    WHERE raw_transcript LIKE ? ESCAPE '\\'
+                      AND status IN ('completed', 'fallback', 'clipboard_only')
+                      AND trim(raw_transcript) != ''
+                    ORDER BY started_at DESC LIMIT ?
+                    """, arguments: ["%\(escaped)%", limit])
             }
-            let escaped = query
-                .replacingOccurrences(of: "\\", with: "\\\\")
-                .replacingOccurrences(of: "%", with: "\\%")
-                .replacingOccurrences(of: "_", with: "\\_")
-            return try Row.fetchAll(db, sql: """
-                SELECT id, raw_transcript text, started_at occurred_at FROM sessions
-                WHERE raw_transcript LIKE ? ESCAPE '\\'
-                  AND status IN ('completed', 'fallback', 'clipboard_only')
-                  AND trim(raw_transcript) != ''
-                ORDER BY started_at DESC LIMIT ?
-                """, arguments: ["%\(escaped)%", limit])
-        }
-        return try rows.map { row in
-            let occurredAt = try parse(row["occurred_at"])
-            return LifeLogSearchResult(
-                id: "dictation-\(row["id"] as String)",
-                kind: .dictation,
-                text: row["text"],
-                occurredAt: occurredAt,
-                day: LifeLogDateKey.string(for: occurredAt, calendar: calendar)
-            )
+            return try rows.map { row in
+                let occurredAt = try PersistenceCoding.decodeDate(row["occurred_at"])
+                return LifeLogSearchResult(
+                    id: "dictation-\(row["id"] as String)",
+                    kind: .dictation,
+                    text: row["text"],
+                    occurredAt: occurredAt,
+                    day: LifeLogDateKey.string(for: occurredAt, calendar: calendar)
+                )
+            }
         }
     }
     public func utterance(id: String) async throws -> LifeLogUtterance? {
