@@ -4,6 +4,10 @@ set -euo pipefail
 build_dir="$1"
 contents="$2"
 module_build="$build_dir/Koe.build"
+if [[ ! -d "$module_build" ]]; then
+    # Swift Build (Swift 6.4以降の既定)はintermediateをProductsと別の場所へ置く。
+    module_build=".build/out/Intermediates.noindex/Koe.build/${(C)build_dir:t}"
+fi
 work_dir="$build_dir/Koe.appintents"
 toolchain_dir="$(xcode-select -p)/Toolchains/XcodeDefault.xctoolchain"
 sdk_root="$(xcrun --sdk macosx --show-sdk-path)"
