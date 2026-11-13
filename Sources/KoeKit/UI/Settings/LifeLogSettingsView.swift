@@ -40,9 +40,9 @@ struct LifeLogSettingsView: View {
                 SettingsRow(title: "文字起こし", caption: "whisper.cppは発話区間だけをMac内で後追い処理します") {
                     Picker("", selection: Binding(get: { settings.lifeLogSttBackend }, set: { value in
                         settings.lifeLogSttBackend = value
-                        Task { await env.applyLifeLogSttChange() }
+                        Task { await env.applySttChange() }
                     })) {
-                        ForEach(LifeLogSttBackend.allCases) { Text($0.displayName).tag($0) }
+                        ForEach(SttBackend.allCases) { Text($0.displayName).tag($0) }
                     }
                     .labelsHidden()
                     .frame(width: 220, alignment: .trailing)
@@ -60,42 +60,7 @@ struct LifeLogSettingsView: View {
                     .frame(width: 220, alignment: .trailing)
                 }
                 if settings.lifeLogSttBackend == .whisperCpp {
-                    SettingsRow(title: "Whisperモデル") {
-                        Picker("", selection: Binding(get: { settings.lifeLogWhisperModel }, set: { value in
-                            settings.lifeLogWhisperModel = value
-                            Task { await env.applyLifeLogSttChange() }
-                        })) {
-                            ForEach(WhisperModel.allCases) { Text($0.displayName).tag($0) }
-                        }
-                        .labelsHidden()
-                        .frame(width: 220, alignment: .trailing)
-                    }
-                    SettingsRow(title: "モデル管理", caption: "取得中だけHugging Faceへ接続します。音声は送信しません") {
-                        HStack(spacing: 8) {
-                            if let progress = env.lifeLogWhisperProgress {
-                                ProgressView(value: progress).frame(width: 110)
-                                Text("\(Int(progress * 100))%")
-                                    .font(.system(size: 10.5, design: .rounded)).monospacedDigit()
-                                Button("キャンセル") { env.cancelLifeLogWhisperDownload() }
-                            } else {
-                                switch env.engines.lifeLogSttAvailability {
-                                case .ready:
-                                    Label("取得済み", systemImage: "checkmark.circle")
-                                        .foregroundStyle(KoeTheme.success)
-                                    Button("削除") { Task { await env.deleteLifeLogWhisperModel() } }
-                                        .disabled(env.lifeLog.hasCaptureIntent || env.lifeLog.isTranscribing)
-                                case .needsDownload:
-                                    Button("取得") { env.installLifeLogWhisperModel() }
-                                case .unavailable(let reason):
-                                    Text(reason).foregroundStyle(KoeTheme.recording)
-                                }
-                            }
-                        }
-                        .font(.system(size: 10.5))
-                    }
-                    if let error = env.lifeLogWhisperError {
-                        Text(error).font(.system(size: 11)).foregroundStyle(KoeTheme.recording)
-                    }
+                    WhisperModelSettingsView(env: env)
                 }
                 Divider()
                 SettingsRow(title: "マイク") {

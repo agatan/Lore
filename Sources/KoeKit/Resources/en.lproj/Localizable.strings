@@ -291,3 +291,6 @@
 "文字起こし中" = "Transcribing";
 "聞き取り中" = "Listening";
 "処理" = "Processing";
+"whisper.cppはキーを離した後に録音全体をMac内で一括認識します。録音中の暫定表示はありません。ボイスメモにも適用します。" = "whisper.cpp transcribes the whole recording on this Mac after you release the key. No live preview is shown while recording. Also applies to voice memos.";
+"音声入力とライフログで共通です" = "Shared by dictation and Life Log.";
+"SpeechAnalyzerを選んだ音声入力とライフログで使います。whisper.cppは各設定で選べます。語彙は両方で共有します。" = "Used by dictation and Life Log when SpeechAnalyzer is selected. whisper.cpp can be chosen in each section. Vocabulary is shared by both.";

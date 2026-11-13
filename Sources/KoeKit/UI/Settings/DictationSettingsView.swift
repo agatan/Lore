@@ -38,6 +38,26 @@ struct DictationSettingsView: View {
                 }
             }
 
+            SettingsCard(
+                title: "聞き取り",
+                footnote: "whisper.cppはキーを離した後に録音全体をMac内で一括認識します。録音中の暫定表示はありません。ボイスメモにも適用します。"
+            ) {
+                SettingsRow(title: "文字起こし") {
+                    Picker("", selection: Binding(get: { settings.dictationSttBackend }, set: { value in
+                        settings.dictationSttBackend = value
+                        Task { await env.applySttChange() }
+                    })) {
+                        ForEach(SttBackend.allCases) { Text($0.displayName).tag($0) }
+                    }
+                    .labelsHidden()
+                    .frame(width: 220, alignment: .trailing)
+                    .accessibilityIdentifier("dictation.stt-backend")
+                }
+                if settings.dictationSttBackend == .whisperCpp {
+                    WhisperModelSettingsView(env: env)
+                }
+            }
+
             SettingsCard(title: "フィードバック") {
                 SettingsToggle(title: "録音中にHUDを表示する", isOn: Binding(
                     get: { settings.hudEnabled }, set: { settings.hudEnabled = $0 }

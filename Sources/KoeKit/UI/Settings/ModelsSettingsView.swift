@@ -62,7 +62,7 @@ struct ModelsSettingsView: View {
     }
 
     private var speechRecognitionCard: some View {
-        SettingsCard(title: "聞き取り", footnote: "音声入力とライフログの文字起こしに共通です。語彙も両方で共有します。") {
+        SettingsCard(title: "聞き取り", footnote: "SpeechAnalyzerを選んだ音声入力とライフログで使います。whisper.cppは各設定で選べます。語彙は両方で共有します。") {
             HStack(alignment: .firstTextBaseline, spacing: 8) {
                 Text("Apple 音声認識 (SpeechAnalyzer)").font(.system(size: 13, weight: .medium))
                 Spacer()

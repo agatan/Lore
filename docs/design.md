@@ -60,7 +60,7 @@ App終了時はApp delegateが進行中操作をinterruptし、音声writerのco
 ```text
 Hotkey/UI
   -> target app・mode・rules・vocabulary・engineをSessionContextへ固定
-  -> AudioCapture + SpeechAnalyzerStt
+  -> AudioCapture + dictation SttEngine (SpeechAnalyzerStt / WhisperCppStt)
   -> raw transcriptをSessionRecord(interrupted)として保存
   -> FormattingPolicy + LlmEngine
   -> TextInserter
@@ -110,14 +110,14 @@ capture request
 
 ## 6. Engine構成
 
-`EngineRegistry`は通常の音声入力・ボイスメモを`SpeechAnalyzerStt`へ固定し、ライフログのpreview・確定jobだけを`SpeechAnalyzerStt`または`WhisperCppStt`から選びます。音声入力整形用とライフログ派生用の`LlmEngine`選択は分離します。
+`EngineRegistry`は音声入力・ボイスメモ用とライフログのpreview・確定job用の`SttEngine`を、それぞれ`SpeechAnalyzerStt`または`WhisperCppStt`から選びます。セッションとjobは開始時のengineを最後まで使います。音声入力整形用とライフログ派生用の`LlmEngine`選択は分離します。
 
 | STT | 実装 | Model | Audio送信 |
 |---|---|---|---|
 | Apple SpeechAnalyzer | `SpeechAnalyzerStt` | macOS管理 | なし |
 | whisper.cpp deferred | `WhisperCppStt` | Koeがlocal downloadを管理するaccuracy優先のcurated GGML model | なし |
 
-`WhisperCppStt`はLarge v3 Turbo Q5_0 574 MBを既定とし、accuracy優先の非Turbo Large v3 Q5_0も選べるmodel catalog、download、cancel、SHA-256検証、削除を一つの境界に置きます。推論contextは同じmodelを使うjob間で共有し、context handleの排他境界で推論と結果読取りを直列実行します。実行中jobが参照するmodelは完了またはcancelまで削除しません。Model lifecycleはLife Log jobが所有し、download完了だけでは推論contextをloadしません。公式XCFrameworkのC APIをprocess内から直接呼び、GGML modelをMetalとCPUで実行します。Core ML modelとANE specialization、Homebrewや外部CLIへの依存は持ちません。Decode時はspecial tokenを出力せず、engine境界でcontrol/timestamp tokenと、独立した文として現れる既知の定型hallucination「ご視聴ありがとうございました」を除去してからdomain eventへ渡します。後続する実発話は保持し、Read/UI側の補正や既存dataの自動書換えは持ちません。Model取得通信に音声、文字起こし、利用者dataを含めません。
+`WhisperCppStt`はLarge v3 Turbo Q5_0 574 MBを既定とし、accuracy優先の非Turbo Large v3 Q5_0も選べるmodel catalog、download、cancel、SHA-256検証、削除を一つの境界に置きます。GGML重みは`WhisperModelCache`がfileごとにprocess内で一つだけloadし、全stateが手放した時点で解放します。`EngineRegistry`は音声入力用とライフログ用に別の`WhisperCppStt`を持ち、それぞれが自分の推論stateを所有するため、両用途の推論は互いを待ちません。同じstateでの推論と結果読取りはactorとstate handleの排他で直列実行します。実行中jobは自分のstateと重みを保持して完了まで使います。音声入力は`captureFormat`で録音を待たせずにstateの準備を開始し、10分のidle後に音声入力用stateだけを解放します。ライフログ用stateは記録停止の完了時に解放します。Download完了だけでは推論stateをloadしません。音声は前後の無音を`WhisperInputPolicy`で除いてから渡し、segment offsetへ除いた長さを加えて保存audioのoffsetと一致させます。語彙promptは同じpolicyで並び順を保ってtoken上限へ収め、prompt全体の写しだけのsegmentを除きます。公式XCFrameworkのC APIをprocess内から直接呼び、GGML modelをMetalとCPUで実行します。Core ML modelとANE specialization、Homebrewや外部CLIへの依存は持ちません。Decode時はspecial tokenを出力せず、engine境界でcontrol/timestamp tokenと、独立した文として現れる既知の定型hallucination「ご視聴ありがとうございました」を除去してからdomain eventへ渡します。後続する実発話は保持し、Read/UI側の補正や既存dataの自動書換えは持ちません。Model取得通信に音声、文字起こし、利用者dataを含めません。
 
 `LifeLogCoordinator`は`SpeechBurstEvidence`が有効になった発話だけを対象に、発話検出から1.5秒後、前のpreviewが完了していれば1.5秒ごとに直近5秒のsnapshotを同じ`SttEngine`へ渡し、結果をephemeralな`liveTranscript`としてだけ公開します。実行中previewへ新しいsnapshotを重ねず、burst確定時はpreviewのcancel完了後に最終認識を優先します。Preview失敗は記録済みaudioの再処理状態を変更せずlogへ残し、最終認識の失敗だけをchunkのfailureとして扱います。有効なburst確定時だけ`ContinuousAudioCapture`へcheckpointを要求し、writer queue上の入力を原子的にcommitして次のfileを開始します。確定結果は対象audioのcommit callbackを待ってからtimestamp付きで保存します。Checkpoint後は定期rotationを30秒後へ再設定し、同時rotationによる空chunkを作りません。
 
@@ -161,7 +161,7 @@ DBは`~/Library/Application Support/Koe/koe.sqlite`です。`DatabaseQueue`を�
 - `AppSettings.Storage`はsuite `dev.agatan.Koe`のUserDefaults key `koe.settings.v1`へJSONで保存します。
 - `ApplicationLanguage`は`system`、`en`、`ja`、`zh-Hans`の閉じた値として保存し、既定は`system`です。`system`はmacOSの優先言語から最初の対応localeを選び、なければ`en`へ解決します。`zh-Hant`は`zh-Hans`へ暗黙変換しません。既存設定にfieldがなければ`system`で補完し、GRDB migrationは追加しません。
 - provider/modelは音声入力とライフログで別設定です。通常音声入力、ライフログcapture、mini window、ボイスメモのhotkey、保持期間、calendar filter、summary間隔をここに入れます。Mini windowは常時手前を不変条件とし、表示levelの設定は持ちません。Color themeも設定として保持せず、`KoeTheme`の固定brand tokenを使います。
-- whisper.cpp engine/model選択と`LifeLogTranscriptionLanguage`はライフログ設定だけに置き、通常の音声入力とボイスメモはSpeechAnalyzer固定です。認識言語の既定値`applicationLanguage`は`ApplicationLanguage`を`ja`、`en`、`zh-Hans`の固定hintへ解決し、明示的な`auto`も選べます。Runtimeの`captureRequested`は設定として永続化しません。GGML model本体と途中downloadは`Application Support/Koe/Models/WhisperCpp/`へ置き、全データ削除に含めます。
+- `dictationSttBackend`と`lifeLogSttBackend`は用途ごとのengine選択です。whisper.cpp modelは両用途で共有し、保存keyは共有化前の`lifeLogWhisperModel`を維持します。`LifeLogTranscriptionLanguage`はライフログ設定だけに置き、音声入力はmodeの言語設定を使います。認識言語の既定値`applicationLanguage`は`ApplicationLanguage`を`ja`、`en`、`zh-Hans`の固定hintへ解決し、明示的な`auto`も選べます。Runtimeの`captureRequested`は設定として永続化しません。GGML model本体と途中downloadは`Application Support/Koe/Models/WhisperCpp/`へ置き、全データ削除に含めます。
 - `AppEnvironment`の設定から解決した`Locale`を全SwiftUI表示へ注入します。localization resourceの開発言語と欠損keyのfallbackは英語です。表示言語はUI shellだけのvariation pointで、ライフログ設定が明示する`applicationLanguage`解決以外はSTT locale、mode、prompt、保存data、export、CLI/MCP contractへ伝播させません。
 - API keyはUserDefaultsやDBには入れずKeychainへ保存します。
 - CLI/MCPによるTODOまたはprompt変更は`DistributedNotificationCenter`でアプリへ通知し、`AppEnvironment`が再読込します。
@@ -184,7 +184,7 @@ DBは`~/Library/Application Support/Koe/koe.sqlite`です。`DatabaseQueue`を�
 | `LifeLogTodoManagerWindow` | 全TODOの編集、確定、完了、再開、削除。TODO本文はvertical axisを持つ複数行入力とし、本文量に応じてrowを広げる |
 | `LifeLogCalendarSettingsView` | calendar選択、参加filter、選択日の予定を明示的に再取得する操作と進行状態 |
 | `SettingsWindowView` | 一般（表示言語を含む）、利用状況、語彙、privacy、連携、音声入力、AI整形、mode、ライフログ、要約とTODO、calendar。各設定行は操作列を共通幅で確保し、Pickerなど可変幅controlの右端を揃える |
-| `WhisperModelSettingsView` | ライフログ用にcurateしたlocal modelを列挙し、選択、download進捗・cancel・再試行・削除・job使用中状態を表示する |
+| `WhisperModelSettingsView` | 音声入力とライフログで共有するcurated local modelを列挙し、選択、download進捗・cancel・再試行・削除・使用中状態を表示する。両方の設定画面で同じviewを使う |
 | `DismissibleNoticeBanner` | 継続可能なmessageと明示的な`×`を表示する。Dismiss actionは表示stateだけをclearし、capture requestやretry taskを変更しない |
 | `HudController` / `HudView` | 通常音声入力またはボイスメモのrecordingから終了までの一時表示 |
 

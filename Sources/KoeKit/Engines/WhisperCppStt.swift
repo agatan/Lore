@@ -4,33 +4,43 @@ import Foundation
 import Synchronization
 import whisper
 
-/// 保存済みの発話区間をGGML modelで一括認識するライフログ用STT。
-/// whisper.cpp contextはthread-safeではないため、このactorがload、推論、解放を直列化する。
+/// GGML modelで発話区間を一括認識するSTT。
+///
+/// GGML重みは`WhisperModelCache`で用途をまたいで1つだけ保持し、このactorは用途ごとの推論stateを持つ。
+/// 音声入力とライフログは別stateなので互いの推論を待たない。同じstateでの推論と結果読取りは
+/// このactorとstate handleの排他で直列化する。
 public actor WhisperCppStt: SttEngine {
     public nonisolated let identifier = EngineIdentifier.whisperCpp
     public nonisolated let modelName: String?
+    public nonisolated let model: WhisperModel
 
-    private let model: WhisperModel
     private let modelRoot: URL
-    private var context: WhisperContextHandle?
+    private let cache: WhisperModelCache
+    private var state: WhisperStateHandle?
 
-    public init(model: WhisperModel, modelRoot: URL? = nil) {
+    public init(model: WhisperModel, modelRoot: URL? = nil, cache: WhisperModelCache = .shared) {
         self.model = model
         self.modelName = model.displayName
         self.modelRoot = modelRoot ?? Self.defaultModelRoot
+        self.cache = cache
     }
 
     public func availability(languagePreference: LanguagePreference) async -> EngineAvailability {
         isInstalled()
             ? .ready
-            : .needsDownload("ライフログ設定から \(model.displayName) を取得してください")
+            : .needsDownload("設定から \(model.displayName) を取得してください")
     }
 
     public func prepare(hints: SttHints) async throws -> AVAudioFormat? {
         guard isInstalled() else {
-            throw EngineError.notReady("ライフログ設定から \(model.displayName) を取得してください")
+            throw EngineError.notReady("設定から \(model.displayName) を取得してください")
         }
         return AudioFormats.canonical
+    }
+
+    /// 録音中に推論stateを用意し、停止後の認識からmodel loadを外す。
+    public func warmUp() throws {
+        _ = try loadedState()
     }
 
     public nonisolated func transcribe(
@@ -53,7 +63,7 @@ public actor WhisperCppStt: SttEngine {
     }
 
     public func unload() async {
-        context = nil
+        state = nil
     }
 
     public func install(progress: @escaping @Sendable (Double) -> Void) async throws {
@@ -105,17 +115,20 @@ public actor WhisperCppStt: SttEngine {
         hints: SttHints,
         continuation: AsyncThrowingStream<SttEvent, Error>.Continuation
     ) async throws {
-        var samples: [Float] = []
+        var recorded: [Float] = []
         for await chunk in audio {
             try Task.checkCancellation()
-            samples.append(contentsOf: try Self.samples(from: chunk.buffer))
+            recorded.append(contentsOf: try Self.samples(from: chunk.buffer))
         }
-        guard !samples.isEmpty else {
+        let span = WhisperInputPolicy.speechSpan(of: recorded, sampleRate: AudioFormats.canonical.sampleRate)
+        guard !span.isEmpty else {
             continuation.yield(.sessionFinished(text: "", language: .unknown))
             return
         }
+        let samples = Array(recorded[span])
+        let spanOffset = Double(span.lowerBound) / AudioFormats.canonical.sampleRate
 
-        let context = try loadedContext()
+        let state = try loadedState()
         let cancellation = WhisperCancellationFlag()
         let language = switch hints.languagePreference {
         case .auto: "auto"
@@ -123,10 +136,14 @@ public actor WhisperCppStt: SttEngine {
         case .en: "en"
         case .zhHans: "zh"
         }
-        let prompt = hints.vocabularyPrompt?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        let prompt = WhisperInputPolicy.fittedPrompt(hints.vocabularyPrompt) {
+            state.weights.tokenCount(of: $0) <= WhisperInputPolicy.maximumPromptTokens
+        }
 
         var params = whisper_full_default_params(WHISPER_SAMPLING_GREEDY)
-        params.n_threads = Int32(max(1, min(8, ProcessInfo.processInfo.activeProcessorCount - 2)))
+        // GPU実行時もCPU側でmel生成とdecoder samplingを行う。Metal M6実測では1〜10 threadで差が無いため、
+        // 他appへ譲れるよう少数に抑える。
+        params.n_threads = Int32(max(1, min(4, ProcessInfo.processInfo.activeProcessorCount / 2)))
         params.translate = false
         params.no_context = true
         params.no_timestamps = false
@@ -144,14 +161,14 @@ public actor WhisperCppStt: SttEngine {
         params.abort_callback_user_data = Unmanaged.passUnretained(cancellation).toOpaque()
 
         let inference = try await withTaskCancellationHandler {
-            try context.withExclusiveAccess { pointer in
+            try state.withExclusiveAccess { context, statePointer in
                 try Task.checkCancellation()
                 let result = language.withCString { languagePointer in
-                    prompt.withCString { promptPointer in
+                    (prompt ?? "").withCString { promptPointer in
                         params.language = languagePointer
-                        params.initial_prompt = prompt.isEmpty ? nil : promptPointer
+                        params.initial_prompt = prompt == nil ? nil : promptPointer
                         return samples.withUnsafeBufferPointer { buffer in
-                            whisper_full(pointer, params, buffer.baseAddress, Int32(buffer.count))
+                            whisper_full_with_state(context, statePointer, params, buffer.baseAddress, Int32(buffer.count))
                         }
                     }
                 }
@@ -163,19 +180,19 @@ public actor WhisperCppStt: SttEngine {
                 }
 
                 var segments: [WhisperSegment] = []
-                for index in 0..<whisper_full_n_segments(pointer) {
-                    guard let textPointer = whisper_full_get_segment_text(pointer, index) else { continue }
+                for index in 0..<whisper_full_n_segments_from_state(statePointer) {
+                    guard let textPointer = whisper_full_get_segment_text_from_state(statePointer, index) else { continue }
                     let text = TranscriptText.whisperSanitized(String(cString: textPointer))
-                    guard !text.isEmpty else { continue }
+                    guard !text.isEmpty, !WhisperInputPolicy.isPromptEcho(text, prompt: prompt) else { continue }
                     segments.append(WhisperSegment(
                         text: text,
-                        startOffset: Double(whisper_full_get_segment_t0(pointer, index)) / 100,
-                        endOffset: Double(whisper_full_get_segment_t1(pointer, index)) / 100
+                        startOffset: spanOffset + Double(whisper_full_get_segment_t0_from_state(statePointer, index)) / 100,
+                        endOffset: spanOffset + Double(whisper_full_get_segment_t1_from_state(statePointer, index)) / 100
                     ))
                 }
                 return WhisperInference(
                     segments: segments,
-                    language: Self.recognizedLanguage(pointer)
+                    language: Self.recognizedLanguage(statePointer)
                 )
             }
         } onCancel: {
@@ -194,24 +211,22 @@ public actor WhisperCppStt: SttEngine {
         continuation.yield(.sessionFinished(text: text, language: inference.language))
     }
 
-    private func loadedContext() throws -> WhisperContextHandle {
-        if let context { return context }
+    private func loadedState() throws -> WhisperStateHandle {
+        if let state { return state }
         guard isInstalled() else {
-            throw EngineError.notReady("ライフログ設定から \(model.displayName) を取得してください")
+            throw EngineError.notReady("設定から \(model.displayName) を取得してください")
         }
-        var params = whisper_context_default_params()
-        params.use_gpu = true
-        params.flash_attn = true
-        guard let value = modelURL.path.withCString({ whisper_init_from_file_with_params($0, params) }) else {
-            throw EngineError.failed("whisper.cpp modelを読み込めませんでした。削除して再取得してください")
+        let weights = try cache.weights(at: modelURL)
+        guard let pointer = whisper_init_state(weights.pointer) else {
+            throw EngineError.failed("whisper.cppの推論状態を作成できませんでした")
         }
-        let handle = WhisperContextHandle(pointer: value)
-        context = handle
+        let handle = WhisperStateHandle(weights: weights, pointer: pointer)
+        state = handle
         return handle
     }
 
-    private nonisolated static func recognizedLanguage(_ context: OpaquePointer) -> RecognizedLanguage {
-        guard let pointer = whisper_lang_str(whisper_full_lang_id(context)) else { return .unknown }
+    private nonisolated static func recognizedLanguage(_ state: OpaquePointer) -> RecognizedLanguage {
+        guard let pointer = whisper_lang_str(whisper_full_lang_id_from_state(state)) else { return .unknown }
         return switch String(cString: pointer) {
         case "ja": .ja
         case "en": .en
@@ -261,20 +276,73 @@ private final class WhisperCancellationFlag: @unchecked Sendable {
     func cancel() { cancelled.withLock { $0 = true } }
 }
 
-private final class WhisperContextHandle: @unchecked Sendable {
-    private let pointer: OpaquePointer
-    private let inferenceLock = Mutex(())
+/// process内で共有するGGML重み。全stateが手放した時点で解放する。
+public final class WhisperModelCache: Sendable {
+    public static let shared = WhisperModelCache()
+
+    private let entries = Mutex<[String: WeakWhisperWeights]>([:])
+
+    public init() {}
+
+    /// 同じfileのmodelがloadされていれば共有し、無ければ一度だけloadする。
+    func weights(at url: URL) throws -> WhisperWeights {
+        try entries.withLock { entries in
+            if let weights = entries[url.path]?.value { return weights }
+            var params = whisper_context_default_params()
+            params.use_gpu = true
+            params.flash_attn = true
+            guard let pointer = url.path.withCString({ whisper_init_from_file_with_params_no_state($0, params) }) else {
+                throw EngineError.failed("whisper.cpp modelを読み込めませんでした。削除して再取得してください")
+            }
+            let weights = WhisperWeights(pointer: pointer)
+            entries = entries.filter { $0.value.value != nil }
+            entries[url.path] = WeakWhisperWeights(value: weights)
+            return weights
+        }
+    }
+}
+
+private struct WeakWhisperWeights {
+    weak var value: WhisperWeights?
+}
+
+final class WhisperWeights: @unchecked Sendable {
+    let pointer: OpaquePointer
 
     init(pointer: OpaquePointer) {
         self.pointer = pointer
     }
 
-    func withExclusiveAccess<Result>(_ body: (OpaquePointer) throws -> Result) rethrows -> Result {
-        try inferenceLock.withLock { _ in try body(pointer) }
+    /// 語彙表を読むだけなので、どのstateの推論中にも呼べる。
+    func tokenCount(of text: String) -> Int {
+        let capacity = WhisperInputPolicy.maximumPromptTokens + 1
+        var tokens = [whisper_token](repeating: 0, count: capacity)
+        let count = text.withCString { whisper_tokenize(pointer, $0, &tokens, Int32(capacity)) }
+        // 容量を超えると負数で必要数を返す。
+        return Int(count < 0 ? -count : count)
     }
 
     deinit {
         whisper_free(pointer)
+    }
+}
+
+private final class WhisperStateHandle: @unchecked Sendable {
+    let weights: WhisperWeights
+    private let pointer: OpaquePointer
+    private let inferenceLock = Mutex(())
+
+    init(weights: WhisperWeights, pointer: OpaquePointer) {
+        self.weights = weights
+        self.pointer = pointer
+    }
+
+    func withExclusiveAccess<Result>(_ body: (OpaquePointer, OpaquePointer) throws -> Result) rethrows -> Result {
+        try inferenceLock.withLock { _ in try body(weights.pointer, pointer) }
+    }
+
+    deinit {
+        whisper_free_state(pointer)
     }
 }
 

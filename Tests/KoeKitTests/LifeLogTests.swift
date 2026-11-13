@@ -1197,7 +1197,7 @@ struct LifeLogWhisperSettingsTests {
     @Test("既存設定のWhisperKit選択はwhisper.cppへ引き継ぐ")
     func legacyBackendSelectionUsesWhisperCpp() throws {
         let backend = try JSONDecoder().decode(
-            LifeLogSttBackend.self,
+            SttBackend.self,
             from: Data(#""whisperKit""#.utf8)
         )
         #expect(backend == .whisperCpp)

@@ -12,7 +12,7 @@
 | 配布形態 | メニューバー常駐macOS app。Dockには常駐しない |
 | 必須権限 | マイク。カーソル位置への挿入にはアクセシビリティ。Option+文字keyのhotkeyには入力監視 |
 | 任意権限 | ライフログに予定を表示する場合のcalendar |
-| 音声認識 | 通常の音声入力とボイスメモはApple SpeechAnalyzer。ライフログはSpeechAnalyzer、またはlocal downloadしたwhisper.cpp GGML modelによる遅延認識 |
+| 音声認識 | 音声入力・ボイスメモとライフログで個別に、Apple SpeechAnalyzerかlocal downloadしたwhisper.cpp GGML modelを選択。whisper.cppは音声入力では停止後の一括認識、ライフログでは発話burstの遅延認識 |
 | 既定の文章処理 | Apple Foundation Modelsによるオンデバイス処理 |
 | 表示言語 | システム設定、英語、日本語、簡体字中国語から選択可能。既定はシステム設定 |
 | 保存 | Mac内のSQLite、UserDefaults、Keychain、ライフログaudio file |
@@ -41,13 +41,15 @@
 
 ### 3.2 認識、mode、語彙
 
-- 通常の音声入力とボイスメモはApple SpeechAnalyzerへstreamし、暫定textをHUDへ表示します。通常の音声入力audioはfileやDBへ保存せず、外部へ送信しません。
-- ライフログだけはSpeechAnalyzerまたはローカルへダウンロードしたwhisper.cpp GGML modelを選べます。連続録音とは分離し、入力signalから検出した発話burstを保存audioから認識します。比較的大きいlocal modelでも入力確認を待たせないよう、発話中は暫定textを表示し、発話確定後にtimestamp付きの最終結果へ置き換えます。
+- 通常の音声入力とボイスメモは既定でApple SpeechAnalyzerへstreamし、暫定textをHUDへ表示します。設定でwhisper.cppを選ぶと、録音開始と並行してmodelを準備し、停止後に録音全体をMac内で一括認識します。この場合、録音中の暫定textは表示しません。通常の音声入力audioはfileやDBへ保存せず、外部へ送信しません。
+- whisper.cppへ渡す音声は、前後の無音（約-50 dBFS未満）を0.5秒の余白を残して除きます。有声区間を検出できない場合は録音全体を渡します。停止後の確定待ちは30秒に録音時間を加えた長さを上限とします。
+- whisper.cppには有効な語彙の表記を並び順のまま、約200 token以内のpromptとして渡します。2語以上のprompt全体をそのまま読み上げただけのsegmentは、無音から生成された写しとして結果から除きます。
+- ライフログも音声入力とは別にSpeechAnalyzerまたはローカルへダウンロードしたwhisper.cpp GGML modelを選べます。連続録音とは分離し、入力signalから検出した発話burstを保存audioから認識します。比較的大きいlocal modelでも入力確認を待たせないよう、発話中は暫定textを表示し、発話確定後にtimestamp付きの最終結果へ置き換えます。
 - 発話開始はUI用levelではなく入力signalの線形RMSを使い、約-50 dBFSの絶対下限、校正したbackground noise floorとの差と倍率、継続時間で判定します。開始候補のうち、累積有声時間が0.5秒未満、またはburst全体に占める有声比率20%未満の入力は生活音・無音として破棄し、whisper.cppを起動しません。Whisper.cpp選択時は有効な発話の開始から1.5秒後、前の暫定認識が完了していれば1.5秒ごとに直近5秒を暫定認識します。累積有声時間が30秒未満なら1.5秒、30秒以上なら1秒の連続無音でburstを確定し、wall timeが5分に達した場合も安全のため確定します。
 - 暫定textは入力確認専用で、誤認識や語尾が更新されることがあります。DB、timeline、検索、書き出し、summary/TODOへは保存せず、永続化済みaudioを使った最終認識だけを正本にします。
 - whisper.cppが無音・環境音から生成する既知の定型文「ご視聴ありがとうございました」は、独立した文として認識された場合に限り表示・保存しません。同じsegmentに続く実発話は残します。
 - 有効な発話を確定した時点で現在の復旧用audio chunkも原子的に確定し、参照範囲のaudioが永続化された後に最終認識を実行します。破棄した候補のためにはchunkを分割しません。発話timestampは録音開始時刻とaudio offsetから復元します。録音session開始時の語彙snapshotを完了まで固定し、保存audioの再処理でも同じ発話判定で無音区間を除き、最新の有効語彙を使います。
-- whisper.cpp modelは設定画面で一覧、download進捗と失敗理由を確認し、downloadをcancel、再試行、削除できます。Download完了前のmodelは認識に利用できず、使用中のjobがあるmodelは完了またはcancelまで削除できません。
+- whisper.cpp modelは音声入力とライフログで共通の選択です。どちらの設定画面からも一覧、download進捗と失敗理由を確認し、downloadをcancel、再試行、削除できます。Download完了前のmodelは認識に利用できず、ライフログの記録・処理中または音声入力の処理中は削除できません。
 - 録音開始時の前面appからmodeを一度決め、そのsession内では固定します。手動固定は自動選択より優先します。
 - modeは名前、対象bundle ID pattern、文章化の指示、言語、任意のmodel指定を持ち、作成、編集、削除、並べ替えができます。
 - 共通ruleは全modeへ適用されます。
@@ -170,7 +172,7 @@ Koeのprimary colorはapp icon由来の爽やかなblueに固定し、利用者�
 | Mini window | ライフログ状態、今日のtimelineへの手入力・音声memo追加。一度開いたら明示的に閉じるまで、ほかのapp、desktop Space、full-screen Spaceより手前に表示し続ける。記録操作はwindow右肩ではなく状態表示に置く |
 | 全TODO window | draft確認、編集、確定、完了、再開、削除 |
 | Settings: 共通 | 一般（表示言語を含む）、利用状況、語彙、privacy、連携 |
-| Settings: 音声入力 | hotkey、feedback、履歴、AI整形、mode。STTはSpeechAnalyzer固定 |
+| Settings: 音声入力 | hotkey、聞き取りengine・whisper.cpp model、feedback、履歴、AI整形、mode |
 | Settings: ライフログ | 記録・mini window・ボイスメモhotkey、入力device、STT engine・認識言語・whisper.cpp model、audio保持、summary間隔、要約/TODO AI、calendar再取得 |
 
 利用状況には音声入力回数・録音時間、ライフログの実発話時間、cloud AIの実測token数、Koe dataのstorage使用量を表示します。ライフログの実発話時間は、無音を含む連続録音時間ではなくtimelineに残る発話区間を日ごとに重複なく集計し、成功した音声入力と重なる発話は二重計上しません。local modelはcloud token集計に含みません。
@@ -274,7 +276,7 @@ koe search "検索語" [--limit N]
 22. 月間calendarは今日を塗り、表示中の日を枠線で示し、既存TODOと同じ作業を新しいDraft TODOとして再提案しない。
 23. Summary/TODO派生は設定間隔の到来またはSummary viewの手動更新だけで実行し、録音停止を含むcapture状態変化では実行しない。確定済みTODOのIDと新しいDraftのIDは衝突しない。
 24. App起動だけではライフログ記録を開始せず、前回processの記録開始意図を復元しない。
-25. 通常の音声入力とボイスメモはSpeechAnalyzerを使い、ライフログだけはSpeechAnalyzerまたはdownload済みwhisper.cpp modelを選べる。Download・cancel・再試行・削除の状態と容量が設定に表示され、audioはMac外へ送信されない。
+25. 音声入力・ボイスメモとライフログは、それぞれSpeechAnalyzerまたはdownload済みwhisper.cpp modelを選べる。音声入力でwhisper.cppを選ぶと停止後に録音全体を一括認識し、modelは両用途で共有する。Download・cancel・再試行・削除の状態と容量が設定に表示され、audioはMac外へ送信されない。
 26. Life Logは起動直後に線形RMSの背景noise floorを校正し、その後も非発話中の入力から更新する。約-50 dBFSの絶対下限と直近のnoise floorに対する十分な上昇を短時間継続した場合だけ発話burstを開始し、微小noiseや持続する空調音では認識jobを作らない。Whisper.cppでは前のpreviewが完了している場合に限り、発話中に1.5秒cadence・直近5秒の暫定textを表示し、30秒未満の発話は1.5秒、30秒以上は1秒の無音でflushする。Burst確定時にaudioをcommitし、timestampは保存audio offsetに一致する。暫定textは永続化せず、語彙は録音session開始時のsnapshotで固定される。
 27. 累積有声時間0.5秒未満または有声比率20%未満の候補はpreview、最終STT、burst checkpointを開始せず、保存audioの再処理でも除外する。Main/mini timelineは末尾表示中だけ新しい項目へ追従し、過去へscrollまたはsource移動した場合は追従を止め、末尾へ戻ると再開する。
 28. whisper.cppの既知の定型hallucination「ご視聴ありがとうございました」は独立した文だけをengine境界で除外し、同じsegmentの実発話は保持する。

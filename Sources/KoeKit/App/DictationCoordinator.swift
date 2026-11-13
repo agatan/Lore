@@ -62,12 +62,16 @@ public final class DictationCoordinator {
     static let hudSuccessLingerDuration: Duration = .milliseconds(120)
     /// 読んでもらう必要がある終わり方(失敗・クリップボード退避・整形スキップ)の居残り時間。
     static let hudNoticeLingerDuration: Duration = .seconds(2)
-    /// 停止後、STT の確定を待つ上限。エンジンが応答しないときに
+    /// 停止後、STT の確定を待つ基本の上限。エンジンが応答しないときに
     /// 「認識中」から永遠に戻らないための保険。
     ///
     /// SpeechAnalyzer は録音中に逐次確定していくので、停止後に残るのは末尾だけ。
-    /// 録音長に比例させる必要はない。打ち切っても暫定テキストで先へ進める。
-    static let finalizationTimeout: Duration = .seconds(30)
+    /// whisper.cpp は停止後に全体を一括認識するため、録音長も上限へ加える(`finalizationTimeout(recorded:)`)。
+    nonisolated static let finalizationTimeout: Duration = .seconds(30)
+
+    nonisolated static func finalizationTimeout(recorded: Duration) -> Duration {
+        finalizationTimeout + recorded
+    }
 
     // MARK: 観測される状態
 
@@ -206,7 +210,7 @@ public final class DictationCoordinator {
             vocabulary: vocabulary
         )
 
-        let sttEngine = deps.engines.stt
+        let sttEngine = deps.engines.dictationStt
         let llmEngine = deps.engines.llm
 
         let context = SessionContext(
@@ -292,7 +296,7 @@ public final class DictationCoordinator {
         sessionTask = Task { [weak self] in
             guard let self else { return }
             await self.runSession(
-                engine: self.deps.engines.stt,
+                engine: self.deps.engines.dictationStt,
                 llm: self.deps.engines.llm,
                 hints: hints,
                 vocabulary: vocabulary
@@ -350,8 +354,10 @@ public final class DictationCoordinator {
     /// STT が確定を返さないまま止まった場合の保険。
     private func startFinalizationWatchdog() {
         watchdogTask?.cancel()
+        let recorded = recordingStartedAt.map { ContinuousClock.now - $0 } ?? recordingElapsed
+        let timeout = Self.finalizationTimeout(recorded: recorded)
         watchdogTask = Task { [weak self] in
-            try? await Task.sleep(for: Self.finalizationTimeout)
+            try? await Task.sleep(for: timeout)
             guard let self, !Task.isCancelled, phase == .recognizing, !finalizationHandled else { return }
             KoeLog.session.error("STT が確定を返さないため打ち切ります")
             await salvageStalledRecognition()
@@ -705,7 +711,7 @@ public final class DictationCoordinator {
         unloadTask = Task { [weak self] in
             try? await Task.sleep(for: .seconds(10 * 60))
             guard let self, !Task.isCancelled, !phase.isActive else { return }
-            await engines.unloadAll()
+            await engines.unloadDictationEngines()
         }
     }
 

@@ -63,8 +63,8 @@ public final class AppEnvironment {
     /// 音声モデル取得の進捗(0...1)。nil = 実行中でない。
     public private(set) var speechAssetProgress: Double?
     public private(set) var speechAssetError: String?
-    public private(set) var lifeLogWhisperProgress: Double?
-    public private(set) var lifeLogWhisperError: String?
+    public private(set) var whisperProgress: Double?
+    public private(set) var whisperError: String?
     /// 選択中のクラウドにAPIキーが登録済みか。キーそのものは状態に持たない(NFR-2)。
     public private(set) var hasLlmApiKey = false
     public private(set) var llmModels: [String] = []
@@ -84,7 +84,7 @@ public final class AppEnvironment {
     /// このプロセスが生きている長さ。起動し直すべきかの判断に使う。
     private let launchedAt = ContinuousClock.now
     @ObservationIgnored private var bootTask: Task<Void, Never>?
-    @ObservationIgnored private var lifeLogWhisperInstallTask: Task<Void, Never>?
+    @ObservationIgnored private var whisperInstallTask: Task<Void, Never>?
     private var permissionWatcher: Task<Void, Never>?
     private var analysisTask: Task<Void, Never>?
     @ObservationIgnored private var powerObservers: [any NSObjectProtocol] = []
@@ -347,6 +347,11 @@ public final class AppEnvironment {
         }
         settings.lifeLogCaptureEnabled = enabled
         lifeLog.setCaptureEnabled(enabled)
+        guard !enabled else { return }
+        Task { [weak self] in
+            guard let self, await lifeLog.stopAndWait(), !lifeLog.hasCaptureIntent else { return }
+            await engines.unloadLifeLogStt()
+        }
     }
 
     public func confirmLifeLogAudioStorageAndStart() {
@@ -846,9 +851,9 @@ public final class AppEnvironment {
             return
         }
         do {
-            cancelLifeLogWhisperDownload()
+            cancelWhisperDownload()
             try removeLifeLogAudioDirectory()
-            try removeLifeLogWhisperModelsDirectories()
+            try removeWhisperModelsDirectories()
             try SecretStore.deleteAll()
             try database.deleteBackups()
             try await database.deleteAllUserData()
@@ -863,7 +868,7 @@ public final class AppEnvironment {
                 model: settings.model(for: settings.lifeLogFormattingBackend, purpose: .lifeLog),
                 purpose: .lifeLog
             )
-            engines.applyLifeLogStt(backend: settings.lifeLogSttBackend, model: settings.lifeLogWhisperModel)
+            applySttSelection()
             try await database.modes.seedBuiltinsIfNeeded()
             try await database.sharedRules.seedOrMigrate()
             await reloadModes()
@@ -933,7 +938,7 @@ public final class AppEnvironment {
         }
     }
 
-    private func removeLifeLogWhisperModelsDirectories() throws {
+    private func removeWhisperModelsDirectories() throws {
         for root in [WhisperCppStt.defaultModelRoot, WhisperCppStt.legacyModelRoot] {
             if FileManager.default.fileExists(atPath: root.path) {
                 try FileManager.default.removeItem(at: root)
@@ -1049,8 +1054,17 @@ public final class AppEnvironment {
         }
     }
 
-    public func applyLifeLogSttChange() async {
-        engines.applyLifeLogStt(backend: settings.lifeLogSttBackend, model: settings.lifeLogWhisperModel)
+    private func applySttSelection() {
+        engines.applyStt(
+            dictation: settings.dictationSttBackend,
+            lifeLog: settings.lifeLogSttBackend,
+            model: settings.whisperModel
+        )
+    }
+
+    /// 聞き取りengineかwhisper modelの変更。録音中の音声入力は開始時のengineで最後まで処理する。
+    public func applySttChange() async {
+        applySttSelection()
         await engines.refreshSttAvailability()
         lifeLog.transcriptionConfigurationDidChange()
     }
@@ -1064,44 +1078,49 @@ public final class AppEnvironment {
         lifeLog.transcriptionConfigurationDidChange()
     }
 
-    public func installLifeLogWhisperModel() {
-        guard lifeLogWhisperProgress == nil else { return }
-        lifeLogWhisperProgress = 0
-        lifeLogWhisperError = nil
-        lifeLogWhisperInstallTask = Task { [weak self] in
+    public func installWhisperModel() {
+        guard whisperProgress == nil else { return }
+        whisperProgress = 0
+        whisperError = nil
+        whisperInstallTask = Task { [weak self] in
             guard let self else { return }
             do {
-                try await engines.installLifeLogWhisperModel { progress in
-                    Task { @MainActor [weak self] in self?.lifeLogWhisperProgress = progress }
+                try await engines.installWhisperModel { progress in
+                    Task { @MainActor [weak self] in self?.whisperProgress = progress }
                 }
-                lifeLogWhisperProgress = nil
+                whisperProgress = nil
                 refreshStorageSizes()
             } catch is CancellationError {
-                lifeLogWhisperProgress = nil
+                whisperProgress = nil
             } catch {
-                lifeLogWhisperProgress = nil
-                lifeLogWhisperError = error.localizedDescription
+                whisperProgress = nil
+                whisperError = error.localizedDescription
                 KoeLog.engine.error("whisper.cppモデルの取得に失敗: \(error.localizedDescription, privacy: .public)")
             }
-            lifeLogWhisperInstallTask = nil
+            whisperInstallTask = nil
         }
     }
 
-    public func cancelLifeLogWhisperDownload() {
-        lifeLogWhisperInstallTask?.cancel()
-        lifeLogWhisperInstallTask = nil
-        lifeLogWhisperProgress = nil
-        lifeLogWhisperError = nil
+    public func cancelWhisperDownload() {
+        whisperInstallTask?.cancel()
+        whisperInstallTask = nil
+        whisperProgress = nil
+        whisperError = nil
     }
 
-    public func deleteLifeLogWhisperModel() async {
-        guard !lifeLog.hasCaptureIntent, !lifeLog.isTranscribing else { return }
-        lifeLogWhisperError = nil
+    /// 使用中のjobがあるmodelは削除しない。音声入力とライフログの両方で共有している。
+    public var isWhisperModelInUse: Bool {
+        lifeLog.hasCaptureIntent || lifeLog.isTranscribing || coordinator?.isBusy == true
+    }
+
+    public func deleteWhisperModel() async {
+        guard !isWhisperModelInUse else { return }
+        whisperError = nil
         do {
-            try await engines.deleteLifeLogWhisperModel()
+            try await engines.deleteWhisperModel()
             refreshStorageSizes()
         } catch {
-            lifeLogWhisperError = error.localizedDescription
+            whisperError = error.localizedDescription
             KoeLog.engine.error("whisper.cppモデルの削除に失敗: \(error.localizedDescription, privacy: .public)")
         }
     }
@@ -1116,7 +1135,7 @@ public final class AppEnvironment {
         checkCredentials: Bool = true,
         resetConnectionState: Bool = false
     ) async {
-        engines.applyLifeLogStt(backend: settings.lifeLogSttBackend, model: settings.lifeLogWhisperModel)
+        applySttSelection()
         if purpose == nil || purpose == .dictation {
             await applyEngineChange(for: .dictation, checkCredentials: checkCredentials, resetConnectionState: resetConnectionState)
         }

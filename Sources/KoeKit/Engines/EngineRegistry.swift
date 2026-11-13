@@ -4,7 +4,8 @@ import Observation
 
 /// 推論エンジンの保持と準備。
 ///
-/// 通常の音声入力はOS内蔵SpeechAnalyzer、ライフログは明示選択時だけwhisper.cppを使う。
+/// 聞き取りは音声入力とライフログで個別に、OS内蔵SpeechAnalyzerか明示選択したwhisper.cppを使う。
+/// whisper.cppは用途ごとに推論stateを分け、GGML重みだけを共有する。
 /// 仕上げだけは選べる: 既定はオンデバイスの Foundation Models、
 /// ユーザーが明示的に選んだときだけクラウドまたはローカルLLM(`FormattingBackend`)。
 /// **選択肢はこの 1 箇所に閉じ込める**。どちらが動いているかを知りたい側は
@@ -16,8 +17,12 @@ import Observation
 @MainActor
 @Observable
 public final class EngineRegistry {
+    /// OS内蔵SpeechAnalyzer。whisper.cppを選んだ用途では使わない。
     @ObservationIgnored public let stt: any SttEngine
-    @ObservationIgnored private var whisperCppStt: WhisperCppStt?
+    @ObservationIgnored private var dictationWhisper: WhisperCppStt
+    @ObservationIgnored private var lifeLogWhisper: WhisperCppStt
+    @ObservationIgnored public private(set) var dictationSttBackend: SttBackend = .speechAnalyzer
+    @ObservationIgnored public private(set) var lifeLogSttBackend: SttBackend = .speechAnalyzer
     @ObservationIgnored private let onDeviceLlm: any LlmEngine
     @ObservationIgnored public let groq: GroqLlm
     @ObservationIgnored public let openAI: RemoteLlm
@@ -34,9 +39,10 @@ public final class EngineRegistry {
     /// prepare() で判明した希望フォーマットのキャッシュ。録音開始を待たせないために持つ。
     @ObservationIgnored private var preparedFormat: AVAudioFormat?
 
-    /// 聞き取りの利用可否。日本語の音声モデルが未取得のことがあるので UI に出す。
+    /// SpeechAnalyzerの利用可否。日本語の音声モデルが未取得のことがあるので UI に出す。
     public private(set) var sttAvailability: EngineAvailability = .ready
-    public private(set) var lifeLogSttAvailability: EngineAvailability = .ready
+    /// 共有whisper.cpp modelの取得状態。
+    public private(set) var whisperAvailability: EngineAvailability = .ready
     /// いま選ばれている仕上げの利用可否。
     public private(set) var llmAvailability: EngineAvailability = .ready
     public private(set) var lifeLogLlmAvailability: EngineAvailability = .ready
@@ -55,6 +61,8 @@ public final class EngineRegistry {
         lmStudio: RemoteLlm = RemoteLlm(identifier: .lmStudio, providerName: "LM Studio", api: .openAICompatible(baseURL: URL(string: "http://localhost:1234/v1")!, authorizationValue: nil), model: "openai/gpt-oss-20b")
     ) {
         self.stt = stt
+        dictationWhisper = WhisperCppStt(model: .largeV3Turbo)
+        lifeLogWhisper = WhisperCppStt(model: .largeV3Turbo)
         self.onDeviceLlm = llm
         self.groq = groq
         self.openAI = openAI
@@ -96,17 +104,33 @@ public final class EngineRegistry {
         }
     }
 
-    public var lifeLogStt: any SttEngine { whisperCppStt ?? stt }
+    /// 音声入力とボイスメモの聞き取り。セッション開始時に取り、途中で設定が変わっても使い続ける。
+    public var dictationStt: any SttEngine {
+        dictationSttBackend == .whisperCpp ? dictationWhisper : stt
+    }
 
-    public func applyLifeLogStt(backend: LifeLogSttBackend, model: WhisperModel) {
-        switch backend {
-        case .speechAnalyzer:
-            whisperCppStt = nil
-        case .whisperCpp:
-            if whisperCppStt?.modelName != model.displayName {
-                whisperCppStt = WhisperCppStt(model: model)
-            }
-        }
+    public var lifeLogStt: any SttEngine {
+        lifeLogSttBackend == .whisperCpp ? lifeLogWhisper : stt
+    }
+
+    public var lifeLogSttAvailability: EngineAvailability {
+        lifeLogSttBackend == .whisperCpp ? whisperAvailability : sttAvailability
+    }
+
+    public var dictationSttAvailability: EngineAvailability {
+        dictationSttBackend == .whisperCpp ? whisperAvailability : sttAvailability
+    }
+
+    public var usesWhisper: Bool {
+        dictationSttBackend == .whisperCpp || lifeLogSttBackend == .whisperCpp
+    }
+
+    public func applyStt(dictation: SttBackend, lifeLog: SttBackend, model: WhisperModel) {
+        dictationSttBackend = dictation
+        lifeLogSttBackend = lifeLog
+        // 実行中jobは旧engineを保持して最後まで使う。新しいstateは次のjobで作る。
+        if dictationWhisper.model != model { dictationWhisper = WhisperCppStt(model: model) }
+        if lifeLogWhisper.model != model { lifeLogWhisper = WhisperCppStt(model: model) }
     }
 
     /// API応答に含まれる実測usageへ、呼び出し用途を付けて上位へ渡す。
@@ -174,8 +198,22 @@ public final class EngineRegistry {
         }
     }
 
-    /// 録音開始時に使うフォーマット。キャッシュが無い初回だけ prepare を待つ。
+    /// 音声入力の録音開始時に使うフォーマット。SpeechAnalyzerはキャッシュが無い初回だけ prepare を待つ。
+    /// whisper.cppは録音を待たせず、録音と並行して推論stateを用意する。
     public func captureFormat(hints: SttHints) async throws -> AVAudioFormat {
+        if dictationSttBackend == .whisperCpp {
+            let whisper = dictationWhisper
+            let format = try await whisper.prepare(hints: hints) ?? AudioFormats.canonical
+            Task.detached(priority: .userInitiated) {
+                do {
+                    try await whisper.warmUp()
+                } catch {
+                    // 認識時に同じ理由で失敗し、利用者へはそのsessionの失敗として表示する。
+                    KoeLog.engine.error("whisper.cppの事前準備に失敗: \(error.localizedDescription, privacy: .public)")
+                }
+            }
+            return format
+        }
         if let cached = preparedFormat { return cached }
         let format = try await stt.prepare(hints: hints) ?? AudioFormats.canonical
         preparedFormat = format
@@ -197,14 +235,7 @@ public final class EngineRegistry {
         sttAvailability = await Task.detached(priority: .utility) {
             await stt.availability(languagePreference: languagePreference)
         }.value
-        if let whisperCppStt {
-            lifeLogSttAvailability = await Task.detached(priority: .utility) {
-                await whisperCppStt.availability(languagePreference: languagePreference)
-            }.value
-        } else {
-            // 同じSpeechAnalyzerへ連続で在庫照会すると起動が長時間止まることがある。
-            lifeLogSttAvailability = sttAvailability
-        }
+        whisperAvailability = await dictationWhisper.availability(languagePreference: languagePreference)
     }
 
     public func refreshLlmAvailability(for purpose: LlmPurpose) async {
@@ -221,26 +252,32 @@ public final class EngineRegistry {
         await refreshSttAvailability()
     }
 
-    public func installLifeLogWhisperModel(progress: @escaping @Sendable (Double) -> Void) async throws {
-        guard let whisperCppStt else { throw EngineError.notReady("whisper.cppを選択してください") }
-        try await whisperCppStt.install(progress: progress)
-        lifeLogSttAvailability = await whisperCppStt.availability(languagePreference: .auto)
+    /// modelは音声入力とライフログで共有するため、どちらの用途から取得しても同じfileになる。
+    public func installWhisperModel(progress: @escaping @Sendable (Double) -> Void) async throws {
+        try await dictationWhisper.install(progress: progress)
+        whisperAvailability = await dictationWhisper.availability(languagePreference: .auto)
     }
 
-    public func deleteLifeLogWhisperModel() async throws {
-        guard let whisperCppStt else { return }
-        try await whisperCppStt.deleteInstalledModel()
-        lifeLogSttAvailability = await whisperCppStt.availability(languagePreference: .auto)
+    public func deleteWhisperModel() async throws {
+        await lifeLogWhisper.unload()
+        try await dictationWhisper.deleteInstalledModel()
+        whisperAvailability = await dictationWhisper.availability(languagePreference: .auto)
     }
 
-    /// アイドル時のモデル解放(NFR-5)。
-    public func unloadAll() async {
+    /// 音声入力のアイドル時のモデル解放(NFR-5)。ライフログの推論stateは記録側が所有するので残す。
+    public func unloadDictationEngines() async {
         preparedFormat = nil
         await stt.unload()
-        await whisperCppStt?.unload()
+        await dictationWhisper.unload()
         await llm.unload()
         if backend != .onDevice || lifeLogBackend != .onDevice {
             await lifeLogLlm.unload()
         }
+    }
+
+    /// ライフログ記録の停止時に、ライフログ用whisper.cpp stateを解放する。
+    /// 実行中jobは自身のstateを保持して完了し、未処理chunkの再処理は次のjobで作り直す。
+    public func unloadLifeLogStt() async {
+        await lifeLogWhisper.unload()
     }
 }

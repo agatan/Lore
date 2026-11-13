@@ -6,7 +6,8 @@ public enum LlmPurpose: String, Sendable, CaseIterable {
     case lifeLog
 }
 
-public enum LifeLogSttBackend: String, Codable, Sendable, CaseIterable, Identifiable {
+/// 音声入力とライフログで個別に選ぶSTT。
+public enum SttBackend: String, Codable, Sendable, CaseIterable, Identifiable {
     case speechAnalyzer
     /// Raw value is retained because it is persisted in released user settings.
     case whisperCpp = "whisperKit"
@@ -100,8 +101,10 @@ public final class AppSettings {
         public var lifeLogOllamaModel: String = "gpt-oss:20b"
         public var lifeLogLmStudioModel: String = "openai/gpt-oss-20b"
         public var lifeLogCaptureEnabled: Bool = false
-        public var lifeLogSttBackend: LifeLogSttBackend = .speechAnalyzer
+        public var dictationSttBackend: SttBackend = .speechAnalyzer
+        public var lifeLogSttBackend: SttBackend = .speechAnalyzer
         public var lifeLogTranscriptionLanguage: LifeLogTranscriptionLanguage = .applicationLanguage
+        /// 音声入力とライフログで共有するmodel。保存keyは共有化前の名前を維持する。
         public var lifeLogWhisperModel: WhisperModel = .largeV3Turbo
         public var lifeLogInputDeviceUID: String?
         /// -1 = 処理後削除、0 = 旧版の無期限、正数 = 保持日数。
@@ -155,7 +158,9 @@ public final class AppSettings {
             lifeLogOllamaModel = try container.decodeIfPresent(String.self, forKey: .lifeLogOllamaModel) ?? ollamaModel
             lifeLogLmStudioModel = try container.decodeIfPresent(String.self, forKey: .lifeLogLmStudioModel) ?? lmStudioModel
             lifeLogCaptureEnabled = try container.decodeIfPresent(Bool.self, forKey: .lifeLogCaptureEnabled) ?? false
-            lifeLogSttBackend = (try? container.decodeIfPresent(LifeLogSttBackend.self, forKey: .lifeLogSttBackend))
+            dictationSttBackend = (try? container.decodeIfPresent(SttBackend.self, forKey: .dictationSttBackend))
+                .flatMap { $0 } ?? .speechAnalyzer
+            lifeLogSttBackend = (try? container.decodeIfPresent(SttBackend.self, forKey: .lifeLogSttBackend))
                 .flatMap { $0 } ?? .speechAnalyzer
             lifeLogTranscriptionLanguage = (try? container.decodeIfPresent(LifeLogTranscriptionLanguage.self, forKey: .lifeLogTranscriptionLanguage))
                 .flatMap { $0 } ?? .applicationLanguage
@@ -347,9 +352,10 @@ public final class AppSettings {
     }
 
     public var lifeLogCaptureEnabled: Bool { get { storage.lifeLogCaptureEnabled } set { storage.lifeLogCaptureEnabled = newValue; persist() } }
-    public var lifeLogSttBackend: LifeLogSttBackend { get { storage.lifeLogSttBackend } set { storage.lifeLogSttBackend = newValue; persist() } }
+    public var lifeLogSttBackend: SttBackend { get { storage.lifeLogSttBackend } set { storage.lifeLogSttBackend = newValue; persist() } }
     public var lifeLogTranscriptionLanguage: LifeLogTranscriptionLanguage { get { storage.lifeLogTranscriptionLanguage } set { storage.lifeLogTranscriptionLanguage = newValue; persist() } }
-    public var lifeLogWhisperModel: WhisperModel { get { storage.lifeLogWhisperModel } set { storage.lifeLogWhisperModel = newValue; persist() } }
+    public var dictationSttBackend: SttBackend { get { storage.dictationSttBackend } set { storage.dictationSttBackend = newValue; persist() } }
+    public var whisperModel: WhisperModel { get { storage.lifeLogWhisperModel } set { storage.lifeLogWhisperModel = newValue; persist() } }
     public var lifeLogInputDeviceUID: String? { get { storage.lifeLogInputDeviceUID } set { storage.lifeLogInputDeviceUID = newValue; persist() } }
     public var lifeLogAudioRetentionPolicy: LifeLogAudioRetentionPolicy {
         get { LifeLogAudioRetentionPolicy(storedDays: storage.lifeLogAudioRetentionDays) }
