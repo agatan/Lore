@@ -96,6 +96,12 @@ struct DictationSttSelectionTests {
         #expect(DictationCoordinator.finalizationTimeout(recorded: .zero) == .seconds(30))
         #expect(DictationCoordinator.finalizationTimeout(recorded: .seconds(120)) == .seconds(150))
     }
+
+    @Test("共通ルールは数え上げを番号付きリストにし、数値を落とさない")
+    func sharedRulesCoverListsAndNumbers() {
+        #expect(BuiltinSharedRules.text.contains("番号付きリスト"))
+        #expect(BuiltinSharedRules.text.contains("話した数値は 1 つも落とさず"))
+    }
 }
 
 /// 実modelを使う統合テスト。`KOE_WHISPER_MODEL_ROOT`に取得済みLarge v3 Turbo Q5_0があるときだけ実行する。
