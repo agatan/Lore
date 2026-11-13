@@ -22,9 +22,9 @@ struct Pill: View {
             }
         }
         .foregroundStyle(tint)
-        .padding(.horizontal, 8)
-        .padding(.vertical, 3)
-        .glassEffect(.regular.tint(tint.opacity(0.22)), in: Capsule())
+        .padding(.horizontal, 7)
+        .padding(.vertical, 2)
+        .background(tint.opacity(0.12), in: Capsule())
     }
 }
 
@@ -119,7 +119,50 @@ struct SunkenSurface: ViewModifier {
     }
 }
 
+/// 主画面の内容を置く平らな面。ガラスは浮くもの(HUD・menu)だけに使い、
+/// 常に見えている面は塗りと細い罫線で静かに区切る。
+struct PanelSurface: ViewModifier {
+    var cornerRadius: CGFloat = KoeTheme.panelCornerRadius
+
+    func body(content: Content) -> some View {
+        let shape = RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+        return content
+            .clipShape(shape)
+            .background { shape.fill(Color.primary.opacity(0.03)) }
+            .overlay { shape.strokeBorder(Color.primary.opacity(0.08), lineWidth: 0.5) }
+    }
+}
+
+/// 面の中の見出し行。見出しは小さく、操作は右へ寄せる。
+struct PanelHeader<Trailing: View>: View {
+    var title: String
+    var subtitle: String?
+    @ViewBuilder var trailing: () -> Trailing
+
+    var body: some View {
+        HStack(alignment: .firstTextBaseline, spacing: 8) {
+            Text(LocalizedStringKey(title))
+                .font(.system(size: 13, weight: .semibold))
+            if let subtitle {
+                Text(LocalizedStringKey(subtitle))
+                    .font(KoeTheme.captionFont)
+                    .foregroundStyle(.secondary)
+            }
+            Spacer(minLength: 8)
+            trailing()
+                .buttonStyle(.borderless)
+                .foregroundStyle(.secondary)
+        }
+        .padding(.horizontal, 16)
+        .frame(height: 44)
+    }
+}
+
 extension View {
+    func panelSurface(cornerRadius: CGFloat = KoeTheme.panelCornerRadius) -> some View {
+        modifier(PanelSurface(cornerRadius: cornerRadius))
+    }
+
     func sunkenSurface(cornerRadius: CGFloat = KoeTheme.cardCornerRadius) -> some View {
         modifier(SunkenSurface(cornerRadius: cornerRadius))
     }
@@ -134,28 +177,27 @@ extension View {
 /// `LabeledContent` はコントロールをラベルの直後に置くため、行ごとに操作部の
 /// 左端がずれて視線が拾いにくい。設定行はここを通して、右端で縦に揃える。
 struct SettingsRow<Control: View>: View {
-    private static var controlColumnWidth: CGFloat { 280 }
-
     var title: String
     var caption: String?
     @ViewBuilder var control: () -> Control
 
     var body: some View {
-        HStack(alignment: .firstTextBaseline, spacing: 16) {
+        HStack(alignment: .center, spacing: 16) {
             VStack(alignment: .leading, spacing: 2) {
                 Text(LocalizedStringKey(title))
-                    .font(.system(size: 12))
+                    .font(KoeTheme.bodyFont)
                 if let caption {
                     Text(LocalizedStringKey(caption))
-                        .font(.system(size: 10.5))
+                        .font(KoeTheme.captionFont)
                         .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
             }
+            .layoutPriority(1)
             Spacer(minLength: 12)
             control()
-                .frame(minWidth: Self.controlColumnWidth, alignment: .trailing)
         }
-        .frame(maxWidth: .infinity)
+        .frame(maxWidth: .infinity, minHeight: 24)
     }
 }
 
@@ -175,7 +217,8 @@ struct SettingsToggle: View {
     }
 }
 
-/// 設定画面のセクションカード。
+/// 設定画面のセクション。システム設定と同じく、行を1枚の面へまとめて細い罫線で区切る。
+/// 区切り線はここで入れるので、各画面は`Divider`を置かない。
 struct SettingsCard<Content: View>: View {
     var title: String?
     var footnote: String?
@@ -184,22 +227,32 @@ struct SettingsCard<Content: View>: View {
     @ViewBuilder var content: () -> Content
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
+        VStack(alignment: .leading, spacing: 8) {
             if let title {
                 Text(LocalizedStringKey(title))
-                    .font(.system(size: 12, weight: .semibold))
-                    .foregroundStyle(.secondary)
+                    .font(.system(size: 13, weight: .semibold))
+                    .padding(.leading, 2)
             }
-            VStack(alignment: .leading, spacing: 12) {
-                content()
+            VStack(alignment: .leading, spacing: 0) {
+                Group(subviews: content()) { subviews in
+                    ForEach(Array(subviews.enumerated()), id: \.element.id) { index, subview in
+                        if index > 0 {
+                            Divider().opacity(0.6)
+                        }
+                        subview
+                            .padding(.horizontal, 14)
+                            .padding(.vertical, 10)
+                    }
+                }
             }
-            .padding(14)
-            .frame(maxWidth: .infinity, maxHeight: fillsVertically ? .infinity : nil, alignment: .leading)
-            .raisedGlass()
+            .frame(maxWidth: .infinity, maxHeight: fillsVertically ? .infinity : nil, alignment: .topLeading)
+            .panelSurface(cornerRadius: 10)
             if let footnote {
                 Text(LocalizedStringKey(footnote))
-                    .font(.system(size: 11))
+                    .font(KoeTheme.captionFont)
                     .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .padding(.horizontal, 2)
             }
         }
     }

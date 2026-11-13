@@ -13,14 +13,12 @@ struct LifeLogSettingsView: View {
                         setCaptureMode: { env.setHotkeyCaptureMode($0) }
                     )
                 }
-                Divider()
                 SettingsRow(title: "ミニウィンドウ") {
                     HotkeyRecorderView(
                         binding: Binding(get: { settings.lifeLogMiniWindowHotkey }, set: { env.updateLifeLogMiniWindowHotkey($0) }),
                         setCaptureMode: { env.setHotkeyCaptureMode($0) }
                     )
                 }
-                Divider()
                 SettingsRow(title: "ボイスメモ", caption: "押すたびに録音開始・停止。認識結果を今日のメモだけに追加します") {
                     HotkeyRecorderView(
                         binding: Binding(get: { settings.voiceMemoHotkey }, set: { env.updateVoiceMemoHotkey($0) }),
@@ -62,7 +60,6 @@ struct LifeLogSettingsView: View {
                 if settings.lifeLogSttBackend == .whisperCpp {
                     WhisperModelSettingsView(env: env)
                 }
-                Divider()
                 SettingsRow(title: "マイク") {
                     Picker("", selection: Binding(get: { settings.lifeLogInputDeviceUID ?? "" }, set: { value in
                         settings.lifeLogInputDeviceUID = value.isEmpty ? nil : value

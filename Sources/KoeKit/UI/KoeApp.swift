@@ -81,6 +81,11 @@ final class KoeApplicationDelegate: NSObject, NSApplicationDelegate {
                 presenter.showMain()
             }
             await environment.boot()
+#if DEBUG
+            if let directory = DebugSnapshotter.outputDirectory {
+                await DebugSnapshotter.run(env: environment, presenter: presenter, into: directory)
+            }
+#endif
         }
     }
 

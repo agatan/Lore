@@ -22,10 +22,8 @@ struct ModelsSettingsView: View {
                     : "一日の要約とTODO案を作ります。音声入力とは別に選べます。"
             ) {
                 providerPicker
-                Divider()
                 engineStatus
                 if backend != .onDevice {
-                    Divider()
                     providerSettings
                 }
             }

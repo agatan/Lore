@@ -137,7 +137,6 @@ struct UsageSettingsView: View {
             .chartXAxis { AxisMarks { AxisValueLabel().font(.system(size: 9.5)) } }
             .frame(height: 190)
 
-            Divider()
             HStack {
                 apiSummary("音声入力", purpose: .dictation, tint: KoeTheme.recording)
                 Divider().frame(height: 32)

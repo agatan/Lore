@@ -1,7 +1,7 @@
 import SwiftUI
 
 struct LifeLogMemoComposer: View {
-    private let actionDiameter: CGFloat = 32
+    private let actionDiameter: CGFloat = 28
 
     @Binding var text: String
     var accessibilityPrefix: String
@@ -13,14 +13,18 @@ struct LifeLogMemoComposer: View {
     var onSend: (String) -> Void
 
     var body: some View {
-        HStack(alignment: .bottom, spacing: 8) {
+        HStack(alignment: .bottom, spacing: 6) {
             TextField("メモを追加…", text: $text, axis: .vertical)
                 .textFieldStyle(.plain)
                 .font(.system(size: 12.5))
                 .lineLimit(1...4)
                 .padding(.horizontal, 12)
-                .padding(.vertical, 9)
-                .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 15))
+                .padding(.vertical, 8)
+                .background(Color.primary.opacity(0.05), in: RoundedRectangle(cornerRadius: 9, style: .continuous))
+                .overlay {
+                    RoundedRectangle(cornerRadius: 9, style: .continuous)
+                        .strokeBorder(Color.primary.opacity(0.08), lineWidth: 0.5)
+                }
                 .onSubmit(send)
                 .accessibilityIdentifier("\(accessibilityPrefix).memo-input")
             voiceMemoButton
@@ -33,7 +37,7 @@ struct LifeLogMemoComposer: View {
                         .font(.system(size: 12, weight: .bold))
                         .foregroundStyle(trimmedText.isEmpty ? Color.secondary.opacity(0.45) : .white)
                 }
-                .frame(width: 36, height: 36)
+                .frame(width: 32, height: 32)
                 .contentShape(Circle())
             }
             .buttonStyle(.plain)
@@ -50,7 +54,7 @@ struct LifeLogMemoComposer: View {
                 if isVoiceMemoRecording {
                     Circle()
                         .fill(KoeTheme.recording.opacity(0.2))
-                        .frame(width: 40, height: 40)
+                        .frame(width: 34, height: 34)
                         .scaleEffect(isVoiceMemoRecording ? 1.12 : 0.72)
                         .opacity(isVoiceMemoRecording ? 0.82 : 0)
                         .animation(
@@ -73,7 +77,7 @@ struct LifeLogMemoComposer: View {
                         .symbolEffect(.breathe, options: .repeating, isActive: isVoiceMemoRecording)
                 }
             }
-            .frame(width: 36, height: 36)
+            .frame(width: 32, height: 32)
             .contentShape(Circle())
         }
         .buttonStyle(.plain)

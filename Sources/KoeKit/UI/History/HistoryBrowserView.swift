@@ -28,7 +28,10 @@ struct HistoryBrowserView: View {
         .onChange(of: query) { _, newValue in
             Task { await env.reloadHistory(query: newValue) }
         }
-        .task { await env.reloadHistory() }
+        .task {
+            await env.reloadHistory()
+            if selectedID == nil { selectedID = env.history.first?.id }
+        }
         .accessibilityIdentifier("history.root")
     }
 
@@ -37,13 +40,12 @@ struct HistoryBrowserView: View {
             ForEach(env.history) { record in
                 HistoryRow(record: record)
                     .tag(record.id)
-                    .listRowInsets(EdgeInsets(top: 5, leading: 10, bottom: 5, trailing: 10))
+                    .listRowInsets(EdgeInsets(top: 6, leading: 12, bottom: 6, trailing: 12))
             }
         }
         // .inset はペインの中では枠付きカードとして描かれてしまうため plain にする。
-        .listStyle(.plain)
+        .listStyle(.sidebar)
         .scrollContentBackground(.hidden)
-        .background(.background.opacity(0.35))
         .overlay {
             if env.history.isEmpty {
                 ContentUnavailableView(
@@ -82,36 +84,30 @@ private struct HistoryRow: View {
     var record: SessionRecord
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 4) {
+        VStack(alignment: .leading, spacing: 3) {
             HStack(spacing: 6) {
                 Text(record.startedAt.formatted(date: .omitted, time: .shortened))
-                    .font(.system(size: 11, weight: .medium, design: .rounded))
-                    .monospacedDigit()
+                    .font(KoeTheme.timeFont)
                     .foregroundStyle(.secondary)
-                if let appName = record.appName {
-                    Text(appName)
-                        .font(.system(size: 11))
-                        .foregroundStyle(.secondary)
-                        .lineLimit(1)
+                Text(subtitle)
+                    .font(KoeTheme.captionFont)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                Spacer(minLength: 4)
+                // 正常に挿入できた履歴は印を付けず、注意が要るものだけを目立たせる。
+                if record.status != .completed {
+                    StatusBadge(status: record.status)
                 }
-                Spacer()
-                StatusBadge(status: record.status)
             }
             Text(record.resultText)
-                .font(.system(size: 12))
+                .font(.system(size: 12.5))
                 .lineLimit(2)
-                .foregroundStyle(.primary.opacity(0.9))
-            HStack(spacing: 5) {
-                Pill(text: record.modeSnapshot.modeName, systemImage: "slider.horizontal.3", tint: KoeTheme.accent)
-                if let insert = record.insertLatencyMs {
-                    Pill(text: Self.durationText(insert), systemImage: "timer", tint: .secondary)
-                }
-                if let language = record.language, language != .unknown {
-                    Pill(text: language.displayName, tint: .secondary, localized: true)
-                }
-            }
         }
-        .padding(.vertical, 3)
+        .padding(.vertical, 2)
+    }
+
+    private var subtitle: String {
+        [record.appName, record.modeSnapshot.modeName].compactMap { $0 }.joined(separator: " · ")
     }
 
     static func durationText(_ ms: Int) -> String {

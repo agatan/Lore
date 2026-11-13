@@ -6,35 +6,35 @@ struct CalendarEventCard: View {
     var isCurrent = false
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            HStack(spacing: 5) {
-                Text(timeRange)
-                    .font(.system(size: 9.5, weight: .medium, design: .monospaced))
-                if isCurrent {
-                    Text("いま")
-                        .font(.system(size: 8.5, weight: .bold, design: .rounded))
-                        .foregroundStyle(KoeTheme.accent)
+        HStack(alignment: .top, spacing: 10) {
+            RoundedRectangle(cornerRadius: 1.5, style: .continuous)
+                .fill(KoeTheme.accentSecondary.opacity(isCurrent ? 1 : 0.7))
+                .frame(width: 3)
+            VStack(alignment: .leading, spacing: 2) {
+                HStack(spacing: 6) {
+                    Text(event.title)
+                        .font(.system(size: 12.5, weight: .semibold))
+                        .fixedSize(horizontal: false, vertical: true)
+                    if isCurrent {
+                        Text("いま")
+                            .font(.system(size: 10, weight: .semibold))
+                            .foregroundStyle(KoeTheme.accentSecondary)
+                    }
                 }
+                Text("\(timeRange) · \(event.calendarTitle)")
+                    .font(KoeTheme.captionFont.monospacedDigit())
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
             }
-            .foregroundStyle(.primary.opacity(0.72))
-
-            Text(event.title)
-                .font(.system(size: 11, weight: .semibold))
-                .fixedSize(horizontal: false, vertical: true)
-
-            Text(event.calendarTitle)
-                .font(.system(size: 9))
-                .foregroundStyle(.secondary)
-                .lineLimit(1)
+            Spacer(minLength: 0)
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(.leading, 10)
-        .padding(.vertical, 4)
-        .overlay(alignment: .leading) {
-            Rectangle()
-                .fill(KoeTheme.accent.opacity(isCurrent ? 0.9 : 0.45))
-                .frame(width: isCurrent ? 2 : 1)
-        }
+        .padding(.vertical, 8)
+        .padding(.horizontal, 10)
+        .background(
+            KoeTheme.accentSecondary.opacity(isCurrent ? 0.12 : 0.06),
+            in: RoundedRectangle(cornerRadius: KoeTheme.cardCornerRadius, style: .continuous)
+        )
+        .fixedSize(horizontal: false, vertical: true)
     }
 
     private var timeRange: String {

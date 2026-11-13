@@ -112,7 +112,7 @@ cloud音声入力で送るのは今回の文字起こし、共通rule、mode指�
 ### 4.2 日別表示
 
 - main windowは「ライフログ」と「音声入力」を切り替え、ライフログを既定表示にします。
-- ライフログは月間activity calendar、選択日のtimeline、summary、global TODOを表示します。
+- ライフログは左に月間activity calendarと選択日のまとめ・時間帯、中央に選択日のtimeline、右にglobal TODOを表示します。Timelineの見出しには選択日と項目数を置き、予定、検索、書き出しのbuttonを右端へまとめます。
 - 通常起動時とmain windowのライフログを開いた時は今日を表示し、dataの読込後にtimeline最下部の最新項目へ一度だけscrollします。mini windowも開いた時に今日を表示して最下部へ一度だけscrollします。その後に新しい認識結果や予定が届いても利用者の閲覧位置を奪いません。
 - timeline paneは予定、発話、音声入力、text memoを一列の時刻順で表示し、column headerは置きません。右上の予定buttonは選択日の予定を時刻と件名中心の素朴な一覧で表示します。日付を選ぶとその日の予定を読み直し、一覧とtimelineの両方へ反映します。予定一覧では塗りを使いません。
 - 右上の検索buttonまたは`Command-F`で横断検索を開きます。検索結果の発話、音声入力、memoを選ぶと対象日を開いてその項目へ移動し、summaryは対象日へ移動します。TODOは一覧へ表示しますが、出典への移動操作は提供しません。
@@ -129,7 +129,7 @@ cloud音声入力で送るのは今回の文字起こし、共通rule、mode指�
 - 既定では参加済み、またはRSVPのない予定だけを表示・派生処理に含めます。このfilterは変更できます。
 - Calendar設定の「予定を再取得」から、現在timelineで選択している日の予定を明示的に読み直せます。処理中は連打できず、完了後にtimelineと月間activityを更新します。
 - KoeからRSVPを変更せず、Calendar appへの操作導線も提供しません。
-- 月間activity calendarでは今日をprimary colorの塗りで示し、timelineで表示中の日をprimary colorの枠線で示します。同じ日なら両方を併用します。
+- 月間activity calendarではtimelineで表示中の日をprimary colorの円で塗り、それ以外の今日はprimary colorの数字で示します。
 
 ### 4.4 SummaryとTODO
 

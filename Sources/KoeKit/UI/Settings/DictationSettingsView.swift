@@ -18,7 +18,6 @@ struct DictationSettingsView: View {
                         setCaptureMode: { env.setHotkeyCaptureMode($0) }
                     )
                 }
-                Divider()
                 SettingsRow(title: "長押し判定") {
                     HStack(spacing: 10) {
                         Slider(

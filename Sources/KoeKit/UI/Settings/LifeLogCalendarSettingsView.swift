@@ -22,9 +22,7 @@ struct LifeLogCalendarSettingsView: View {
                         }
                     )
                 )
-                Divider()
                 calendars
-                Divider()
                 SettingsRow(
                     title: "予定を再取得",
                     caption: "\(env.lifeLog.selectedDate.formatted(.dateTime.year().month().day()))の予定をCalendarから読み直します"

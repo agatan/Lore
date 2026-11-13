@@ -7,40 +7,44 @@ struct LifeLogCaptureControl: View {
     var onToggle: () -> Void
 
     var body: some View {
-        HStack(spacing: 12) {
-            ZStack {
-                Circle()
-                    .fill(statusTint.opacity(0.14))
-                    .frame(width: 42, height: 42)
-                Image(systemName: statusSymbol)
-                    .font(.system(size: 17, weight: .semibold))
-                    .foregroundStyle(statusTint)
-                    .symbolEffect(.variableColor.iterative, isActive: lifeLog.isCapturing)
-                    .symbolEffect(.rotate, options: .repeating, isActive: lifeLog.isRecoveringCapture)
-            }
+        HStack(spacing: 10) {
+            Image(systemName: statusSymbol)
+                .font(.system(size: 13, weight: .medium))
+                .foregroundStyle(statusTint)
+                .symbolEffect(.variableColor.iterative, isActive: lifeLog.isCapturing)
+                .symbolEffect(.rotate, options: .repeating, isActive: lifeLog.isRecoveringCapture)
+                .frame(width: 18)
 
-            VStack(alignment: .leading, spacing: 3) {
+            VStack(alignment: .leading, spacing: 1) {
                 Text(LocalizedStringKey(statusTitle))
-                    .font(.system(size: 12.5, weight: .semibold))
-                Text(LocalizedStringKey(lifeLog.captureStatusText))
-                    .font(.system(size: 10.5))
-                    .foregroundStyle(.secondary)
+                    .font(.system(size: 12, weight: .medium))
+                // 停止中は見出しだけで状態が伝わるため、同じ意味の補足を重ねない。
+                if lifeLog.hasCaptureIntent {
+                    Text(LocalizedStringKey(lifeLog.captureStatusText))
+                        .font(KoeTheme.captionFont)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
 
             Button(action: onToggle) {
-                Image(systemName: lifeLog.hasCaptureIntent ? "stop.fill" : "record.circle.fill")
-                    .font(.system(size: 13, weight: .bold))
-                    .foregroundStyle(.white)
-                    .frame(width: 34, height: 34)
-                    .background(buttonFill, in: Circle())
+                Label(LocalizedStringKey(buttonTitle), systemImage: lifeLog.hasCaptureIntent ? "stop.fill" : "record.circle")
+                    .font(.system(size: 12, weight: .medium))
                     .contentTransition(.symbolEffect(.replace))
             }
-            .buttonStyle(.plain)
+            .buttonStyle(.bordered)
+            .buttonBorderShape(.capsule)
+            .tint(lifeLog.hasCaptureIntent ? KoeTheme.recording : KoeTheme.accent)
+            .controlSize(.regular)
             .help(LocalizedStringKey(actionLabel))
             .accessibilityLabel(LocalizedStringKey(actionLabel))
             .accessibilityIdentifier(accessibilityIdentifier)
         }
+    }
+
+    private var buttonTitle: String {
+        lifeLog.hasCaptureIntent ? "停止" : "記録を開始"
     }
 
     private var statusTint: Color {
@@ -62,12 +66,6 @@ struct LifeLogCaptureControl: View {
         if lifeLog.isCapturing { return "ライフログ記録中" }
         if lifeLog.hasCaptureIntent { return "ライフログ開始中" }
         return "ライフログ停止中"
-    }
-
-    private var buttonFill: AnyShapeStyle {
-        lifeLog.hasCaptureIntent
-            ? AnyShapeStyle(KoeTheme.recordingGradient)
-            : AnyShapeStyle(KoeTheme.voiceGradient)
     }
 
     private var actionLabel: String {

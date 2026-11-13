@@ -23,13 +23,13 @@ struct LifeLogTodoManagerWindow: View {
     var body: some View {
         VStack(spacing: 0) {
             HStack(spacing: 14) {
-                VStack(alignment: .leading, spacing: 3) {
+                VStack(alignment: .leading, spacing: 2) {
                     Text("すべてのTODO")
-                        .font(.system(size: 19, weight: .semibold, design: .rounded))
+                        .font(.system(size: 15, weight: .semibold))
                         .accessibilityIdentifier("todo-manager.root")
                     if !confirmedTodos.isEmpty {
                         Text("完了した項目は、いつでも未実施へ戻せます")
-                            .font(.system(size: 11.5))
+                            .font(KoeTheme.captionFont)
                             .foregroundStyle(.secondary)
                     }
                 }
@@ -42,43 +42,33 @@ struct LifeLogTodoManagerWindow: View {
                 .fixedSize()
                 .accessibilityIdentifier("todo-manager.filter")
             }
-            .padding(20)
+            .padding(.horizontal, 20)
+            .padding(.vertical, 14)
 
-            Divider().opacity(0.45)
+            Divider().opacity(0.6)
 
             if filteredTodos.isEmpty {
                 emptyState
             } else {
                 List(filteredTodos) { todo in
                     todoRow(todo)
-                        .listRowSeparator(.hidden)
-                        .listRowBackground(Color.clear)
+                        .listRowInsets(EdgeInsets(top: 0, leading: 12, bottom: 0, trailing: 12))
                 }
-                .listStyle(.plain)
+                .listStyle(.inset)
                 .scrollContentBackground(.hidden)
             }
         }
         .frame(minWidth: 560, minHeight: 420)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background {
-            LinearGradient(
-                colors: [KoeTheme.accent.opacity(0.055), .clear],
-                startPoint: .topLeading,
-                endPoint: .bottomTrailing
-            ).ignoresSafeArea()
-        }
         .task { await env.lifeLog.reload() }
     }
 
     private var emptyState: some View {
-        VStack(spacing: 10) {
-            Image(systemName: filter == .completed ? "checkmark.circle" : "circle.dashed")
-                .font(.system(size: 28, weight: .light))
-                .foregroundStyle(.secondary.opacity(0.45))
-            Text(filter == .completed ? "完了したTODOはありません" : "TODOはありません")
-                .font(.system(size: 14, weight: .medium, design: .rounded))
-                .foregroundStyle(.secondary)
-        }
+        ContentUnavailableView(
+            filter == .completed ? "完了したTODOはありません" : "TODOはありません",
+            systemImage: filter == .completed ? "checkmark.circle" : "checklist"
+        )
+        .foregroundStyle(.secondary)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .accessibilityElement(children: .combine)
         .accessibilityIdentifier("todo-manager.empty")
@@ -97,19 +87,19 @@ struct LifeLogTodoManagerWindow: View {
     }
 
     private func todoRow(_ todo: LifeLogTodo) -> some View {
-        HStack(alignment: .top, spacing: 12) {
+        HStack(alignment: .firstTextBaseline, spacing: 10) {
             Button { toggle(todo) } label: {
                 Image(systemName: todo.status == .completed ? "checkmark.circle.fill" : "circle")
-                    .font(.system(size: 17))
+                    .font(.system(size: 15))
                     .foregroundStyle(todo.status == .completed ? KoeTheme.success : Color.secondary)
             }
             .buttonStyle(.plain)
             .help(todo.status == .completed ? "未実施に戻す" : "完了にする")
 
-            VStack(alignment: .leading, spacing: 5) {
+            VStack(alignment: .leading, spacing: 3) {
                 TextField("TODO", text: title(todo), axis: .vertical)
                     .textFieldStyle(.plain)
-                    .font(.system(size: 13.5, weight: .medium))
+                    .font(KoeTheme.bodyFont)
                     .lineLimit(1...8)
                     .fixedSize(horizontal: false, vertical: true)
                     .strikethrough(todo.status == .completed)
@@ -119,8 +109,8 @@ struct LifeLogTodoManagerWindow: View {
                         Text("完了 \(completedAt.formatted(.dateTime.year().month().day().hour().minute()))")
                     }
                 }
-                .font(.system(size: 10.5, design: .rounded))
-                .foregroundStyle(.tertiary)
+                .font(KoeTheme.captionFont.monospacedDigit())
+                .foregroundStyle(.secondary)
             }
             Spacer(minLength: 12)
             Button(role: .destructive) {
@@ -128,15 +118,12 @@ struct LifeLogTodoManagerWindow: View {
             } label: {
                 Image(systemName: "trash")
             }
-            .buttonStyle(.plain)
-            .foregroundStyle(.tertiary)
+            .buttonStyle(.borderless)
+            .foregroundStyle(.secondary)
             .help("削除")
+            .accessibilityLabel("TODOを削除")
         }
-        .padding(.horizontal, 14)
-        .padding(.vertical, 12)
-        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 14))
-        .padding(.horizontal, 10)
-        .padding(.vertical, 4)
+        .padding(.vertical, 9)
     }
 
     private func toggle(_ todo: LifeLogTodo) {

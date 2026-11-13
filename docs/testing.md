@@ -45,3 +45,12 @@ make ui-test
 ```
 
 `make ui-test`には実行元ターミナルのアクセシビリティ許可が必要です。失敗時は、システム設定の「プライバシーとセキュリティ > アクセシビリティ」で許可してから再実行します。
+
+## 見た目の確認
+
+Debug buildの`KoeUITests.app`を`--koe-screenshot-demo --koe-snapshot <dir>`で起動すると、main（ライフログ・音声入力）、全設定section、mini window、TODO管理windowを順に開き、各windowを`<dir>`へPNGで保存して終了します。自process内のwindowだけをScreenCaptureKitで撮るため、画面収録の許可は不要です。Release buildには含めません。
+
+```sh
+make ui-test-app
+open -n -W build/KoeUITests.app --args --koe-screenshot-demo --koe-snapshot /tmp/koe-shots
+```

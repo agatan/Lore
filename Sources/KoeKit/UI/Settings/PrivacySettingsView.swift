@@ -50,7 +50,6 @@ struct PrivacySettingsView: View {
                     .buttonStyle(.bordered)
                     .controlSize(.small)
                 }
-                Divider()
                 HStack(spacing: 12) {
                     VStack(alignment: .leading, spacing: 3) {
                         Text("ライフログ")
@@ -66,7 +65,6 @@ struct PrivacySettingsView: View {
                     .buttonStyle(.bordered)
                     .controlSize(.small)
                 }
-                Divider()
                 HStack(spacing: 12) {
                     Text("設定、語彙、プロンプト、APIキーを含むすべて")
                         .font(.system(size: 11.5))

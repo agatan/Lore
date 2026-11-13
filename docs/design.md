@@ -170,12 +170,12 @@ DBは`~/Library/Application Support/Koe/koe.sqlite`です。`DatabaseQueue`を�
 
 | Scene / View | 内容 |
 |---|---|
-| `KoeTheme` | app icon由来の固定blue/cyanをprimary/secondary、同じ明度と彩度へ揃えたrose/mint/goldを録音/成功/警告として定義する。Viewや設定からpaletteを差し替えない |
+| `KoeTheme` | app icon由来の固定blue/cyanをprimary/secondary、同じ明度と彩度へ揃えたrose/mint/goldを録音/成功/警告として定義する。Viewや設定からpaletteを差し替えない。文字は本文・補足・見出しの3段と桁揃えの時刻書体に限る。Glassは浮くもの(HUD、menu)だけに使い、常に見えるpanelと設定sectionは`panelSurface`の淡い塗りと細い罫線で区切る。`SettingsCard`は行の間へ罫線を自動で入れ、各画面は`Divider`を置かない |
 | `MenuBarPanel` | 用途別quick action。ライフログtabはcompactなcapture状態と記録切替、今日のmain/mini window入口、音声入力tabは録音、hotkey、mode、直前結果、履歴入口を持つ。共通footerは設定と終了だけに限定する。Main/mini入口はglass buttonによるtext rasterizationを避け、plain button内にsystem fontを直接描画する |
 | `MenuBarLabel` | 音声入力のphase、入力level、ライフログcapture状態。`LifeLogCoordinator.isCapturing`中もKoe icon本体はmonochrome maskとして描画し、右下のrose色badgeだけを着色する。停止中または`isRecoveringCapture`のみの状態ではbadgeなしのmonochrome表示にする |
 | `MainWindowView` | `lifeLog` / `history`のsegmented切替。初回はonboarding、通常起動は`lifeLog`を開く |
-| `LifeLogWindow` | 月間activity、日別timeline、Markdown summary、global TODO。Timeline本体はevent/utterance/dictation/memoを一列の時刻順で表示し、column headerを持たない。日付選択時はsnapshotを再取得し、予定一覧とtimelineを同じdataから更新する。検索buttonは`Command-F`も受け、発話・音声入力・memoの検索結果だけをtimeline itemへ移動する。表示開始時だけ今日を読み込んで末尾へscrollし、その後のreloadでは閲覧位置を保つ。左下Summary viewはMarkdownを描画し、summaryとdraft TODOの手動更新、進捗、失敗を扱う。TODO本文は複数行入力にするが、保存済みprovenanceへの移動UIは持たない |
-| `LifeLogCaptureControl` | Main、mini、menu barで共有するcapture状態と開始・停止操作。停止中の開始はblue/cyanのrecord、記録開始意図がある間の停止はroseのstopとして、symbol、文言、semantic colorを一か所で決める。録音と文字起こしの内部Boolの中間状態を文言へ直接投影せず、利用者向け状態を安定させる。Main/miniでは状態textの隣へ配置する |
+| `LifeLogWindow` | 月間activity、日別timeline、Markdown summary、global TODO。Timeline本体はevent/utterance/dictation/memoを一列の時刻順で表示し、column headerを持たない。日付選択時はsnapshotを再取得し、予定一覧とtimelineを同じdataから更新する。検索buttonは`Command-F`も受け、発話・音声入力・memoの検索結果だけをtimeline itemへ移動する。表示開始時だけ今日を読み込んで末尾へscrollし、その後のreloadでは閲覧位置を保つ。左columnはcalendarの下にMarkdownのまとめ、話題、時間帯を置き、summaryとdraft TODOの手動更新、進捗、失敗を扱う。中央timelineは`PanelHeader`に選択日・項目数・予定/検索/書き出しbuttonを置き、行は`TimelineEntryRow`をminiと共有する。右columnはTODO専用で、`LifeLogTodoRow`が提案の採用・棄却と確定済みの完了・削除をhoverで出す。TODO本文は複数行入力にするが、保存済みprovenanceへの移動UIは持たない |
+| `LifeLogCaptureControl` | Main、mini、menu barで共有するcapture状態と開始・停止操作。停止中は「記録を開始」のblue、記録開始意図がある間は「停止」のroseのcapsule buttonとして、symbol、文言、semantic colorを一か所で決める。停止中は状態の補足文を重ねない。録音と文字起こしの内部Boolの中間状態を文言へ直接投影せず、利用者向け状態を安定させる。Main/miniでは状態textの隣へ配置する |
 | `LifeLogTranscriptionProgressRow` | `LifeLogCoordinator.activeTranscriptionStartedAt`がある間だけMain/miniのcapture状態直上へ一行表示し、認識対象audio長、1秒ごとの処理経過時間、Shimmerで実際のSTT job実行中を示す。発話burstの確定待ちや録音状態は表現しない |
 | `LifeLogExportSheet` | 表示開始時のdate/day/TODOをsnapshotとして保持し、cancel可能なbackground taskで人間向けMarkdownを一度だけ生成する。previewは折り返し可能な上限付きtextとし、完全版をcopy/fileへ再利用する。生成中と書込中はprogressを表示し、MainActorではclipboardとpanel操作だけを行う |
 | `HistoryBrowserView` | 音声入力履歴、検索、詳細、コピー、削除 |
@@ -190,7 +190,7 @@ DBは`~/Library/Application Support/Koe/koe.sqlite`です。`DatabaseQueue`を�
 
 ## 10. 自動化境界
 
-LifeLogTextExporterは90秒未満の連続発話を別種の表示項目で区切ってまとめ、TODOは作成日・完了日から抽出します。LifeLogExportSheetはプレビューもbackgroundで4,000文字に制限します。Day paneは縦scroll、予定rowは塗りなしで描画します。LifeLogStoreから対象日以前90日分の話題名を最大100件取得し、LifeLogDerivationServiceが既存プロジェクト名を優先して最大5件生成します。過去本文の送信、追加LLM call、schema変更は行いません。旧commitments fieldは保存互換性のため残し、新規要約は空配列を保存します。
+LifeLogTextExporterは90秒未満の連続発話を別種の表示項目で区切ってまとめ、TODOは作成日・完了日から抽出します。LifeLogExportSheetはプレビューもbackgroundで4,000文字に制限します。左columnのまとめと時間帯は縦scrollし、timelineの予定rowは淡い塗りと左端の色帯で発話と区別します。LifeLogStoreから対象日以前90日分の話題名を最大100件取得し、LifeLogDerivationServiceが既存プロジェクト名を優先して最大5件生成します。過去本文の送信、追加LLM call、schema変更は行いません。旧commitments fieldは保存互換性のため残し、新規要約は空配列を保存します。
 
 `KoeAutomationService`がCLIとMCPで共有され、日別export、open TODO export、横断検索、TODO CRUD、summary/TODO prompt更新を提供します。App Intentsは`AppEnvironment.boot()`の完了後にcapture開始・終了とexportを実行します。開始Actionだけはマイクを扱うためforeground mode、その他はbackground modeです。Shortcutsからの実行にはmacOSが検証できるbundle署名が必要なため、buildは有効な`Apple Development` identityを自己署名より優先します。公開コマンドとtool schemaは外部仕様に列挙します。
 

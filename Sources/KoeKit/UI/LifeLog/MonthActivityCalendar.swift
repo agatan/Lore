@@ -45,27 +45,30 @@ struct MonthActivityCalendar: View {
     private var header: some View {
         HStack(spacing: 8) {
             Text(displayedMonth.formatted(.dateTime.year().month(.wide)))
-                .font(.system(size: 15, weight: .semibold, design: .rounded))
+                .font(.system(size: 14, weight: .semibold))
             Spacer()
             Button { moveMonth(-1) } label: { Image(systemName: "chevron.left") }
-            Button {
+                .help("前の月")
+            Button("今日") {
                 let today = Date()
                 displayedMonth = calendar.dateInterval(of: .month, for: today)?.start ?? today
                 onMonthChanged(displayedMonth)
                 onSelect(today)
-            } label: { Image(systemName: "scope") }
-            .help("今日")
+            }
+            .font(.system(size: 11, weight: .medium))
             Button { moveMonth(1) } label: { Image(systemName: "chevron.right") }
+                .help("次の月")
         }
-        .buttonStyle(.plain)
+        .buttonStyle(.borderless)
         .foregroundStyle(.secondary)
+        .font(.system(size: 11, weight: .semibold))
     }
 
     private var weekdayHeader: some View {
         HStack(spacing: 3) {
             ForEach(weekdaySymbols, id: \.self) { symbol in
                 Text(symbol)
-                    .font(.system(size: 9.5, weight: .medium, design: .rounded))
+                    .font(.system(size: 10, weight: .medium))
                     .foregroundStyle(.tertiary)
                     .frame(maxWidth: .infinity)
             }
@@ -79,35 +82,31 @@ struct MonthActivityCalendar: View {
         return Button { onSelect(date) } label: {
             VStack(spacing: 3) {
                 Text(String(calendar.component(.day, from: date)))
-                    .font(.system(size: 11.5, weight: today ? .bold : .medium, design: .rounded))
-                    .foregroundStyle(today ? KoeTheme.accent : .primary)
-                HStack(spacing: 3) {
+                    .font(.system(size: 12, weight: today || selected ? .semibold : .regular).monospacedDigit())
+                    .foregroundStyle(selected ? Color.white : (today ? KoeTheme.accent : Color.primary))
+                    .frame(width: 26, height: 26)
+                    .background {
+                        if selected {
+                            Circle().fill(KoeTheme.accent)
+                        }
+                    }
+                HStack(spacing: 2) {
                     densityDot(intensity: value.eventIntensity, color: KoeTheme.accentSecondary)
                     densityDot(intensity: value.voiceIntensity, color: KoeTheme.accent)
                 }
-                .frame(height: 6)
+                .frame(height: 5)
             }
-            .frame(maxWidth: .infinity, minHeight: 38)
+            .frame(maxWidth: .infinity, minHeight: 36)
             .contentShape(.rect)
-            .background(
-                today ? KoeTheme.accent.opacity(0.20) : .clear,
-                in: RoundedRectangle(cornerRadius: 10, style: .continuous)
-            )
-            .overlay {
-                if selected {
-                    RoundedRectangle(cornerRadius: 10, style: .continuous)
-                        .strokeBorder(KoeTheme.accent.opacity(0.9), lineWidth: 1.5)
-                }
-            }
         }
         .buttonStyle(.plain)
     }
 
     private func densityDot(intensity: Double, color: Color) -> some View {
         Circle()
-            .fill(intensity > 0 ? color.opacity(0.35 + intensity * 0.65) : .clear)
-            .frame(width: 3 + intensity * 3, height: 3 + intensity * 3)
-            .frame(width: 7, height: 7)
+            .fill(intensity > 0 ? color.opacity(0.4 + intensity * 0.6) : .clear)
+            .frame(width: 4, height: 4)
+            .frame(width: 5, height: 5)
     }
 
     private var days: [Date?] {

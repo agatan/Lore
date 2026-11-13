@@ -15,20 +15,13 @@ public struct LifeLogWindow: View {
     public init(env: AppEnvironment) { self.env = env }
 
     public var body: some View {
-        HStack(spacing: 12) {
-            left.frame(width: 306)
-            timeline.frame(minWidth: 500, maxWidth: .infinity)
-            right.frame(width: 336)
+        HStack(spacing: 10) {
+            left.frame(width: 288)
+            timeline.frame(minWidth: 520, maxWidth: .infinity)
+            right.frame(width: 320)
         }
-        .padding(12)
+        .padding(10)
         .frame(minWidth: 1_120, minHeight: 680)
-        .background {
-            LinearGradient(
-                colors: [KoeTheme.accent.opacity(0.055), KoeTheme.accentSecondary.opacity(0.035), .clear],
-                startPoint: .topLeading,
-                endPoint: .bottomTrailing
-            ).ignoresSafeArea()
-        }
         .task {
             await env.lifeLog.followCurrentDay()
             await env.lifeLog.loadActivity(containing: env.lifeLog.selectedDate)
@@ -64,57 +57,95 @@ public struct LifeLogWindow: View {
                 },
                 onMonthChanged: { date in Task { await env.lifeLog.loadActivity(containing: date) } }
             )
-            .padding(16)
-            Divider().opacity(0.45)
-            VStack(alignment: .leading, spacing: 12) {
-                HStack {
-                    Text(env.lifeLog.selectedDate.formatted(.dateTime.month(.abbreviated).day().weekday(.abbreviated)))
-                        .font(.system(size: 14, weight: .semibold, design: .rounded))
-                    Spacer()
-                    if let summary = env.lifeLog.day.summary, summary.isFinal {
-                        Image(systemName: "checkmark.seal.fill").foregroundStyle(KoeTheme.success)
+            .padding(14)
+            Divider().opacity(0.6)
+            ScrollView {
+                VStack(alignment: .leading, spacing: 18) {
+                    daySummary
+                    dayRhythm
+                }
+                .padding(16)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            }
+        }
+        .panelSurface()
+    }
+
+    private var daySummary: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 6) {
+                sectionLabel("まとめ")
+                if let summary = env.lifeLog.day.summary, summary.isFinal {
+                    Image(systemName: "checkmark.seal.fill")
+                        .font(.system(size: 10))
+                        .foregroundStyle(KoeTheme.success)
+                        .help("確定済み")
+                }
+                Spacer()
+                Button {
+                    Task { await env.lifeLog.refreshSelectedDaySummary() }
+                } label: {
+                    if env.lifeLog.isDeriving {
+                        ProgressView().controlSize(.mini)
+                    } else {
+                        Image(systemName: "arrow.clockwise").font(.system(size: 11))
                     }
-                    Button {
-                        Task { await env.lifeLog.refreshSelectedDaySummary() }
-                    } label: {
-                        if env.lifeLog.isDeriving {
-                            ProgressView().controlSize(.small)
-                        } else {
-                            Image(systemName: "arrow.clockwise")
+                }
+                .buttonStyle(.borderless)
+                .foregroundStyle(.secondary)
+                .disabled(env.lifeLog.isDeriving || !hasSummarySource)
+                .help("要約とTODO案を更新")
+                .accessibilityLabel("要約とTODO案を更新")
+                .accessibilityIdentifier("life-log.refresh-summary")
+            }
+            if let summary = env.lifeLog.day.summary {
+                LifeLogMarkdownSummary(markdown: summary.summary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                if !summary.topics.isEmpty {
+                    FlowLayout(spacing: 5) {
+                        ForEach(summary.topics, id: \.self) { topic in
+                            Text(topic)
+                                .font(.system(size: 11, weight: .medium))
+                                .foregroundStyle(.secondary)
+                                .padding(.horizontal, 8)
+                                .padding(.vertical, 3)
+                                .background(Color.primary.opacity(0.06), in: Capsule())
                         }
                     }
-                    .buttonStyle(.plain)
-                    .foregroundStyle(KoeTheme.accent)
-                    .disabled(env.lifeLog.isDeriving || !hasSummarySource)
-                    .help("要約とTODO案を更新")
-                    .accessibilityLabel("要約とTODO案を更新")
-                    .accessibilityIdentifier("life-log.refresh-summary")
                 }
-                if let summary = env.lifeLog.day.summary {
-                    ScrollView {
-                        LifeLogMarkdownSummary(markdown: summary.summary)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                    }
-                } else {
-                    HStack(spacing: 8) { Image(systemName: "sparkles"); Text("Summary") }
-                        .font(.system(size: 11.5, weight: .medium))
-                        .foregroundStyle(.secondary.opacity(0.45))
-                }
+            } else {
+                Text(hasSummarySource ? "更新するとこの日の要約を作ります" : "記録が増えると要約を作ります")
+                    .font(KoeTheme.captionFont)
+                    .foregroundStyle(.tertiary)
             }
-            .padding(16)
-            Spacer(minLength: 0)
         }
-        .raisedGlass(cornerRadius: 22)
+    }
+
+    private var dayRhythm: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            sectionLabel("時間帯")
+            DayRhythmView(day: env.lifeLog.day)
+                .frame(height: 52)
+        }
+        .accessibilityIdentifier("life-log.day-insights")
+    }
+
+    private func sectionLabel(_ title: String) -> some View {
+        Text(LocalizedStringKey(title))
+            .font(KoeTheme.sectionFont)
+            .foregroundStyle(.secondary)
     }
 
     private var timeline: some View {
         VStack(spacing: 0) {
-            panelHeader("Timeline", symbol: "calendar.day.timeline.left") {
-                HStack(spacing: 10) {
+            PanelHeader(
+                title: env.lifeLog.selectedDate.formatted(.dateTime.month(.abbreviated).day().weekday(.wide)),
+                subtitle: timelineSubtitle
+            ) {
+                HStack(spacing: 14) {
                     Button { showsCalendarEvents = true } label: { Image(systemName: "calendar") }
-                        .buttonStyle(.plain)
-                        .foregroundStyle(.secondary)
                         .help("この日の予定")
+                        .accessibilityLabel("この日の予定")
                         .accessibilityIdentifier("life-log.calendar-events")
                         .popover(isPresented: $showsCalendarEvents, arrowEdge: .top) {
                             LifeLogCalendarEventList(
@@ -126,25 +157,27 @@ public struct LifeLogWindow: View {
                             )
                         }
                     Button { showsSearchSheet = true } label: { Image(systemName: "magnifyingglass") }
-                        .buttonStyle(.plain)
-                        .foregroundStyle(.secondary)
                         .help("ライフログを検索 (⌘F)")
+                        .accessibilityLabel("ライフログを検索")
                         .keyboardShortcut("f", modifiers: .command)
                         .accessibilityIdentifier("life-log.search")
-                    Text(env.lifeLog.selectedDate.formatted(.dateTime.year().month().day()))
-                        .font(.system(size: 11, weight: .medium, design: .rounded)).foregroundStyle(.tertiary)
+                    Button { showsExportSheet = true } label: { Image(systemName: "square.and.arrow.up") }
+                        .help("この日を書き出す")
+                        .accessibilityLabel("この日を書き出す")
+                        .accessibilityIdentifier("life-log.export-day")
                 }
+                .font(.system(size: 13))
             }
-            Divider().opacity(0.4)
+            Divider().opacity(0.6)
             ScrollViewReader { proxy in
                 ScrollView {
-                    LazyVStack(alignment: .leading, spacing: 0) {
+                    LazyVStack(alignment: .leading, spacing: 2) {
                         ForEach(timelineItems, id: \.id) { item in
                             timelineRow(item)
-                            Divider().opacity(0.25)
                         }
                         Color.clear.frame(height: 1).id("timeline-bottom")
                     }
+                    .padding(.vertical, 8)
                 }
                 .onChange(of: env.lifeLog.sourceNavigationRevision) { _, _ in
                     guard let id = env.lifeLog.highlightedTimelineItemID else { return }
@@ -192,7 +225,7 @@ public struct LifeLogWindow: View {
                 .accessibilityIdentifier("life-log.notice")
             }
             if let startedAt = env.lifeLog.liveActivityStartedAt {
-                Divider().opacity(0.35)
+                Divider().opacity(0.6)
                 LifeLogTranscriptionProgressRow(
                     startedAt: startedAt,
                     audioDuration: env.lifeLog.liveActivityAudioDuration,
@@ -200,17 +233,16 @@ public struct LifeLogWindow: View {
                     transcript: env.lifeLog.liveTranscript
                 )
             }
-            Divider().opacity(0.35)
+            Divider().opacity(0.6)
             LifeLogCaptureControl(
                 lifeLog: env.lifeLog,
                 accessibilityIdentifier: "life-log.capture-toggle"
             ) {
                 setCaptureEnabled(!env.lifeLog.hasCaptureIntent)
             }
-            .padding(.horizontal, 12)
-            .padding(.vertical, 8)
+            .padding(.horizontal, 16)
+            .padding(.vertical, 10)
             if Calendar.current.isDateInToday(env.lifeLog.selectedDate) {
-                Divider().opacity(0.35)
                 LifeLogMemoComposer(
                     text: $memoDraft,
                     accessibilityPrefix: "life-log",
@@ -222,21 +254,31 @@ public struct LifeLogWindow: View {
                 ) { value in
                     Task { await env.lifeLog.addMemo(value) }
                 }
-                .padding(10)
+                .padding(.horizontal, 12)
+                .padding(.bottom, 12)
             }
         }
-        .raisedGlass(cornerRadius: 22)
+        .panelSurface()
+    }
+
+    private var timelineSubtitle: String? {
+        let day = env.lifeLog.day
+        let count = day.utterances.count + day.dictations.count + day.memos.count
+        return count == 0 ? nil : "\(count)件"
     }
 
     private var timelineEmptyState: some View {
-        VStack(spacing: 10) {
-            Image(systemName: env.lifeLog.hasCaptureIntent ? "waveform" : "waveform.slash")
-                .font(.system(size: 32, weight: .light))
-                .foregroundStyle(env.lifeLog.hasCaptureIntent ? KoeTheme.accent : Color.secondary.opacity(0.42))
-            Text(env.lifeLog.hasCaptureIntent ? "発話を待っています" : "この日の記録はありません")
-                .font(.system(size: 12, weight: .medium, design: .rounded))
-                .foregroundStyle(.secondary.opacity(0.55))
+        ContentUnavailableView {
+            Label(
+                env.lifeLog.hasCaptureIntent ? "発話を待っています" : "この日の記録はありません",
+                systemImage: env.lifeLog.hasCaptureIntent ? "waveform" : "text.bubble"
+            )
+        } description: {
+            if !env.lifeLog.hasCaptureIntent, Calendar.current.isDateInToday(env.lifeLog.selectedDate) {
+                Text("記録を開始すると、話した内容がここに時刻順で並びます。")
+            }
         }
+        .foregroundStyle(.secondary)
     }
 
     private func timelineRow(_ item: TimelineItem) -> some View {
@@ -249,94 +291,53 @@ public struct LifeLogWindow: View {
     private func activityCell(_ item: TimelineItem) -> some View {
         switch item.kind {
         case .utterance(let value):
-            HStack(alignment: .top, spacing: 12) {
-                Text(value.startedAt.formatted(date: .omitted, time: .shortened))
-                    .font(.system(size: 10.5, weight: .medium, design: .monospaced))
-                    .foregroundStyle(.tertiary).frame(width: 64, alignment: .leading)
-                Text(value.text).font(.system(size: 13)).textSelection(.enabled)
-                Spacer(minLength: 0)
-            }
-            .padding(.horizontal, 16).padding(.vertical, 11)
-            .background(env.lifeLog.highlightedTimelineItemID == "u-\(value.id)" ? KoeTheme.accent.opacity(0.12) : .clear)
+            TimelineEntryRow(
+                date: value.startedAt,
+                kind: .utterance,
+                text: value.text,
+                isHighlighted: env.lifeLog.highlightedTimelineItemID == "u-\(value.id)"
+            )
         case .event(let value):
             CalendarEventCard(event: value)
                 .padding(.horizontal, 12)
-                .padding(.vertical, 7)
+                .padding(.vertical, 6)
                 .accessibilityIdentifier("life-log.timeline-event-\(value.id)")
         case .dictation(let value):
-            HStack(alignment: .top, spacing: 12) {
-                Text(value.startedAt.formatted(date: .omitted, time: .shortened))
-                    .font(.system(size: 10.5, weight: .medium, design: .monospaced))
-                    .foregroundStyle(.tertiary).frame(width: 64, alignment: .leading)
-                Image(systemName: "keyboard.badge.ellipsis")
-                    .font(.system(size: 11, weight: .semibold))
-                    .foregroundStyle(KoeTheme.accent)
-                    .frame(width: 16)
-                    .help("音声入力")
-                Text(value.text).font(.system(size: 13)).textSelection(.enabled)
-                Spacer(minLength: 0)
-            }
-            .padding(.horizontal, 16).padding(.vertical, 11)
-            .background(KoeTheme.accent.opacity(0.04))
+            TimelineEntryRow(date: value.startedAt, kind: .dictation, text: value.text)
         case .memo(let value):
-            HStack(alignment: .top, spacing: 12) {
-                Text(value.createdAt.formatted(date: .omitted, time: .shortened))
-                    .font(.system(size: 10.5, weight: .medium, design: .monospaced))
-                    .foregroundStyle(.tertiary).frame(width: 64, alignment: .leading)
-                Image(systemName: "note.text")
-                    .font(.system(size: 11, weight: .semibold))
-                    .foregroundStyle(KoeTheme.accent)
-                    .frame(width: 16)
-                    .help("メモ")
-                Text(value.text).font(.system(size: 13)).textSelection(.enabled)
-                Spacer(minLength: 0)
-                Button { Task { await env.lifeLog.deleteMemo(id: value.id) } } label: {
-                    Image(systemName: "trash")
-                }
-                .buttonStyle(.plain).foregroundStyle(.tertiary).help("メモを削除")
-            }
-            .padding(.horizontal, 16).padding(.vertical, 11)
-            .background(env.lifeLog.highlightedTimelineItemID == "m-\(value.id)" ? KoeTheme.accent.opacity(0.12) : .clear)
+            TimelineEntryRow(
+                date: value.createdAt,
+                kind: .memo,
+                text: value.text,
+                isHighlighted: env.lifeLog.highlightedTimelineItemID == "m-\(value.id)",
+                onDelete: { Task { await env.lifeLog.deleteMemo(id: value.id) } }
+            )
         }
     }
 
     private var right: some View {
-        VStack(spacing: 12) {
-            todoPanel.frame(maxHeight: .infinity)
-            insightsPanel.frame(height: 238)
-            Button { showsExportSheet = true } label: {
-                Label("この日を書き出す", systemImage: "square.and.arrow.up")
-                    .frame(maxWidth: .infinity)
+        todoPanel
+            .alert("書き出せませんでした", isPresented: Binding(
+                get: { exportError != nil },
+                set: { if !$0 { exportError = nil } }
+            )) {
+                Button("閉じる") { exportError = nil }
+            } message: {
+                Text(exportError ?? "不明なエラー")
             }
-            .buttonStyle(.bordered)
-            .controlSize(.large)
-            .help("予定・発話・音声入力・メモを読みやすいMarkdownで書き出す")
-            .accessibilityIdentifier("life-log.export-day")
-        }
-        .alert("書き出せませんでした", isPresented: Binding(
-            get: { exportError != nil },
-            set: { if !$0 { exportError = nil } }
-        )) {
-            Button("閉じる") { exportError = nil }
-        } message: {
-            Text(exportError ?? "不明なエラー")
-        }
     }
 
     private var todoPanel: some View {
         VStack(spacing: 0) {
-            panelHeader("TODO", symbol: "checkmark.circle") {
-                HStack(spacing: 8) {
-                    let count = env.lifeLog.todos.filter { $0.status == .open }.count
-                    if count > 0 { Pill(text: "\(count)", tint: KoeTheme.accent) }
+            PanelHeader(title: "TODO", subtitle: openTodoCount > 0 ? "\(openTodoCount)件" : nil) {
+                HStack(spacing: 14) {
                     Button {
                         env.onShowLifeLogTodos?()
                     } label: {
-                        Image(systemName: "rectangle.stack")
-                            .foregroundStyle(.secondary)
+                        Image(systemName: "list.bullet")
                     }
-                    .buttonStyle(.plain)
                     .help("すべてのTODO")
+                    .accessibilityLabel("すべてのTODO")
                     .accessibilityIdentifier("life-log.open-all-todos")
                     Menu {
                         Button("未実施TODOをコピー", systemImage: "doc.on.clipboard") {
@@ -346,58 +347,51 @@ public struct LifeLogWindow: View {
                             exportOpenTodos(to: .file)
                         }
                     } label: {
-                        Image(systemName: "square.and.arrow.up")
-                            .foregroundStyle(.secondary)
+                        Image(systemName: "ellipsis.circle")
                     }
                     .menuStyle(.borderlessButton)
+                    .menuIndicator(.hidden)
+                    .tint(.secondary)
                     .fixedSize()
                     .help("すべての未実施TODOを書き出す")
                 }
+                .font(.system(size: 13))
             }
-            Divider().opacity(0.4)
+            Divider().opacity(0.6)
             if visibleTodos.isEmpty {
-                VStack(spacing: 10) {
-                    Image(systemName: "checkmark").font(.system(size: 25, weight: .light))
-                    Text("Clear").font(.system(size: 11.5, weight: .medium, design: .rounded))
+                ContentUnavailableView {
+                    Label("未実施のTODOはありません", systemImage: "checkmark.circle")
+                } description: {
+                    Text("要約を更新すると、会話からTODO案を提案します。")
                 }
-                .foregroundStyle(.secondary.opacity(0.4)).frame(maxWidth: .infinity, maxHeight: .infinity)
+                .foregroundStyle(.secondary)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
-                List(visibleTodos) { todo in
-                    VStack(alignment: .leading, spacing: 6) {
-                        HStack(alignment: .top) {
-                            if todo.status == .draft {
-                                Image(systemName: "sparkles").foregroundStyle(.secondary)
-                            } else {
-                                Button { toggle(todo) } label: {
-                                    Image(systemName: todo.status == .completed ? "checkmark.circle.fill" : "circle")
-                                        .foregroundStyle(todo.status == .completed ? KoeTheme.success : .secondary)
-                                }.buttonStyle(.plain)
-                            }
-                            TextField("TODO", text: todoTitle(todo), axis: .vertical)
-                                .textFieldStyle(.plain)
-                                .font(.system(size: 12))
-                                .lineLimit(1...6)
-                                .fixedSize(horizontal: false, vertical: true)
-                                .strikethrough(todo.status == .completed)
-                            Spacer()
-                            if todo.status == .draft {
-                                Button { confirm(todo) } label: { Image(systemName: "checkmark") }
-                                    .buttonStyle(.plain).foregroundStyle(KoeTheme.success).help("TODOにする")
-                                Button { Task { await env.lifeLog.delete(todoID: todo.id) } } label: { Image(systemName: "xmark") }
-                                    .buttonStyle(.plain).foregroundStyle(.tertiary).help("棄却")
-                            }
-                            if todo.status != .draft {
-                                Button { Task { await env.lifeLog.delete(todoID: todo.id) } } label: { Image(systemName: "trash") }
-                                    .buttonStyle(.plain).foregroundStyle(.tertiary).help("Delete")
-                            }
+                ScrollView {
+                    LazyVStack(alignment: .leading, spacing: 2) {
+                        ForEach(visibleTodos) { todo in
+                            todoRow(todo)
                         }
                     }
-                    .listRowBackground(todo.status == .draft ? KoeTheme.accent.opacity(0.055) : Color.clear)
+                    .padding(.vertical, 8)
                 }
-                .listStyle(.plain).scrollContentBackground(.hidden)
             }
         }
-        .raisedGlass(cornerRadius: 22)
+        .panelSurface()
+    }
+
+    private var openTodoCount: Int {
+        env.lifeLog.todos.filter { $0.status == .open }.count
+    }
+
+    private func todoRow(_ todo: LifeLogTodo) -> some View {
+        LifeLogTodoRow(
+            todo: todo,
+            title: todoTitle(todo),
+            onToggle: { toggle(todo) },
+            onConfirm: { confirm(todo) },
+            onDelete: { Task { await env.lifeLog.delete(todoID: todo.id) } }
+        )
     }
 
     private var visibleTodos: [LifeLogTodo] {
@@ -408,51 +402,6 @@ public struct LifeLogWindow: View {
         !env.lifeLog.day.utterances.isEmpty
             || !env.lifeLog.day.memos.isEmpty
             || !env.lifeLog.day.calendarEvents.isEmpty
-    }
-
-    private var insightsPanel: some View {
-        VStack(spacing: 0) {
-            panelHeader("Day", symbol: "chart.bar.xaxis") { EmptyView() }
-            Divider().opacity(0.4)
-            GeometryReader { geometry in
-                ScrollView {
-                    VStack(alignment: .leading, spacing: 18) {
-                        DayRhythmView(day: env.lifeLog.day)
-                            .frame(height: 80)
-                        if let summary = env.lifeLog.day.summary, !summary.topics.isEmpty {
-                            FlowLayout(spacing: 6) {
-                                ForEach(summary.topics, id: \.self) { topic in
-                                    Pill(text: topic, tint: KoeTheme.accentSecondary)
-                                        .frame(maxWidth: max(0, geometry.size.width - 28), alignment: .leading)
-                                        .fixedSize(horizontal: false, vertical: true)
-                                }
-                            }
-                        } else {
-                            HStack(spacing: 7) {
-                                Image(systemName: "circle.hexagongrid")
-                                Text("No signals")
-                            }
-                            .font(.system(size: 10.5, weight: .medium, design: .rounded))
-                            .foregroundStyle(.secondary.opacity(0.35))
-                        }
-                    }
-                    .padding(14)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                }
-                .accessibilityIdentifier("life-log.day-insights")
-            }
-        }
-        .raisedGlass(cornerRadius: 22)
-    }
-
-    private func panelHeader<Trailing: View>(_ title: String, symbol: String, @ViewBuilder trailing: () -> Trailing) -> some View {
-        HStack(spacing: 7) {
-            Image(systemName: symbol).foregroundStyle(KoeTheme.accent)
-            Text(title).font(.system(size: 13, weight: .semibold, design: .rounded))
-            Spacer()
-            trailing()
-        }
-        .padding(.horizontal, 14).padding(.vertical, 12)
     }
 
     private enum ItemKind {
@@ -546,7 +495,7 @@ private struct LifeLogMarkdownSummary: View {
     var body: some View {
         Text(rendered)
             .font(.system(size: 12.5))
-            .lineSpacing(4)
+            .lineSpacing(3.5)
             .textSelection(.enabled)
             .tint(KoeTheme.accent)
             .accessibilityIdentifier("life-log.summary-markdown")
@@ -586,12 +535,12 @@ private struct DayRhythmView: View {
 
     var body: some View {
         VStack(spacing: 6) {
-            HStack(alignment: .bottom, spacing: 3) {
+            HStack(alignment: .bottom, spacing: 2) {
                 ForEach(0..<24, id: \.self) { hour in
                     let value = intensity(hour)
                     Capsule()
-                        .fill(value > 0 ? KoeTheme.voiceGradient : LinearGradient(colors: [.secondary.opacity(0.12)], startPoint: .bottom, endPoint: .top))
-                        .frame(height: 5 + value * 35)
+                        .fill(value > 0 ? AnyShapeStyle(KoeTheme.accent.opacity(0.45 + value * 0.55)) : AnyShapeStyle(Color.primary.opacity(0.08)))
+                        .frame(height: 3 + value * 29)
                         .frame(maxWidth: .infinity, alignment: .bottom)
                 }
             }
@@ -601,7 +550,7 @@ private struct DayRhythmView: View {
                     if value != 24 { Spacer() }
                 }
             }
-            .font(.system(size: 8.5, weight: .medium, design: .rounded))
+            .font(.system(size: 9).monospacedDigit())
             .foregroundStyle(.tertiary)
         }
     }
