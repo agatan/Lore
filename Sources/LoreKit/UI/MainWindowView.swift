@@ -19,6 +19,13 @@ public enum MainSection: String, CaseIterable, Identifiable, Hashable, Sendable 
         case .history: "waveform.and.mic"
         }
     }
+
+    var tint: Color {
+        switch self {
+        case .lifeLog: LoreTheme.lifeLogTint
+        case .history: LoreTheme.dictationTint
+        }
+    }
 }
 
 /// Mail・Notesと同じく、全高のsidebarにnavigationとその表示の補助(calendar)を置き、
@@ -96,7 +103,7 @@ private struct MainSidebar: View {
                 ForEach(MainSection.allCases) { section in
                     // 行の選択に加えてAXPressで切り替えられるよう、行の中身をbuttonにする。
                     Button { env.mainSection = section } label: {
-                        Label(LocalizedStringKey(section.title), systemImage: section.symbol)
+                        SidebarLabel(title: section.title, symbol: section.symbol, tint: section.tint)
                             .frame(maxWidth: .infinity, alignment: .leading)
                             .contentShape(.rect)
                     }

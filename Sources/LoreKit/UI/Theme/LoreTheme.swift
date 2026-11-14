@@ -24,6 +24,13 @@ public enum LoreTheme {
     /// 失敗と取り返しのつかない操作。録音中のroseと取り違えないよう黄みの赤にする。
     public static let danger = Color(red: 0.86, green: 0.30, blue: 0.24)
 
+    /// 機能の色。Sidebarの記号を載せる角丸tile（`SidebarIcon`）にだけ使い、面や文字は塗らない。
+    /// 白の記号が読める中間の明るさで揃え、録音のroseと状態の色（緑・黄・赤）を避ける。
+    public static let lifeLogTint = Color(red: 0.40, green: 0.38, blue: 0.80)
+    public static let dictationTint = Color(red: 0.20, green: 0.52, blue: 0.88)
+    public static let generalTint = Color(red: 0.52, green: 0.54, blue: 0.58)
+    public static let connectTint = Color(red: 0.14, green: 0.56, blue: 0.66)
+
     private static func adaptive(light: NSColor, dark: NSColor) -> Color {
         Color(nsColor: NSColor(name: nil) { appearance in
             appearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua ? dark : light

@@ -43,6 +43,16 @@ public enum SettingsSection: String, CaseIterable, Identifiable, Hashable, Senda
         case .calendar: "calendar"
         }
     }
+
+    /// Sidebarの塊ごとの機能の色。
+    var tint: Color {
+        switch self {
+        case .common, .privacy: LoreTheme.generalTint
+        case .lifeLog, .calendar: LoreTheme.lifeLogTint
+        case .dictation, .models, .modes, .vocabulary: LoreTheme.dictationTint
+        case .sync, .automation: LoreTheme.connectTint
+        }
+    }
 }
 
 struct SettingsWindowView: View {
@@ -86,7 +96,7 @@ struct SettingsWindowView: View {
     }
 
     private func row(_ section: SettingsSection) -> some View {
-        Label(LocalizedStringKey(section.title), systemImage: section.symbol)
+        SidebarLabel(title: section.title, symbol: section.symbol, tint: section.tint)
             .tag(section)
             .accessibilityIdentifier("settings.section.\(section.rawValue)")
     }
