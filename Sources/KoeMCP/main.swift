@@ -68,13 +68,6 @@ struct KoeMCP {
             let to = try optionalDay("to", in: arguments)
             let options = try exportOptions(arguments["include"])
             return try LifeLogJSON.encode(try await service.range(from: from, to: to, options: options))
-        case "memo_add":
-            guard let text = arguments["text"] as? String else { throw MCPError.missingArgument("text") }
-            let at = try (arguments["at"] as? String).map { value in
-                guard let date = LifeLogEntry.parseTimestamp(value) else { throw MCPError.invalidArgument("at") }
-                return date
-            } ?? Date()
-            return try await service.addMemo(text, at: at).id
         case "life_log_search":
             let query = try requiredString("query", in: arguments)
             let results = try await service.search(query, limit: arguments["limit"] as? Int ?? 100)
@@ -129,7 +122,7 @@ struct KoeMCP {
                 "to": stringSchema("終了日YYYY-MM-DD(含む)。省略時は今日。期間は最大366日"),
              ]),
         tool("life_log_range",
-             "期間内の予定・発話・音声入力・メモを時刻順の構造化JSON配列で返す。各要素はid、kind(event|utterance|dictation|memo)、day、start、end(任意)、text。eventはtitle、calendar、allDayも持つ。時刻はローカル時差付きISO8601。週や月の振り返り、要約、TODO抽出の材料に使う",
+             "期間内の予定・発話・音声入力・メモを時刻順の構造化JSON配列で返す。各要素はid、kind(event|utterance|dictation|memo)、day、start、end(任意)、text。eventはtitle、calendar、allDayも持つ。時刻はローカル時差付きISO8601。週や月の振り返り、要約、TODO抽出、雑なメモ(kind=memo、include=[memos])を読んで別のメモアプリやタスク管理へ清書・転記する材料に使う。Koeは読み取り専用で、転記先への書き込みは呼び出し側が行う",
              properties: [
                 "from": stringSchema("開始日YYYY-MM-DD"),
                 "to": stringSchema("終了日YYYY-MM-DD(含む)。省略時はfromの1日だけ。期間は最大31日"),
@@ -146,13 +139,6 @@ struct KoeMCP {
              "発話・音声入力・メモを日本語部分一致で横断検索し、新しい順に「日付<TAB>種類<TAB>本文」の行で返す。前後の文脈はlife_log_rangeでその日を読む",
              properties: ["query": stringSchema("検索語"), "limit": ["type": "integer", "minimum": 1, "description": "最大件数。省略時は100"]],
              required: ["query"]),
-        tool("memo_add",
-             "ライフログにメモを1件追加し、作成したメモのidを返す。利用者に頼まれた振り返りや決定事項を残すときだけ使う。起動中のKoeのタイムラインにすぐ表示される",
-             properties: [
-                "text": stringSchema("メモ本文。前後の空白は除き、空ならエラー"),
-                "at": stringSchema("メモの時刻(ISO8601、例: 2026-08-29T18:00:00+09:00)。省略時は現在時刻"),
-             ],
-             required: ["text"]),
     ] }
 
     private static func stringSchema(_ description: String) -> [String: Any] { ["type": "string", "description": description] }

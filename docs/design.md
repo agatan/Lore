@@ -159,7 +159,7 @@ DBは`~/Library/Application Support/Koe/koe.sqlite`です。`DatabaseQueue`を�
 
 `Sync/`は利用者が選んだfolderを経由するMac間同期です。Koeはnetworkへ接続せず、folderの提供元が運ぶ暗号化fileだけを読み書きします。
 
-- **変更の記録**: `v10-sync`が`life_log_utterances`、`life_log_memos`、`sessions`、`vocabulary`のINSERT/UPDATE/DELETE triggerを作り、`sync_control`の`enabled=1`かつ`suppressed=0`の間だけ`sync_outbox(entity, record_id, changed_at)`へ記録します。CLI/MCPなど別processの書き込みも同じtriggerで拾います。保持期間による削除、一括削除、全data削除、他のMacからの適用は`suppressed=1`の同じtransaction内で行い、outboxへ載せません。
+- **変更の記録**: `v10-sync`が`life_log_utterances`、`life_log_memos`、`sessions`、`vocabulary`のINSERT/UPDATE/DELETE triggerを作り、`sync_control`の`enabled=1`かつ`suppressed=0`の間だけ`sync_outbox(entity, record_id, changed_at)`へ記録します。CLI/MCPは読み取り専用のため、別processからの書き込みはありません。保持期間による削除、一括削除、全data削除、他のMacからの適用は`suppressed=1`の同じtransaction内で行い、outboxへ載せません。
 - **書き出し**: `SyncEngine.export`はoutboxを読み、行が残っていれば現在の列値をupsert、無ければtombstoneにしたbatchを作ります。`<folder>/Koe Sync/devices/<device-id>/<10桁seq>.koesync`へ一時fileを書いてrenameし、その後のtransactionで、書き出し時と`changed_at`が同じoutbox行だけを消して`sync_versions`へ版を記録します。seqはDBの次番号と既存file最大値+1の大きい方で、file書込後のcrashでも番号を再利用しません。
 - **取り込み**: 自分以外のdevice directoryを`sync_cursors`の次seqから連番で読みます。復号・検証・適用とcursor更新を1 transactionで行い、失敗したfileで止めて同じdeviceの後続を待たせます。iCloud Driveの`.icloud` placeholderはdownloadを要求して次回へ回します。
 - **競合**: 版は`(changed_at, device_id)`の辞書順で比較し、新しい方だけを適用します（後勝ち）。未書き出しのoutbox行も自分の版として比較に含めます。Tombstoneも`sync_versions`に`deleted=1`で残し、古いupsertで復活させません。
@@ -176,7 +176,6 @@ DBは`~/Library/Application Support/Koe/koe.sqlite`です。`DatabaseQueue`を�
 - `dictationSttBackend`と`lifeLogSttBackend`は用途ごとのengine選択です。whisper.cpp modelは両用途で共有し、保存keyは共有化前の`lifeLogWhisperModel`を維持します。`LifeLogTranscriptionLanguage`はライフログ設定だけに置き、音声入力はmodeの言語設定を使います。認識言語の既定値`applicationLanguage`は`ApplicationLanguage`を`ja`、`en`、`zh-Hans`の固定hintへ解決し、明示的な`auto`も選べます。Runtimeの`captureRequested`は設定として永続化しません。GGML model本体と途中downloadは`Application Support/Koe/Models/WhisperCpp/`へ置き、全データ削除に含めます。
 - `AppEnvironment`の設定から解決した`Locale`を全SwiftUI表示へ注入します。localization resourceの開発言語と欠損keyのfallbackは英語です。表示言語はUI shellだけのvariation pointで、ライフログ設定が明示する`applicationLanguage`解決以外はSTT locale、mode、prompt、保存data、export、CLI/MCP contractへ伝播させません。
 - API keyはUserDefaultsやDBには入れずKeychainへ保存します。
-- `AppEnvironment`は`DistributedNotificationCenter`の`dataChanged`を受けるとライフログを再読込します。CLI/MCPの`memo add`/`memo_add`だけがmemo保存後にこの通知を送ります。
 
 ## 9. UIとwindow対応
 
@@ -206,7 +205,7 @@ DBは`~/Library/Application Support/Koe/koe.sqlite`です。`DatabaseQueue`を�
 
 LifeLogTextExporterは90秒未満の連続発話を別種の表示項目で区切ってまとめます。LifeLogExportSheetはプレビューもbackgroundで4,000文字に制限します。timelineの予定rowは淡い塗りと左端の色帯で発話と区別します。
 
-`KoeAutomationService`がCLIとMCPで共有され、記録がある日の一覧、期間の構造化項目、日別export、横断検索、memo追加を提供します。期間取得は画面と同じ`LifeLogStore.day`を日ごとに読み、音声入力優先の発話projectionと参加中予定filterをそのまま使います。書き込みはmemo追加だけです。App Intentsは`AppEnvironment.boot()`の完了後にcapture開始・終了だけを実行します。開始Actionはマイクを扱うためforeground mode、終了Actionはbackground modeです。Shortcutsからの実行にはmacOSが検証できるbundle署名が必要なため、buildは有効な`Apple Development` identityを自己署名より優先します。公開コマンドとtool schemaは外部仕様に列挙します。
+`KoeAutomationService`がCLIとMCPで共有され、記録がある日の一覧、期間の構造化項目、日別export、横断検索を読み取り専用で提供します。期間取得は画面と同じ`LifeLogStore.day`を日ごとに読み、音声入力優先の発話projectionと参加中予定filterをそのまま使います。Koeへの書き込みは提供しません。App Intentsは`AppEnvironment.boot()`の完了後にcapture開始・終了だけを実行します。開始Actionはマイクを扱うためforeground mode、終了Actionはbackground modeです。Shortcutsからの実行にはmacOSが検証できるbundle署名が必要なため、buildは有効な`Apple Development` identityを自己署名より優先します。公開コマンドとtool schemaは外部仕様に列挙します。
 
 ## 11. 並行実行とエラー表示
 

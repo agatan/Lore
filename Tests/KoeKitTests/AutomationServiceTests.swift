@@ -3,7 +3,7 @@ import Testing
 
 @testable import KoeKit
 
-@Suite("CLI/MCP共通のライフログ取得とmemo追加")
+@Suite("CLI/MCP共通のライフログ取得")
 @MainActor
 struct AutomationServiceTests {
     private let calendar: Calendar = {
@@ -16,16 +16,11 @@ struct AutomationServiceTests {
         calendar.date(from: DateComponents(year: 2026, month: 8, day: day, hour: hour, minute: minute))!
     }
 
-    private final class Notifications {
-        var count = 0
-    }
-
-    private func makeService(notifications: Notifications = Notifications()) async throws -> KoeAutomationService {
+    private func makeService() async throws -> KoeAutomationService {
         let defaults = UserDefaults(suiteName: "koe-automation-\(UUID().uuidString)")!
         return KoeAutomationService(
             database: try await KoeDatabase.inMemory(),
-            settings: AppSettings(defaults: defaults),
-            notifyDataChanged: { notifications.count += 1 }
+            settings: AppSettings(defaults: defaults)
         )
     }
 
@@ -141,24 +136,6 @@ struct AutomationServiceTests {
         }
         let edge = calendar.date(byAdding: .day, value: 30, to: at(1, 0))!
         _ = try await service.range(from: at(1, 0), to: edge, calendar: calendar)
-    }
-
-    @Test("memo追加は空白を除いて保存し、時刻を指定でき、起動中のKoeへ通知する")
-    func addMemoTrimsAndNotifies() async throws {
-        let notifications = Notifications()
-        let service = try await makeService(notifications: notifications)
-
-        let memo = try await service.addMemo("  週次レビュー\n", at: at(29, 18))
-        #expect(memo.text == "週次レビュー")
-        let stored = try #require(try await service.database.lifeLog.memo(id: memo.id))
-        #expect(stored.createdAt == at(29, 18))
-        #expect(stored.text == "週次レビュー")
-        #expect(notifications.count == 1)
-
-        await #expect(throws: AutomationError.self) {
-            _ = try await service.addMemo(" \n ")
-        }
-        #expect(notifications.count == 1)
     }
 
     @Test("ISO8601は時差付きと小数秒付きを受け付ける")

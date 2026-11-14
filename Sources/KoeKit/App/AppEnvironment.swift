@@ -80,7 +80,6 @@ public final class AppEnvironment {
     private var permissionWatcher: Task<Void, Never>?
     private var analysisTask: Task<Void, Never>?
     @ObservationIgnored private var powerObservers: [any NSObjectProtocol] = []
-    @ObservationIgnored private var automationObservers: [any NSObjectProtocol] = []
     @ObservationIgnored private var clockObservers: [any NSObjectProtocol] = []
     @ObservationIgnored private var scheduleTask: Task<Void, Never>?
     /// 自動記録の判断状態。表示（自動記録中か）にも使うため観測対象にする。
@@ -104,20 +103,6 @@ public final class AppEnvironment {
         )
         wireHotkeys()
         wirePowerNotifications()
-        wireAutomationNotifications()
-    }
-
-    private func wireAutomationNotifications() {
-        let center = DistributedNotificationCenter.default()
-        automationObservers.append(center.addObserver(forName: KoeAutomationNotification.dataChanged, object: nil, queue: .main) {
-            [weak self] _ in
-            Task { @MainActor [weak self] in
-                await self?.lifeLog.reload()
-                if let date = self?.lifeLog.selectedDate { await self?.lifeLog.loadActivity(containing: date) }
-                // 別processの書き込みはDBの変更監視に届かないため、ここで書き出しを予約する。
-                self?.sync.localDataChanged()
-            }
-        })
     }
 
     private func wirePowerNotifications() {

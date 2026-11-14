@@ -217,6 +217,7 @@
 <article class="card">
 <h3>Timeline</h3>
 <p>Life logは左に月間activity calendarと選択日の時間帯、右に選択日のtimelineを表示します。Timelineの見出しには選択日と項目数を置き、予定、検索、書き出しのbuttonを右端へまとめます。Timeline paneは予定、発話、音声入力、text memoを一列の時刻順で表示し、column headerは置きません。日付を選ぶと予定一覧とtimelineを更新します。検索buttonまたはCommand-Fで横断検索を開き、発話、音声入力、memoは対象項目へ移動します。Mini windowも予定と記録を一列表示します。今日の最下部とmini windowにはmemo入力、記録状態、開始・停止操作を置きます。</p>
+<p>Koeのmemoは声や短い入力で素早く残す下書きです。本格的な清書や別のメモアプリ・タスク管理への転記は、MCPやCLIで読み出した外部AIが行います。Koe側は誤字直し程度の編集だけを提供します。</p>
 <p>Main windowとmini windowのmemoは、hover時の編集buttonまたは本文のdouble-clickでその場で編集できます。Returnで保存、Option-Returnで改行、Escで取り消します。空の本文は保存せず、memoの作成時刻は変わりません。削除はmain windowのhover時の削除buttonで行います。Main windowのtimelineは本文を読みやすい幅（約800 pt）に抑えます。</p>
 </article>
 <article class="card">
@@ -383,10 +384,9 @@
 <pre>koe export day [--date YYYY-MM-DD] [--include calendar,speech,voice-input,memos] [--clipboard|--output PATH]
 koe search "検索語" [--limit N]
 koe days [--from YYYY-MM-DD] [--to YYYY-MM-DD]
-koe range --from YYYY-MM-DD [--to YYYY-MM-DD] [--include calendar,speech,voice-input,memos]
-koe memo add "本文" [--at ISO8601]</pre>
+koe range --from YYYY-MM-DD [--to YYYY-MM-DD] [--include calendar,speech,voice-input,memos]</pre>
 <p>
-<code>--clipboard</code>と<code>--output</code>は同時指定できません。<code>--output .</code>は既定filenameを現在directoryへ書きます。検索結果はtab区切りです。<code>days</code>と<code>range</code>はMCPの<code>life_log_days</code>、<code>life_log_range</code>と同じJSONを出し、<code>memo add</code>は作成したmemoのidを出します。</p>
+<code>--clipboard</code>と<code>--output</code>は同時指定できません。<code>--output .</code>は既定filenameを現在directoryへ書きます。検索結果はtab区切りです。<code>days</code>と<code>range</code>はMCPの<code>life_log_days</code>、<code>life_log_range</code>と同じJSONを出します。CLIは読み取り専用です。</p>
 </section>
 <section id="mcp">
 <h2>9. MCP</h2>
@@ -421,17 +421,11 @@ koe memo add "本文" [--at ISO8601]</pre>
 <td><code>query: string</code>, <code>limit?: integer</code></td>
 <td><code>day</code>、<code>kind</code>、本文のtab区切り行</td>
 </tr>
-<tr>
-<td><code>memo_add</code></td>
-<td><code>text: string</code>, <code>at?: ISO8601</code>（省略時は現在時刻）</td>
-<td>作成したmemoの<code>id</code></td>
-</tr>
 </tbody>
 </table>
 <ul>
 <li>時刻はISO8601のlocal時差付き文字列です。予定はlife log設定の参加中filterに従い、成功した音声入力と重なるlife-log発話は画面・書き出しと同じく除きます。</li>
-<li><code>memo_add</code>は前後の空白を除き、空の本文をerrorにします。保存後に起動中のKoeへ通知し、timelineを再読込させます。</li>
-<li>MCPから変更できるのはmemoの追加だけです。serverはMac内のDBを読むだけで、外部へ通信しません。</li>
+<li>MCPは読み取り専用です。Koeへの書き戻しは提供せず、読み出した発話やmemoを別のアプリへ清書・転記するのはMCP client側のAIの役割です。serverはMac内のDBを読むだけで、外部へ通信しません。</li>
 </ul>
 </section>
 <section id="failures">

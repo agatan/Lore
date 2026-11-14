@@ -1,39 +1,19 @@
 import Foundation
 
-public enum KoeAutomationNotification {
-    public static let dataChanged = Notification.Name("dev.agatan.Koe.automation.dataChanged")
-}
-
-/// CLIとMCPが共有する読み取り中心のユースケース。
+/// CLIとMCPが共有する読み取り専用のユースケース。
+/// 雑なメモや発話を別アプリへ転記するのは外部AIの役割で、Koeへの書き戻しは提供しない。
 @MainActor
 public final class KoeAutomationService {
     public let database: KoeDatabase
     public let settings: AppSettings
 
-    private let notifyDataChanged: @MainActor () -> Void
-
     /// 期間取得の上限。AIへ一度に返す量を抑え、DBを日ごとに読む回数を有界にする。
     public static let maximumRangeDays = 31
     public static let maximumDayListDays = 366
 
-    public init(
-        database: KoeDatabase,
-        settings: AppSettings,
-        notifyDataChanged: @MainActor @escaping () -> Void = KoeAutomationService.postDataChanged
-    ) {
+    public init(database: KoeDatabase, settings: AppSettings) {
         self.database = database
         self.settings = settings
-        self.notifyDataChanged = notifyDataChanged
-    }
-
-    /// 起動中のKoeへ、外部からlife logを変更したことを知らせる。
-    public static func postDataChanged() {
-        DistributedNotificationCenter.default().postNotificationName(
-            KoeAutomationNotification.dataChanged,
-            object: nil,
-            userInfo: nil,
-            deliverImmediately: true
-        )
     }
 
     public static func openDefault() async throws -> KoeAutomationService {
@@ -107,17 +87,6 @@ public final class KoeAutomationService {
                 .filter { $0.entry.kind != .event || seenEventIDs.insert($0.entry.id).inserted }
         }
         return entries.sorted { ($0.date, $0.entry.id) < ($1.date, $1.entry.id) }.map(\.entry)
-    }
-
-    /// AIなど外部clientからlife logへmemoを1件追加し、起動中のKoeへ再読込を促す。
-    @discardableResult
-    public func addMemo(_ text: String, at date: Date = Date()) async throws -> LifeLogMemo {
-        let value = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !value.isEmpty else { throw AutomationError.emptyMemo }
-        let memo = LifeLogMemo(createdAt: date, text: value)
-        try await database.lifeLog.save(memo: memo)
-        notifyDataChanged()
-        return memo
     }
 
     private static func days(from start: Date, through end: Date, limit: Int, calendar: Calendar) throws -> [Date] {
@@ -211,7 +180,7 @@ public struct LifeLogEntry: Codable, Sendable, Equatable {
     }
 
     /// 時差付き、または小数秒付きのISO8601を受け付ける。
-    public static func parseTimestamp(_ value: String) -> Date? {
+    static func parseTimestamp(_ value: String) -> Date? {
         let formatter = ISO8601DateFormatter()
         formatter.formatOptions = [.withInternetDateTime]
         if let date = formatter.date(from: value) { return date }
@@ -231,7 +200,6 @@ public enum LifeLogJSON {
 public enum AutomationError: LocalizedError, Sendable {
     case preferencesUnavailable
     case emptyExportSelection
-    case emptyMemo
     case invalidRange
     case rangeTooLong(Int)
 
@@ -239,7 +207,6 @@ public enum AutomationError: LocalizedError, Sendable {
         switch self {
         case .preferencesUnavailable: "Koeの設定を開けませんでした"
         case .emptyExportSelection: "書き出す項目を1つ以上選んでください"
-        case .emptyMemo: "メモの本文が空です"
         case .invalidRange: "開始日は終了日以前にしてください"
         case .rangeTooLong(let days): "期間は\(days)日以内にしてください"
         }

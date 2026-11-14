@@ -22,7 +22,6 @@ struct KoeCLI {
         case "search": try await search(Array(arguments.dropFirst()), service: service)
         case "days": try await days(Array(arguments.dropFirst()), service: service)
         case "range": try await range(Array(arguments.dropFirst()), service: service)
-        case "memo": try await memo(Array(arguments.dropFirst()), service: service)
         case "help", "--help", "-h": print(usage)
         default: throw CLIError.usage("不明なコマンド: \(command)\n\n\(usage)")
         }
@@ -60,17 +59,6 @@ struct KoeCLI {
         let to = try value(after: "--to", in: arguments).map(parseDay)
         let options = try exportOptions(value(after: "--include", in: arguments))
         print(try LifeLogJSON.encode(try await service.range(from: from, to: to, options: options)))
-    }
-
-    private static func memo(_ arguments: [String], service: KoeAutomationService) async throws {
-        guard arguments.first == "add" else { throw CLIError.usage("使い方: koe memo add \"本文\" [--at ISO8601]") }
-        let rest = Array(arguments.dropFirst())
-        let text = try positional(at: 0, in: rest, label: "メモの本文")
-        let at = try value(after: "--at", in: rest).map { value in
-            guard let date = LifeLogEntry.parseTimestamp(value) else { throw CLIError.invalidValue("at", value) }
-            return date
-        } ?? Date()
-        print(try await service.addMemo(text, at: at).id)
     }
 
     private static func exportOptions(_ value: String?) throws -> LifeLogTextExporter.Options {
@@ -123,7 +111,6 @@ struct KoeCLI {
     koe search "検索語" [--limit N]
     koe days [--from YYYY-MM-DD] [--to YYYY-MM-DD]
     koe range --from YYYY-MM-DD [--to YYYY-MM-DD] [--include calendar,speech,voice-input,memos]
-    koe memo add "本文" [--at ISO8601]
     """
 }
 

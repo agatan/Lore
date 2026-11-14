@@ -1,6 +1,6 @@
 ---
 name: koe
-description: Read, search, and export the user's Koe life log (speech, dictation, memos, calendar) through the local koe CLI, and append memos back — for example to review a day or week, summarize it, or extract tasks.
+description: Read, search, and export the user's Koe life log (speech, dictation, memos, calendar) through the local koe CLI (read-only) — for example to review a day or week, summarize it, extract tasks, or turn rough voice memos into clean notes for another app.
 ---
 
 # Koe
@@ -41,12 +41,8 @@ koe export day --date 2026-08-29 --include calendar,speech,voice-input,memos
 
 Add `--clipboard` to copy, or `--output <path>` to create a file. Confirm the destination before creating or replacing a file.
 
-## Write back a memo
+## Rough memos → another app
 
-Append a memo to the life log (for example a review or decisions the user asked you to keep). `--at` takes ISO8601 and defaults to now. Prints the new memo id. Ask before writing unless the user requested it:
+Koe memos are quick, rough voice or text notes. To clean them up or move them into the user's note-taking or task app, read them with `koe range --from ... --include memos`, rewrite them, and write the result with that app's own tool. Koe has no write-back command.
 
-```sh
-koe memo add "週次レビュー: ..." --at 2026-08-29T18:00:00+09:00
-```
-
-The CLI uses Koe's local database and settings, sends nothing over the network, and only ever adds memos. It does not require direct access to files under Koe's Application Support directory.
+The CLI uses Koe's local database and settings, sends nothing over the network, and never modifies Koe data. It does not require direct access to files under Koe's Application Support directory.

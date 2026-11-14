@@ -392,7 +392,7 @@ KoeMCP ──┘</pre>
 <h2>7.1 Mac間同期</h2>
 <p><code>Sync/</code>は利用者が選んだfolderを経由するMac間同期です。Koeはnetworkへ接続せず、folderの提供元が運ぶ暗号化fileだけを読み書きします。</p>
 <ul>
-<li><strong>変更の記録</strong>: <code>v10-sync</code>が<code>life_log_utterances</code>、<code>life_log_memos</code>、<code>sessions</code>、<code>vocabulary</code>のINSERT/UPDATE/DELETE triggerを作り、<code>sync_control</code>の<code>enabled=1</code>かつ<code>suppressed=0</code>の間だけ<code>sync_outbox(entity, record_id, changed_at)</code>へ記録します。CLI/MCPなど別processの書き込みも同じtriggerで拾います。保持期間による削除、一括削除、全data削除、他のMacからの適用は<code>suppressed=1</code>の同じtransaction内で行い、outboxへ載せません。</li>
+<li><strong>変更の記録</strong>: <code>v10-sync</code>が<code>life_log_utterances</code>、<code>life_log_memos</code>、<code>sessions</code>、<code>vocabulary</code>のINSERT/UPDATE/DELETE triggerを作り、<code>sync_control</code>の<code>enabled=1</code>かつ<code>suppressed=0</code>の間だけ<code>sync_outbox(entity, record_id, changed_at)</code>へ記録します。CLI/MCPは読み取り専用のため、別processからの書き込みはありません。保持期間による削除、一括削除、全data削除、他のMacからの適用は<code>suppressed=1</code>の同じtransaction内で行い、outboxへ載せません。</li>
 <li><strong>書き出し</strong>: <code>SyncEngine.export</code>はoutboxを読み、行が残っていれば現在の列値をupsert、無ければtombstoneにしたbatchを作ります。<code>&lt;folder&gt;/Koe Sync/devices/&lt;device-id&gt;/&lt;10桁seq&gt;.koesync</code>へ一時fileを書いてrenameし、その後のtransactionで、書き出し時と<code>changed_at</code>が同じoutbox行だけを消して<code>sync_versions</code>へ版を記録します。seqはDBの次番号と既存file最大値+1の大きい方で、file書込後のcrashでも番号を再利用しません。</li>
 <li><strong>取り込み</strong>: 自分以外のdevice directoryを<code>sync_cursors</code>の次seqから連番で読みます。復号・検証・適用とcursor更新を1 transactionで行い、失敗したfileで止めて同じdeviceの後続を待たせます。iCloud Driveの<code>.icloud</code> placeholderはdownloadを要求して次回へ回します。</li>
 <li><strong>競合</strong>: 版は<code>(changed_at, device_id)</code>の辞書順で比較し、新しい方だけを適用します（後勝ち）。未書き出しのoutbox行も自分の版として比較に含めます。Tombstoneも<code>sync_versions</code>に<code>deleted=1</code>で残し、古いupsertで復活させません。</li>
@@ -404,7 +404,7 @@ KoeMCP ──┘</pre>
 </section>
 <section id="settings">
 <h2>8. 設定、秘密、process間同期</h2>
-<ul><li><code>AppSettings.Storage</code>をUserDefaultsへ保存しますが、runtimeの<code>captureRequested</code>は永続化しません。自動記録schedule（<code>lifeLogSchedule</code>、既定は無効）は設定として保存します。</li><li><code>dictationSttBackend</code>と<code>lifeLogSttBackend</code>は用途ごとのengine選択です。whisper.cpp modelは両用途で共有し、保存keyは共有化前の<code>lifeLogWhisperModel</code>を維持します。Life log認識言語はlife logだけに置きます。</li><li>認識言語の既定値は表示言語を固定hintへ解決し、明示的な自動判定も選べます。</li><li>GGML model本体と途中downloadは専用directoryへ置き、全data削除に含めます。</li><li>表示言語はlife log設定が明示する解決以外ではSTT locale、prompt、保存data、automation contractへ伝播させません。</li><li>API keyだけはKeychainへ保存します。廃止したlife log用provider、prompt、要約間隔のkeyは読み捨て、保存し直した時点で消えます。</li><li><code>AppEnvironment</code>は<code>dataChanged</code>のdistributed notificationでlife logを再読込します。CLI/MCPの<code>memo add</code>/<code>memo_add</code>だけがmemo保存後にこの通知を送ります。</li></ul>
+<ul><li><code>AppSettings.Storage</code>をUserDefaultsへ保存しますが、runtimeの<code>captureRequested</code>は永続化しません。自動記録schedule（<code>lifeLogSchedule</code>、既定は無効）は設定として保存します。</li><li><code>dictationSttBackend</code>と<code>lifeLogSttBackend</code>は用途ごとのengine選択です。whisper.cpp modelは両用途で共有し、保存keyは共有化前の<code>lifeLogWhisperModel</code>を維持します。Life log認識言語はlife logだけに置きます。</li><li>認識言語の既定値は表示言語を固定hintへ解決し、明示的な自動判定も選べます。</li><li>GGML model本体と途中downloadは専用directoryへ置き、全data削除に含めます。</li><li>表示言語はlife log設定が明示する解決以外ではSTT locale、prompt、保存data、automation contractへ伝播させません。</li><li>API keyだけはKeychainへ保存します。廃止したlife log用provider、prompt、要約間隔のkeyは読み捨て、保存し直した時点で消えます。</li></ul>
 </section>
 <section id="ui">
 <h2>9. UIとwindow対応</h2>
@@ -412,7 +412,7 @@ KoeMCP ──┘</pre>
 </section>
 <section id="automation">
 <h2>10. 自動化境界</h2>
-<p>App Intents、CLI、MCPを公開します。CLI/MCPは<code>KoeAutomationService</code>を共有し、記録がある日の一覧、期間の構造化項目、日別export、横断検索、memo追加を提供します。期間取得は画面と同じ<code>LifeLogStore.day</code>を日ごとに読み、音声入力優先の発話projectionと参加中予定filterをそのまま使います。書き込みはmemo追加だけです。App Intentsは<code>AppEnvironment.boot()</code>の完了後にcapture開始・終了だけを実行します。開始Actionはマイクを扱うためforeground mode、終了Actionはbackground modeです。Shortcutsからの実行にはmacOSが検証できるbundle署名が必要なため、buildは有効な<code>Apple Development</code> identityを自己署名より優先します。公開commandとtool schemaは外部仕様に列挙します。</p>
+<p>App Intents、CLI、MCPを公開します。CLI/MCPは<code>KoeAutomationService</code>を共有し、記録がある日の一覧、期間の構造化項目、日別export、横断検索を読み取り専用で提供します。期間取得は画面と同じ<code>LifeLogStore.day</code>を日ごとに読み、音声入力優先の発話projectionと参加中予定filterをそのまま使います。Koeへの書き込みは提供しません。App Intentsは<code>AppEnvironment.boot()</code>の完了後にcapture開始・終了だけを実行します。開始Actionはマイクを扱うためforeground mode、終了Actionはbackground modeです。Shortcutsからの実行にはmacOSが検証できるbundle署名が必要なため、buildは有効な<code>Apple Development</code> identityを自己署名より優先します。公開commandとtool schemaは外部仕様に列挙します。</p>
 <p>LifeLogTextExporterは90秒未満の連続発話を別種の表示項目で区切ってまとめます。LifeLogExportSheetはプレビューもbackgroundで4,000文字に制限します。Timelineの予定rowは淡い塗りと左端の色帯で発話と区別します。</p>
 </section>
 <section id="concurrency">
