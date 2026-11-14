@@ -5,7 +5,7 @@ struct GeneralSettingsView: View {
 
     var body: some View {
         LazyVStack(alignment: .leading, spacing: 20) {
-            SettingsCard(title: "表示") {
+            SettingsCard(title: "言語") {
                 SettingsRow(title: "表示言語") {
                     Picker("表示言語", selection: Binding(
                         get: { env.settings.applicationLanguage },

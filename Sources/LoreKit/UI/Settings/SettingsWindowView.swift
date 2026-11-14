@@ -75,12 +75,14 @@ struct SettingsWindowView: View {
             .listStyle(.sidebar)
             .navigationSplitViewColumnWidth(min: 184, ideal: 204, max: 240)
         } detail: {
-            detail.navigationTitle(LocalizedStringKey(env.settingsSection.title))
+            // Window titleはSwiftUIの環境localeでなくprocessの言語で解決されるため、表示言語で引いた文字列を渡す。
+            detail.navigationTitle(LoreLocalization.string(
+                String.LocalizationValue(env.settingsSection.title),
+                language: env.settings.applicationLanguage
+            ))
         }
         .frame(minWidth: 960, minHeight: 680)
         .toolbarBackgroundVisibility(.hidden, for: .windowToolbar)
-        // Sidebarの記号と選択色もsystemの青ではなくLoreの墨色に揃える。
-        .tint(LoreTheme.accent)
     }
 
     private func row(_ section: SettingsSection) -> some View {

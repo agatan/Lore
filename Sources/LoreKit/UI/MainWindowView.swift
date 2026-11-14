@@ -43,8 +43,6 @@ public struct MainWindowView: View {
             }
         }
             .frame(minWidth: 1_080, minHeight: 680)
-            // Sidebarの記号と選択色もsystemの青ではなくLoreの墨色に揃える。
-            .tint(LoreTheme.accent)
             .toolbar(removing: .title)
             // Toolbarの下に硬い罫線を引かず、scroll edge effectで内容との境界を作る。
             .toolbarBackgroundVisibility(.hidden, for: .windowToolbar)

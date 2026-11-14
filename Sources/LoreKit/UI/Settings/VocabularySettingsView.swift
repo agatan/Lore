@@ -167,6 +167,7 @@ private struct VocabularyEditorSheet: View {
                     dismiss()
                 }
                 .buttonStyle(.borderedProminent)
+                .tint(LoreTheme.accent)
                 .disabled(entry.surface.trimmingCharacters(in: .whitespaces).isEmpty)
             }
         }

@@ -17,13 +17,7 @@ final class LoreWindowPresenter {
             title: "Lore",
             size: NSSize(width: 1_680, height: 960),
             chrome: .sidebar,
-            root: AnyView(
-                MainWindowView(env: env)
-                    .environment(\.locale, env.settings.applicationLanguage.resolvedLocale())
-                    .loreWindow()
-                    .tint(LoreTheme.accent)
-                    .accentColor(LoreTheme.accent)
-            )
+            root: AnyView(LoreWindowRoot(env: env, content: MainWindowView(env: env)))
         )
     }
 
@@ -31,16 +25,10 @@ final class LoreWindowPresenter {
         env.settingsSection = section
         show(
             id: LoreWindow.settings,
-            title: "Lore 設定",
+            title: String(lore: "Lore 設定"),
             size: NSSize(width: 980, height: 720),
             chrome: .sidebar,
-            root: AnyView(
-                SettingsWindowView(env: env)
-                    .environment(\.locale, env.settings.applicationLanguage.resolvedLocale())
-                    .loreWindow()
-                    .tint(LoreTheme.accent)
-                    .accentColor(LoreTheme.accent)
-            )
+            root: AnyView(LoreWindowRoot(env: env, content: SettingsWindowView(env: env)))
         )
     }
 
@@ -51,16 +39,10 @@ final class LoreWindowPresenter {
         }
         show(
             id: LoreWindow.lifeLogMini,
-            title: "ライフログ ミニ",
+            title: String(lore: "ライフログ ミニ"),
             size: NSSize(width: 460, height: 620),
             chrome: .panel,
-            root: AnyView(
-                LifeLogMiniWindow(env: env)
-                    .environment(\.locale, env.settings.applicationLanguage.resolvedLocale())
-                    .loreWindow()
-                    .tint(LoreTheme.accent)
-                    .accentColor(LoreTheme.accent)
-            )
+            root: AnyView(LoreWindowRoot(env: env, content: LifeLogMiniWindow(env: env)))
         )
         env.applyLifeLogMiniWindowLevel()
     }
@@ -99,12 +81,13 @@ final class LoreWindowPresenter {
             backing: .buffered,
             defer: false
         )
+        // SwiftUIの`navigationTitle`が後から上書きできるよう、contentより先に既定のtitleを置く。
+        window.title = title
         window.contentViewController = controller
         // NSHostingControllerを設定するとSwiftUIのfitting sizeへ縮むため、
         // window種別ごとの初期content sizeは設定後に確定する。
         window.setContentSize(size)
         window.identifier = NSUserInterfaceItemIdentifier(id)
-        window.title = title
         window.isReleasedWhenClosed = false
         switch chrome {
         case .standard:
@@ -143,5 +126,21 @@ final class LoreWindowPresenter {
             guard !NSApp.isActive, attemptsRemaining > 1 else { return }
             self.requestActivation(of: window, attemptsRemaining: attemptsRemaining - 1)
         }
+    }
+}
+
+/// 各windowの共通の外側。表示言語を毎回`env`から読むため、設定で言語を変えると
+/// 開いているwindowもその場で切り替わる（生成時のlocaleを固定しない）。
+private struct LoreWindowRoot<Content: View>: View {
+    var env: AppEnvironment
+    var content: Content
+
+    var body: some View {
+        content
+            .environment(\.locale, env.settings.applicationLanguage.resolvedLocale())
+            .loreWindow()
+            // Sidebarの選択やswitchはsystemの青ではなくLoreの灰色にする。
+            .tint(LoreTheme.control)
+            .accentColor(LoreTheme.control)
     }
 }

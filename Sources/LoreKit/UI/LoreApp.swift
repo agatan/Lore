@@ -12,8 +12,8 @@ public struct LoreApp: App {
         MenuBarExtra {
             MenuBarPanel(env: env)
                 .environment(\.locale, env.settings.applicationLanguage.resolvedLocale())
-                .tint(LoreTheme.accent)
-                .accentColor(LoreTheme.accent)
+                .tint(LoreTheme.control)
+                .accentColor(LoreTheme.control)
         } label: {
             MenuBarLabel(coordinator: env.coordinator, lifeLog: env.lifeLog, settings: env.settings)
         }
