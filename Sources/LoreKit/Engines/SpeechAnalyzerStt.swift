@@ -20,15 +20,15 @@ public final class SpeechAnalyzerStt: SttEngine {
             case .installed:
                 return .ready
             case .downloading:
-                return .needsDownload("音声モデルのダウンロード中です")
+                return .needsDownload(String(lore: "音声モデルのダウンロード中です"))
             case .needsInstall:
-                return .needsDownload("音声モデル(\(locale.localizedDisplayName))の取得が必要です")
+                return .needsDownload(String(lore: "音声モデル(\(locale.localizedDisplayName))の取得が必要です"))
             case .notReserved:
                 return .unavailable(Self.needsRestartMessage(locale))
             case .unsupported:
-                return .unavailable("\(locale.identifier) は SpeechAnalyzer 非対応です")
+                return .unavailable(String(lore: "\(locale.identifier) は SpeechAnalyzer 非対応です"))
             case .unknown:
-                return .unavailable("音声モデルの状態を判定できません")
+                return .unavailable(String(lore: "音声モデルの状態を判定できません"))
             }
         } catch {
             return .unavailable(error.localizedDescription)
@@ -203,7 +203,7 @@ public final class SpeechAnalyzerStt: SttEngine {
     /// **取得も再試行も促してはいけない**。アセットは取得済みで、このプロセスの
     /// `AssetInventory` はもう何をしても戻らない(C-15d)。打つ手は起動し直すことだけ。
     static func needsRestartMessage(_ locale: Locale) -> String {
-        "音声モデル(\(locale.localizedDisplayName))を使えなくなりました。Lore を再起動してください"
+        String(lore: "音声モデル(\(locale.localizedDisplayName))を使えなくなりました。Lore を再起動してください")
     }
 
     /// Speech framework への問い合わせをまとめた層。**状態は持たない**。
@@ -224,17 +224,17 @@ public final class SpeechAnalyzerStt: SttEngine {
             case .installed:
                 return transcriber(locale: supported)
             case .downloading:
-                throw EngineError.notReady("音声モデルのダウンロード中です。完了後に再試行してください")
+                throw EngineError.notReady(String(lore: "音声モデルのダウンロード中です。完了後に再試行してください"))
             case .needsInstall:
                 throw EngineError.notReady(
-                    "音声モデル(\(supported.localizedDisplayName))が未取得です。設定 > AI整形 から取得してください"
+                    String(lore: "音声モデル(\(supported.localizedDisplayName))が未取得です。設定 > AI整形 から取得してください")
                 )
             case .notReserved:
                 throw EngineError.needsAppRestart(SpeechAnalyzerStt.needsRestartMessage(supported))
             case .unsupported:
-                throw EngineError.notReady("\(supported.identifier) は SpeechAnalyzer 非対応です")
+                throw EngineError.notReady(String(lore: "\(supported.identifier) は SpeechAnalyzer 非対応です"))
             case .unknown:
-                throw EngineError.notReady("音声モデルの状態を判定できません")
+                throw EngineError.notReady(String(lore: "音声モデルの状態を判定できません"))
             }
         }
 
@@ -292,8 +292,7 @@ public final class SpeechAnalyzerStt: SttEngine {
                 _ = try await AssetInventory.reserve(locale: locale)
             } catch {
                 throw EngineError.notReady(
-                    "音声モデルの割り当てに失敗しました(\(error.localizedDescription))。"
-                    + "予約できる言語は最大 \(AssetInventory.maximumReservedLocales) 個です"
+                    String(lore: "音声モデルの割り当てに失敗しました(\(error.localizedDescription))。予約できる言語は最大 \(AssetInventory.maximumReservedLocales) 個です")
                 )
             }
         }
@@ -327,6 +326,6 @@ public final class SpeechAnalyzerStt: SttEngine {
 
 private extension Locale {
     var localizedDisplayName: String {
-        Locale(identifier: "ja_JP").localizedString(forIdentifier: identifier) ?? identifier
+        LoreLocalization.language.resolvedLocale().localizedString(forIdentifier: identifier) ?? identifier
     }
 }

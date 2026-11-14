@@ -7,16 +7,6 @@ public enum RecognizedLanguage: String, Codable, Sendable, CaseIterable {
     case zhHans = "zh-Hans"
     case mixed
     case unknown
-
-    public var displayName: String {
-        switch self {
-        case .ja: "日本語"
-        case .en: "英語"
-        case .zhHans: "簡体字中国語"
-        case .mixed: "日英混在"
-        case .unknown: "不明"
-        }
-    }
 }
 
 /// モード・セッション単位の言語方針。`auto` はエンジンの判定に委ねる。

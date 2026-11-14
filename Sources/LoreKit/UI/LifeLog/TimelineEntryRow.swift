@@ -50,7 +50,7 @@ struct TimelineEntryRow: View {
 
     var body: some View {
         TimelineRowFrame(
-            time: Text(date.formatted(date: .omitted, time: .shortened)),
+            time: Text(date.loreFormatted(date: .omitted, time: .shortened)),
             node: kind.node,
             nodeLabel: kind == .utterance ? nil : kind.label,
             above: above,

@@ -62,13 +62,13 @@ public final class HotkeyMonitor {
 
         public var errorDescription: String? {
             switch self {
-            case .notTrusted: "アクセシビリティの許可が必要です"
-            case .inputMonitoringRequired: "Option+文字keyには入力監視の許可が必要です"
-            case .tapCreationFailed: "キーボード監視を開始できませんでした"
+            case .notTrusted: String(lore: "アクセシビリティの許可が必要です")
+            case .inputMonitoringRequired: String(lore: "Option+文字keyには入力監視の許可が必要です")
+            case .tapCreationFailed: String(lore: "キーボード監視を開始できませんでした")
             case .registrationFailed(let status) where status == eventHotKeyExistsErr:
-                "このホットキーは別のアプリが使用しています"
+                String(lore: "このホットキーは別のアプリが使用しています")
             case .registrationFailed(let status):
-                "ホットキーを登録できませんでした (\(status))"
+                String(lore: "ホットキーを登録できませんでした (\(Int(status)))")
             }
         }
     }

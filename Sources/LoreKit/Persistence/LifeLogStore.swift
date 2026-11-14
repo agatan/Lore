@@ -322,7 +322,7 @@ public enum LifeLogStoreError: LocalizedError, Sendable {
 
     public var errorDescription: String? {
         switch self {
-        case .memoNotFound: "編集するメモが見つかりません。すでに削除された可能性があります"
+        case .memoNotFound: String(lore: "編集するメモが見つかりません。すでに削除された可能性があります")
         }
     }
 }

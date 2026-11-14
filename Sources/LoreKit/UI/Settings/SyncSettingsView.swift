@@ -21,13 +21,12 @@ struct SyncSettingsView: View {
                 setupCard
             }
             SettingsCard(
-                title: "同期されるもの",
-                footnote: "「Loreを初期化」はこのMacのデータだけを消して同期を解除します。フォルダ内のファイルは削除しないため、不要になったらフォルダごと削除してください。"
+                title: "同期する内容",
+                footnote: "このMacで暗号化してから、選んだフォルダの「Lore Sync」に置きます。Lore自身は通信せず、iCloud DriveやDropboxなどの提供元も中身を読めません。"
             ) {
-                explanation("ライフログの発話とメモ、音声入力の履歴、語彙を同期します。録音した音声、APIキー、設定、予定の控えは同期しません。")
-                explanation("文字データはこのMacで暗号化してから、選んだフォルダの「Lore Sync」に置きます。Lore自身は通信せず、iCloud DriveやDropboxなどフォルダの提供元は中身を読めません。")
-                explanation("同じ項目を複数のMacで変えた場合は、後から変えた方を採用します。メモや履歴を1件ずつ削除すると他のMacからも消えます。保持期間による削除と「すべて削除」はこのMacだけに適用します。")
-                explanation("同期コードは他のMacを追加するときに必要です。参加済みのMacから再表示できますが、すべてのMacを失うと誰もフォルダの中身を読めなくなります。")
+                SettingsRow(title: "同期するもの", caption: "発話、メモ、音声入力の履歴、語彙") { EmptyView() }
+                SettingsRow(title: "同期しないもの", caption: "録音した音声、APIキー、設定、取り込んだ予定") { EmptyView() }
+                SettingsRow(title: "削除したとき", caption: "1件ずつ削除したものは、他のMacからも消えます。保持期間による削除と全削除はこのMacだけです") { EmptyView() }
             }
         }
         .sheet(isPresented: Binding(get: { shownCode != nil }, set: { if !$0 { shownCode = nil } })) {
@@ -110,7 +109,7 @@ struct SyncSettingsView: View {
     private var statusCaption: String {
         if sync.isSyncing { return "同期中…" }
         guard let date = sync.lastSyncedAt else { return "まだ同期していません" }
-        return "最終同期 " + date.formatted(date: .abbreviated, time: .shortened)
+        return String(lore: "最終同期 \(date.loreFormatted(date: .abbreviated, time: .shortened))")
     }
 
     // MARK: - sheet
@@ -118,7 +117,7 @@ struct SyncSettingsView: View {
     private func codeSheet(_ code: String) -> some View {
         VStack(alignment: .leading, spacing: 14) {
             Text("同期コード").font(.system(size: LoreTheme.TextSize.headline, weight: .semibold))
-            Text("他のMacの「同期コードで参加」で入力してください。コードを知っている人は同期データを読めるため、他人には渡さないでください。")
+            Text("他のMacの「同期コードで参加」で入力します。コードを知っている人は同期データを読めるため、他人には渡さないでください。すべてのMacを失うと再表示できないので、パスワード管理アプリなどに保管してください。")
                 .font(LoreTheme.captionFont)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
@@ -219,16 +218,9 @@ struct SyncSettingsView: View {
         panel.canChooseFiles = false
         panel.canCreateDirectories = true
         panel.allowsMultipleSelection = false
-        panel.prompt = String(localized: "このフォルダを使う")
-        panel.message = String(localized: "iCloud Drive、Dropbox、Syncthingなど、他のMacからも見えるフォルダを選んでください")
+        panel.prompt = String(lore: "このフォルダを使う")
+        panel.message = String(lore: "iCloud Drive、Dropbox、Syncthingなど、他のMacからも見えるフォルダを選んでください")
         return panel.runModal() == .OK ? panel.url : nil
-    }
-
-    private func explanation(_ text: String) -> some View {
-        Text(LocalizedStringKey(text))
-            .font(.system(size: LoreTheme.TextSize.caption))
-            .foregroundStyle(.secondary)
-            .fixedSize(horizontal: false, vertical: true)
     }
 
     private func errorLabel(_ message: String) -> some View {

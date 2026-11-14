@@ -30,6 +30,7 @@ struct GeneralSettingsView: View {
                     )
                 )
             }
+            PermissionsCard(env: env)
         }
         .toggleStyle(.switch)
         .task { await env.refreshLoginItem() }

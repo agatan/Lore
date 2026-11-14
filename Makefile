@@ -22,7 +22,7 @@ BUILD_DIR = .build/$(CONFIG)
 # SwiftPMはroot packageのartifactsをcheckout directory名(小文字)の下に置く。
 WHISPER_FRAMEWORK = .build/artifacts/$(shell basename "$(CURDIR)" | tr A-Z a-z)/WhisperFramework/whisper.xcframework/macos-arm64_x86_64/whisper.framework
 
-.PHONY: all build tools app ui-test-app run stop test ui-test clean install icon dev-cert reset-permissions
+.PHONY: all build tools app ui-test-app run stop test ui-test clean install icon dev-cert reset-permissions lp-media
 
 all: app
 
@@ -53,6 +53,9 @@ app: build tools
 	@cp THIRD_PARTY_NOTICES "$(CONTENTS)/Resources/THIRD_PARTY_NOTICES.txt"
 	@printf 'APPL????' > "$(CONTENTS)/PkgInfo"
 	@if [ -f Resources/AppIcon.icns ]; then cp Resources/AppIcon.icns "$(CONTENTS)/Resources/"; fi
+	@# System controls (sidebar selection, menus, switches) read the app accent from the asset catalog.
+	@xcrun actool --compile "$(CONTENTS)/Resources" --platform macosx --minimum-deployment-target 26.0 \
+		--output-format human-readable-text --errors --warnings Resources/Assets.xcassets >/dev/null
 	@for b in $(BUILD_DIR)/*.bundle; do \
 		[ -e "$$b" ] && cp -R "$$b" "$(CONTENTS)/Resources/" || true; \
 	done
@@ -125,6 +128,10 @@ reset-permissions: stop
 	@tccutil reset Microphone $(BUNDLE_ID) || true
 	@tccutil reset ListenEvent $(BUNDLE_ID) 2>/dev/null || true
 	@echo "リセットしました。起動して許可し直してください。"
+
+## LP (site/) のスクリーンショットと動画をdemo dataから作り直す
+lp-media: ui-test-app
+	@zsh Scripts/lp-media.sh
 
 ## Resources/AppIcon.icns を生成する
 icon:

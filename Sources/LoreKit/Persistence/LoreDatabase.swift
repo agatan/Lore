@@ -561,7 +561,7 @@ private enum BackupError: LocalizedError {
     var errorDescription: String? {
         switch self {
         case .cleanupFailed(let backup, let cleanup):
-            "DBバックアップに失敗し、一時ファイルも削除できませんでした。backup: \(backup) / cleanup: \(cleanup)"
+            String(lore: "DBバックアップに失敗し、一時ファイルも削除できませんでした。backup: \(backup) / cleanup: \(cleanup)")
         }
     }
 }

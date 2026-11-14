@@ -37,11 +37,11 @@ public enum ModifierKey: String, Codable, Sendable, CaseIterable, Identifiable {
     public var displayName: String {
         switch self {
         case .fn: "fn"
-        case .rightOption: "右 ⌥"
-        case .leftOption: "左 ⌥"
-        case .rightCommand: "右 ⌘"
-        case .rightControl: "右 ⌃"
-        case .rightShift: "右 ⇧"
+        case .rightOption: String(lore: "右 ⌥")
+        case .leftOption: String(lore: "左 ⌥")
+        case .rightCommand: String(lore: "右 ⌘")
+        case .rightControl: String(lore: "右 ⌃")
+        case .rightShift: String(lore: "右 ⇧")
         }
     }
 }
@@ -61,7 +61,7 @@ public enum HotkeyBinding: Codable, Sendable, Hashable {
         case .modifier(let key):
             key.displayName
         case .key(let code, let modifiers):
-            Self.modifierSymbols(modifiers) + (Self.keyName(code) ?? "キー\(code)")
+            Self.modifierSymbols(modifiers) + (Self.keyName(code) ?? String(lore: "キー\(Int(code))"))
         }
     }
 
@@ -86,7 +86,7 @@ public enum HotkeyBinding: Codable, Sendable, Hashable {
         switch code {
         case 0x24: "↩"
         case 0x30: "⇥"
-        case 0x31: "スペース"
+        case 0x31: String(lore: "スペース")
         case 0x33: "⌫"
         case 0x35: "esc"
         case 0x60: "F5"

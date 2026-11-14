@@ -87,7 +87,7 @@ private struct HistoryRow: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 3) {
             HStack(spacing: 6) {
-                Text(record.startedAt.formatted(date: .omitted, time: .shortened))
+                Text(record.startedAt.loreFormatted(date: .omitted, time: .shortened))
                     .font(LoreTheme.timeFont)
                     .foregroundStyle(.secondary)
                 Text(subtitle)
@@ -110,10 +110,6 @@ private struct HistoryRow: View {
     private var subtitle: String {
         [record.appName, record.modeSnapshot.modeName].compactMap { $0 }.joined(separator: " · ")
     }
-
-    static func durationText(_ ms: Int) -> String {
-        ms >= 1_000 ? String(format: "%.1f 秒", Double(ms) / 1_000) : "\(ms) ミリ秒"
-    }
 }
 
 /// 履歴1件の詳細。読みやすい幅の列を中央に置き、挿入した文章を本文として一番大きく見せる。
@@ -128,7 +124,7 @@ private struct HistoryDetailView: View {
                 header
 
                 VStack(alignment: .leading, spacing: 10) {
-                    sectionTitle("挿入した文章", copying: record.formattedText)
+                    sectionTitle("入力した文章", copying: record.formattedText)
                     if let text = record.formattedText, !text.isEmpty {
                         HStack(alignment: .top, spacing: 14) {
                             Capsule()
@@ -142,14 +138,14 @@ private struct HistoryDetailView: View {
                         }
                         .fixedSize(horizontal: false, vertical: true)
                     } else {
-                        Text("仕上げをせず、聞き取った文字をそのまま挿入しました")
+                        Text("整形せずに、文字起こしをそのまま入力しました")
                             .font(.system(size: LoreTheme.TextSize.callout))
                             .foregroundStyle(.tertiary)
                     }
                 }
 
                 VStack(alignment: .leading, spacing: 10) {
-                    sectionTitle("聞き取った文字", copying: record.rawTranscript)
+                    sectionTitle("文字起こし", copying: record.rawTranscript)
                     Text(record.rawTranscript.isEmpty ? "—" : record.rawTranscript)
                         .font(.system(size: LoreTheme.TextSize.body))
                         .lineSpacing(4)
@@ -162,7 +158,7 @@ private struct HistoryDetailView: View {
                 }
 
                 if let error = record.error {
-                    NoticeBanner(title: "このとき起きたこと", message: error, actionTitle: nil, action: nil)
+                    NoticeBanner(title: "エラー", message: error, actionTitle: nil, action: nil)
                 }
 
                 LatencyBreakdown(record: record)
@@ -186,11 +182,11 @@ private struct HistoryDetailView: View {
     private var header: some View {
         VStack(alignment: .leading, spacing: 10) {
             VStack(alignment: .leading, spacing: 4) {
-                Text(record.startedAt.formatted(.dateTime.year().month(.wide).day().weekday(.wide)))
+                Text(record.startedAt.loreFormatted(.dateTime.year().month(.wide).day().weekday(.wide)))
                     .font(.system(size: LoreTheme.TextSize.body, weight: .semibold))
                     .foregroundStyle(.secondary)
                 HStack(alignment: .firstTextBaseline, spacing: 10) {
-                    Text(record.startedAt.formatted(date: .omitted, time: .shortened))
+                    Text(record.startedAt.loreFormatted(date: .omitted, time: .shortened))
                         .font(LoreTheme.titleFont)
                         .accessibilityAddTraits(.isHeader)
                     StatusBadge(status: record.status)
@@ -268,9 +264,9 @@ private struct LatencyBreakdown: View {
         let llm = record.llmLatencyMs ?? 0
         let rest = max(0, total - stt - llm)
         return [
-            Part(label: "聞き取り", ms: stt, tint: LoreTheme.accent),
-            Part(label: "仕上げ", ms: llm, tint: LoreTheme.accent.opacity(0.55)),
-            Part(label: "挿入", ms: rest, tint: LoreTheme.accent.opacity(0.25)),
+            Part(label: "文字起こし", ms: stt, tint: LoreTheme.accent),
+            Part(label: "整形", ms: llm, tint: LoreTheme.accent.opacity(0.55)),
+            Part(label: "入力", ms: rest, tint: LoreTheme.accent.opacity(0.25)),
         ].filter { $0.ms > 0 }
     }
 
@@ -282,7 +278,7 @@ private struct LatencyBreakdown: View {
             HStack(alignment: .firstTextBaseline, spacing: 8) {
                 Text(verbatim: record.insertLatencyMs.map(Self.seconds) ?? "—")
                     .font(.system(size: LoreTheme.TextSize.metric, weight: .bold, design: .rounded).monospacedDigit())
-                Text("話し終わってから挿入まで")
+                Text("話し終えてから入力まで")
                     .font(.system(size: LoreTheme.TextSize.callout))
                     .foregroundStyle(.secondary)
                 Spacer(minLength: 12)
@@ -325,7 +321,7 @@ private struct LatencyBreakdown: View {
     }
 
     static func seconds(_ ms: Int) -> String {
-        ms >= 1_000 ? String(format: "%.2f 秒", Double(ms) / 1_000) : "\(ms) ms"
+        ms >= 1_000 ? String(lore: "\(String(format: "%.2f", Double(ms) / 1_000)) 秒") : "\(ms) ms"
     }
 }
 
@@ -336,7 +332,7 @@ private func previewEnvironment() -> AppEnvironment {
     let snapshot = ModeSnapshot(
         modeName: "Chat",
         modePrompt: "カジュアルに",
-        systemPrompt: "あなたは口述筆記の整形エンジンです。…",
+        systemPrompt: "You clean up dictated text. …",
         vocabularyCount: 3,
         trigger: .pushToTalk
     )

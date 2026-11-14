@@ -13,8 +13,8 @@ public struct AutomationIntegrationStatus: Equatable, Sendable {
     public var skill: AutomationIntegrationState
 
     public static let unavailable = Self(
-        cli: .unavailable("Lore.appにCLIが同梱されていません"),
-        skill: .unavailable("Lore.appにAgent Skillが同梱されていません")
+        cli: .unavailable(String(lore: "Lore.appにCLIが同梱されていません")),
+        skill: .unavailable(String(lore: "Lore.appにAgent Skillが同梱されていません"))
     )
 }
 
@@ -34,6 +34,11 @@ public struct AutomationIntegrationManager: Sendable {
 
     public var cliSourceURL: URL {
         bundleURL.appending(path: "Contents/Helpers/lore")
+    }
+
+    /// AIクライアントへ登録する標準入出力のMCPサーバー。Lore.appに同梱し、そのまま参照してもらう。
+    public var mcpServerURL: URL {
+        bundleURL.appending(path: "Contents/Helpers/lore-mcp")
     }
 
     public var cliDestinationURL: URL {
@@ -132,7 +137,7 @@ public struct AutomationIntegrationManager: Sendable {
     private func cliState() -> AutomationIntegrationState {
         let fileManager = FileManager.default
         guard fileManager.isExecutableFile(atPath: cliSourceURL.path) else {
-            return .unavailable("Lore.appにCLIが同梱されていません")
+            return .unavailable(String(lore: "Lore.appにCLIが同梱されていません"))
         }
         switch entry(at: cliDestinationURL) {
         case .missing:
@@ -141,7 +146,7 @@ public struct AutomationIntegrationManager: Sendable {
             return linkDestination(at: cliDestinationURL) == cliSourceURL.standardizedFileURL
                 ? .installed : .updateAvailable
         case .other:
-            return .conflict("同名のファイルがすでにあります")
+            return .conflict(String(lore: "同名のファイルがすでにあります"))
         }
     }
 
@@ -149,19 +154,19 @@ public struct AutomationIntegrationManager: Sendable {
         let fileManager = FileManager.default
         var isDirectory: ObjCBool = false
         guard fileManager.fileExists(atPath: skillSourceURL.path, isDirectory: &isDirectory), isDirectory.boolValue else {
-            return .unavailable("Lore.appにAgent Skillが同梱されていません")
+            return .unavailable(String(lore: "Lore.appにAgent Skillが同梱されていません"))
         }
         switch entry(at: skillDestinationURL) {
         case .missing:
             return .notInstalled
         case .symbolicLink, .other:
             guard isManagedSkill else {
-                return .conflict("同名のSkillがすでにあります")
+                return .conflict(String(lore: "同名のSkillがすでにあります"))
             }
         }
 
         guard entry(at: claudeSkillURL) != .other else {
-            return .conflict("Claudeに同名のSkillがあります")
+            return .conflict(String(lore: "Claudeに同名のSkillがあります"))
         }
         guard directoriesMatch(skillSourceURL, skillDestinationURL),
               linkDestination(at: claudeSkillURL) == skillDestinationURL.standardizedFileURL else {
@@ -268,13 +273,13 @@ public struct AutomationIntegrationManager: Sendable {
         public var errorDescription: String? {
             switch self {
             case .missingBundledCLI:
-                "Lore.appにCLIが同梱されていません。アプリを入れ直してください。"
+                String(lore: "Lore.appにCLIが同梱されていません。アプリを入れ直してください。")
             case .missingBundledSkill:
-                "Lore.appにAgent Skillが同梱されていません。アプリを入れ直してください。"
+                String(lore: "Lore.appにAgent Skillが同梱されていません。アプリを入れ直してください。")
             case .unmanagedFile(let path):
-                "\(path) はLoreが管理していないため、上書きしません。"
+                String(lore: "\(path) はLoreが管理していないため、上書きしません。")
             case .skillRecoveryFailed(let install, let recovery):
-                "Agent Skillの更新と復元に失敗しました。更新: \(install) / 復元: \(recovery)"
+                String(lore: "Agent Skillの更新と復元に失敗しました。更新: \(install) / 復元: \(recovery)")
             }
         }
     }

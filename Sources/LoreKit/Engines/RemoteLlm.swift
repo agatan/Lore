@@ -47,7 +47,7 @@ public final class RemoteLlm: LlmEngine {
         guard requiresApiKey else { return .ready }
         do {
             guard try apiKeySource()?.isEmpty == false else {
-                return .unavailable("\(providerName) のAPIキーが未設定です")
+                return .unavailable(String(lore: "\(providerName) のAPIキーが未設定です"))
             }
             return .ready
         } catch {
@@ -77,7 +77,7 @@ public final class RemoteLlm: LlmEngine {
             output = response.choices.first?.message.content ?? ""
         }
         let cleaned = Self.strippingReasoning(output).trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !cleaned.isEmpty else { throw EngineError.failed("\(providerName) が空の応答を返しました") }
+        guard !cleaned.isEmpty else { throw EngineError.failed(String(lore: "\(providerName) が空の応答を返しました")) }
         return cleaned
     }
 
@@ -151,7 +151,7 @@ public final class RemoteLlm: LlmEngine {
     private func applyCredential(to request: inout URLRequest) throws {
         guard requiresApiKey else { return }
         guard let key = try apiKeySource(), !key.isEmpty else {
-            throw EngineError.notReady("\(providerName) のAPIキーが未設定です。利用するAI設定で登録してください")
+            throw EngineError.notReady(String(lore: "\(providerName) のAPIキーが未設定です。利用するAI設定で登録してください"))
         }
         switch api {
         case .anthropic: request.setValue(key, forHTTPHeaderField: "x-api-key")
@@ -162,11 +162,11 @@ public final class RemoteLlm: LlmEngine {
 
     private func checkStatus(_ response: URLResponse, data: Data) throws {
         guard let http = response as? HTTPURLResponse else {
-            throw EngineError.failed("\(providerName) から想定外の応答を受け取りました")
+            throw EngineError.failed(String(lore: "\(providerName) から想定外の応答を受け取りました"))
         }
         guard (200..<300).contains(http.statusCode) else {
             let detail = Self.apiErrorMessage(data) ?? String(data: data, encoding: .utf8) ?? ""
-            throw EngineError.failed("\(providerName) が \(http.statusCode) を返しました\(detail.isEmpty ? "" : ": \(detail)")")
+            throw EngineError.failed(String(lore: "\(providerName) が \(http.statusCode) を返しました\(detail.isEmpty ? "" : ": \(detail)")"))
         }
     }
 

@@ -87,13 +87,13 @@ public enum SyncFileError: LocalizedError, Equatable {
 
     public var errorDescription: String? {
         switch self {
-        case .notSyncFile: "Loreの同期fileではありません"
-        case .unsupportedVersion(let version): "新しい形式(\(version))の同期fileです。Loreを更新してください"
-        case .truncated: "同期fileが途中までしか届いていません"
-        case .authenticationFailed: "同期fileを復号できません。同期コードが違うか、fileが途中までしか届いていないか、改ざんされています"
-        case .corruptPayload: "同期fileの中身を読み取れません"
-        case .sealFailed: "同期fileを暗号化できませんでした"
-        case .headerMismatch: "同期fileの名前と中身が一致しません"
+        case .notSyncFile: String(lore: "Loreの同期fileではありません")
+        case .unsupportedVersion(let version): String(lore: "新しい形式(\(Int(version)))の同期fileです。Loreを更新してください")
+        case .truncated: String(lore: "同期fileが途中までしか届いていません")
+        case .authenticationFailed: String(lore: "同期fileを復号できません。同期コードが違うか、fileが途中までしか届いていないか、改ざんされています")
+        case .corruptPayload: String(lore: "同期fileの中身を読み取れません")
+        case .sealFailed: String(lore: "同期fileを暗号化できませんでした")
+        case .headerMismatch: String(lore: "同期fileの名前と中身が一致しません")
         }
     }
 }

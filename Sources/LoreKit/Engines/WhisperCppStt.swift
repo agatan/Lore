@@ -28,12 +28,12 @@ public actor WhisperCppStt: SttEngine {
     public func availability(languagePreference: LanguagePreference) async -> EngineAvailability {
         isInstalled()
             ? .ready
-            : .needsDownload("設定から \(model.displayName) を取得してください")
+            : .needsDownload(String(lore: "設定から \(model.displayName) を取得してください"))
     }
 
     public func prepare(hints: SttHints) async throws -> AVAudioFormat? {
         guard isInstalled() else {
-            throw EngineError.notReady("設定から \(model.displayName) を取得してください")
+            throw EngineError.notReady(String(lore: "設定から \(model.displayName) を取得してください"))
         }
         return AudioFormats.canonical
     }
@@ -74,17 +74,17 @@ public actor WhisperCppStt: SttEngine {
             delegate: delegate
         )
         guard let http = response as? HTTPURLResponse, http.statusCode == 200 else {
-            throw EngineError.failed("Whisper modelの取得先が正常に応答しませんでした")
+            throw EngineError.failed(String(lore: "Whisper modelの取得先が正常に応答しませんでした"))
         }
         try Task.checkCancellation()
 
         let attributes = try FileManager.default.attributesOfItem(atPath: temporaryURL.path)
         let byteCount = (attributes[.size] as? NSNumber)?.int64Value ?? 0
         guard byteCount == model.byteCount else {
-            throw EngineError.failed("取得したWhisper modelの容量が一致しません")
+            throw EngineError.failed(String(lore: "取得したWhisper modelの容量が一致しません"))
         }
         guard try Self.sha256(of: temporaryURL) == model.sha256 else {
-            throw EngineError.failed("取得したWhisper modelのSHA-256が一致しません")
+            throw EngineError.failed(String(lore: "取得したWhisper modelのSHA-256が一致しません"))
         }
         try Task.checkCancellation()
 
@@ -176,7 +176,7 @@ public actor WhisperCppStt: SttEngine {
                     throw CancellationError()
                 }
                 guard result == 0 else {
-                    throw EngineError.failed("whisper.cppが文字起こしを完了できませんでした (code: \(result))")
+                    throw EngineError.failed(String(lore: "whisper.cppが文字起こしを完了できませんでした (code: \(Int(result)))"))
                 }
 
                 var segments: [WhisperSegment] = []
@@ -214,11 +214,11 @@ public actor WhisperCppStt: SttEngine {
     private func loadedState() throws -> WhisperStateHandle {
         if let state { return state }
         guard isInstalled() else {
-            throw EngineError.notReady("設定から \(model.displayName) を取得してください")
+            throw EngineError.notReady(String(lore: "設定から \(model.displayName) を取得してください"))
         }
         let weights = try cache.weights(at: modelURL)
         guard let pointer = whisper_init_state(weights.pointer) else {
-            throw EngineError.failed("whisper.cppの推論状態を作成できませんでした")
+            throw EngineError.failed(String(lore: "whisper.cppの推論状態を作成できませんでした"))
         }
         let handle = WhisperStateHandle(weights: weights, pointer: pointer)
         state = handle
@@ -243,7 +243,7 @@ public actor WhisperCppStt: SttEngine {
         guard buffer.format.commonFormat == .pcmFormatFloat32,
               buffer.format.channelCount == 1,
               let channel = buffer.floatChannelData?[0] else {
-            throw EngineError.failed("whisper.cppへ渡す音声は16 kHz mono Float32である必要があります")
+            throw EngineError.failed(String(lore: "whisper.cppへ渡す音声は16 kHz mono Float32である必要があります"))
         }
         return Array(UnsafeBufferPointer(start: channel, count: Int(buffer.frameLength)))
     }
@@ -292,7 +292,7 @@ public final class WhisperModelCache: Sendable {
             params.use_gpu = true
             params.flash_attn = true
             guard let pointer = url.path.withCString({ whisper_init_from_file_with_params_no_state($0, params) }) else {
-                throw EngineError.failed("whisper.cpp modelを読み込めませんでした。削除して再取得してください")
+                throw EngineError.failed(String(lore: "whisper.cpp modelを読み込めませんでした。削除して再取得してください"))
             }
             let weights = WhisperWeights(pointer: pointer)
             entries = entries.filter { $0.value.value != nil }

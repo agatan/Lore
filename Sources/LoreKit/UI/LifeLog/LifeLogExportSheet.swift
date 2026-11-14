@@ -39,10 +39,10 @@ struct LifeLogExportSheet: View {
         VStack(alignment: .leading, spacing: 16) {
             HStack(alignment: .top) {
                 VStack(alignment: .leading, spacing: 4) {
-                    Text("この日を書き出す")
+                    Text("記録を書き出す")
                         .font(.system(size: LoreTheme.TextSize.title, weight: .semibold))
                         .accessibilityIdentifier("export.sheet")
-                    Text(snapshot.date.formatted(.dateTime.year().month().day().weekday(.wide)))
+                    Text(snapshot.date.loreFormatted(.dateTime.year().month().day().weekday(.wide)))
                         .font(.system(size: LoreTheme.TextSize.caption))
                         .foregroundStyle(.secondary)
                 }
@@ -140,7 +140,7 @@ struct LifeLogExportSheet: View {
                 )
                 let prefix = String(text.prefix(4_001))
                 let preview = prefix.count > 4_000
-                    ? String(prefix.prefix(4_000)) + "\n\n…プレビューは先頭部分だけを表示しています。書き出しには全文が含まれます。"
+                    ? String(prefix.prefix(4_000)) + "\n\n…" + String(lore: "プレビューは先頭部分だけを表示しています。書き出しには全文が含まれます。")
                     : prefix
                 return (text, preview)
             }.value
@@ -166,7 +166,7 @@ struct LifeLogExportSheet: View {
         }
     }
 
-    private func exportToggle(_ title: String, id: String, count: Int, isOn: Binding<Bool>) -> some View {
+    private func exportToggle(_ title: LocalizedStringKey, id: String, count: Int, isOn: Binding<Bool>) -> some View {
         Button {
             isOn.wrappedValue.toggle()
         } label: {
@@ -192,7 +192,7 @@ struct LifeLogExportSheet: View {
             RoundedRectangle(cornerRadius: LoreTheme.smallCornerRadius)
                 .stroke(isOn.wrappedValue ? LoreTheme.accent.opacity(0.45) : Color.secondary.opacity(0.18), lineWidth: 1)
         }
-        .accessibilityLabel("\(title)を含める")
+        .accessibilityLabel(Text("\(Text(title))を含める"))
         .accessibilityValue(isOn.wrappedValue ? "オン" : "オフ")
         .accessibilityIdentifier("export.include.\(id)")
     }

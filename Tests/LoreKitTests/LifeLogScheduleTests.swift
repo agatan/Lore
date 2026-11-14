@@ -181,6 +181,6 @@ struct LifeLogScheduleEnvironmentTests {
         #expect(!env.lifeLog.hasCaptureIntent)
         #expect(!env.presentsLifeLogAudioConsent)
         #expect(!env.lifeLogScheduleState.ownsCapture)
-        #expect(env.lifeLog.errorMessage?.contains("手動") == true)
+        #expect(env.lifeLog.errorMessage == String(lore: "自動記録を始められませんでした。録音の保存に同意するため、一度手動でライフログを開始してください"))
     }
 }

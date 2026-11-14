@@ -149,6 +149,6 @@ public struct SecretMigrationError: LocalizedError, Sendable {
 
     public var errorDescription: String? {
         let details = failures.map { "\($0.account): \($0.reason)" }.joined(separator: "、")
-        return "以前のKoeのAPIキーを移せませんでした（\(details)）。設定で入力し直してください。"
+        return String(lore: "以前のKoeのAPIキーを移せませんでした（\(details)）。設定で入力し直してください。")
     }
 }

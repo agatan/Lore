@@ -26,11 +26,11 @@ struct VocabularySettingsView: View {
 
     private var entriesCard: some View {
         SettingsCard(
-            title: "辞書 (\(env.vocabulary.count))",
-            footnote: "音声入力とライフログの文字起こしで同じ辞書を使います。表記・読みは聞き取りのヒントに、よくある誤認識は音声入力の整形に使います。"
+            title: "登録した語",
+            footnote: "音声入力とライフログで共通です。表記と読みは文字起こしのヒントに、よくある誤認識は音声入力の整形に使います。"
         ) {
             HStack {
-                Text("表記・読み・よくある誤認識を登録します")
+                Text("固有名詞や専門用語を登録すると、正しく文字起こしされやすくなります")
                     .font(.system(size: LoreTheme.TextSize.caption))
                     .foregroundStyle(.secondary)
                 Spacer()
@@ -45,7 +45,7 @@ struct VocabularySettingsView: View {
             }
 
             if env.vocabulary.isEmpty {
-                Text("まだ登録がありません")
+                Text("まだ登録した語はありません")
                     .font(.system(size: LoreTheme.TextSize.caption))
                     .foregroundStyle(.tertiary)
                     .frame(maxWidth: .infinity, alignment: .center)
@@ -102,7 +102,7 @@ private struct VocabularyRow: View {
                     }
                 }
                 if !entry.misrecognitions.isEmpty {
-                    Text("誤認識: " + entry.misrecognitions.joined(separator: " / "))
+                    Text("誤認識: \(entry.misrecognitions.joined(separator: " / "))")
                         .font(.system(size: LoreTheme.TextSize.micro))
                         .foregroundStyle(.tertiary)
                         .lineLimit(1)

@@ -37,6 +37,14 @@ struct LocalizationTests {
         #expect(LoreLocalization.string("表示言語", language: .simplifiedChinese) == "显示语言")
     }
 
+    @Test("UIの外で組み立てる文言も値を埋め込んで三言語から取得できる")
+    func interpolatedResources() {
+        let count = 3
+        #expect(LoreLocalization.string("\(count)件", language: .english) == "3 items")
+        #expect(LoreLocalization.string("\(count)件", language: .japanese) == "3件")
+        #expect(LoreLocalization.string("\(count)件", language: .simplifiedChinese) == "3 项")
+    }
+
     @Test("ライフログ認識言語は表示言語を固定hintへ解決する")
     func lifeLogLanguageFollowsDisplayLanguage() {
         #expect(LifeLogTranscriptionLanguage.applicationLanguage.preference(applicationLanguage: .japanese) == .ja)

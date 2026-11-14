@@ -139,7 +139,7 @@ public struct SyncEngine: Sendable {
                     report.appliedChanges += try await store.apply(batch, from: deviceID, seq: seq)
                     seq += 1
                 } catch {
-                    let message = "\(deviceID.prefix(8))の\(seq)番: \(error.localizedDescription)"
+                    let message = String(lore: "\(String(deviceID.prefix(8)))の\(Int(seq))番: \(error.localizedDescription)")
                     LoreLog.persistence.error("同期fileを取り込めません: \(message, privacy: .public)")
                     report.failures.append(message)
                     break
@@ -181,15 +181,15 @@ public enum SyncEngineError: LocalizedError, Equatable {
     public var errorDescription: String? {
         switch self {
         case .folderAlreadyUsed:
-            "このフォルダは別の同期で使われています。「同期コードで参加」から、そのコードを入力してください"
+            String(lore: "このフォルダは別の同期で使われています。「同期コードで参加」から、そのコードを入力してください")
         case .folderNotInitialized:
-            "このフォルダに同期データがありません。1台目のMacで選んだフォルダを指定してください"
+            String(lore: "このフォルダに同期データがありません。1台目のMacで選んだフォルダを指定してください")
         case .wrongCode:
-            "同期コードがこのフォルダと一致しません"
+            String(lore: "同期コードがこのフォルダと一致しません")
         case .notDownloadedYet:
-            "フォルダの同期データがまだこのMacに届いていません。しばらく待ってからやり直してください"
+            String(lore: "フォルダの同期データがまだこのMacに届いていません。しばらく待ってからやり直してください")
         case .folderUnavailable(let path):
-            "同期フォルダを開けません: \(path)"
+            String(lore: "同期フォルダを開けません: \(path)")
         }
     }
 }

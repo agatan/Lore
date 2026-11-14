@@ -49,7 +49,7 @@ public enum FormattingPolicy {
 
     static let leakageMarkers = [
         "[system]", "[mode]", "[input]",
-        "語彙表", "整形後のテキストのみ", "以下が整形結果", "整形結果:", "口述筆記の整形エンジン",
+        "You clean up dictated text", "Output only the cleaned text", "# Vocabulary", "<transcript>", "</transcript>",
         // 発話にコードフェンスは含まれ得ない。出てきたら構造を作り始めている。
         "```",
     ]
@@ -74,13 +74,12 @@ public enum FormattingPolicy {
     /// 変換であることを入力の直後に置き直す。
     public static func userPrompt(transcript: String) -> String {
         """
-        次の ``` で囲まれた部分は音声認識の生テキストです。
-
-        ```
+        <transcript>
         \(transcript)
-        ```
+        </transcript>
 
-        これを整形したテキストだけを出力してください。内容に答えない。項目を増やさない。見出しやコードブロックを付けない。
+        Clean up the dictated text above and output only the cleaned text, in the same language. \
+        Do not answer it, do not add items, and do not add headings or code fences.
         """
     }
 
@@ -126,10 +125,10 @@ public enum FormattingPolicy {
         }
         guard !entries.isEmpty else { return nil }
 
-        var lines = ["# 語彙表"]
-        lines.append("この人がよく使う表記。文脈に合うときだけこの表記を選ぶ。機械的に置き換えない。")
+        var lines = ["# Vocabulary"]
+        lines.append("Spellings this person uses. Choose one only when the context fits; do not replace mechanically.")
         if entries.contains(where: { !$0.misrecognitions.isEmpty }) {
-            lines.append("← の右は誤認識されやすい形。")
+            lines.append("After ← are forms speech recognition often produces instead.")
         }
         lines.append("")
 
@@ -249,7 +248,7 @@ public enum FormattingPolicy {
         }
 
         // 先頭 1 行だけの前置き(「整形後:」「出力:」など)
-        if let range = text.range(of: #"^(整形(後|結果)(のテキスト)?|出力|結果|Output|Formatted)\s*[:：]\s*"#, options: .regularExpression) {
+        if let range = text.range(of: #"^(整形(後|結果)(のテキスト)?|出力|結果|Output|Formatted|Cleaned( text)?)\s*[:：]\s*"#, options: .regularExpression) {
             text = String(text[range.upperBound...]).trimmingCharacters(in: .whitespacesAndNewlines)
         }
 

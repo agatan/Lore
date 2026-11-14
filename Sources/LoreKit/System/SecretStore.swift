@@ -166,6 +166,8 @@ public struct SecretStoreError: LocalizedError, Sendable {
 
     public var errorDescription: String? {
         let detail = SecCopyErrorMessageString(status, nil) as String? ?? "OSStatus \(status)"
-        return "キーチェーンの\(operation)に失敗しました(\(detail))"
+        // operationは「保存」「削除」「読み出し」のいずれかで、文字列表のkeyを兼ねる。
+        let action = LoreLocalization.string(String.LocalizationValue(operation))
+        return String(lore: "キーチェーンの\(action)に失敗しました(\(detail))")
     }
 }

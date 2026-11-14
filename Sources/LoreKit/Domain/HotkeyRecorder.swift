@@ -70,7 +70,7 @@ public struct HotkeyRecorder: Sendable {
         pendingModifier = nil
         let modifiers = flags & Self.modifierMask
         guard modifiers != 0 || Self.standaloneKeyCodes.contains(keyCode) else {
-            return .rejected("このキーは単体では割り当てられません。⌘ ⌥ ⌃ ⇧ と組み合わせるか、F13 などを使ってください")
+            return .rejected(String(lore: "このキーは単体では割り当てられません。⌘ ⌥ ⌃ ⇧ と組み合わせるか、F13 などを使ってください"))
         }
         return .captured(.key(code: keyCode, modifiers: modifiers))
     }

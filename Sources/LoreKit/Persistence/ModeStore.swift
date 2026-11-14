@@ -210,7 +210,7 @@ public enum ModeStoreError: LocalizedError {
 
     public var errorDescription: String? {
         switch self {
-        case .defaultCannotBeDeleted: "Defaultは削除できません"
+        case .defaultCannotBeDeleted: String(lore: "Defaultは削除できません")
         }
     }
 }

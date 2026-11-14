@@ -50,7 +50,7 @@ public final class GroqLlm: LlmEngine {
     public func availability() async -> EngineAvailability {
         do {
             guard let key = try apiKeySource(), !key.isEmpty else {
-                return .unavailable("Groq の API キーが未設定です")
+                return .unavailable(String(lore: "Groq の API キーが未設定です"))
             }
             return .ready
         } catch {
@@ -87,7 +87,7 @@ public final class GroqLlm: LlmEngine {
 
         let decoded = try JSONDecoder().decode(ChatResponse.self, from: data)
         guard let content = decoded.choices.first?.message.content else {
-            throw EngineError.failed("Groq が空の応答を返しました")
+            throw EngineError.failed(String(lore: "Groq が空の応答を返しました"))
         }
         return Self.strippingReasoning(content).trimmingCharacters(in: .whitespacesAndNewlines)
     }
@@ -108,14 +108,14 @@ public final class GroqLlm: LlmEngine {
 
     private func apiKey() throws -> String {
         guard let key = try apiKeySource(), !key.isEmpty else {
-            throw EngineError.notReady("Groq の API キーが未設定です。利用するAI設定で登録してください")
+            throw EngineError.notReady(String(lore: "Groq の API キーが未設定です。利用するAI設定で登録してください"))
         }
         return key
     }
 
     private static func checkStatus(_ response: URLResponse, data: Data) throws {
         guard let http = response as? HTTPURLResponse else {
-            throw EngineError.failed("Groq から想定外の応答を受け取りました")
+            throw EngineError.failed(String(lore: "Groq から想定外の応答を受け取りました"))
         }
         guard (200..<300).contains(http.statusCode) else {
             // API 側のメッセージをそのまま見せる。モデル ID の間違いやキーの失効は
@@ -123,7 +123,7 @@ public final class GroqLlm: LlmEngine {
             let detail = (try? JSONDecoder().decode(ApiError.self, from: data))?.error.message
                 ?? String(data: data, encoding: .utf8)
                 ?? ""
-            throw EngineError.failed("Groq が \(http.statusCode) を返しました\(detail.isEmpty ? "" : ": \(detail)")")
+            throw EngineError.failed(String(lore: "Groq が \(http.statusCode) を返しました\(detail.isEmpty ? "" : ": \(detail)")"))
         }
     }
 

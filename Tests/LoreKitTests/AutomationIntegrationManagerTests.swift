@@ -36,7 +36,7 @@ struct AutomationIntegrationManagerTests {
         )
         try Data("user command".utf8).write(to: fixture.manager.cliDestinationURL)
 
-        #expect(fixture.manager.status().cli == .conflict("同名のファイルがすでにあります"))
+        #expect(fixture.manager.status().cli == .conflict(String(lore: "同名のファイルがすでにあります")))
         #expect(throws: AutomationIntegrationManager.Failure.self) {
             try fixture.manager.installCLI()
         }
@@ -87,7 +87,7 @@ struct AutomationIntegrationManagerTests {
             encoding: .utf8
         )
 
-        #expect(fixture.manager.status().skill == .conflict("同名のSkillがすでにあります"))
+        #expect(fixture.manager.status().skill == .conflict(String(lore: "同名のSkillがすでにあります")))
         #expect(throws: AutomationIntegrationManager.Failure.self) {
             try fixture.manager.installSkill()
         }

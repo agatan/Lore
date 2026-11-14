@@ -19,7 +19,7 @@ struct LifeLogDayInspector: View {
             // 今日は現在時刻の線が残りの時間を示すため、空でも出す。
             if isToday || !mapLayout.blocks.isEmpty || !mapLayout.marks.isEmpty {
                 VStack(alignment: .leading, spacing: 10) {
-                    Text("一日の流れ")
+                    Text("時間ごとの記録")
                         .font(LoreTheme.sectionFont)
                         .foregroundStyle(.secondary)
                     LifeLogDayMap(layout: mapLayout, date: date, onJump: onJump)
@@ -206,7 +206,7 @@ struct LifeLogDayMap: View {
                         .font(.system(size: LoreTheme.TextSize.caption, weight: .semibold))
                         .lineLimit(height >= 40 ? 2 : 1)
                     if height >= 30 {
-                        Text(verbatim: "\(block.event.startsAt.formatted(date: .omitted, time: .shortened))–\(block.event.endsAt.formatted(date: .omitted, time: .shortened))")
+                        Text(verbatim: "\(block.event.startsAt.loreFormatted(date: .omitted, time: .shortened))–\(block.event.endsAt.loreFormatted(date: .omitted, time: .shortened))")
                             .font(.system(size: LoreTheme.TextSize.micro).monospacedDigit())
                             .foregroundStyle(.secondary)
                             .lineLimit(1)
@@ -224,7 +224,7 @@ struct LifeLogDayMap: View {
         .frame(width: columnWidth - (block.columnCount > 1 ? 2 : 0), height: height)
         .offset(x: originX + CGFloat(block.column) * columnWidth, y: top + 0.75)
         .help(block.event.title)
-        .accessibilityLabel(Text(verbatim: "\(block.event.title)、\(block.event.startsAt.formatted(date: .omitted, time: .shortened))"))
+        .accessibilityLabel(Text(verbatim: "\(block.event.title)、\(block.event.startsAt.loreFormatted(date: .omitted, time: .shortened))"))
         .accessibilityIdentifier("life-log.calendar-event-\(block.event.id)")
     }
 
@@ -259,7 +259,7 @@ struct LifeLogDayMap: View {
                 .fill(Color.primary.opacity(0.25))
                 .frame(width: size.width - labelWidth - 6, height: 1)
                 .offset(x: labelWidth + 6, y: lineY)
-            Text(time.formatted(date: .omitted, time: .shortened))
+            Text(time.loreFormatted(date: .omitted, time: .shortened))
                 .font(.system(size: LoreTheme.TextSize.micro, weight: .semibold).monospacedDigit())
                 .foregroundStyle(.primary)
                 .padding(.horizontal, 5)

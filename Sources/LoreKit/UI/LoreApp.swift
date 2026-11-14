@@ -83,6 +83,9 @@ final class LoreApplicationDelegate: NSObject, NSApplicationDelegate {
             if let directory = DebugSnapshotter.outputDirectory {
                 await DebugSnapshotter.run(env: environment, presenter: presenter, into: directory)
             }
+            if let directory = DebugRecorder.outputDirectory {
+                await DebugRecorder.run(env: environment, presenter: presenter, into: directory)
+            }
 #endif
         }
     }

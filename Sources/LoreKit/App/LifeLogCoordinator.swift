@@ -220,7 +220,7 @@ public final class LifeLogCoordinator {
             return
         }
         captureRetryAttempt = 0
-        scheduleCaptureRetry(unless: EngineError.failed("スリープから復帰しました"))
+        scheduleCaptureRetry(unless: EngineError.failed(String(lore: "スリープから復帰しました")))
     }
 
     /// ボイスメモの音声をlife-log utteranceへ取り込まないための排他境界。
@@ -238,7 +238,7 @@ public final class LifeLogCoordinator {
         let deadline = clock.now.advanced(by: timeout)
         while capture.isRunning || liveTranscriptionTask != nil || isFinalizingSession || isStartingCapture {
             guard clock.now < deadline else {
-                fail(EngineError.failed("ライフログの一時停止を完了できませんでした"))
+                fail(EngineError.failed(String(lore: "ライフログの一時停止を完了できませんでした")))
                 return false
             }
             do { try await Task.sleep(for: .milliseconds(50)) } catch { return false }
@@ -251,7 +251,7 @@ public final class LifeLogCoordinator {
         isSuspendedForVoiceMemo = false
         guard captureRequested, !isSuspendedForSleep else { return }
         captureRetryAttempt = 0
-        scheduleCaptureRetry(unless: EngineError.failed("ボイスメモが終了しました"))
+        scheduleCaptureRetry(unless: EngineError.failed(String(lore: "ボイスメモが終了しました")))
     }
 
     private func startLiveCapture() async {
@@ -334,7 +334,7 @@ public final class LifeLogCoordinator {
             do { try await Task.sleep(for: .seconds(delay)) } catch { return }
             guard let self, self.captureRequested else { return }
             if self.liveTranscriptionTask != nil {
-                self.scheduleCaptureRetry(unless: EngineError.failed("前の音声ストリームを終了しています"))
+                self.scheduleCaptureRetry(unless: EngineError.failed(String(lore: "前の音声ストリームを終了しています")))
             } else {
                 await self.startLiveCapture()
             }
@@ -579,12 +579,12 @@ public final class LifeLogCoordinator {
     /// 認識結果が必ず復旧可能な音声を参照するよう、対象範囲のfile commitを先に待つ。
     private func waitUntilAudioIsCommitted(through offset: TimeInterval) async throws {
         guard let sessionStart = liveSessionStartedAt else {
-            throw EngineError.failed("ライフログ音声の開始時刻を確認できません")
+            throw EngineError.failed(String(lore: "ライフログ音声の開始時刻を確認できません"))
         }
         let requiredDate = sessionStart.addingTimeInterval(offset)
         while (liveChunks.last?.captureEndedAt ?? .distantPast) < requiredDate.addingTimeInterval(-0.25) {
             if captureFinished {
-                throw EngineError.failed("認識対象のライフログ音声を保存できませんでした")
+                throw EngineError.failed(String(lore: "認識対象のライフログ音声を保存できませんでした"))
             }
             try Task.checkCancellation()
             try await Task.sleep(for: .milliseconds(50))
@@ -702,7 +702,7 @@ public final class LifeLogCoordinator {
                 if liveRecognitionFailed {
                     chunk.transcriptionState = .failed
                     chunk.processingState = .failed
-                    chunk.failureReason = "後追い音声認識に失敗したため次回起動時に再処理します"
+                    chunk.failureReason = String(lore: "後追い音声認識に失敗したため次回起動時に再処理します")
                 } else {
                     chunk.transcriptionState = .transcribed
                     chunk.processingState = .extracted
@@ -729,7 +729,7 @@ public final class LifeLogCoordinator {
             restartForTranscriptionConfiguration = false
             await startLiveCapture()
         } else if captureRequested, isRecoveringCapture, !isSuspendedForSleep, !isSuspendedForVoiceMemo {
-            scheduleCaptureRetry(unless: EngineError.failed("音声streamの終了後に再接続します"))
+            scheduleCaptureRetry(unless: EngineError.failed(String(lore: "音声streamの終了後に再接続します")))
         }
     }
 
@@ -860,6 +860,30 @@ public final class LifeLogCoordinator {
         highlightedTimelineItemID = timelineItemID
         sourceNavigationRevision += 1
     }
+
+    #if DEBUG
+    /// LP用の収録だけで使う。実際のcaptureを動かさず、記録中と聞き取り中の見た目を再現する。
+    public func applyPreviewCapture(capturing: Bool, hearingSince: Date? = nil, audioDuration: TimeInterval = 0, transcript: String = "") {
+        captureRequested = capturing
+        isCapturing = capturing
+        isHearingSpeech = hearingSince != nil
+        liveSpeechStartedAt = hearingSince
+        liveSpeechAudioDuration = audioDuration
+        liveTranscript = transcript
+    }
+
+    /// LP用の収録だけで使う。話し終えた一文をdemo databaseへ保存し、timelineへ並べる。
+    public func savePreviewUtterance(text: String, startedAt: Date, endedAt: Date) async throws {
+        guard let database else {
+            throw CocoaError(.fileWriteUnknown, userInfo: [NSLocalizedDescriptionKey: "databaseがまだ開いていません"])
+        }
+        let id = UUID().uuidString
+        let chunk = LifeLogAudioChunk(id: "preview-audio-\(id)", captureStartedAt: startedAt, captureEndedAt: endedAt, localPath: "/tmp/lore-preview-\(id).m4a", transcriptionState: .transcribed, processingState: .extracted, peakLevel: 0.5)
+        try await database.lifeLog.save(audioChunk: chunk)
+        try await database.lifeLog.save(utterance: LifeLogUtterance(id: "preview-utterance-\(id)", startedAt: startedAt, endedAt: endedAt, text: text, audioChunkID: chunk.id))
+        await reload()
+    }
+    #endif
 
     public func reload() async {
         guard let database else { return }
@@ -1108,9 +1132,9 @@ public final class LifeLogCoordinator {
         var offset: AVAudioFramePosition = 0
         while file.framePosition < file.length {
             let count = AVAudioFrameCount(min(4_096, file.length - file.framePosition))
-            guard let buffer = AVAudioPCMBuffer(pcmFormat: file.processingFormat, frameCapacity: count) else { throw EngineError.failed("音声bufferを作成できません") }
+            guard let buffer = AVAudioPCMBuffer(pcmFormat: file.processingFormat, frameCapacity: count) else { throw EngineError.failed(String(lore: "音声bufferを作成できません")) }
             try file.read(into: buffer, frameCount: count)
-            guard let converted = resampler?.convert(buffer) else { throw EngineError.failed("音声を認識形式へ変換できません") }
+            guard let converted = resampler?.convert(buffer) else { throw EngineError.failed(String(lore: "音声を認識形式へ変換できません")) }
             chunks.append(AudioChunk(buffer: converted, frameOffset: offset))
             offset += AVAudioFramePosition(converted.frameLength)
         }

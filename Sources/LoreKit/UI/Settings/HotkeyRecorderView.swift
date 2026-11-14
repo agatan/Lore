@@ -24,7 +24,7 @@ struct HotkeyRecorderView: View {
                     HStack(spacing: 6) {
                         Image(systemName: isRecording ? "record.circle" : "keyboard")
                             .font(.system(size: LoreTheme.TextSize.caption))
-                        Text(label)
+                        label
                             .font(.system(size: LoreTheme.TextSize.callout, weight: .medium))
                     }
                     .frame(minWidth: 150)
@@ -63,12 +63,12 @@ struct HotkeyRecorderView: View {
     }
 
     /// 記録中は「押されている修飾キー」を出して、まだ続けられることを伝える。
-    private var label: String {
-        guard isRecording else { return binding.displayName }
+    private var label: Text {
+        guard isRecording else { return Text(verbatim: binding.displayName) }
         if let pending = recorder.pendingModifier {
-            return "\(pending.displayName) + キー、または離して確定"
+            return Text("\(pending.displayName) + キー、または離して確定")
         }
-        return "キーを押してください…"
+        return Text("キーを押してください…")
     }
 
     private func start() {

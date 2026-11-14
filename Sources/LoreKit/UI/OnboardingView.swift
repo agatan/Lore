@@ -36,7 +36,7 @@ struct OnboardingView: View {
                 .resizable()
                 .interpolation(.high)
                 .frame(width: 96, height: 96)
-            Text("話して過ごす毎日を、あなたの資産に。")
+            Text("話したことを、あとから読める記録に。")
                 .font(.system(size: LoreTheme.TextSize.display, weight: .bold, design: .rounded))
                 .multilineTextAlignment(.center)
             Text("Loreは、話したこと、声で残したメモ、音声入力した文章を、このMacの中に時刻順で残します。")
@@ -65,7 +65,7 @@ struct OnboardingView: View {
             FeatureCard(
                 symbol: "pencil",
                 tint: LoreTheme.accent,
-                title: "声のメモ",
+                title: "ボイスメモ",
                 detail: "思いついたことを声や短い文で残し、検索や書き出し、AIへの受け渡しに使えます。"
             )
         }
@@ -73,7 +73,7 @@ struct OnboardingView: View {
 
     private var permissions: some View {
         VStack(alignment: .leading, spacing: 0) {
-            Text("はじめる準備")
+            Text("アクセス権")
                 .font(LoreTheme.sectionFont)
                 .foregroundStyle(.secondary)
                 .padding(.horizontal, 16)
@@ -88,7 +88,7 @@ struct OnboardingView: View {
             Divider().padding(.leading, 56)
             PermissionRow(
                 symbol: "cursorarrow.motionlines",
-                title: "入力操作",
+                title: "アクセシビリティ",
                 detail: "ホットキーと、文章をアプリへ入力するために使います。",
                 granted: env.isAccessibilityGranted
             ) {
@@ -100,8 +100,8 @@ struct OnboardingView: View {
                 symbol: "calendar",
                 title: "カレンダー",
                 detail: "任意です。予定をライフログの横に並べます。",
-                granted: !env.lifeLog.availableCalendars.isEmpty
-            ) { Task { await env.lifeLog.loadCalendars() } }
+                granted: env.isCalendarGranted
+            ) { Task { await env.requestCalendar() } }
         }
         .padding(.bottom, 4)
         .background(.regularMaterial, in: RoundedRectangle(cornerRadius: LoreTheme.panelCornerRadius, style: .continuous))

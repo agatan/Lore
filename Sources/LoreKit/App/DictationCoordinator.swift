@@ -346,7 +346,7 @@ public final class DictationCoordinator {
                     persist(record)
                 }
             }
-            finish(phase: .finished(.cancelled), detail: "終了のため処理を中断しました")
+            finish(phase: .finished(.cancelled), detail: String(lore: "終了のため処理を中断しました"))
         }
         await flushPersistence(timeout: .seconds(2))
     }
@@ -374,17 +374,17 @@ public final class DictationCoordinator {
         let salvaged = (draft?.partialTranscript ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
         let voiceMemoSalvaged = liveTranscript.trimmingCharacters(in: .whitespacesAndNewlines)
         if captureDestination == .voiceMemo, !voiceMemoSalvaged.isEmpty {
-            statusDetail = "音声認識が応答しないため、途中までのテキストを使いました"
+            statusDetail = String(lore: "音声認識が応答しないため、途中までのテキストを使いました")
             await completeVoiceMemo(voiceMemoSalvaged, alreadyHandled: true)
             return
         }
         guard !salvaged.isEmpty else {
             sounds.play(.failure)
-            finish(phase: .finished(.failed("音声認識が応答しませんでした")), detail: nil)
+            finish(phase: .finished(.failed(String(lore: "音声認識が応答しませんでした"))), detail: nil)
             return
         }
 
-        statusDetail = "音声認識が応答しないため、途中までのテキストを使いました"
+        statusDetail = String(lore: "音声認識が応答しないため、途中までのテキストを使いました")
         do {
             try await complete(
                 transcript: salvaged,
@@ -440,7 +440,7 @@ public final class DictationCoordinator {
             let format = try await deps.engines.captureFormat(hints: hints)
             // 初回だけ prepare を待つため、その間に離してしまうケースを弾く。
             guard isRecording else {
-                finish(phase: .finished(.failed("録音の準備が間に合いませんでした")), detail: nil)
+                finish(phase: .finished(.failed(String(lore: "録音の準備が間に合いませんでした"))), detail: nil)
                 return
             }
             let streams = try audio.start(format: format)
@@ -471,7 +471,7 @@ public final class DictationCoordinator {
             guard !transcript.isEmpty else {
                 logInputDiagnostics(transcriptLength: 0)
                 LoreLog.session.error("音声認識結果が空")
-                finish(phase: .finished(.failed("音声を認識できませんでした")), detail: nil)
+                finish(phase: .finished(.failed(String(lore: "音声を認識できませんでした"))), detail: nil)
                 sounds.play(.failure)
                 return
             }
@@ -498,7 +498,7 @@ public final class DictationCoordinator {
         liveTranscript = transcript
         await saveVoiceMemo?(transcript)
         sounds.play(.complete)
-        finish(phase: .finished(.completed), detail: statusDetail ?? "メモに追加しました")
+        finish(phase: .finished(.completed), detail: statusDetail ?? String(lore: "メモに追加しました"))
     }
 
     /// ★ ここから先は「発話を失わない」経路。
@@ -547,11 +547,12 @@ public final class DictationCoordinator {
                 case .success(let formatted):
                     record = draft.markFormatted(formatted, llmLatencyMs: latency) ?? record
                 case .failure(let rejection):
+                    let reason = rejection.localizedMessage
                     record = draft.markFormattingSkipped(
-                        reason: rejection.message,
+                        reason: reason,
                         llmLatencyMs: latency
                     ) ?? record
-                    statusDetail = "整形をスキップしました(\(rejection.message))"
+                    statusDetail = String(lore: "整形をスキップしました(\(reason))")
                 }
             } catch {
                 let latency = elapsedMs(since: started)
@@ -560,7 +561,7 @@ public final class DictationCoordinator {
                     reason: reason,
                     llmLatencyMs: latency
                 ) ?? record
-                statusDetail = "整形をスキップしました(\(reason))"
+                statusDetail = String(lore: "整形をスキップしました(\(reason))")
             }
         }
         self.draft = draft
@@ -584,7 +585,7 @@ public final class DictationCoordinator {
             self.draft = draft
             persist(record)
             sounds.play(.failure)
-            statusDetail = "\(error.localizedDescription)。クリップボードにコピーしました"
+            statusDetail = String(lore: "\(error.localizedDescription)。クリップボードにコピーしました")
             finish(phase: draft.phase, detail: statusDetail)
         }
     }
@@ -606,7 +607,12 @@ public final class DictationCoordinator {
 
     private func finish(phase newPhase: SessionPhase, detail: String?) {
         phase = newPhase
-        statusDetail = detail ?? statusDetail
+        if let detail {
+            statusDetail = detail
+        } else if case .finished(.failed(let reason)) = newPhase {
+            // 失敗の理由をHUDに出す。前の段階の補足が残ると、別の失敗に見えてしまう。
+            statusDetail = reason
+        }
         inputLevel = 0
         levelTask?.cancel()
         elapsedTask?.cancel()
@@ -782,5 +788,18 @@ public final class DictationCoordinator {
     private func elapsedMs(since instant: ContinuousClock.Instant) -> Int {
         let duration = ContinuousClock.now - instant
         return Int(duration.components.seconds * 1_000 + duration.components.attoseconds / 1_000_000_000_000_000)
+    }
+}
+
+extension FormattingRejection {
+    /// 履歴とHUDに出す理由。判定そのものはDomainに置き、表示言語だけここで決める。
+    var localizedMessage: String {
+        switch self {
+        case .empty: String(lore: "整形結果が空でした")
+        case .tooShort(let ratio): String(lore: "整形結果が短すぎます(入力比 \(String(format: "%.2f", ratio)))")
+        case .tooLong(let ratio): String(lore: "整形結果が長すぎます(入力比 \(String(format: "%.2f", ratio)))")
+        case .promptLeakage(let marker): String(lore: "プロンプトの漏洩を検出しました(\(marker))")
+        case .unrelated(let overlap): String(lore: "整形結果が発話と繋がっていません(一致度 \(String(format: "%.2f", overlap)))")
+        }
     }
 }

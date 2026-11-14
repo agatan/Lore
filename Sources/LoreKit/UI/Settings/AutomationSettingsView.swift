@@ -1,3 +1,4 @@
+import AppKit
 import SwiftUI
 
 struct AutomationSettingsView: View {
@@ -8,8 +9,36 @@ struct AutomationSettingsView: View {
     var body: some View {
         LazyVStack(alignment: .leading, spacing: 20) {
             SettingsCard(
+                title: "MCPサーバー",
+                footnote: "MCPに対応したAIクライアントに、このパスを標準入出力のサーバーとして登録します。記録を読むだけで、書き換えや外部への通信はしません。"
+            ) {
+                HStack(spacing: 12) {
+                    integrationIcon("point.3.connected.trianglepath.dotted")
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text(verbatim: "lore-mcp")
+                            .font(.system(size: LoreTheme.TextSize.callout, weight: .semibold))
+                        Text(integrations.mcpServerURL.path)
+                            .font(.system(size: LoreTheme.TextSize.caption, design: .monospaced))
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
+                            .truncationMode(.middle)
+                            .textSelection(.enabled)
+                    }
+                    Spacer(minLength: 12)
+                    Menu("コピー") {
+                        Button("パスをコピー") { copy(integrations.mcpServerURL.path) }
+                        Button("Claude Code用のコマンドをコピー") {
+                            copy("claude mcp add lore -- \"\(integrations.mcpServerURL.path)\"")
+                        }
+                    }
+                    .fixedSize()
+                    .accessibilityIdentifier("automation.mcp.copy")
+                }
+            }
+
+            SettingsCard(
                 title: "コマンドライン",
-                footnote: "シェルの設定やPATHは変更しません。Lore.app内のCLIへのリンクだけを作ります。"
+                footnote: "シェルの設定やPATHは変更しません。Lore.appの中のCLIへのリンクを作るだけです。"
             ) {
                 integrationRow(
                     symbol: "terminal",
@@ -21,8 +50,8 @@ struct AutomationSettingsView: View {
             }
 
             SettingsCard(
-                title: "AIエージェント",
-                footnote: "共通のAgent Skillへ配置し、Claudeからも同じSkillを参照できるようにします。"
+                title: "Agent Skill",
+                footnote: "Loreの記録の読み方をAIエージェントに教えるSkillです。共通のSkillフォルダに置き、Claudeからも参照できるようにします。"
             ) {
                 integrationRow(
                     symbol: "sparkles",
@@ -52,11 +81,7 @@ struct AutomationSettingsView: View {
         action: @escaping () -> Void
     ) -> some View {
         HStack(spacing: 12) {
-            Image(systemName: symbol)
-                .font(.system(size: LoreTheme.TextSize.headline, weight: .medium))
-                .foregroundStyle(LoreTheme.accent)
-                .frame(width: 30, height: 30)
-                .background(LoreTheme.accent.opacity(0.10), in: RoundedRectangle(cornerRadius: LoreTheme.cardCornerRadius))
+            integrationIcon(symbol)
             VStack(alignment: .leading, spacing: 3) {
                 Text(title)
                     .font(.system(size: LoreTheme.TextSize.callout, weight: .semibold))
@@ -69,6 +94,19 @@ struct AutomationSettingsView: View {
             Spacer(minLength: 12)
             stateControl(state, action: action)
         }
+    }
+
+    private func integrationIcon(_ symbol: String) -> some View {
+        Image(systemName: symbol)
+            .font(.system(size: LoreTheme.TextSize.headline, weight: .medium))
+            .foregroundStyle(LoreTheme.accent)
+            .frame(width: 30, height: 30)
+            .background(LoreTheme.accent.opacity(0.08), in: RoundedRectangle(cornerRadius: LoreTheme.smallCornerRadius))
+    }
+
+    private func copy(_ text: String) {
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(text, forType: .string)
     }
 
     @ViewBuilder

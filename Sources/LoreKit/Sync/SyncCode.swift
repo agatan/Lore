@@ -71,8 +71,8 @@ public enum SyncCodeError: LocalizedError, Equatable {
 
     public var errorDescription: String? {
         switch self {
-        case .malformed: "同期コードの形式が正しくありません"
-        case .checksumMismatch: "同期コードに書き写し間違いがあります"
+        case .malformed: String(lore: "同期コードの形式が正しくありません")
+        case .checksumMismatch: String(lore: "同期コードに書き写し間違いがあります")
         }
     }
 }

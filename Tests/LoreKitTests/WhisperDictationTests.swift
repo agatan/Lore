@@ -99,8 +99,8 @@ struct DictationSttSelectionTests {
 
     @Test("共通ルールは数え上げを番号付きリストにし、数値を落とさない")
     func sharedRulesCoverListsAndNumbers() {
-        #expect(BuiltinSharedRules.text.contains("番号付きリスト"))
-        #expect(BuiltinSharedRules.text.contains("話した数値は 1 つも落とさず"))
+        #expect(BuiltinSharedRules.text.contains("numbered list"))
+        #expect(BuiltinSharedRules.text.contains("Never convert units, round, merge, reorder, or drop a number"))
     }
 }
 

@@ -134,11 +134,15 @@ struct FormattingPolicyTests {
         // 言いよどみを閉じた列挙で書くと、実際の発話に出る語が漏れて残る
         // (「そのー」だけを挙げていると「その」が消えない)。
         // 日本語の考え中の語が名指しされていることを固定する。
-        for word in ["えーと", "その", "なんか", "なんていうの", "こう", "まあ"] {
+        for word in ["えーと", "その", "なんか", "なんていうの", "こう", "まあ", "um", "uh"] {
             #expect(prompt.contains(word), "言いよどみとして「\(word)」が挙がっていない")
         }
+        // 列挙は例であり、挙げていない考え中の音も消させる。
+        #expect(prompt.contains("not only the ones listed here"))
         // 同じ語句の繰り返しをまとめる指示。抽象的な「重複を残さない」では効かない。
-        #expect(prompt.contains("1 回にする"))
+        #expect(prompt.contains("keep only the final version once"))
+        // 指示は英語でも、出力は発話の言語のまま。
+        #expect(prompt.contains("Do not translate"))
 
         #expect(prompt.contains("レセコン"))
         #expect(prompt.contains("レセ困"))
@@ -212,7 +216,7 @@ struct FormattingPolicyTests {
         #expect(prompt.contains("テスト入力"))
         // 小型モデルが応答に流れないよう、命令は入力より後ろにある
         let transcriptIndex = prompt.range(of: "テスト入力")!.lowerBound
-        let instructionIndex = prompt.range(of: "整形したテキストだけ")!.lowerBound
+        let instructionIndex = prompt.range(of: "output only the cleaned text")!.lowerBound
         #expect(transcriptIndex < instructionIndex)
     }
 

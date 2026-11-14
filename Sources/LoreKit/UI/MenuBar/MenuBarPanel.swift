@@ -208,15 +208,15 @@ struct MenuBarPanel: View {
     private var notices: [Notice] {
         var values: [Notice] = []
         if !env.isAccessibilityGranted {
-            values.append(Notice(id: "ax", title: "アクセシビリティが未許可", message: "ホットキーとテキスト挿入に必要です。", actionTitle: "許可する", action: {
+            values.append(Notice(id: "ax", title: "アクセシビリティが許可されていません", message: "ホットキーの検知と、文章の入力に必要です。", actionTitle: "許可する", action: {
                 env.requestAccessibility(); Permissions.openAccessibilitySettings()
             }))
         }
         if env.requiresInputMonitoring, !env.isInputMonitoringGranted {
             values.append(Notice(
                 id: "input-monitoring",
-                title: "入力監視が未許可",
-                message: "Option+文字keyのホットキーに必要です。Secure Input中は利用できません。",
+                title: "入力監視が許可されていません",
+                message: "Option＋文字キーのホットキーに必要です。パスワード入力中は使えません。",
                 actionTitle: "許可する",
                 action: {
                     env.requestInputMonitoring()
@@ -225,7 +225,7 @@ struct MenuBarPanel: View {
             ))
         }
         if !env.isMicrophoneGranted {
-            values.append(Notice(id: "mic", title: "マイクが未許可", message: "音声を取り込めません。", actionTitle: "許可する", action: {
+            values.append(Notice(id: "mic", title: "マイクが許可されていません", message: "音声入力と録音に必要です。", actionTitle: "許可する", action: {
                 Task { await env.requestMicrophone() }
             }))
         }

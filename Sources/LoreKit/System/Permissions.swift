@@ -1,6 +1,7 @@
 import AVFoundation
 import AppKit
 import ApplicationServices
+import EventKit
 
 /// マイクとアクセシビリティの権限状態。どちらも欠けると中核機能が動かないため、
 /// UI から常に見える形にしておく。
@@ -35,6 +36,19 @@ public enum Permissions {
 
     public static func openMicrophoneSettings() {
         openSettings("x-apple.systempreferences:com.apple.preference.security?Privacy_Microphone")
+    }
+
+    public static func openCalendarSettings() {
+        openSettings("x-apple.systempreferences:com.apple.preference.security?Privacy_Calendars")
+    }
+
+    public static var isCalendarGranted: Bool {
+        EKEventStore.authorizationStatus(for: .event) == .fullAccess
+    }
+
+    /// 一度拒否したカレンダー権限はアプリから尋ね直せないため、システム設定を開く。
+    public static var canPromptForCalendar: Bool {
+        EKEventStore.authorizationStatus(for: .event) == .notDetermined
     }
 
     public static var microphoneStatus: AVAuthorizationStatus {

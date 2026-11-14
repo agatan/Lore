@@ -12,8 +12,7 @@ struct ModelsSettingsView: View {
     var body: some View {
         LazyVStack(alignment: .leading, spacing: 20) {
             privacyNotice
-            speechRecognitionCard
-            SettingsCard(title: "音声入力の整形", footnote: "音声入力の文章を整えます。ライフログの文字は整形にも外部送信にも使いません。") {
+            SettingsCard(title: "音声入力の整形", footnote: "ライフログの文字起こしは整形せず、外部にも送りません。") {
                 providerPicker
                 engineStatus
                 if backend != .onDevice {
@@ -30,7 +29,9 @@ struct ModelsSettingsView: View {
 
     private var privacyNotice: some View {
         NoticeBanner(
-            title: backend.sendsTranscriptOffDevice ? "文章だけを \(backend.displayName) に送ります" : "この Mac の中だけで動きます",
+            title: backend.sendsTranscriptOffDevice
+                ? String(lore: "文字起こしを\(backend.displayName)に送ります")
+                : "このMacの中で処理します",
             message: noticeMessage,
             tint: backend.sendsTranscriptOffDevice ? LoreTheme.warning : LoreTheme.accent,
             symbol: backend.sendsTranscriptOffDevice ? "exclamationmark.triangle.fill" : "lock.fill",
@@ -41,25 +42,12 @@ struct ModelsSettingsView: View {
 
     private var noticeMessage: String {
         if backend.sendsTranscriptOffDevice {
-            return "整形のため、文字起こしと指示文を送ります。音声ファイルは送りません。"
+            return "整形のため、その回の文字起こしと指示文、語彙を送ります。音声とライフログは送りません。"
         }
         if backend == .onDevice {
-            return "聞き取りと整形をmacOS内蔵モデルで行います。"
+            return "macOSに内蔵されたモデルで整形します。"
         }
-        return "文章処理をこのMac上のローカルサーバーで行います。"
-    }
-
-    private var speechRecognitionCard: some View {
-        SettingsCard(title: "聞き取り", footnote: "SpeechAnalyzerを選んだ音声入力とライフログで使います。whisper.cppは各設定で選べます。語彙は両方で共有します。") {
-            HStack(alignment: .firstTextBaseline, spacing: 8) {
-                Text("Apple 音声認識 (SpeechAnalyzer)").font(.system(size: LoreTheme.TextSize.body, weight: .medium))
-                Spacer()
-                availabilityLabel(env.engines.sttAvailability, canInstall: true)
-            }
-            if let error = env.speechAssetError {
-                Text(error).font(.system(size: LoreTheme.TextSize.caption)).foregroundStyle(LoreTheme.danger)
-            }
-        }
+        return "このMacで動いているローカルサーバーで整形します。"
     }
 
     private var providerPicker: some View {
@@ -121,7 +109,7 @@ struct ModelsSettingsView: View {
     @ViewBuilder
     private var providerSettings: some View {
         if backend.sendsTranscriptOffDevice {
-            SettingsRow(title: "API キー", caption: env.hasLlmApiKey ? "キーチェーンに登録済み" : "キーチェーンに保存します") {
+            SettingsRow(title: "APIキー", caption: env.hasLlmApiKey ? "キーチェーンに保存済み" : "キーチェーンに保存します") {
                 HStack(spacing: 8) {
                     SecureField("API key", text: $apiKeyDraft).textFieldStyle(.roundedBorder).frame(width: 180).onSubmit(saveKey)
                     Button("保存", action: saveKey).controlSize(.small)
@@ -168,11 +156,11 @@ struct ModelsSettingsView: View {
     }
 
     private var timeoutCard: some View {
-        SettingsCard(title: "待ち時間の上限", footnote: "時間を過ぎたら整形を打ち切り、文字起こしをそのまま挿入します。") {
-            SettingsRow(title: "仕上げを待つ上限") {
+        SettingsCard(title: "待ち時間", footnote: "この時間を過ぎると整形をやめ、文字起こしをそのまま入力します。") {
+            SettingsRow(title: "整形を待つ時間") {
                 HStack(spacing: 10) {
                     Slider(value: Binding(get: { Double(settings.formattingTimeoutMs) }, set: { settings.formattingTimeoutMs = Int($0) }), in: 2_000...20_000, step: 500).frame(width: 190)
-                    Text(String(format: "%.1f 秒", Double(settings.formattingTimeoutMs) / 1_000))
+                    Text("\(String(format: "%.1f", Double(settings.formattingTimeoutMs) / 1_000)) 秒")
                         .font(.system(size: LoreTheme.TextSize.caption)).monospacedDigit().foregroundStyle(.secondary)
                 }
             }
@@ -208,7 +196,7 @@ struct ModelsSettingsView: View {
         switch backend {
         case .ollama: "Ollama · localhost:11434"
         case .lmStudio: "LM Studio · localhost:1234"
-        default: "接続確認で利用可能なモデルを取得"
+        default: "接続を確認すると、使えるモデルを選べます"
         }
     }
 
@@ -216,15 +204,5 @@ struct ModelsSettingsView: View {
         let key = apiKeyDraft
         apiKeyDraft = ""
         Task { await env.setLlmApiKey(key) }
-    }
-
-    static func speedLines(_ stats: LatencyStats) -> [String] {
-        guard let factor = stats.realtimeFactor else { return ["実測 \(secondsText(stats.p50Ms))", "\(stats.count) 回の中央値"] }
-        let text = factor < 1 ? String(format: "%.2f 倍", factor) : String(format: "%.1f 倍", factor)
-        return ["音声の長さの \(text)", "音声 10 秒 → \(secondsText(Int(factor * 10_000)))", "\(stats.realtimeFactorCount) 回の中央値"]
-    }
-
-    static func secondsText(_ ms: Int) -> String {
-        ms >= 1_000 ? String(format: "%.1f 秒", Double(ms) / 1_000) : "\(ms) ミリ秒"
     }
 }

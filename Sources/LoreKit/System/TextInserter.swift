@@ -15,9 +15,9 @@ public enum TextInserter {
 
         public var errorDescription: String? {
             switch self {
-            case .notTrusted: "アクセシビリティの許可がないため挿入できません"
-            case .secureInput: "セキュア入力中のため挿入できません"
-            case .activationFailed(let app): "\(app) を前面に戻せませんでした"
+            case .notTrusted: String(lore: "アクセシビリティの許可がないため挿入できません")
+            case .secureInput: String(lore: "セキュア入力中のため挿入できません")
+            case .activationFailed(let app): String(lore: "\(app) を前面に戻せませんでした")
             }
         }
     }
@@ -36,7 +36,7 @@ public enum TextInserter {
             target.activate()
             try? await Task.sleep(for: activationDelay)
             guard target.isActive else {
-                throw Failure.activationFailed(target.localizedName ?? "対象アプリ")
+                throw Failure.activationFailed(target.localizedName ?? String(lore: "対象アプリ"))
             }
         }
 

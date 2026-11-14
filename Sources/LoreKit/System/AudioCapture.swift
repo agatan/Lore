@@ -20,9 +20,9 @@ public final class AudioCapture {
 
         public var errorDescription: String? {
             switch self {
-            case .microphoneDenied: "マイクの使用が許可されていません"
-            case .noInputDevice: "入力デバイスが見つかりません"
-            case .formatUnsupported: "この入力フォーマットを変換できません"
+            case .microphoneDenied: String(lore: "マイクの使用が許可されていません")
+            case .noInputDevice: String(lore: "入力デバイスが見つかりません")
+            case .formatUnsupported: String(lore: "この入力フォーマットを変換できません")
             }
         }
     }

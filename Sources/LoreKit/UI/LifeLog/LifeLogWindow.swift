@@ -66,13 +66,13 @@ public struct LifeLogWindow: View {
                 .help("ライフログを検索 (⌘F)")
                 .keyboardShortcut("f", modifiers: .command)
                 .accessibilityIdentifier("life-log.search")
-            Button { showsExportSheet = true } label: { Label("この日を書き出す", systemImage: "square.and.arrow.up") }
-                .help("この日を書き出す")
+            Button { showsExportSheet = true } label: { Label("書き出す", systemImage: "square.and.arrow.up") }
+                .help("この日の記録を書き出す")
                 .accessibilityIdentifier("life-log.export-day")
         }
         ToolbarItem(placement: .automatic) {
-            Button { showsInspector.toggle() } label: { Label("この日の概要", systemImage: "sidebar.trailing") }
-                .help(Text(showsInspector ? "この日の概要を隠す" : "この日の概要を表示"))
+            Button { showsInspector.toggle() } label: { Label("概要", systemImage: "sidebar.trailing") }
+                .help(Text(showsInspector ? "概要を隠す" : "概要を表示"))
                 .accessibilityIdentifier("life-log.inspector-toggle")
         }
     }
@@ -83,13 +83,13 @@ public struct LifeLogWindow: View {
     /// 記録状態と終日の予定は日付の下に一列だけ置く。Scrollすると見出しごとtoolbarの下へ流れる。
     private var header: some View {
         VStack(alignment: .leading, spacing: 6) {
-            (isToday ? Text("今日") : Text(verbatim: env.lifeLog.selectedDate.formatted(.dateTime.year())))
+            (isToday ? Text("今日") : Text(verbatim: env.lifeLog.selectedDate.loreFormatted(.dateTime.year())))
                 .font(.system(size: LoreTheme.TextSize.body, weight: .semibold))
                 .foregroundStyle(isToday ? AnyShapeStyle(LoreTheme.recording) : AnyShapeStyle(.secondary))
             HStack(alignment: .firstTextBaseline, spacing: 10) {
-                Text(env.lifeLog.selectedDate.formatted(.dateTime.month(.wide).day()))
+                Text(env.lifeLog.selectedDate.loreFormatted(.dateTime.month(.wide).day()))
                     .font(LoreTheme.titleFont)
-                Text(env.lifeLog.selectedDate.formatted(.dateTime.weekday(.wide)))
+                Text(env.lifeLog.selectedDate.loreFormatted(.dateTime.weekday(.wide)))
                     .font(.system(size: LoreTheme.TextSize.title, weight: .medium, design: .rounded))
                     .foregroundStyle(.secondary)
             }

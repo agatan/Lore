@@ -242,9 +242,9 @@ public enum SyncCoordinatorError: LocalizedError {
 
     public var errorDescription: String? {
         switch self {
-        case .databaseUnavailable: "データベースを開けていないため同期できません"
-        case .missingKey: "このMacに同期コードがありません。同期を解除して、もう一度参加してください"
-        case .missingFolder: "同期フォルダが設定されていません"
+        case .databaseUnavailable: String(lore: "データベースを開けていないため同期できません")
+        case .missingKey: String(lore: "このMacに同期コードがありません。同期を解除して、もう一度参加してください")
+        case .missingFolder: String(lore: "同期フォルダが設定されていません")
         }
     }
 }

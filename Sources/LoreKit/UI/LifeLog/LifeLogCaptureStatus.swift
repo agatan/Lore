@@ -15,12 +15,6 @@ struct LifeLogCaptureStatus {
         return LocalizedStringKey(lifeLog.captureStatusText)
     }
 
-    var buttonTitle: String {
-        lifeLog.hasCaptureIntent ? "停止" : "記録を開始"
-    }
-
-
-
     var title: String {
         if lifeLog.isSuspendedForVoiceMemo { return "ライフログ一時停止中" }
         if lifeLog.isRecoveringCapture { return "ライフログ再接続中" }

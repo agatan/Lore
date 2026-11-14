@@ -9,34 +9,18 @@ struct PrivacySettingsView: View {
     var body: some View {
         // 画面外のカードを先に組まない(GeneralSettingsView と同じ理由)。
         LazyVStack(alignment: .leading, spacing: 20) {
-            SettingsCard(title: "アクセシビリティ") {
-                Text("グローバルショートカットの検知と、仕上げた文章の貼り付けに使います。画面やウィンドウ内の文字は読み取りません。")
-                .font(.system(size: LoreTheme.TextSize.caption))
-                .foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
-            }
-
-            SettingsCard(title: "保存場所", footnote: "音声入力は文章だけを保存します。ライフログの音声は、設定した保持期間だけこのMacに保存します。") {
-                if let url = env.database?.fileURL {
-                    HStack {
-                        Text(url.path(percentEncoded: false))
-                            .font(.system(size: LoreTheme.TextSize.caption, design: .monospaced))
-                            .foregroundStyle(.secondary)
-                            .lineLimit(2)
-                            .truncationMode(.middle)
-                        Spacer()
-                        Button("表示") {
+            SettingsCard(title: "保存場所", footnote: "録音した音声は外部へ送信しません。音声入力は文章だけを保存し、ライフログの音声は保存期間の設定に従って削除します。") {
+                SettingsRow(
+                    title: "データフォルダ",
+                    caption: env.database?.fileURL?.deletingLastPathComponent().path(percentEncoded: false)
+                ) {
+                    if let url = env.database?.fileURL {
+                        Button("Finderで表示") {
                             NSWorkspace.shared.activateFileViewerSelecting([url])
                         }
-                        .buttonStyle(.bordered)
-                        .controlSize(.small)
                     }
-                } else {
-                    Text("履歴の保存先はまだ作られていません")
-                        .font(.system(size: LoreTheme.TextSize.caption))
-                        .foregroundStyle(.tertiary)
                 }
-                SettingsRow(title: "このMacの使用量", caption: "履歴、ライフログ、保存音声、whisper.cpp modelの合計です") {
+                SettingsRow(title: "このMacでの使用量", caption: "履歴、ライフログ、音声、whisper.cppのモデル") {
                     Text(ByteCountFormatter.string(fromByteCount: env.appDataBytes, countStyle: .file))
                         .font(LoreTheme.timeFont)
                         .foregroundStyle(.secondary)
@@ -44,43 +28,21 @@ struct PrivacySettingsView: View {
                 }
             }
 
-            SettingsCard(title: "データの削除", footnote: "削除した内容は元に戻せません。ライフログの削除には、発話、メモ、予定の控え、保存音声が含まれます。") {
-                HStack(spacing: 12) {
-                    Text("\(env.historyCount) 件の履歴が保存されています")
-                        .font(.system(size: LoreTheme.TextSize.caption))
-                        .foregroundStyle(.secondary)
-                    Spacer()
-                    Button("音声入力履歴…", role: .destructive) {
-                        deleteTarget = .history
-                    }
-                    .buttonStyle(.bordered)
-                    .controlSize(.small)
+            SettingsCard(title: "データの削除", footnote: "削除したデータは元に戻せません。") {
+                SettingsRow(title: "音声入力の履歴", detail: "\(env.historyCount)件") {
+                    Button("削除…", role: .destructive) { deleteTarget = .history }
+                        .accessibilityIdentifier("privacy.delete-history")
                 }
-                HStack(spacing: 12) {
-                    VStack(alignment: .leading, spacing: 3) {
-                        Text("ライフログ")
-                            .font(.system(size: LoreTheme.TextSize.caption, weight: .medium))
-                        Text("音声 \(ByteCountFormatter.string(fromByteCount: env.lifeLogAudioBytes, countStyle: .file))")
-                            .font(.system(size: LoreTheme.TextSize.caption))
-                            .foregroundStyle(.secondary)
-                    }
-                    Spacer()
-                    Button("ライフログを削除…", role: .destructive) {
-                        deleteTarget = .lifeLog
-                    }
-                    .buttonStyle(.bordered)
-                    .controlSize(.small)
+                SettingsRow(
+                    title: "ライフログ",
+                    detail: "発話、メモ、取り込んだ予定、音声（\(ByteCountFormatter.string(fromByteCount: env.lifeLogAudioBytes, countStyle: .file))）"
+                ) {
+                    Button("削除…", role: .destructive) { deleteTarget = .lifeLog }
+                        .accessibilityIdentifier("privacy.delete-life-log")
                 }
-                HStack(spacing: 12) {
-                    Text("設定、語彙、モード、APIキーを含むすべて")
-                        .font(.system(size: LoreTheme.TextSize.caption))
-                        .foregroundStyle(.secondary)
-                    Spacer()
-                    Button("Loreを初期化…", role: .destructive) {
-                        deleteTarget = .application
-                    }
-                    .buttonStyle(.bordered)
-                    .controlSize(.small)
+                SettingsRow(title: "すべてのデータ", caption: "設定、語彙、モード、APIキーを含めて初期状態に戻します") {
+                    Button("Loreを初期化…", role: .destructive) { deleteTarget = .application }
+                        .accessibilityIdentifier("privacy.reset")
                 }
                 if let error = env.dataOperationError {
                     Label(error, systemImage: "exclamationmark.triangle.fill")
@@ -90,12 +52,12 @@ struct PrivacySettingsView: View {
                 }
             }
         }
-        .confirmationDialog(deleteTarget?.title ?? "データを削除しますか？", isPresented: Binding(
+        .confirmationDialog(LocalizedStringKey(deleteTarget?.title ?? "データを削除しますか？"), isPresented: Binding(
             get: { deleteTarget != nil },
             set: { if !$0 { deleteTarget = nil } }
         )) {
             if let target = deleteTarget {
-                Button(target.actionTitle, role: .destructive) {
+                Button(LocalizedStringKey(target.actionTitle), role: .destructive) {
                     deleteTarget = nil
                     Task {
                         switch target {
@@ -108,7 +70,7 @@ struct PrivacySettingsView: View {
             }
             Button("キャンセル", role: .cancel) { deleteTarget = nil }
         } message: {
-            Text(deleteTarget?.message ?? "元に戻せません。")
+            Text(LocalizedStringKey(deleteTarget?.message ?? "元に戻せません。"))
         }
         .task { env.refreshStorageSizes() }
     }
@@ -120,7 +82,7 @@ struct PrivacySettingsView: View {
 
         var title: String {
             switch self {
-            case .history: "音声入力履歴を削除しますか？"
+            case .history: "音声入力の履歴を削除しますか？"
             case .lifeLog: "ライフログをすべて削除しますか？"
             case .application: "Loreを初期状態に戻しますか？"
             }
@@ -137,11 +99,11 @@ struct PrivacySettingsView: View {
         var message: String {
             switch self {
             case .history:
-                "生の文字起こしと整形後の文章を削除します。語彙とライフログは残ります。"
+                "文字起こしと整形後の文章を削除します。語彙とライフログは残ります。"
             case .lifeLog:
-                "発話、メモ、予定の控え、保存音声を削除します。音声入力履歴と設定は残ります。"
+                "発話、メモ、取り込んだ予定、音声を削除します。音声入力の履歴と設定は残ります。"
             case .application:
-                "履歴、ライフログ、保存音声、語彙、モード、設定、APIキーを削除し、同期を解除します。同期フォルダ内のファイルは残ります。元に戻せません。"
+                "履歴、ライフログ、音声、語彙、モード、設定、APIキーを削除し、同期を解除します。同期フォルダ内のファイルは残ります。"
             }
         }
     }

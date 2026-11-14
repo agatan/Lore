@@ -22,12 +22,12 @@
 
 ## 2. 初回起動と権限
 
-- 初回はwindow全体を使うonboardingを表示し、ライフログ、音声入力、声のメモの三つの機能、マイク・入力操作・任意のcalendar権限とそれぞれの許可状況、保存範囲を説明します。
+- 初回はwindow全体を使うonboardingを表示し、ライフログ、音声入力、ボイスメモの三つの機能、マイク・アクセシビリティ・任意のcalendar権限とそれぞれの許可状況、保存範囲を説明します。
 - 通常起動ではメニューバー常駐に加えてmain windowを開き、ライフログを選択した状態で表示します。
 - アプリ名をKoeからLoreへ変えました。Lore（bundle ID `dev.agatan.Lore`）の初回起動時は、旧Koe（`dev.agatan.Koe`）のdataを一度だけ引き継ぎます。`~/Library/Application Support/Koe/`を`~/Library/Application Support/Lore/`へ移してDB fileを`lore.sqlite`へ改名し、保存audioの参照先も付け替えます。設定は旧Koeの値を写し、Lore側にすでに設定があれば写しません。Keychainに保存したAPI keyと同期の鍵は新しい保存先へ写してから旧itemを消します。Lore側のfolderがすでにある場合は混ぜずに旧folderを残し、menu barに残した場所を表示します。folderを移せない場合はDBを開かず、理由を表示します（旧dataはそのまま残ります）。macOSの権限（マイク、アクセシビリティ、入力監視、calendar）とログイン項目はbundle IDごとのため、Loreで改めて許可・設定します。CLIは`lore`、MCP serverは`lore-mcp`になり、AIクライアントへ登録し直します。CLI/MCPが先に起動した場合も、同じ手順でdataを移します。
 - 前回processの記録開始意図は復元しません。ライフログ記録は起動後の明示的なUI、hotkey、Shortcuts操作か、利用者が有効にした自動記録の時間帯でだけ開始します（4.1）。
 - マイク権限がなければ録音できません。アクセシビリティ権限がなければ結果を対象appへ挿入できません。Option+文字keyのhotkeyは入力監視権限がなければ開始しません。
-- calendar権限は音声入力には不要です。
+- calendar権限は音声入力には不要です。設定の「一般」には各権限の状態を並べ、未許可の項目には「許可する」を置きます。まだ尋ねていない権限はシステムのダイアログを出し、一度拒否された権限はシステム設定の該当箇所を開きます。
 - ライフログ開始時は、30秒単位の復旧用audioをMac内へ保存することを初回だけ確認します。同意前にShortcutsから開始した場合は、Loreを開いて同意するようエラーを返します。
 
 ## 3. 音声入力
@@ -54,7 +54,7 @@
 - whisper.cpp modelは音声入力とライフログで共通の選択です。どちらの設定画面からも一覧、download進捗と失敗理由を確認し、downloadをcancel、再試行、削除できます。Download完了前のmodelは認識に利用できず、ライフログの記録・処理中または音声入力の処理中は削除できません。
 - 録音開始時の前面appからmodeを一度決め、そのsession内では固定します。手動固定は自動選択より優先します。
 - modeは名前、対象bundle ID pattern、文章化の指示、言語、任意のmodel指定を持ち、作成、編集、削除、並べ替えができます。
-- 共通ruleは全modeへ適用されます。
+- 共通ruleは全modeへ適用されます。同梱の共通ruleとmodeの指示は、表示言語や話す言語に関わらず英語で書き、整形結果は発話と同じ言語で返して翻訳しません。未編集の共通rule・Default modeは同梱内容の更新に追従し、編集済みの内容は変えません。
 - 語彙は表記、任意の読み、誤認識pattern、有効/無効を持ち、STT hintと文章処理の指示へ反映します。
 
 ### 3.3 文章処理
@@ -107,7 +107,7 @@ cloud音声入力で送るのは今回の文字起こし、共通rule、mode指�
 - 音声入力との同時利用中も、復旧可能なライフログaudioの記録は中断しません。音声入力が成功した区間はそのraw transcriptを正本とし、同じ録音時間帯にライフログ側で認識した発話はtimeline、検索、書き出しへ重複して出しません。音声入力がcancelまたは失敗した場合は、ライフログ側の発話を残します。
 - 入力deviceを選択できます。記録中は30秒ごと、または発話burstの確定時に復旧用`.m4a`をMac内へ確定します。audioをcloud STTへ送ることはありません。
 - audio chunkは耐久化・復旧の単位です。30秒に達する前でも発話確定時にchunkを閉じるため、最終認識は次の定期確定を待ちません。認識はadaptiveな発話burst単位で実行し、持続するnear-silenceを文字起こししません。
-- Main windowとmini windowは有効な発話と判定した時点で、記録状態とは別のlive行を表示します。最初は「聞き取り中」と入力audioの長さを示し、暫定認識が返るたびにrolling textを更新します。発話確定後は「文字起こし中」と処理経過時間へ切り替え、最終結果をtimelineへ保存したらlive行を消します。
+- Main windowとmini windowは有効な発話と判定した時点で、記録状態とは別のlive行を表示します。最初は「発話中」と入力audioの長さを示し、暫定認識が返るたびにrolling textを更新します。発話確定後は「文字起こし中」と処理経過時間へ切り替え、最終結果をtimelineへ保存したらlive行を消します。
 - Main windowとmini windowのtimelineは初回表示時に最新項目を表示し、利用者が最新位置にいる間だけ、新しい発話・メモ・予定へ自動追従します。利用者が過去へscrollした場合や検索・予定から項目へ移動した場合は追従を止め、末尾へ戻ると再開します。
 - ライフログの認識言語は「表示言語に合わせる」「自動判定」「日本語」「English」「简体中文」から選べ、既定は表示言語に合わせます。表示言語が「システム設定」の場合も解決後の対応言語を使います。この設定はライフログだけに適用し、通常の音声入力、ボイスメモ、modeには伝播しません。
 - whisper.cppのcontrol tokenとtimestamp tokenはSTT engine境界で認識結果から除き、timeline、検索、書き出しへ新しく保存しません。過去に保存されたtextへ表示時の補正や自動書換えは行いません。
@@ -120,7 +120,7 @@ cloud音声入力で送るのは今回の文字起こし、共通rule、mode指�
 ### 4.2 日別表示
 
 - main windowは全高の半透明sidebarを持つsplit viewです。Sidebar上部の「ライフログ」「音声入力」で表示を切り替え、ライフログを既定表示にします。
-- ライフログ表示中は三列です。Sidebarはnavigationの下に月間activity calendarを置きます。中央は選択日のtimelineで、読みやすい幅の列をwindow中央に置き、先頭に大きな日付と曜日、今日なら「今日」と記録状態、終日の予定を表示します。右のinspector「この日」は話した時間、発話・メモ・音声入力の件数と、予定のblockと記録の印を時刻の縦軸へ並べた一日の流れを表示します。予定blockや一日の流れの位置を選ぶと、timelineのその時刻へ移動します。今日なら現在時刻の線を引きます。Inspectorはtoolbarのbuttonで隠せ、表示状態は次回も保ちます。記録がない日は件数の代わりに記録がないことだけを示し、過去日で予定も記録もなければ一日の流れを出しません。記録がない日のtimelineは、縦線の位置に記録の始め方（今日）または記録がないこと（過去日）を一行で示します。検索と書き出しのbuttonもwindow toolbarに置きます。
+- ライフログ表示中は三列です。Sidebarはnavigationの下に月間activity calendarを置きます。中央は選択日のtimelineで、読みやすい幅の列をwindow中央に置き、先頭に大きな日付と曜日、今日なら「今日」と記録状態、終日の予定を表示します。右のinspector「概要」は話した時間、発話・メモ・音声入力の件数と、予定のblockと記録の印を時刻の縦軸へ並べた一日の流れを表示します。予定blockや一日の流れの位置を選ぶと、timelineのその時刻へ移動します。今日なら現在時刻の線を引きます。Inspectorはtoolbarのbuttonで隠せ、表示状態は次回も保ちます。記録がない日は件数の代わりに記録がないことだけを示し、過去日で予定も記録もなければ一日の流れを出しません。記録がない日のtimelineは、縦線の位置に記録の始め方（今日）または記録がないこと（過去日）を一行で示します。検索と書き出しのbuttonもwindow toolbarに置きます。
 - 通常起動時とmain windowのライフログを開いた時は今日を表示し、dataの読込後にtimeline最下部の最新項目へ一度だけscrollします。mini windowも開いた時に今日を表示して最下部へ一度だけscrollします。その後に新しい認識結果や予定が届いても利用者の閲覧位置を奪いません。
 - timeline paneは時刻の予定、発話、音声入力、text memoを一列の時刻順で表示し、column headerは置きません。時刻の右に縦の線を通し、各行はその線上の印で種類を示します（発話は小さな点、メモと音声入力は記号、予定は輪）。予定の開始から終了までに入る区間は線を予定の色で塗り、予定の行は件名と長さ・calendar名を表示します。前の項目から1時間以上空いた所には空いた時間を示します。日付を選ぶとその日の予定を読み直し、inspectorとtimelineの両方へ反映します。
 - toolbarの検索buttonまたは`Command-F`で横断検索を開きます。検索結果は種類をtimelineと同じ印と色で示し、一致した語を強調し、日付と時刻を添えます。入力欄から手を離さずに↑↓で結果を選び、Returnで開けます。検索結果の発話、音声入力、memoを選ぶと対象日を開いてその項目へ移動します。
@@ -165,10 +165,10 @@ Loreの配色はapp iconと同じ墨・白・roseの3色に固定し、利用者
 | 場所 | 公開機能 |
 |---|---|
 | Menu bar | ライフログ/音声入力の用途別quick action。ライフログは記録切替、今日の画面、mini window、音声入力は録音、mode、直前結果、履歴を各tab内にまとめ、共通footerは設定と終了だけを置く。「今日を開く」「ミニウィンドウ」はsystem fontを直接描画するcompact buttonとする |
-| Main window | 通常起動時に前面のkey windowとして1680×960 ptで開き、全高のsidebar（navigation、calendar）、中央のtimeline、右のinspector「この日」の三列を表示する。ライフログの今日を選択してtimelineの最新位置を表示。onboarding、ライフログ、最下部の浮いたbarからの手入力・音声memo追加と記録操作、音声入力履歴（一覧と詳細）。inspectorの表示切替・検索・書き出しはwindow toolbarに置く。音声入力履歴の詳細は中央の読みやすい幅に置く |
+| Main window | 通常起動時に前面のkey windowとして1680×960 ptで開き、全高のsidebar（navigation、calendar）、中央のtimeline、右のinspector「概要」の三列を表示する。ライフログの今日を選択してtimelineの最新位置を表示。onboarding、ライフログ、最下部の浮いたbarからの手入力・音声memo追加と記録操作、音声入力履歴（一覧と詳細）。inspectorの表示切替・検索・書き出しはwindow toolbarに置く。音声入力履歴の詳細は中央の読みやすい幅に置く |
 | Mini window | ライフログ状態、今日のtimelineへの手入力・音声memo追加。一度開いたら明示的に閉じるまで、ほかのapp、desktop Space、full-screen Spaceより手前に表示し続ける。記録操作は最下部の浮いたbarに置く。窓全体を半透明の素材で描く |
 | Settings: 共通 | 一般（表示言語を含む）、語彙、privacy（保存場所、このMacの使用量、削除）、同期、連携 |
-| Settings: 音声入力 | hotkey、聞き取りengine・whisper.cpp model、feedback、履歴、AI整形、mode |
+| Settings: 音声入力 | hotkey、文字起こしengine・whisper.cpp model、feedback、履歴、AI整形、mode |
 | Settings: ライフログ | 記録・mini window・ボイスメモhotkey、自動記録の曜日と時間帯、入力device、STT engine・認識言語・whisper.cpp model、audio保持、calendar再取得 |
 
 Privacy設定には、履歴、ライフログ、保存audio、whisper.cpp modelを含むLore dataのこのMac上の合計使用量を表示します。

@@ -124,9 +124,9 @@ public enum SyncStoreError: LocalizedError, Sendable, Equatable {
 
     public var errorDescription: String? {
         switch self {
-        case .unsupportedValue: "同期できない形式の値があります"
-        case .missingField(let entity, let column): "同期データの\(entity)に\(column)がありません"
-        case .notEnabled: "同期が有効になっていません"
+        case .unsupportedValue: String(lore: "同期できない形式の値があります")
+        case .missingField(let entity, let column): String(lore: "同期データの\(entity)に\(column)がありません")
+        case .notEnabled: String(lore: "同期が有効になっていません")
         }
     }
 }

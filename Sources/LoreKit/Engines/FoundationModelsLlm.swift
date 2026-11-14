@@ -20,19 +20,19 @@ public final class FoundationModelsLlm: LlmEngine {
         case .available:
             .ready
         case .unavailable(.appleIntelligenceNotEnabled):
-            .unavailable("システム設定で Apple Intelligence を有効にしてください")
+            .unavailable(String(lore: "システム設定で Apple Intelligence を有効にしてください"))
         case .unavailable(.modelNotReady):
-            .needsDownload("システムモデルの準備中です。しばらく待ってから再確認してください")
+            .needsDownload(String(lore: "システムモデルの準備中です。しばらく待ってから再確認してください"))
         case .unavailable(.deviceNotEligible):
-            .unavailable("この Mac は Apple Intelligence 非対応です")
+            .unavailable(String(lore: "この Mac は Apple Intelligence 非対応です"))
         case .unavailable:
-            .unavailable("システムモデルを利用できません")
+            .unavailable(String(lore: "システムモデルを利用できません"))
         }
     }
 
     public func complete(prompt: FormattingPrompt, timeout: Duration) async throws -> String {
         guard case .ready = await availability() else {
-            throw EngineError.notReady(await availability().message ?? "システムモデルを利用できません")
+            throw EngineError.notReady(await availability().message ?? String(lore: "システムモデルを利用できません"))
         }
 
         // 口述内容の整形は「変換」であってコンテンツ生成ではないため、
@@ -81,7 +81,7 @@ func withEngineTimeout<T: Sendable>(
             throw EngineError.timedOut
         }
         guard let result = try await group.next() else {
-            throw EngineError.failed("処理が結果を返しませんでした")
+            throw EngineError.failed(String(lore: "処理が結果を返しませんでした"))
         }
         group.cancelAll()
         return result

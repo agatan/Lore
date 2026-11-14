@@ -125,7 +125,7 @@ struct LifeLogSearchSheet: View {
                         Text(LocalizedStringKey(result.kind.displayName))
                             .font(.system(size: LoreTheme.TextSize.caption, weight: .semibold))
                             .foregroundStyle(.secondary)
-                        Text(result.occurredAt.formatted(.dateTime.month().day().weekday(.abbreviated).hour().minute()))
+                        Text(result.occurredAt.loreFormatted(.dateTime.month().day().weekday(.abbreviated).hour().minute()))
                             .font(LoreTheme.timeFont)
                             .foregroundStyle(.tertiary)
                     }

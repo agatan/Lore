@@ -96,7 +96,7 @@ public protocol SttEngine: Sendable {
 
 extension SttEngine {
     public func install(progress: @escaping @Sendable (Double) -> Void) async throws {
-        throw EngineError.notReady("このエンジンには取得できるモデルがありません")
+        throw EngineError.notReady(String(lore: "このエンジンには取得できるモデルがありません"))
     }
 }
 
@@ -123,7 +123,7 @@ public protocol LlmEngine: Sendable {
 
 extension LlmEngine {
     public func install(progress: @escaping @Sendable (Double) -> Void) async throws {
-        throw EngineError.notReady("このエンジンには取得できるモデルがありません")
+        throw EngineError.notReady(String(lore: "このエンジンには取得できるモデルがありません"))
     }
 }
 
@@ -137,9 +137,9 @@ public enum EngineError: LocalizedError, Sendable {
 
     public var errorDescription: String? {
         switch self {
-        case .timedOut: "処理がタイムアウトしました"
+        case .timedOut: String(lore: "処理がタイムアウトしました")
         case .notReady(let text), .needsAppRestart(let text): text
-        case .cancelled: "キャンセルされました"
+        case .cancelled: String(lore: "キャンセルされました")
         case .failed(let text): text
         }
     }

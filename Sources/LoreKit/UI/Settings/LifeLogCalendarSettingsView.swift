@@ -9,11 +9,11 @@ struct LifeLogCalendarSettingsView: View {
         LazyVStack(alignment: .leading, spacing: 20) {
             SettingsCard(
                 title: "表示する予定",
-                footnote: "選んだカレンダーの予定を、タイムラインと「この日」の一日の流れに並べます。"
+                footnote: "選んだカレンダーの予定を、ライフログのタイムラインに表示します。"
             ) {
                 SettingsToggle(
                     title: "参加する予定だけ",
-                    caption: "参加済みと、返答のない自分の予定を含めます。Loreから参加可否は変更できません。",
+                    caption: "承諾した予定と、まだ返答していない予定を表示します",
                     isOn: Binding(
                         get: { settings.lifeLogParticipatingEventsOnly },
                         set: { value in
@@ -25,7 +25,7 @@ struct LifeLogCalendarSettingsView: View {
                 calendars
                 SettingsRow(
                     title: "予定を再取得",
-                    caption: "\(env.lifeLog.selectedDate.formatted(.dateTime.year().month().day()))の予定をCalendarから読み直します"
+                    detail: "\(env.lifeLog.selectedDate.loreFormatted(.dateTime.year().month().day()))の予定をカレンダーから読み込み直します"
                 ) {
                     Button {
                         Task { await env.lifeLog.refreshCalendar(selectedCalendars: selectedCalendars) }
@@ -40,7 +40,7 @@ struct LifeLogCalendarSettingsView: View {
                     .accessibilityIdentifier("calendar.refresh")
                 }
                 if let refreshedAt = env.lifeLog.lastCalendarRefreshAt {
-                    Text("最終取得: \(refreshedAt.formatted(date: .omitted, time: .shortened))")
+                    Text("最終取得: \(refreshedAt.loreFormatted(date: .omitted, time: .shortened))")
                         .font(.system(size: LoreTheme.TextSize.caption))
                         .foregroundStyle(.secondary)
                         .frame(maxWidth: .infinity, alignment: .trailing)
@@ -49,13 +49,21 @@ struct LifeLogCalendarSettingsView: View {
         }
         .accessibilityIdentifier("calendar.settings.root")
         .toggleStyle(.switch)
-        .task { await env.lifeLog.loadCalendars() }
+        .task {
+            env.refreshPermissions()
+            if env.isCalendarGranted { await env.lifeLog.loadCalendars() }
+        }
     }
 
     @ViewBuilder
     private var calendars: some View {
-        if env.lifeLog.availableCalendars.isEmpty {
-            Label("利用できるカレンダーがありません", systemImage: "calendar.badge.exclamationmark")
+        if !env.isCalendarGranted {
+            SettingsRow(title: "カレンダーへのアクセスが許可されていません", caption: "許可すると、予定をタイムラインに表示できます") {
+                Button("許可する") { Task { await env.requestCalendar() } }
+                    .accessibilityIdentifier("calendar.request-access")
+            }
+        } else if env.lifeLog.availableCalendars.isEmpty {
+            Label("カレンダーがありません", systemImage: "calendar.badge.exclamationmark")
                 .font(.system(size: LoreTheme.TextSize.caption))
                 .foregroundStyle(.secondary)
                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -91,7 +99,7 @@ struct LifeLogCalendarSettingsView: View {
             : Set(settings.lifeLogCalendarTitles)
     }
 
-    private var selectionSummary: String {
+    private var selectionSummary: LocalizedStringKey {
         settings.lifeLogCalendarTitles.isEmpty ? "すべてのカレンダー" : "\(selectedCalendars.count)件を表示"
     }
 

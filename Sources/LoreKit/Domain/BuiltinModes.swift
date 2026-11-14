@@ -19,13 +19,13 @@ public enum BuiltinModes {
         name: "Default",
         bundleIDs: [],
         prompt: """
-        そのまま読める文章になるよう構造化してください。
+        Format the text so it reads naturally wherever it is pasted.
 
-        - 話が複数の項目に分かれているときは箇条書き(- )にする。ただし 1 つの話を工程に分解して項目を増やしてはいけない
-        - 話題が変わったところで段落を分ける(空行を入れる)
-        - 元の口調と丁寧さの度合いを保つ。敬語を足して丁寧にしすぎない。「〜させていただきます」のような過剰な言い換えはしない
-        - 見出し・番号付きリスト・太字は、発話でそう指示していない限り付けない
-        - 一言だけの発話は無理に構造化せず、1 文のまま返す
+        - Split separate topics into paragraphs with a blank line.
+        - Use "- " bullets only when the speaker lists several distinct items. Never break one thought into steps.
+        - Keep the speaker's tone and politeness. Do not make it more formal (no 「〜させていただきます」 rewrites).
+        - No headings or bold unless the speaker asked for them.
+        - A one-sentence utterance stays one sentence.
         """,
         sortOrder: 0,
         isBuiltin: true
@@ -42,12 +42,12 @@ public enum BuiltinModes {
             "ru.keepcoder.Telegram",
         ],
         prompt: """
-        チャットに投稿するメッセージとして整形してください。
+        Format the text as a chat message.
 
-        - 話し言葉の距離感を保つ。硬い書き言葉に直しすぎない
-        - 短く読みやすく。1〜3 文程度にまとめ、改行は意味の切れ目だけに入れる
-        - 「です・ます」は残すが、恐縮しすぎた定型句(お忙しいところ恐れ入りますが等)は足さない
-        - 絵文字や装飾は発話に含まれていない限り追加しない
+        - Keep the conversational distance. Do not stiffen it into written prose.
+        - Keep it short: one to three sentences, with line breaks only between ideas.
+        - Keep です/ます if spoken, but do not add stock courtesy phrases (お忙しいところ恐れ入りますが, "Hope you're well").
+        - No emoji or decoration unless spoken.
         """,
         sortOrder: 20,
         isBuiltin: false
@@ -66,12 +66,12 @@ public enum BuiltinModes {
             "com.apple.iWork.Pages",
         ],
         prompt: """
-        メールやドキュメントの本文として整形してください。
+        Format the text as the body of an email or document.
 
-        - 「です・ます」調に統一する
-        - 意味のまとまりごとに段落を分ける(空行で区切る)
-        - 書き言葉として読める硬さに整える
-        - 挨拶文・署名・宛名は発話に含まれていない限り追加しない
+        - In Japanese, use です/ます consistently.
+        - Break paragraphs at each change of topic, with a blank line.
+        - Make it read as written prose, not as speech.
+        - Do not add greetings, signatures, or recipients unless spoken.
         """,
         sortOrder: 30,
         isBuiltin: false
@@ -88,12 +88,12 @@ public enum BuiltinModes {
             "com.apple.Stickies",
         ],
         prompt: """
-        思考のメモとして整形してください。
+        Format the text as a note to self.
 
-        - 結論が出ていない話を、無理にまとめたり言い切ったりしない
-        - 話題が切り替わったら箇条書き(- )に分けて構造化する
-        - 確信度を表す言葉(たぶん、〜かも)は残す。断定に書き換えない
-        - 思考の順序を入れ替えない
+        - Do not resolve or conclude what the speaker left open.
+        - Split topic changes into "- " bullets.
+        - Keep hedges (たぶん, 〜かも, maybe). Do not turn them into certainty.
+        - Keep the order of thoughts.
         """,
         sortOrder: 40,
         isBuiltin: false
@@ -108,12 +108,12 @@ public enum BuiltinModes {
             "com.fournova.Tower3",
         ],
         prompt: """
-        コミットメッセージや PR 説明として整形してください。
+        Format the text as a commit message or pull request description.
 
-        - 1 行目は要点を 50 文字程度で言い切る。句点は付けない
-        - 詳細があれば空行を挟み、本文として「なぜそう変更したか」を書く
-        - 体言止めまたは「〜する」の常体に統一する
-        - 技術用語・識別子は正確な表記にする
+        - First line: the gist in about 50 characters, no trailing period.
+        - If there is more, add a blank line and explain why the change was made.
+        - In Japanese, use plain form (常体) or noun endings. In English, use the imperative mood ("Fix", "Add").
+        - Spell technical terms and identifiers exactly.
         """,
         sortOrder: 50,
         isBuiltin: false

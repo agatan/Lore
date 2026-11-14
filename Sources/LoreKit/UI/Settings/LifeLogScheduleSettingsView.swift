@@ -13,7 +13,9 @@ struct LifeLogScheduleSettingsView: View {
     var body: some View {
         SettingsCard(
             title: "自動記録",
-            footnote: "時間帯の終わりに止まるのは自動で始めた記録だけです。途中で手動停止した場合は次の時間帯まで再開しません。"
+            footnote: schedule.isEnabled
+                ? "時間帯の終わりに止まるのは、自動で始めた記録だけです。途中で手動で止めると、次の時間帯まで再開しません。"
+                : nil
         ) {
             SettingsRow(title: "決まった時間に記録する", detail: captionText) {
                 Toggle("", isOn: binding(\.isEnabled))
@@ -43,7 +45,7 @@ struct LifeLogScheduleSettingsView: View {
         guard schedule.isEnabled else { return nil }
         let now = Date()
         if let window = schedule.window(containing: now) {
-            return "いまは時間帯の中です。\(AppEnvironment.scheduleTimeText(window.end, now: now))に終わります"
+            return "現在の時間帯は\(AppEnvironment.scheduleTimeText(window.end, now: now))までです"
         }
         guard let next = schedule.nextWindow(after: now) else { return "曜日を選んでください" }
         return "次は\(AppEnvironment.scheduleTimeText(next.start, now: now))から\(AppEnvironment.scheduleTimeText(next.end, now: next.start))まで"

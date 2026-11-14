@@ -26,6 +26,7 @@ enum DebugSnapshotter {
 
     static func run(env: AppEnvironment, presenter: LoreWindowPresenter, into directory: URL) async {
         if let appearance { NSApp.appearance = appearance }
+        env.settings.applicationLanguage = DemoCopy.current.language
         do {
             try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
             // 自動記録の表示も確認できるよう、現在時刻を含まない時間帯で有効にする。
@@ -70,7 +71,7 @@ enum DebugSnapshotter {
             )
             try writeMenuBarIcons(into: directory)
             try await captureHosted(
-                LifeLogSearchSheet(env: env, initialQuery: "整理")
+                LifeLogSearchSheet(env: env, initialQuery: DemoCopy.current.searchQuery)
                     .background(.background),
                 as: "search",
                 into: directory
@@ -91,12 +92,13 @@ enum DebugSnapshotter {
             let wave = abs(sin(Double(index) / 2.4)) * (0.35 + 0.65 * Double(index) / Double(DictationCoordinator.levelHistoryLength))
             return Float(0.08 + 0.8 * wave)
         }
+        let copy = DemoCopy.current
         let states: [(String, SessionPhase, String, String?)] = [
             ("hud-recording-start", .recording, "", nil),
-            ("hud-recording", .recording, "えーと明日の1on1なんですけど、30分後ろにずらしてもらえると助かります", nil),
-            ("hud-formatting", .formatting, "明日の1on1なんですけど、30分後ろにずらしてもらえると助かります", nil),
+            ("hud-recording", .recording, copy.spoken, nil),
+            ("hud-formatting", .formatting, copy.spoken, nil),
             ("hud-completed", .finished(.completed), "", nil),
-            ("hud-skipped", .finished(.formattingSkipped(reason: "タイムアウト")), "明日の1on1なんですけど30分後ろにずらしてもらえると助かります", "整形をスキップしました(処理がタイムアウトしました)"),
+            ("hud-skipped", .finished(.formattingSkipped(reason: "timeout")), copy.spoken, copy.skippedDetail),
         ]
         for (name, phase, transcript, detail) in states {
             coordinator.applyPreviewState(
@@ -106,7 +108,7 @@ enum DebugSnapshotter {
                 levels: levels,
                 elapsed: .seconds(7),
                 detail: detail,
-                inputDeviceName: "MacBook Pro のマイク"
+                inputDeviceName: DemoCopy.current.inputDevice
             )
             try await captureHosted(
                 HudView(coordinator: coordinator, onCancel: {})
@@ -211,30 +213,14 @@ enum DebugSnapshotter {
         try data.write(to: directory.appending(path: "\(name).png"))
     }
 }
-/// HUDやpanelのガラスが透かす、デスクトップの壁紙の代わり。
+/// HUDやpanelのガラスが透かす、デスクトップの壁紙の代わり。LP にも載るため、Lore の配色に合わせて無地にする。
 private struct SnapshotWallpaper: View {
     @Environment(\.colorScheme) private var colorScheme
 
     var body: some View {
-        ZStack {
-            LinearGradient(
-                colors: colorScheme == .dark
-                    ? [Color(red: 0.10, green: 0.12, blue: 0.24), Color(red: 0.26, green: 0.14, blue: 0.30)]
-                    : [Color(red: 0.62, green: 0.78, blue: 0.95), Color(red: 0.96, green: 0.80, blue: 0.84)],
-                startPoint: .topLeading,
-                endPoint: .bottomTrailing
-            )
-            Circle()
-                .fill(Color(red: 0.98, green: 0.72, blue: 0.40).opacity(colorScheme == .dark ? 0.35 : 0.55))
-                .frame(width: 220)
-                .blur(radius: 50)
-                .offset(x: -160, y: 30)
-            Circle()
-                .fill(Color(red: 0.35, green: 0.55, blue: 0.98).opacity(0.5))
-                .frame(width: 240)
-                .blur(radius: 60)
-                .offset(x: 180, y: -40)
-        }
+        colorScheme == .dark
+            ? Color(red: 0.16, green: 0.16, blue: 0.19)
+            : Color(red: 0.86, green: 0.86, blue: 0.88)
     }
 }
 #endif

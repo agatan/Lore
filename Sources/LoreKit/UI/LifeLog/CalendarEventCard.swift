@@ -13,7 +13,7 @@ struct CalendarEventCard: View {
 
     var body: some View {
         TimelineRowFrame(
-            time: event.isAllDay ? Text("終日") : Text(event.startsAt.formatted(date: .omitted, time: .shortened)),
+            time: event.isAllDay ? Text("終日") : Text(event.startsAt.loreFormatted(date: .omitted, time: .shortened)),
             node: .event,
             nodeLabel: "予定",
             above: above,

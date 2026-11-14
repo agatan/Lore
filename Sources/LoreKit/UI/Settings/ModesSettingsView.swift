@@ -18,7 +18,7 @@ struct ModesSettingsView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
-            Text("アプリごとに仕上げ方を切り替えます。Defaultは、どのアプリにも当てはまらないときに使われます。")
+            Text("アプリごとに整形の指示を切り替えます。どのモードにも当てはまらないアプリではDefaultを使います。")
                 .font(.system(size: LoreTheme.TextSize.caption))
                 .foregroundStyle(.secondary)
 
@@ -45,7 +45,7 @@ struct ModesSettingsView: View {
                     VStack(alignment: .leading, spacing: 1) {
                         Text("共通ルール")
                             .font(.system(size: LoreTheme.TextSize.callout, weight: .medium))
-                        Text("すべてのモードの前に入る")
+                        Text("すべてのモードに適用")
                             .font(.system(size: LoreTheme.TextSize.micro))
                             .foregroundStyle(.secondary)
                     }
@@ -57,14 +57,14 @@ struct ModesSettingsView: View {
                 .tag(Selection.sharedRules)
                 .listRowInsets(EdgeInsets(top: 6, leading: 10, bottom: 6, trailing: 10))
 
-                Divider().opacity(0.5)
-
+                // 区切りを行として置くと選べる空行になるため、見出しで分ける。
+                Section("モード") {
                 ForEach(env.modes) { mode in
                     HStack(spacing: 6) {
                         VStack(alignment: .leading, spacing: 1) {
                             Text(mode.name)
                                 .font(.system(size: LoreTheme.TextSize.callout, weight: .medium))
-                            Text(mode.isFallback ? "フォールバック" : "\(mode.bundleIDs.count) アプリ")
+                            Text(mode.isFallback ? "その他のアプリ" : "\(mode.bundleIDs.count) アプリ")
                                 .font(.system(size: LoreTheme.TextSize.micro))
                                 .foregroundStyle(.secondary)
                         }
@@ -76,6 +76,7 @@ struct ModesSettingsView: View {
                     .tag(Selection.mode(mode.id))
                     .accessibilityIdentifier("mode.row.\(mode.id)")
                     .listRowInsets(EdgeInsets(top: 6, leading: 10, bottom: 6, trailing: 10))
+                }
                 }
             }
             // .sidebar はペインの中でもサイドバーの素材(ガラス)を継承してしまい、
@@ -148,7 +149,7 @@ struct ModesSettingsView: View {
         VStack(alignment: .leading, spacing: 16) {
             SettingsCard(
                 title: "共通ルール",
-                footnote: "すべてのモードの指示より前に、この内容がそのまま渡されます。ここに書いてあることをモード側で繰り返す必要はありません。逆向きの指示を書くと、どちらが効くか分からなくなります。",
+                footnote: "すべてのモードで、モードの指示より先にこの内容を渡します。ここにある指示はモード側に書く必要はありません。",
                 fillsVertically: true
             ) {
                 TextEditor(text: $sharedDraft)
@@ -213,7 +214,7 @@ struct ModesSettingsView: View {
 
                 SettingsCard(
                     title: "このモードを使うアプリ",
-                    footnote: "空にすると、どのアプリにも当てはまらない「既定のモード」になります。`com.jetbrains.*` のように * で複数まとめて指定できます。"
+                    footnote: "空にすると、他のモードに当てはまらないアプリで使う既定のモードになります。`com.jetbrains.*` のように * でまとめて指定できます。"
                 ) {
                     bundleIDEditor(draft)
                 }
@@ -221,8 +222,8 @@ struct ModesSettingsView: View {
                 // このカードだけ縦を使い切る。長い指示文を書く場所なので、
                 // 余白を空けておくより入力欄を広く取るほうが役に立つ。
                 SettingsCard(
-                    title: "仕上げの指示",
-                    footnote: "どのモードにも共通の指示(言いよどみの削除・句読点・言い直しの整理・語彙の統一)が先に入ります。ここにはこのモード固有の指示だけを書きます。",
+                    title: "整形の指示",
+                    footnote: "共通ルール（言いよどみの削除、句読点、言い直しの整理、語彙）が先に入るので、ここにはこのモードだけの指示を書きます。",
                     fillsVertically: true
                 ) {
                     TextEditor(text: bind(\.prompt))
@@ -369,7 +370,7 @@ struct ModesSettingsView: View {
         let mode = Mode(
             name: "新しいモード",
             bundleIDs: [],
-            prompt: "ここにこのモード固有の整形指示を書きます。",
+            prompt: "このモードだけの整形の指示を書きます。",
             sortOrder: (env.modes.map(\.sortOrder).max() ?? 0) + 10
         )
         await env.save(mode: mode)

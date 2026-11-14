@@ -9,7 +9,7 @@ struct MonthActivityCalendar: View {
     var onMonthChanged: (Date) -> Void
 
     @State private var displayedMonth: Date
-    private let calendar = Calendar.current
+    private var calendar: Calendar { LoreLocalization.calendar }
 
     init(
         selectedDate: Binding<Date>,
@@ -44,7 +44,7 @@ struct MonthActivityCalendar: View {
 
     private var header: some View {
         HStack(spacing: 8) {
-            Text(displayedMonth.formatted(.dateTime.year().month(.wide)))
+            Text(displayedMonth.loreFormatted(.dateTime.year().month(.wide)))
                 .font(.system(size: LoreTheme.TextSize.reading, weight: .semibold))
             Spacer()
             Button { moveMonth(-1) } label: { Image(systemName: "chevron.left") }

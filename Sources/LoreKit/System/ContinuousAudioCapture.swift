@@ -9,11 +9,11 @@ public final class ContinuousAudioCapture {
         case alreadyRunning, microphoneDenied, noInputDevice, formatUnsupported, configurationChanged
         public var errorDescription: String? {
             switch self {
-            case .alreadyRunning: "ライフログはすでに記録中です"
-            case .microphoneDenied: "マイクの使用が許可されていません"
-            case .noInputDevice: "入力デバイスが見つかりません"
-            case .formatUnsupported: "この入力フォーマットを変換できません"
-            case .configurationChanged: "音声入力の構成が変わりました"
+            case .alreadyRunning: String(lore: "ライフログはすでに記録中です")
+            case .microphoneDenied: String(lore: "マイクの使用が許可されていません")
+            case .noInputDevice: String(lore: "入力デバイスが見つかりません")
+            case .formatUnsupported: String(lore: "この入力フォーマットを変換できません")
+            case .configurationChanged: String(lore: "音声入力の構成が変わりました")
             }
         }
     }
@@ -154,7 +154,7 @@ public final class ContinuousAudioCapture {
 final class DurableAudioChunkWriter: @unchecked Sendable {
     private enum Failure: LocalizedError {
         case conversionFailed
-        var errorDescription: String? { "ライフログ音声を保存用フォーマットへ変換できません" }
+        var errorDescription: String? { String(lore: "ライフログ音声を保存用フォーマットへ変換できません") }
     }
 
     private let queue = DispatchQueue(label: "app.lore.life-log.audio-writer", qos: .utility)

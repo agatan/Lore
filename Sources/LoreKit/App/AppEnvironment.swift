@@ -42,6 +42,7 @@ public final class AppEnvironment {
     public private(set) var isAccessibilityGranted = false
     public private(set) var isInputMonitoringGranted = false
     public private(set) var isMicrophoneGranted = false
+    public private(set) var isCalendarGranted = false
     /// ログイン項目の状態。問い合わせが同期 XPC なので、UI は必ずこのキャッシュを読む。
     public private(set) var loginItemState: LoginItem.State = .unknown
     public private(set) var hotkeyError: String?
@@ -98,6 +99,16 @@ public final class AppEnvironment {
         )
         wireHotkeys()
         wirePowerNotifications()
+        followApplicationLanguage()
+    }
+
+    /// coordinatorやengineが組み立てる文言も、Viewと同じ表示言語で作らせる。
+    private func followApplicationLanguage() {
+        LoreLocalization.language = withObservationTracking {
+            settings.applicationLanguage
+        } onChange: { [weak self] in
+            Task { @MainActor [weak self] in self?.followApplicationLanguage() }
+        }
     }
 
     private func wirePowerNotifications() {
@@ -238,7 +249,7 @@ public final class AppEnvironment {
     private func openDefaultDatabase() async throws -> LoreDatabase {
         let (database, outcome) = try await LoreDatabase.openDefault()
         if case .leftLegacyInPlace(let legacy) = outcome {
-            appendDataMigrationIssue("以前のKoeのデータが\(legacy.path)に残っています。Loreのデータがすでにあったため、混ぜずに残しました。")
+            appendDataMigrationIssue(String(lore: "以前のKoeのデータが\(legacy.path)に残っています。Loreのデータがすでにあったため、混ぜずに残しました。"))
         }
         return database
     }
@@ -345,7 +356,7 @@ public final class AppEnvironment {
             } else {
                 // 同意画面を勝手に開かない。不在時に起きた時間帯の開始でwindowを奪わないため。
                 lifeLogScheduleState.startFailed(schedule: schedule, now: now)
-                lifeLog.showNotice("自動記録を始められませんでした。録音の保存に同意するため、一度手動でライフログを開始してください")
+                lifeLog.showNotice(String(lore: "自動記録を始められませんでした。録音の保存に同意するため、一度手動でライフログを開始してください"))
             }
         case .stop:
             applyLifeLogCapture(false)
@@ -377,9 +388,9 @@ public final class AppEnvironment {
 
     /// 今日なら時刻だけ、別の日なら曜日を添える。
     static func scheduleTimeText(_ date: Date, now: Date = Date(), calendar: Calendar = .current) -> String {
-        let time = date.formatted(date: .omitted, time: .shortened)
+        let time = date.loreFormatted(date: .omitted, time: .shortened)
         if calendar.isDate(date, inSameDayAs: now) { return time }
-        return date.formatted(.dateTime.month(.defaultDigits).day().weekday(.abbreviated)) + " " + time
+        return date.loreFormatted(.dateTime.month(.defaultDigits).day().weekday(.abbreviated)) + " " + time
     }
 
     public func cancelLifeLogAudioStorageConsent() {
@@ -444,10 +455,10 @@ public final class AppEnvironment {
 
     public func startHotkeyMonitor() {
         let registrations: [(String, HotkeyMonitor, HotkeyBinding)] = [
-            ("音声入力", hotkeys, settings.hotkey),
-            ("ライフログ", lifeLogCaptureHotkeys, settings.lifeLogCaptureHotkey),
-            ("ミニウィンドウ", lifeLogMiniWindowHotkeys, settings.lifeLogMiniWindowHotkey),
-            ("ボイスメモ", voiceMemoHotkeys, settings.voiceMemoHotkey),
+            (String(lore: "音声入力"), hotkeys, settings.hotkey),
+            (String(lore: "ライフログ"), lifeLogCaptureHotkeys, settings.lifeLogCaptureHotkey),
+            (String(lore: "ミニウィンドウ"), lifeLogMiniWindowHotkeys, settings.lifeLogMiniWindowHotkey),
+            (String(lore: "ボイスメモ"), voiceMemoHotkeys, settings.voiceMemoHotkey),
         ]
         if requiresInputMonitoring, !Permissions.isInputMonitoringGranted {
             _ = Permissions.requestInputMonitoring()
@@ -487,7 +498,7 @@ public final class AppEnvironment {
         guard binding != settings.lifeLogCaptureHotkey,
               binding != settings.lifeLogMiniWindowHotkey,
               binding != settings.voiceMemoHotkey else {
-            hotkeyError = "同じキーを複数の操作には割り当てられません"
+            hotkeyError = String(lore: "同じキーを複数の操作には割り当てられません")
             return
         }
         settings.hotkey = binding
@@ -499,7 +510,7 @@ public final class AppEnvironment {
         guard binding != settings.hotkey,
               binding != settings.lifeLogMiniWindowHotkey,
               binding != settings.voiceMemoHotkey else {
-            hotkeyError = "同じキーを複数の操作には割り当てられません"
+            hotkeyError = String(lore: "同じキーを複数の操作には割り当てられません")
             return
         }
         settings.lifeLogCaptureHotkey = binding
@@ -512,7 +523,7 @@ public final class AppEnvironment {
         guard binding != settings.hotkey,
               binding != settings.lifeLogCaptureHotkey,
               binding != settings.voiceMemoHotkey else {
-            hotkeyError = "同じキーを複数の操作には割り当てられません"
+            hotkeyError = String(lore: "同じキーを複数の操作には割り当てられません")
             return
         }
         settings.lifeLogMiniWindowHotkey = binding
@@ -525,7 +536,7 @@ public final class AppEnvironment {
         guard binding != settings.hotkey,
               binding != settings.lifeLogCaptureHotkey,
               binding != settings.lifeLogMiniWindowHotkey else {
-            hotkeyError = "同じキーを複数の操作には割り当てられません"
+            hotkeyError = String(lore: "同じキーを複数の操作には割り当てられません")
             return
         }
         settings.voiceMemoHotkey = binding
@@ -587,14 +598,31 @@ public final class AppEnvironment {
         isAccessibilityGranted = Permissions.isAccessibilityGranted
         isInputMonitoringGranted = Permissions.isInputMonitoringGranted
         isMicrophoneGranted = Permissions.isMicrophoneGranted
+        isCalendarGranted = Permissions.isCalendarGranted
         // 画面を開いたタイミングは「権限を付与した直後」の可能性が高いので、監視を焚き直す。
         if !isAccessibilityGranted || !isMicrophoneGranted || (requiresInputMonitoring && !isInputMonitoringGranted) {
             startPermissionWatcher()
         }
     }
 
+    /// 未確認ならシステムのダイアログを出し、一度拒否されていればシステム設定の該当箇所を開く。
+    /// 押しても何も起きない「許可する」を作らないため、拒否済みの経路もここで扱う。
     public func requestMicrophone() async {
-        _ = await Permissions.requestMicrophone()
+        switch Permissions.microphoneStatus {
+        case .denied, .restricted:
+            Permissions.openMicrophoneSettings()
+        default:
+            _ = await Permissions.requestMicrophone()
+        }
+        refreshPermissions()
+    }
+
+    public func requestCalendar() async {
+        if Permissions.canPromptForCalendar {
+            await lifeLog.loadCalendars()
+        } else if !Permissions.isCalendarGranted {
+            Permissions.openCalendarSettings()
+        }
         refreshPermissions()
     }
 
@@ -646,6 +674,7 @@ public final class AppEnvironment {
                 isAccessibilityGranted = Permissions.isAccessibilityGranted
                 isInputMonitoringGranted = Permissions.isInputMonitoringGranted
                 isMicrophoneGranted = Permissions.isMicrophoneGranted
+                isCalendarGranted = Permissions.isCalendarGranted
                 if (!hadAccessibility && isAccessibilityGranted)
                     || (!hadInputMonitoring && isInputMonitoringGranted)
                 {
@@ -719,7 +748,7 @@ public final class AppEnvironment {
     public func duplicateMode(_ mode: Mode) async -> Mode? {
         var copy = mode
         copy.id = UUID().uuidString
-        copy.name = mode.name + " のコピー"
+        copy.name = String(lore: "\(mode.name) のコピー")
         copy.isBuiltin = false
         copy.sortOrder = (modes.map(\.sortOrder).max() ?? 0) + 10
         await save(mode: copy)
@@ -978,7 +1007,7 @@ public final class AppEnvironment {
         case captureDidNotStop
 
         var errorDescription: String? {
-            "録音の保存処理が終わらなかったため、データを削除しませんでした。もう一度お試しください。"
+            String(lore: "録音の保存処理が終わらなかったため、データを削除しませんでした。もう一度お試しください。")
         }
     }
 
@@ -1155,8 +1184,8 @@ public final class AppEnvironment {
                 timeout: .seconds(20)
             )
             llmStatus = reply.isEmpty
-                ? "接続できましたが、応答が空でした"
-                : "\(settings.model(for: backend)) に接続できました"
+                ? String(lore: "接続できましたが、応答が空でした")
+                : String(lore: "\(settings.model(for: backend)) に接続できました")
         } catch {
             llmStatus = error.localizedDescription
             LoreLog.engine.error("LLM の疎通確認に失敗: \(error.localizedDescription, privacy: .public)")

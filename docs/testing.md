@@ -20,14 +20,14 @@ UI E2Eは内部のView構造ではなく、利用者が認識する操作とア�
 1. Loreを開くとライフログが表示され、TODOと要約の表示はない。
 2. 予定一覧と検索から該当項目へ移動できる。
 3. 音声入力へ切り替え、履歴画面が表示される。
-4. ライフログへ戻り、「この日を書き出す」を開く。
+4. ライフログへ戻り、「書き出す」を開く。
 5. 予定・メモが日別の書き出しプレビューまで届く。
 6. 含める項目を変更すると、選択状態とプレビューがともに更新される。
 
 ### CUJ 2: 記録がない状態で操作する
 
 1. 空のデータで起動しても、記録の開始操作が表示される。
-2. 「この日を書き出す」を開いて閉じられる。
+2. 「書き出す」を開いて閉じられる。
 
 ### CUJ 3: 設定を確認する
 
@@ -55,3 +55,7 @@ Debug buildの`LoreUITests.app`を`--lore-screenshot-demo --lore-snapshot <dir>`
 make ui-test-app
 open -n -W build/LoreUITests.app --args --lore-screenshot-demo --lore-snapshot /tmp/lore-shots --lore-snapshot-appearance dark
 ```
+
+`--lore-demo-language en|ja|zh-Hans`を足すと、表示言語とdemo dataの文面をその言語に切り替えて撮ります（既定は日本語）。`--lore-record <dir>`は撮影の代わりに、決まった台本で音声入力（メッセージ欄へ整った文章が入るまで）とライフログ（話した文がタイムラインに並ぶまで）を動かし、自process内のwindowだけをmp4で収録します。台本は発話をdemo databaseへ書き足すため、`--lore-screenshot-demo`と一緒でなければ起動しません。
+
+LP（`site/`）のスクリーンショットと動画は`make lp-media`で言語ごとに`site/assets/<言語>/`へ作り直します。収録した動画には、systemが信号機の位置へ描く収録中の印が入るため、`Scripts/patch-recording.swift`が同じwindowの静止画で覆ってから縮小します。画面がロックされているとScreenCaptureKitが取り込みを始められないため、ロックを解除して実行します。

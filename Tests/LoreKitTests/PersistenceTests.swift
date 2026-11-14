@@ -409,7 +409,7 @@ struct SharedRulesStoreTests {
             vocabulary: [VocabularyEntry(surface: "レセコン")]
         )
         #expect(prompt.contains("レセコン"))
-        #expect(prompt.contains("チャットに投稿するメッセージとして整形"))
+        #expect(prompt.contains("Format the text as a chat message"))
         #expect(!prompt.hasPrefix("\n"))
     }
 }
@@ -420,12 +420,12 @@ struct PromptConsistencyTests {
     /// 補完の許可は共通側にだけ書き、モード側では繰り返さない。
     @Test("補完の許可は共通ルールにあり、モードは繰り返さない")
     func completionRuleLivesInSharedRulesOnly() {
-        #expect(BuiltinSharedRules.text.contains("主語・助詞・接続詞の欠けは補う"))
-        #expect(BuiltinSharedRules.text.contains("「情報を足す」ことには当たらない"))
+        #expect(BuiltinSharedRules.text.contains("Supply a missing particle, subject, or connective"))
+        #expect(BuiltinSharedRules.text.contains("That is not adding information"))
 
         for mode in BuiltinModes.all {
             #expect(
-                !mode.prompt.contains("補って"),
+                !mode.prompt.localizedCaseInsensitiveContains("supply"),
                 "\(mode.name) が共通ルールと重複する補完指示を持っている"
             )
         }
@@ -436,7 +436,7 @@ struct PromptConsistencyTests {
     func modesDoNotAskToKeepDisfluencies() {
         for mode in BuiltinModes.all {
             #expect(
-                !mode.prompt.contains("そのまま残す"),
+                !mode.prompt.localizedCaseInsensitiveContains("keep filler"),
                 "\(mode.name) が言いよどみ除去と逆向きの指示を持っている"
             )
         }
@@ -454,10 +454,10 @@ struct VocabularyPromptToneTests {
     @Test("必ず置き換えろとは書かない")
     func doesNotCommandUnconditionalReplacement() {
         let table = try! #require(FormattingPolicy.vocabularyTable(vocabulary))
-        #expect(!table.contains("必ず"))
-        #expect(!table.contains("最優先"))
-        #expect(table.contains("文脈に合うときだけ"))
-        #expect(table.contains("機械的に置き換えない"))
+        #expect(!table.localizedCaseInsensitiveContains("always"))
+        #expect(!table.localizedCaseInsensitiveContains("must"))
+        #expect(table.contains("only when the context fits"))
+        #expect(table.contains("do not replace mechanically"))
         // 判断に必要な材料(表記・読み・化けやすい形)は渡す。
         #expect(table.contains("医事(いじ)"))
         #expect(table.contains("「維持」"))
@@ -467,14 +467,14 @@ struct VocabularyPromptToneTests {
             VocabularyEntry(surface: "医事", reading: "いじ", misrecognitions: ["維持"]),
             VocabularyEntry(surface: "レセコン", reading: "れせこん", misrecognitions: ["レセ困"]),
         ]))
-        #expect(twoEntries.components(separatedBy: "機械的に置き換えない").count - 1 == 1)
-        #expect(twoEntries.components(separatedBy: "← の右は").count - 1 == 1)
+        #expect(twoEntries.components(separatedBy: "do not replace mechanically").count - 1 == 1)
+        #expect(twoEntries.components(separatedBy: "After ←").count - 1 == 1)
     }
 
     @Test("共通ルールも語彙を最優先だと言わない")
     func sharedRulesDoNotOverrideContext() {
-        #expect(!BuiltinSharedRules.text.contains("必ずその表記に置き換える"))
-        #expect(BuiltinSharedRules.text.contains("機械的に置き換えない"))
+        #expect(!BuiltinSharedRules.text.localizedCaseInsensitiveContains("always replace"))
+        #expect(BuiltinSharedRules.text.contains("Do not replace mechanically"))
     }
 
     /// モードの指示は見出しを被せずそのまま連ねる。
@@ -482,7 +482,7 @@ struct VocabularyPromptToneTests {
     func modePromptIsConcatenatedPlainly() {
         let prompt = FormattingPolicy.systemPrompt(mode: BuiltinModes.chat, vocabulary: [])
         #expect(!prompt.contains("固有の指示"))
-        #expect(prompt.contains("チャットに投稿するメッセージとして整形"))
+        #expect(prompt.contains("Format the text as a chat message"))
     }
 
     /// 語彙表は入力にいちばん近い位置(最後)に置く。
@@ -492,8 +492,8 @@ struct VocabularyPromptToneTests {
             mode: BuiltinModes.chat,
             vocabulary: [VocabularyEntry(surface: "レセコン")]
         )
-        let mode = try! #require(prompt.range(of: "チャットに投稿するメッセージとして整形"))
-        let table = try! #require(prompt.range(of: "# 語彙表"))
+        let mode = try! #require(prompt.range(of: "Format the text as a chat message"))
+        let table = try! #require(prompt.range(of: "# Vocabulary"))
         #expect(mode.lowerBound < table.lowerBound)
     }
 }

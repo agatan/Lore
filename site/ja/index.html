@@ -1,0 +1,255 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Lore — Macのライフログと音声入力</title>
+<meta name="description" content="Loreは、話した内容を文字起こしして予定と同じタイムラインに記録し、ホットキーひとつで整形した文章を入力できるMacアプリです。音声認識はMac上で動作し、録音データを外部に送信しません。">
+<link rel="alternate" hreflang="en" href="../index.html">
+<link rel="alternate" hreflang="ja" href="../ja/index.html">
+<link rel="alternate" hreflang="zh-Hans" href="../zh-Hans/index.html">
+<link rel="alternate" hreflang="x-default" href="../index.html">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="Lore">
+<meta property="og:title" content="Lore — Macのライフログと音声入力">
+<meta property="og:description" content="Macのためのライフログと音声入力。音声認識はMac上で動作します。">
+<meta property="og:image" content="../assets/ja/life-log.png">
+<meta property="og:locale" content="ja_JP">
+<meta property="og:locale:alternate" content="en_US">
+<meta property="og:locale:alternate" content="zh_CN">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#111115" media="(prefers-color-scheme: dark)">
+<link rel="icon" href="../assets/icon.png">
+<link rel="stylesheet" href="../style.css">
+<script src="../main.js" defer></script>
+</head>
+<body>
+<a class="skip" href="#main">本文へ移動</a>
+
+<header class="top">
+  <div class="wrap">
+    <a class="brand" href="../ja/index.html"><img src="../assets/icon.png" alt="" width="28" height="28">Lore</a>
+    <nav class="links" aria-label="ページ内の項目">
+      <a href="#life-log">ライフログ</a>
+      <a href="#dictation">音声入力</a>
+      <a href="#ai">AI連携</a>
+      <a href="#privacy">プライバシー</a>
+    </nav>
+    <nav class="lang" aria-label="言語">
+      <ul>
+        <li><a href="../index.html" hreflang="en" lang="en">English</a></li>
+        <li><a href="../ja/index.html" hreflang="ja" lang="ja" aria-current="page">日本語</a></li>
+        <li><a href="../zh-Hans/index.html" hreflang="zh-Hans" lang="zh-Hans">简体中文</a></li>
+      </ul>
+    </nav>
+    <a class="btn btn-ink" href="#download">近日公開</a>
+  </div>
+</header>
+
+<main id="main">
+  <section class="hero" aria-labelledby="hero-title">
+    <div class="wrap">
+      <p class="eyebrow">Macのためのライフログと音声入力</p>
+      <h1 id="hero-title">話したことを、<br>検索できる記録に<span class="dot">。</span></h1>
+      <p class="lead">Loreは、会議や作業中に話した内容を文字起こしし、カレンダーの予定と同じタイムラインに記録します。音声入力では、ホットキーを押して話すだけで整形済みの文章を入力できます。音声認識はMac上で動作し、録音データを外部に送信しません。</p>
+      <div class="cta">
+        <span class="btn btn-ink" role="link" aria-disabled="true"><span class="rec" aria-hidden="true"></span>近日公開</span>
+        <a class="btn btn-line" href="#life-log">機能を見る</a>
+      </div>
+      <p class="req">macOS 26以降・Apple Silicon</p>
+    </div>
+    <figure class="stage">
+      <div class="screen">
+        <video data-demo src="../assets/ja/life-log.mp4" poster="../assets/ja/life-log.png" autoplay muted loop playsinline preload="metadata" aria-label="ライフログの記録中、話した内容が時刻付きでタイムラインに追加されていく様子"></video>
+      </div>
+      <figcaption>記録を開始すると、話し終えた内容から順に、時刻付きでタイムラインに追加されます。</figcaption>
+    </figure>
+  </section>
+
+  <section class="feature" id="life-log" aria-labelledby="life-log-title">
+    <div class="wrap">
+      <div class="split">
+        <div class="text">
+          <p class="kicker">ライフログ</p>
+          <h2 id="life-log-title">話した内容を、<br>予定と一緒に記録。</h2>
+          <p class="section-lead">会議での発言も、作業中のひとりごとも、時刻付きのテキストとして残ります。カレンダーの予定と同じタイムラインに並ぶので、いつ何を話したかがすぐにわかります。</p>
+          <ul class="points">
+            <li><b>手動でも、スケジュールでも</b><span>曜日と時間帯（例: 平日9:00〜18:00）を設定すると、その間だけ自動で記録します。</span></li>
+            <li><b>発話だけを文字起こし</b><span>無音や生活音は文字起こしせず、話している区間だけをMac上で認識します。</span></li>
+            <li><b>1日の記録をひと目で</b><span>話した時間、記録の件数、予定を時刻の軸にまとめて表示。クリックするとその時刻に移動します。</span></li>
+          </ul>
+        </div>
+        <div class="screen">
+          <img src="../assets/ja/life-log-dark.png" alt="ダークモードのライフログ画面。中央に時刻順のタイムライン、右側に1日の記録の概要" loading="lazy" width="2400" height="1371">
+        </div>
+      </div>
+
+      <div class="grid-3">
+        <div class="card">
+          <div class="shot">
+            <picture>
+              <source srcset="../assets/ja/mini-dark.png" media="(prefers-color-scheme: dark)">
+              <img src="../assets/ja/mini.png" alt="ほかのウィンドウの手前に表示される、ミニウィンドウのタイムライン" loading="lazy">
+            </picture>
+          </div>
+          <h3>ミニウィンドウ</h3>
+          <p>常に手前に表示される小さなタイムライン。フルスクリーンのアプリを使っているときも表示され、その場でメモを追加できます。</p>
+        </div>
+        <div class="card">
+          <div class="shot"><img src="../assets/ja/search.png" alt="発話、メモ、音声入力をまとめて検索した結果" loading="lazy"></div>
+          <h3>検索</h3>
+          <p>発話、メモ、音声入力をまとめて検索（⌘F）。矢印キーで結果を選び、その時刻に移動できます。</p>
+        </div>
+        <div class="card">
+          <div class="shot"><img src="../assets/ja/hud-recording.png" alt="話している間に表示される小さな録音中の表示" loading="lazy"></div>
+          <h3>ボイスメモ</h3>
+          <p>ショートカットを押して話すと、今日のタイムラインにメモとして追加されます。話した内容がそのまま残ります。</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="feature" id="dictation" aria-labelledby="dictation-title">
+    <div class="wrap">
+      <div class="split flip">
+        <div class="text">
+          <p class="kicker">音声入力</p>
+          <h2 id="dictation-title">話すだけで、<br>文章を入力。</h2>
+          <p class="section-lead">ホットキーを押して話すと、整形した文章を、使用中のアプリのカーソル位置に入力します。</p>
+          <ul class="points">
+            <li><b>短く押して切り替え、長押しで話す間だけ</b><span>既定は右Optionキー。どのアプリでも使え、Escで取り消せます。</span></li>
+            <li><b>アプリごとのモード</b><span>使用中のアプリに応じてモードを自動で選択します。チャットとメールで整形の指示を変えられ、登録した語彙はすべてのモードに反映されます。</span></li>
+            <li><b>整形もMac上で</b><span>既定はApple Foundation Models。ローカルのOllamaやLM Studioも使えます。クラウドのAIは、自分で選んだ場合だけ使用します。</span></li>
+            <li><b>入力内容は失われない</b><span>整形に失敗したときは文字起こしをそのまま入力し、入力できないときはクリップボードに残します。</span></li>
+          </ul>
+        </div>
+        <div class="screen">
+          <video data-demo src="../assets/ja/dictation.mp4" poster="../assets/ja/dictation.png" autoplay muted loop playsinline preload="metadata" aria-label="話した内容が整形され、メッセージ欄に入力される様子"></video>
+        </div>
+      </div>
+      <figure class="wide">
+        <div class="screen">
+          <picture>
+            <source srcset="../assets/ja/history-dark.png" media="(prefers-color-scheme: dark)">
+            <img src="../assets/ja/history.png" alt="音声入力の履歴。入力した文章、文字起こしの原文、各処理にかかった時間" loading="lazy" width="2000" height="1143">
+          </picture>
+        </div>
+        <figcaption>履歴には、入力した文章と文字起こしの原文、使用したモードとモデル、各処理にかかった時間が残ります。</figcaption>
+      </figure>
+    </div>
+  </section>
+
+  <section class="feature" id="ai" aria-labelledby="ai-title">
+    <div class="wrap">
+      <div class="split">
+        <div class="text">
+          <p class="kicker">AI連携</p>
+          <h2 id="ai-title">要約や整理は、<br>お使いのAIで。</h2>
+          <p class="section-lead">Loreは記録に専念し、要約やTODOは作成しません。振り返りや清書が必要なときは、普段使っているAIにライフログを渡せます。</p>
+          <ul class="points">
+            <li><b>CLI</b><span><code>lore</code>コマンドで、1日の記録をMarkdownで書き出したり、検索したり、期間を指定してJSONで取得したりできます。</span></li>
+            <li><b>MCP</b><span>AIクライアントに<code>lore-mcp</code>を登録すると、日付や期間を指定して記録を読み込めます。</span></li>
+            <li><b>読み取り専用、Mac上で動作</b><span>標準入出力でAIクライアントとつながり、データを変更しません。Lore側から外部へ通信することもありません。</span></li>
+          </ul>
+        </div>
+        <div>
+<pre class="code" tabindex="0" aria-label="CLIコマンドとMCPの設定例"><code><span class="c"># 今日の記録をMarkdownでコピー</span>
+<span class="p">$ </span>lore export day --clipboard
+
+<span class="c"># 過去の会話を検索</span>
+<span class="p">$ </span>lore search "リリース計画" --limit 20
+
+<span class="c"># 1週間分の発話とメモをJSONで取得</span>
+<span class="p">$ </span>lore range --from 2026-11-09 --to 2026-11-13 --include speech,memos
+
+<span class="c"># MCPクライアントに登録</span>
+<span class="p">$ </span>claude mcp add lore -- /Applications/Lore.app/Contents/Helpers/lore-mcp
+
+<span class="c"># MCPのツール
+#   life_log_days    life_log_range
+#   life_log_export  life_log_search</span></code></pre>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="feature" aria-labelledby="menu-bar-title">
+    <div class="wrap menubar">
+      <div class="text">
+        <p class="kicker">メニューバー</p>
+        <h2 id="menu-bar-title">メニューバーから、すぐに。</h2>
+        <p class="section-lead">ライフログの開始と停止、音声入力、モードの切り替え、直前の結果のコピーまで、メニューバーから操作できます。点の色で現在の状態がわかります。</p>
+        <div class="icons"><img src="../assets/menu-bar-icons.png" alt="状態ごとのメニューバーアイコン" loading="lazy"></div>
+        <ul class="states" aria-label="メニューバーの状態">
+          <li><i class="idle"></i>待機中</li>
+          <li><i class="live"></i>録音中</li>
+          <li><i class="busy"></i>処理中</li>
+          <li><i class="done"></i>完了</li>
+          <li><i class="attn"></i>要確認</li>
+        </ul>
+      </div>
+      <div class="panel">
+        <picture>
+          <source srcset="../assets/ja/menu-panel-dark.png" media="(prefers-color-scheme: dark)">
+          <img src="../assets/ja/menu-panel.png" alt="ライフログと音声入力を操作できるメニューバーのパネル" loading="lazy">
+        </picture>
+      </div>
+    </div>
+  </section>
+
+  <section class="privacy" id="privacy" aria-labelledby="privacy-title">
+    <div class="wrap">
+      <p class="kicker">プライバシー</p>
+      <h2 id="privacy-title">音声データは、Macの外に出しません。</h2>
+      <p class="section-lead">1日中マイクを使うアプリだからこそ、どのデータがどこに送られるかを明確にしています。</p>
+      <div class="grid-2">
+        <div class="card">
+          <div class="mark"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg></div>
+          <h3>音声認識はMac上で</h3>
+          <p>Apple SpeechAnalyzer、またはダウンロードしたwhisper.cppのモデルで文字起こしします。クラウドの音声認識は使いません。</p>
+        </div>
+        <div class="card">
+          <div class="mark"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><rect x="4" y="10" width="16" height="11" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></svg></div>
+          <h3>録音データは送信しない</h3>
+          <p>音声入力の音声は保存しません。ライフログの音声はMac内に保存し、既定では文字起こし後に削除します（7日・30日も選択可）。どちらも外部に送信しません。</p>
+        </div>
+        <div class="card">
+          <div class="mark"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M7 18a5 5 0 1 1 1-9.9A6 6 0 0 1 19 10a4 4 0 0 1-1 8H7z"/></svg></div>
+          <h3>クラウドのAIは選んだときだけ</h3>
+          <p>OpenAI、Claude、Gemini、Groqで整形するのは、設定で選んだ場合だけです。送信するのは今回の文字起こし、共通ルール、モードの指示、語彙のみで、音声やライフログは送信しません。</p>
+        </div>
+        <div class="card">
+          <div class="mark"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 12a8 8 0 0 1 14-5.3M20 12a8 8 0 0 1-14 5.3"/><path d="M18 3v4h-4M6 21v-4h4"/></svg></div>
+          <h3>同期は任意、暗号化して</h3>
+          <p>iCloud Drive、Dropbox、Syncthingなど自分で選んだフォルダに、AES-GCMで暗号化したテキストだけを書き込みます。同期のためにLoreが通信することはなく、音声は同期しません。</p>
+        </div>
+      </div>
+      <figure class="engine">
+        <div class="screen"><img src="../assets/ja/settings-models.png" alt="音声認識エンジンとモデルの設定画面。whisper.cppモデルのダウンロード状況" loading="lazy"></div>
+        <figcaption>音声認識エンジンは設定で選べます。whisper.cppのモデルは一度ダウンロードすれば、Mac上だけで動作します。</figcaption>
+      </figure>
+    </div>
+  </section>
+
+  <section class="closing" id="download" aria-labelledby="download-title">
+    <div class="wrap">
+      <img class="logo" src="../assets/icon.png" alt="Loreのアイコン" width="88" height="88" loading="lazy">
+      <h2 id="download-title">話したことを、記録に残す<span class="dot">。</span></h2>
+      <p class="section-lead">LoreのMac版は近日公開予定です。</p>
+      <div class="cta">
+        <span class="btn btn-ink" role="link" aria-disabled="true"><span class="rec" aria-hidden="true"></span>近日公開</span>
+      </div>
+      <p class="req">macOS 26以降・Apple Silicon</p>
+    </div>
+  </section>
+</main>
+
+<footer>
+  <div class="wrap">
+    <span>© 2026 Lore</span>
+    <span>音声認識と既定の整形は、すべてMac上で動作します。</span>
+  </div>
+</footer>
+</body>
+</html>

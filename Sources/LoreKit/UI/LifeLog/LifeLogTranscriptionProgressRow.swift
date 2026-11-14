@@ -53,7 +53,7 @@ struct LifeLogTranscriptionProgressRow: View {
             .frame(width: 88, height: 16, alignment: .leading)
     }
 
-    private var statusText: String { isListening ? "聞き取り中" : "文字起こし中" }
+    private var statusText: String { isListening ? "発話中" : "文字起こし中" }
 
     static func elapsedText(_ seconds: Int) -> String {
         String(format: "%02d:%02d", seconds / 60, seconds % 60)

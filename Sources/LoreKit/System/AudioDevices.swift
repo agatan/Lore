@@ -35,7 +35,7 @@ public enum AudioDevices {
     }
 
     public enum SelectionError: LocalizedError { case notFound, cannotSelect(OSStatus)
-        public var errorDescription: String? { switch self { case .notFound: "選択した入力デバイスが見つかりません"; case .cannotSelect(let status): "入力デバイスを選択できません (\(status))" } }
+        public var errorDescription: String? { switch self { case .notFound: String(lore: "選択した入力デバイスが見つかりません"); case .cannotSelect(let status): String(lore: "入力デバイスを選択できません (\(Int(status)))") } }
     }
 
     private static func defaultInputDevice() -> AudioDeviceID? {

@@ -51,21 +51,25 @@ struct SettingsWindowView: View {
     var body: some View {
         NavigationSplitView {
             List(selection: Binding(get: { env.settingsSection }, set: { env.settingsSection = $0 ?? .common })) {
-                Section("共通") {
+                // 見出しを付けると項目名と重なる（「音声入力」の下に「音声入力」）ため、
+                // システム設定と同じく見出しのない塊で分ける。
+                Section {
                     row(.common)
-                    row(.vocabulary)
                     row(.privacy)
-                    row(.sync)
-                    row(.automation)
                 }
-                Section("音声入力") {
+                Section {
+                    row(.lifeLog)
+                    row(.calendar)
+                }
+                Section {
                     row(.dictation)
                     row(.models)
                     row(.modes)
+                    row(.vocabulary)
                 }
-                Section("ライフログ") {
-                    row(.lifeLog)
-                    row(.calendar)
+                Section {
+                    row(.sync)
+                    row(.automation)
                 }
             }
             .listStyle(.sidebar)

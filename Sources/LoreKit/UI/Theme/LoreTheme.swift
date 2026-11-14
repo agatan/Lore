@@ -90,10 +90,10 @@ public enum LoreTheme {
         case .recording: "録音中"
         case .recognizing: "認識中"
         case .formatting: "整形中"
-        case .inserting: "挿入中"
+        case .inserting: "入力中"
         case .finished(let outcome):
             switch outcome {
-            case .completed: "挿入しました"
+            case .completed: "入力しました"
             case .cancelled: "キャンセルしました"
             case .formattingSkipped: "整形をスキップ"
             case .clipboardOnly: "クリップボードにコピー"
