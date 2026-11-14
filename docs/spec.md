@@ -16,6 +16,7 @@
 | 既定の文章処理 | Apple Foundation Modelsによるオンデバイス処理 |
 | 表示言語 | システム設定、英語、日本語、簡体字中国語から選択可能。既定はシステム設定 |
 | 保存 | Mac内のSQLite、UserDefaults、Keychain、ライフログaudio file |
+| 同期 | 任意。利用者が選んだfolderへ、Mac内で暗号化した文字dataだけを置いて複数のMac間で共有する（6.1） |
 
 対象外はmacOS以外、任意の音声fileの一括文字起こし、音声commandによるアプリ操作、通常の音声入力audioの保存、cloud STTです。
 
@@ -165,7 +166,7 @@ Koeのprimary colorはapp icon由来の爽やかなblueに固定し、利用者�
 | Menu bar | ライフログ/音声入力の用途別quick action。ライフログは記録切替、今日の画面、mini window、音声入力は録音、mode、直前結果、履歴を各tab内にまとめ、共通footerは設定と終了だけを置く。「今日を開く」「ミニウィンドウ」はsystem fontを直接描画するcompact buttonとする |
 | Main window | 通常起動時に前面のkey windowとして1680×960 ptで開き、calendar列とtimelineの2ペインを同時に表示する。ライフログの今日を選択してtimelineの最新位置を表示。onboarding、ライフログ、今日のtimeline最下部からの手入力・音声memo追加、音声入力履歴。記録操作はtoolbar右肩ではなくtimeline内の状態表示に置く |
 | Mini window | ライフログ状態、今日のtimelineへの手入力・音声memo追加。一度開いたら明示的に閉じるまで、ほかのapp、desktop Space、full-screen Spaceより手前に表示し続ける。記録操作はwindow右肩ではなく状態表示に置く |
-| Settings: 共通 | 一般（表示言語を含む）、語彙、privacy（保存場所、このMacの使用量、削除）、連携 |
+| Settings: 共通 | 一般（表示言語を含む）、語彙、privacy（保存場所、このMacの使用量、削除）、同期、連携 |
 | Settings: 音声入力 | hotkey、聞き取りengine・whisper.cpp model、feedback、履歴、AI整形、mode |
 | Settings: ライフログ | 記録・mini window・ボイスメモhotkey、自動記録の曜日と時間帯、入力device、STT engine・認識言語・whisper.cpp model、audio保持、calendar再取得 |
 
@@ -184,6 +185,8 @@ Main window、mini window、menu barのライフログ状態表示は同じ記�
 | whisper.cpp model | `~/Library/Application Support/Koe/Models/WhisperCpp/` | 利用者が個別に削除、または全データ削除まで |
 | 一般設定（表示言語を含む） | app UserDefaults | app data削除まで |
 | API key | macOS Keychain | 個別削除まで |
+| 同期の鍵 | macOS Keychain（このMacだけ。iCloud Keychainへは同期しない） | 同期の解除または全データ削除まで |
+| 同期の変更file | 利用者が選んだfolderの`Koe Sync/` | Koeは削除しない。利用者がfolderごと管理する |
 | DB backup | `~/Library/Application Support/Koe/Backups/` | 最新7file |
 
 - 既存DBは未適用migrationの直前にbackupします。通常起動でも同日重複なしで1日1回backupします。
@@ -191,6 +194,20 @@ Main window、mini window、menu barのライフログ状態表示は同じ記�
 - 「全データを削除」は履歴、mode、語彙、ライフログ、保存audio、download済みwhisper.cpp model、途中のdownload file、旧WhisperKit model、DB backupを削除します。設定とKeychainは画面で示す個別範囲に従います。
 - 履歴から語彙候補へ複製済みの短い根拠は履歴とは別dataであり、履歴だけの削除では残る場合があります。
 - TODO、日次要約、話題、cloud AIのtoken集計を保存していた旧版DBは、更新時のmigration直前backupを作ってからそれらのtableを削除します。発話、memo、予定、音声入力履歴は変更しません。旧版でライフログ用に登録したAPI keyは読み出さず、「全データを削除」でKeychainから消します。
+
+### 6.1 Mac間の同期
+
+- 設定の「同期」から、複数のMacで同じ文字dataを使えます。既定は無効です。
+- 同期するのは、ライフログの発話text、memo（追加・編集・削除）、音声入力履歴（生text、整形結果、status、mode snapshot、対象app名・bundle ID、provider/model、error、時間）、語彙です。
+- 録音audio、API key、設定、予定の控え（各Macが自分のcalendarから読む）、whisper.cpp model、DB backup、語彙候補、modeは同期しません。他のMacから届いた発話は保存audioを持たず、予定との関連付けも持ちません。
+- Koeは利用者が選んだfolder（iCloud Drive、Dropbox、Syncthingなど）の中の`Koe Sync/`へ、暗号化した変更fileだけを書きます。Koe自身はnetwork通信をせず、fileの運搬はfolderの提供元に任せます。
+- 暗号化はMac内でAES-GCM（256-bit鍵）を使って行います。鍵は最初のMacで生成して「同期コード」として表示し、ほかのMacではそのコードを入力して参加します。鍵は各MacのKeychainだけに保存し、folderの提供元は中身を読めません。同期コードは参加済みのMacの設定から確認操作のあと再表示できます。参加済みのMacをすべて失い同期コードも控えていない場合、folderの内容は誰も読めません。
+- 違う同期コードはfolder内の確認fileで検出し、参加を拒否します。読めない、改ざんされた、途中までしか届いていない、新しい形式の変更fileは取り込まず、理由を設定画面とlogに出して次回の同期で再試行します。そのfileより後の同じMacの変更も、順序を保つため取り込みを待ちます。
+- 変更は数秒後にまとめて書き出します。取り込みは起動時、Koeが前面に来た時、2分ごと、「今すぐ同期」で行います。iCloud Driveでまだ手元に無いfileはdownloadを要求し、届いた後の同期で取り込みます。
+- 同じ項目を複数のMacで変更した場合は、変更時刻が新しい方を採用します。削除も時刻付きで記録し、それより古い変更で復活しません。
+- 利用者が個別に行った削除（memo、音声入力履歴1件、語彙）はほかのMacにも反映します。履歴とaudioの保持期間による自動削除、「音声入力履歴をすべて削除」「ライフログを削除」「Koeを初期化」は、このMacのdataだけを消します。
+- 同期を有効にした時点でこのMacにある対象dataはすべて書き出します。
+- 「同期を解除」と「Koeを初期化」は、このMacの同期鍵と同期状態を消し、変更の書き出しと取り込みを止めます。folder内のfileは削除しません。
 
 ## 7. macOS Shortcuts / App Intents
 
@@ -271,3 +288,4 @@ koe memo add "本文" [--at ISO8601]
 26. Life Logは起動直後に線形RMSの背景noise floorを校正し、その後も非発話中の入力から更新する。約-50 dBFSの絶対下限と直近のnoise floorに対する十分な上昇を短時間継続した場合だけ発話burstを開始し、微小noiseや持続する空調音では認識jobを作らない。Whisper.cppでは前のpreviewが完了している場合に限り、発話中に1.5秒cadence・直近5秒の暫定textを表示し、30秒未満の発話は1.5秒、30秒以上は1秒の無音でflushする。Burst確定時にaudioをcommitし、timestampは保存audio offsetに一致する。暫定textは永続化せず、語彙は録音session開始時のsnapshotで固定される。
 27. 累積有声時間0.5秒未満または有声比率20%未満の候補はpreview、最終STT、burst checkpointを開始せず、保存audioの再処理でも除外する。Main/mini timelineは末尾表示中だけ新しい項目へ追従し、過去へscrollまたはsource移動した場合は追従を止め、末尾へ戻ると再開する。
 28. whisper.cppの既知の定型hallucination「ご視聴ありがとうございました」は独立した文だけをengine境界で除外し、同じsegmentの実発話は保持する。
+29. 同期を有効にした2台のMacは、folderに暗号化した変更fileだけを置いて発話text、memo、音声入力履歴、語彙を共有する。違う同期コードは拒否され、読めない変更fileは取り込まずに理由を表示し、後で届けば取り込む。個別削除は他のMacへ反映し、保持期間による削除と一括削除は反映しない。

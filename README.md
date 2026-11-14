@@ -89,6 +89,15 @@ claude mcp add koe -- /Applications/Koe.app/Contents/Helpers/koe-mcp
 
 開発中にCLIとMCPだけを組み立てる場合は`make tools`を使います。
 
+## Mac間の同期
+
+「設定 > 同期」から、複数のMacでライフログの発話・メモ・音声入力履歴・語彙を共有できます。録音音声、APIキー、設定は同期しません。
+
+1. 1台目で「新しく同期を始める」を選び、iCloud Drive・Dropbox・Syncthingなど他のMacからも見えるフォルダを指定します。表示される同期コードを控えます。
+2. 2台目以降で「同期コードで参加」を選び、同期コードを入力して同じフォルダを指定します。
+
+Koeはフォルダ内の `Koe Sync/` に、Mac内で暗号化した変更ファイルだけを書きます。Koe自身は通信せず、フォルダの提供元は中身を読めません。同じ項目を複数のMacで変えた場合は、後から変えた方を採用します。
+
 ## 文章の仕上げ
 
 - **このMac内** — 既定のApple Foundation Modelsに加え、ローカルで起動したOllamaまたはLM Studioを選べます。文字データを外部サービスへ送りません。
@@ -104,6 +113,7 @@ Sources/KoeKit/
 ├── Engines/       SpeechAnalyzer、WhisperKit、Foundation Models、クラウド／ローカルLLM
 ├── System/        ホットキー、録音、挿入、Keychain、macOS 統合
 ├── Persistence/   GRDB / SQLite による履歴・設定データ
+├── Sync/          暗号化した変更ファイルによるMac間同期
 ├── Analysis/      オンデバイスの語彙候補分析
 ├── App/           状態機械の駆動と依存関係の組み立て
 └── UI/            メニューバー、HUD、設定、履歴

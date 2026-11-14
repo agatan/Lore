@@ -157,21 +157,27 @@ public struct HistoryStore: Sendable {
         }
     }
 
+    /// 一括削除はこのMacだけに適用し、同期先のMacへは伝えない。
     public func deleteAll() async throws {
         try await queue.write { db in
-            try db.execute(sql: "DELETE FROM sessions")
+            try SyncStore.withoutRecordingChanges(db) {
+                try db.execute(sql: "DELETE FROM sessions")
+            }
         }
     }
 
     public func purge(retentionDays: Int) async throws -> Int {
         guard retentionDays > 0 else { return 0 }
         let cutoff = Calendar(identifier: .gregorian).date(byAdding: .day, value: -retentionDays, to: Date())!
+        // 保持期間はMacごとの設定なので、期限切れの削除は同期先へ伝えない。
         return try await queue.write { db in
-            try db.execute(
-                sql: "DELETE FROM sessions WHERE started_at < ?",
-                arguments: [PersistenceCoding.encode(date: cutoff)]
-            )
-            return db.changesCount
+            try SyncStore.withoutRecordingChanges(db) {
+                try db.execute(
+                    sql: "DELETE FROM sessions WHERE started_at < ?",
+                    arguments: [PersistenceCoding.encode(date: cutoff)]
+                )
+                return db.changesCount
+            }
         }
     }
 

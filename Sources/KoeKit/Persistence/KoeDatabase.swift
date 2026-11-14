@@ -49,6 +49,7 @@ public final class KoeDatabase: Sendable {
     public var vocabulary: VocabularyStore { VocabularyStore(queue: queue) }
     public var meta: MetaStore { MetaStore(queue: queue) }
     public var lifeLog: LifeLogStore { LifeLogStore(queue: queue) }
+    public var sync: SyncStore { SyncStore(queue: queue) }
 
     /// 「Koeの全データを削除」にバックアップも含める。DB単体の削除では復旧点を残す。
     public func deleteBackups() throws {
@@ -115,6 +116,8 @@ public final class KoeDatabase: Sendable {
     /// 設定(UserDefaults)と秘密(Keychain)以外の利用者データを一つのDB transactionで消す。
     public func deleteAllUserData() async throws {
         try await queue.write { db in
+            // 同期を解除してから消すため、削除は同期先へ伝わらない。
+            try SyncStore.reset(db)
             try db.execute(sql: "DELETE FROM life_log_utterances")
             try db.execute(sql: "DELETE FROM life_log_memos")
             try db.execute(sql: "DELETE FROM calendar_event_snapshots")
@@ -407,6 +410,79 @@ public final class KoeDatabase: Sendable {
                 END;
                 INSERT INTO life_log_utterances_fts(life_log_utterances_fts) VALUES ('rebuild');
                 """)
+        }
+        migrator.registerMigration("v10-sync") { db in
+            // 他のMacから届いた発話は保存audioを持たないため、audio_chunk_idをNULL許容へ作り直す。
+            try db.execute(sql: """
+                DROP TRIGGER life_log_utterances_fts_insert;
+                DROP TRIGGER life_log_utterances_fts_delete;
+                DROP TRIGGER life_log_utterances_fts_update;
+                DROP TABLE life_log_utterances_fts;
+                CREATE TABLE life_log_utterances_new (
+                  id TEXT PRIMARY KEY, started_at TEXT NOT NULL, ended_at TEXT NOT NULL, text TEXT NOT NULL,
+                  audio_chunk_id TEXT REFERENCES life_log_audio_chunks(id),
+                  calendar_event_id TEXT REFERENCES calendar_event_snapshots(id)
+                );
+                INSERT INTO life_log_utterances_new (id, started_at, ended_at, text, audio_chunk_id, calendar_event_id)
+                  SELECT id, started_at, ended_at, text, audio_chunk_id, calendar_event_id FROM life_log_utterances;
+                DROP TABLE life_log_utterances;
+                ALTER TABLE life_log_utterances_new RENAME TO life_log_utterances;
+                CREATE INDEX life_log_utterances_started_at ON life_log_utterances(started_at);
+                CREATE VIRTUAL TABLE life_log_utterances_fts USING fts5(text, content='life_log_utterances', content_rowid='rowid', tokenize='trigram');
+                CREATE TRIGGER life_log_utterances_fts_insert AFTER INSERT ON life_log_utterances BEGIN
+                  INSERT INTO life_log_utterances_fts(rowid, text) VALUES (new.rowid, new.text);
+                END;
+                CREATE TRIGGER life_log_utterances_fts_delete AFTER DELETE ON life_log_utterances BEGIN
+                  INSERT INTO life_log_utterances_fts(life_log_utterances_fts, rowid, text) VALUES ('delete', old.rowid, old.text);
+                END;
+                CREATE TRIGGER life_log_utterances_fts_update AFTER UPDATE ON life_log_utterances BEGIN
+                  INSERT INTO life_log_utterances_fts(life_log_utterances_fts, rowid, text) VALUES ('delete', old.rowid, old.text);
+                  INSERT INTO life_log_utterances_fts(rowid, text) VALUES (new.rowid, new.text);
+                END;
+                INSERT INTO life_log_utterances_fts(life_log_utterances_fts) VALUES ('rebuild');
+
+                CREATE TABLE sync_control (
+                  id INTEGER PRIMARY KEY CHECK (id = 1),
+                  enabled INTEGER NOT NULL DEFAULT 0,
+                  suppressed INTEGER NOT NULL DEFAULT 0,
+                  device_id TEXT,
+                  folder_bookmark BLOB,
+                  next_seq INTEGER NOT NULL DEFAULT 1,
+                  last_synced_at TEXT,
+                  last_error TEXT
+                );
+                INSERT INTO sync_control (id) VALUES (1);
+                CREATE TABLE sync_outbox (
+                  entity TEXT NOT NULL, record_id TEXT NOT NULL, changed_at TEXT NOT NULL,
+                  PRIMARY KEY (entity, record_id)
+                );
+                CREATE TABLE sync_versions (
+                  entity TEXT NOT NULL, record_id TEXT NOT NULL, changed_at TEXT NOT NULL,
+                  device_id TEXT NOT NULL, deleted INTEGER NOT NULL,
+                  PRIMARY KEY (entity, record_id)
+                );
+                CREATE TABLE sync_cursors (
+                  device_id TEXT PRIMARY KEY, last_seq INTEGER NOT NULL
+                );
+                """)
+            // migrationは後から変えないよう、対象tableをここに固定する。
+            let synced = [
+                ("utterance", "life_log_utterances"), ("memo", "life_log_memos"),
+                ("session", "sessions"), ("vocabulary", "vocabulary"),
+            ]
+            for (entity, table) in synced {
+                for (event, row) in [("INSERT", "new"), ("UPDATE", "new"), ("DELETE", "old")] {
+                    try db.execute(sql: """
+                        CREATE TRIGGER sync_\(entity)_\(event.lowercased()) AFTER \(event) ON \(table)
+                        WHEN (SELECT enabled = 1 AND suppressed = 0 FROM sync_control WHERE id = 1)
+                        BEGIN
+                          INSERT INTO sync_outbox (entity, record_id, changed_at)
+                          VALUES ('\(entity)', \(row).id, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+                          ON CONFLICT (entity, record_id) DO UPDATE SET changed_at = excluded.changed_at;
+                        END;
+                        """)
+                }
+            }
         }
         return migrator
     }

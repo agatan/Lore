@@ -25,6 +25,7 @@ public final class AppEnvironment {
     public let lifeLogMiniWindowHotkeys = HotkeyMonitor()
     public let voiceMemoHotkeys = HotkeyMonitor()
     public let lifeLog = LifeLogCoordinator()
+    public let sync = SyncCoordinator()
     public private(set) var coordinator: DictationCoordinator!
 
     public private(set) var database: KoeDatabase?
@@ -113,6 +114,8 @@ public final class AppEnvironment {
             Task { @MainActor [weak self] in
                 await self?.lifeLog.reload()
                 if let date = self?.lifeLog.selectedDate { await self?.lifeLog.loadActivity(containing: date) }
+                // 別processの書き込みはDBの変更監視に届かないため、ここで書き出しを予約する。
+                self?.sync.localDataChanged()
             }
         })
     }
@@ -214,6 +217,9 @@ public final class AppEnvironment {
             await purgeExpiredLifeLogAudio()
             refreshStorageSizes()
             lastAnalysisAt = try? await database.meta.date(forKey: Self.lastAnalysisRunKey)
+            if !Self.isUITestBundle {
+                await sync.configure(database: database) { [weak self] in await self?.reloadAfterSync() }
+            }
         } catch {
             bootError = error.localizedDescription
             KoeLog.persistence.error("DB の初期化に失敗: \(error.localizedDescription, privacy: .public)")
@@ -805,6 +811,15 @@ public final class AppEnvironment {
         }
     }
 
+    /// 他のMacの変更を取り込んだ後、開いている画面を読み直す。
+    private func reloadAfterSync() async {
+        await reloadHistory()
+        // 語彙は次の録音sessionから使う。取り込みのたびに記録中の認識を再起動しない。
+        await reloadVocabulary()
+        await lifeLog.reload()
+        await lifeLog.loadActivity(containing: lifeLog.selectedDate)
+    }
+
     // MARK: 保存データ
 
     public func purgeExpiredLifeLogAudio() async {
@@ -865,6 +880,7 @@ public final class AppEnvironment {
             try SecretStore.deleteAll()
             try database.deleteBackups()
             try await database.deleteAllUserData()
+            await sync.didDeleteAllData()
             settings.resetAll()
             engines.apply(
                 backend: settings.formattingBackend,

@@ -4,6 +4,7 @@ public enum SettingsSection: String, CaseIterable, Identifiable, Hashable, Senda
     case common
     case models
     case privacy
+    case sync
     case automation
     case dictation
     case modes
@@ -18,6 +19,7 @@ public enum SettingsSection: String, CaseIterable, Identifiable, Hashable, Senda
         case .common: "一般"
         case .models: "AI整形"
         case .privacy: "プライバシー"
+        case .sync: "同期"
         case .automation: "連携"
         case .dictation: "音声入力"
         case .modes: "モード"
@@ -32,6 +34,7 @@ public enum SettingsSection: String, CaseIterable, Identifiable, Hashable, Senda
         case .common: "gearshape"
         case .models: "cpu"
         case .privacy: "hand.raised"
+        case .sync: "arrow.triangle.2.circlepath"
         case .automation: "link"
         case .dictation: "waveform.and.mic"
         case .modes: "slider.horizontal.3"
@@ -52,6 +55,7 @@ struct SettingsWindowView: View {
                     row(.common)
                     row(.vocabulary)
                     row(.privacy)
+                    row(.sync)
                     row(.automation)
                 }
                 Section("音声入力") {
@@ -101,6 +105,7 @@ struct SettingsWindowView: View {
         case .common: GeneralSettingsView(env: env)
         case .models: ModelsSettingsView(env: env)
         case .privacy: PrivacySettingsView(env: env)
+        case .sync: SyncSettingsView(env: env)
         case .automation: AutomationSettingsView()
         case .dictation: DictationSettingsView(env: env)
         case .modes: EmptyView()

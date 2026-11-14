@@ -25,6 +25,7 @@
 <a href="#dictation">音声入力</a>
 <a href="#lifelog">Life log</a>
 <a href="#persistence">永続化</a>
+<a href="#sync">同期</a>
 <a href="#settings">設定</a>
 <a href="#ui">UI</a>
 <a href="#automation">自動化</a>
@@ -172,6 +173,15 @@ KoeMCP ──┘</pre>
 <code>KoeAutomationService</code>
 </td>
 <td>CLI/MCP共通の日一覧・期間取得・日別export・検索・memo追加use case</td>
+</tr>
+<tr>
+<td>
+<code>Sync/</code>
+</td>
+<td>
+<code>SyncCode</code>, <code>SyncFileFormat</code>, <code>SyncEngine</code>, <code>SyncCoordinator</code>
+</td>
+<td>暗号化した変更fileによるMac間同期</td>
 </tr>
 <tr>
 <td>
@@ -365,10 +375,32 @@ KoeMCP ──┘</pre>
 </td>
 <td>audio chunks、calendar snapshots、utterances、memosとFTS</td>
 </tr>
+<tr>
+<td>
+<code>SyncStore</code>
+</td>
+<td>
+<code>sync_control</code>, <code>sync_outbox</code>, <code>sync_versions</code>, <code>sync_cursors</code>
+</td>
+</tr>
 </tbody>
 </table>
-<p>Named migrationは<code>v1</code>から<code>v9</code>です。<code>v9-remove-todo-summary-usage</code>はTODO、日次要約、token集計、会話区切りのtableとFTSを削除し、<code>life_log_utterances</code>を<code>conversation_id</code>なしで作り直してFTSを再構築します。削除前の内容はmigration直前backupに残ります。</p>
+<p>Named migrationは<code>v1</code>から<code>v10</code>です。<code>v9-remove-todo-summary-usage</code>はTODO、日次要約、token集計、会話区切りのtableとFTSを削除し、<code>life_log_utterances</code>を<code>conversation_id</code>なしで作り直してFTSを再構築します。削除前の内容はmigration直前backupに残ります。<code>v10-sync</code>は同期用tableとtriggerを追加し、<code>life_log_utterances.audio_chunk_id</code>をNULL許容へ作り直します（<a href="#sync">7.1</a>）。</p>
 <p>DBは<code>Application Support/Koe/koe.sqlite</code>、whisper.cpp modelと途中downloadは<code>Application Support/Koe/Models/WhisperCpp/</code>です。既存DBはmigration前と1日1回backupし、最新7fileを保持します。全data削除はbackup、新旧model、途中fileも削除します。</p>
+</section>
+<section id="sync">
+<h2>7.1 Mac間同期</h2>
+<p><code>Sync/</code>は利用者が選んだfolderを経由するMac間同期です。Koeはnetworkへ接続せず、folderの提供元が運ぶ暗号化fileだけを読み書きします。</p>
+<ul>
+<li><strong>変更の記録</strong>: <code>v10-sync</code>が<code>life_log_utterances</code>、<code>life_log_memos</code>、<code>sessions</code>、<code>vocabulary</code>のINSERT/UPDATE/DELETE triggerを作り、<code>sync_control</code>の<code>enabled=1</code>かつ<code>suppressed=0</code>の間だけ<code>sync_outbox(entity, record_id, changed_at)</code>へ記録します。CLI/MCPなど別processの書き込みも同じtriggerで拾います。保持期間による削除、一括削除、全data削除、他のMacからの適用は<code>suppressed=1</code>の同じtransaction内で行い、outboxへ載せません。</li>
+<li><strong>書き出し</strong>: <code>SyncEngine.export</code>はoutboxを読み、行が残っていれば現在の列値をupsert、無ければtombstoneにしたbatchを作ります。<code>&lt;folder&gt;/Koe Sync/devices/&lt;device-id&gt;/&lt;10桁seq&gt;.koesync</code>へ一時fileを書いてrenameし、その後のtransactionで、書き出し時と<code>changed_at</code>が同じoutbox行だけを消して<code>sync_versions</code>へ版を記録します。seqはDBの次番号と既存file最大値+1の大きい方で、file書込後のcrashでも番号を再利用しません。</li>
+<li><strong>取り込み</strong>: 自分以外のdevice directoryを<code>sync_cursors</code>の次seqから連番で読みます。復号・検証・適用とcursor更新を1 transactionで行い、失敗したfileで止めて同じdeviceの後続を待たせます。iCloud Driveの<code>.icloud</code> placeholderはdownloadを要求して次回へ回します。</li>
+<li><strong>競合</strong>: 版は<code>(changed_at, device_id)</code>の辞書順で比較し、新しい方だけを適用します（後勝ち）。未書き出しのoutbox行も自分の版として比較に含めます。Tombstoneも<code>sync_versions</code>に<code>deleted=1</code>で残し、古いupsertで復活させません。</li>
+<li><strong>列の範囲</strong>: 発話は<code>id</code>、時刻、<code>text</code>だけを送り、他のMacでは<code>audio_chunk_id</code>と<code>calendar_event_id</code>をNULLで保存します。このため<code>v10-sync</code>は<code>life_log_utterances.audio_chunk_id</code>をNULL許容へ作り直し、FTSを再構築します。履歴は<code>sessions</code>の全列、語彙は<code>vocabulary</code>の全列、memoは全列です。Audio、calendar snapshot、mode、語彙候補、設定、API keyは対象外です。</li>
+<li><strong>file形式</strong>: <code>KOESYNC</code> magic、format version 1 byte、header JSON長(UInt32 big endian)、header JSON（<code>device</code>, <code>seq</code>）、AES-GCM combined box（nonce 12 byte + 暗号文 + tag 16 byte）。Magicからheader JSONまでをassociated dataとして認証します。平文はLZFSE圧縮したbatch JSONです。<code>Koe Sync/keycheck.koesync</code>は既知の平文を同じ鍵で封じたfileで、参加時に同期コードを検証します。</li>
+<li><strong>鍵と状態</strong>: 256-bit鍵は<code>SecretStore</code>の<code>sync.key</code>（non-synchronizable generic password）に同期コード文字列として保存します。同期コードは鍵32 byteとSHA-256先頭2 byteをRFC 4648 base32にして4文字ずつ区切ったものです。Device ID、folder bookmark、次seq、最終同期時刻、最後のerrorは<code>sync_control</code>の1行に置き、全data削除と同期解除で消します。</li>
+<li><strong>実行契機</strong>: <code>SyncCoordinator</code>(<code>@MainActor</code>)はoutboxの変更をGRDBの<code>DatabaseRegionObservation</code>で受けて5秒debounceで書き出し、起動時、app activation、120秒timer、「今すぐ同期」で書き出しと取り込みを行います。取り込みで行が変わった場合は履歴、語彙、life logを再読込します。</li>
+</ul>
 </section>
 <section id="settings">
 <h2>8. 設定、秘密、process間同期</h2>
@@ -376,7 +408,7 @@ KoeMCP ──┘</pre>
 </section>
 <section id="ui">
 <h2>9. UIとwindow対応</h2>
-<table><thead><tr><th>View</th><th>内容</th></tr></thead><tbody><tr><td><code>KoeTheme</code></td><td>固定brand palette。Glassは浮くもの(HUD、menu)だけに使い、常に見えるpanelと設定sectionは淡い塗りと細い罫線で区切る。<code>SettingsCard</code>が行間の罫線を入れる</td></tr><tr><td><code>MenuBarPanel</code></td><td>用途別quick actionと終了導線</td></tr><tr><td><code>MenuBarLabel</code></td><td>音声入力phaseとlife-log capture状態</td></tr><tr><td><code>MainWindowView</code></td><td>Life log/history切替</td></tr><tr><td><code>LifeLogWindow</code></td><td>左columnにcalendarと、発話・予定から描く時間帯。右に選択日・項目数・予定/検索/書き出しbuttonを持つ一列timeline</td></tr><tr><td><code>LifeLogCaptureControl</code></td><td>利用者向け記録状態を安定表示し、「記録を開始」/「停止」のcapsule buttonを持つ。自動記録が有効なら、scheduleが始めた記録中は終了時刻、停止中は次の開始時刻を補足に出す</td></tr><tr><td><code>LifeLogScheduleSettingsView</code></td><td>Life log設定の「自動記録」card。有効化、曜日capsule、開始・終了時刻を<code>AppEnvironment.updateLifeLogSchedule</code>へ渡し、次の時間帯を補足に示す</td></tr><tr><td><code>LifeLogTranscriptionProgressRow</code></td><td>実際のSTT job中だけShimmer、対象audio長、処理経過時間を表示</td></tr><tr><td><code>LifeLogExportSheet</code></td><td>人間向けMarkdownをbackground生成して共有</td></tr><tr><td><code>LifeLogMemoComposer</code></td><td>手入力とボイスメモを同じmemoとして追加</td></tr><tr><td><code>TimelineEntryRow</code></td><td>main/miniで共有する1行。Memoだけはhoverの編集buttonかdouble-clickでinline編集し、空文字を除いて<code>LifeLogCoordinator.updateMemo</code>へ渡す。作成時刻は変えない。Main timelineは本文幅を約800 ptに抑える</td></tr><tr><td><code>LifeLogMiniWindow</code></td><td>予定と記録の常時手前window</td></tr><tr><td><code>WhisperModelSettingsView</code></td><td>音声入力とlife logで共有するmodelの選択、download進捗・cancel・再試行・削除・使用中状態。両設定画面で同じviewを使う</td></tr><tr><td><code>SettingsWindowView</code></td><td>9 settings section。Privacyは保存場所の下にKoe dataの合計使用量を一行で示す。各設定行は操作列を共通幅で確保し、可変幅controlの右端を揃える</td></tr><tr><td>HUD</td><td>通常音声入力またはボイスメモの状態表示</td></tr></tbody></table>
+<table><thead><tr><th>View</th><th>内容</th></tr></thead><tbody><tr><td><code>KoeTheme</code></td><td>固定brand palette。Glassは浮くもの(HUD、menu)だけに使い、常に見えるpanelと設定sectionは淡い塗りと細い罫線で区切る。<code>SettingsCard</code>が行間の罫線を入れる</td></tr><tr><td><code>MenuBarPanel</code></td><td>用途別quick actionと終了導線</td></tr><tr><td><code>MenuBarLabel</code></td><td>音声入力phaseとlife-log capture状態</td></tr><tr><td><code>MainWindowView</code></td><td>Life log/history切替</td></tr><tr><td><code>LifeLogWindow</code></td><td>左columnにcalendarと、発話・予定から描く時間帯。右に選択日・項目数・予定/検索/書き出しbuttonを持つ一列timeline</td></tr><tr><td><code>LifeLogCaptureControl</code></td><td>利用者向け記録状態を安定表示し、「記録を開始」/「停止」のcapsule buttonを持つ。自動記録が有効なら、scheduleが始めた記録中は終了時刻、停止中は次の開始時刻を補足に出す</td></tr><tr><td><code>LifeLogScheduleSettingsView</code></td><td>Life log設定の「自動記録」card。有効化、曜日capsule、開始・終了時刻を<code>AppEnvironment.updateLifeLogSchedule</code>へ渡し、次の時間帯を補足に示す</td></tr><tr><td><code>LifeLogTranscriptionProgressRow</code></td><td>実際のSTT job中だけShimmer、対象audio長、処理経過時間を表示</td></tr><tr><td><code>LifeLogExportSheet</code></td><td>人間向けMarkdownをbackground生成して共有</td></tr><tr><td><code>LifeLogMemoComposer</code></td><td>手入力とボイスメモを同じmemoとして追加</td></tr><tr><td><code>TimelineEntryRow</code></td><td>main/miniで共有する1行。Memoだけはhoverの編集buttonかdouble-clickでinline編集し、空文字を除いて<code>LifeLogCoordinator.updateMemo</code>へ渡す。作成時刻は変えない。Main timelineは本文幅を約800 ptに抑える</td></tr><tr><td><code>LifeLogMiniWindow</code></td><td>予定と記録の常時手前window</td></tr><tr><td><code>WhisperModelSettingsView</code></td><td>音声入力とlife logで共有するmodelの選択、download進捗・cancel・再試行・削除・使用中状態。両設定画面で同じviewを使う</td></tr><tr><td><code>SyncSettingsView</code></td><td>共通の「同期」section。新しく始める（folder選択→同期コード表示）、同期コードで参加、状態・最終同期・error、今すぐ同期、確認つきの同期コード再表示、同期の解除</td></tr><tr><td><code>SettingsWindowView</code></td><td>10 settings section。Privacyは保存場所の下にKoe dataの合計使用量を一行で示す。各設定行は操作列を共通幅で確保し、可変幅controlの右端を揃える</td></tr><tr><td>HUD</td><td>通常音声入力またはボイスメモの状態表示</td></tr></tbody></table>
 </section>
 <section id="automation">
 <h2>10. 自動化境界</h2>
@@ -409,6 +441,11 @@ KoeMCP ──┘</pre>
 <td>永続model</td>
 <td>Domain、migrator、Store</td>
 <td>migration/backup/delete test、design</td>
+</tr>
+<tr>
+<td>同期対象・形式</td>
+<td>SyncEngine、SyncStore、v10-sync trigger、SyncFileFormat</td>
+<td>暗号・改ざん・途中file、後勝ち、tombstone、suppress、cursor test、PRIVACY、spec/design</td>
 </tr>
 <tr>
 <td>Dictation状態</td>
@@ -448,7 +485,7 @@ KoeMCP ──┘</pre>
 </section>
 <section id="tests">
 <h2>13. Test配置</h2>
-<p><code>Tests/KoeKitTests</code>はnoise floor校正と追従、相対level差による発話開始、1.5/1秒tier、whisper.cppの1.5秒preview cadenceと5秒rolling window、5分flushをdomain testで固定します。<code>make ui-test</code>は本番と別のbundle IDを持つ署名済み<code>KoeUITests.app</code>を別process instanceとして起動して主要CUJを検証します。UI test bundleは専用UserDefaultsとインモリDBを使い、global hotkeyと権限監視を起動しません。E2E runnerは専用bundle ID以外のappを終了せず、本番bundle IDを指定された場合は実行を拒否します。</p>
+<p><code>Tests/KoeKitTests</code>はnoise floor校正と追従、相対level差による発話開始、1.5/1秒tier、whisper.cppの1.5秒preview cadenceと5秒rolling window、5分flushをdomain testで固定します。<code>make ui-test</code>は本番と別のbundle IDを持つ署名済み<code>KoeUITests.app</code>を別process instanceとして起動して主要CUJを検証します。UI test bundleは専用UserDefaultsとインモリDBを使い、global hotkeyと権限監視を起動しません。E2E runnerは専用bundle ID以外のappを終了せず、本番bundle IDを指定された場合は実行を拒否します。同期は<code>SyncTests</code>が、同期コードとfileの暗号（違う鍵、改ざん、途中まで、新形式）と、2つのin-memory DBと一時folderによる往復（memo・履歴・語彙・発話、後勝ち、tombstone、保持期間と一括削除の非伝播、初回snapshot、読めないfileでのcursor停止、番号の非再利用、解除）、<code>v10-sync</code> migrationを検証します。</p>
 </section>
 </main>
 <footer>詳細な型と経路は <a href="design.md">Markdown版</a>、利用者との契約は <a href="spec.html">外部仕様</a> を参照してください。</footer>

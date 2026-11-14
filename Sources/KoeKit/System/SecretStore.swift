@@ -12,6 +12,8 @@ public enum SecretStore {
         case openAIApiKey = "openai.apiKey"
         case anthropicApiKey = "anthropic.apiKey"
         case geminiApiKey = "gemini.apiKey"
+        /// Mac間同期の鍵。同期コードの文字列で持ち、iCloud Keychainへは同期しない。
+        case syncKey = "sync.key"
         // ライフログ要約の廃止前に保存した可能性があるキー。読み出さず、全削除でだけ消す。
         case lifeLogGroqApiKey = "lifeLog.groq.apiKey"
         case lifeLogOpenAIApiKey = "lifeLog.openai.apiKey"

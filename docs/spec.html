@@ -25,6 +25,7 @@
 <a href="#lifelog">Life log</a>
 <a href="#ui">UI</a>
 <a href="#data">Data</a>
+<a href="#sync">同期</a>
 <a href="#shortcuts">Shortcuts</a>
 <a href="#cli">CLI</a>
 <a href="#mcp">MCP</a>
@@ -69,6 +70,10 @@
 <tr>
 <td>表示言語</td>
 <td>システム設定、英語、日本語、簡体字中国語から選択可能。既定はシステム設定</td>
+</tr>
+<tr>
+<td>同期</td>
+<td>任意。利用者が選んだfolderへ、Mac内で暗号化した文字dataだけを置いて複数のMac間で共有する（<a href="#sync">6.1</a>）</td>
 </tr>
 </tbody>
 </table>
@@ -255,7 +260,7 @@
 </tr>
 <tr>
 <td>Settings: 共通</td>
-<td>一般（表示言語を含む）、語彙、privacy（保存場所、このMacの使用量、削除）、連携</td>
+<td>一般（表示言語を含む）、語彙、privacy（保存場所、このMacの使用量、削除）、同期、連携</td>
 </tr>
 <tr>
 <td>Settings: 音声入力</td>
@@ -310,6 +315,16 @@
 <td>個別削除まで</td>
 </tr>
 <tr>
+<td>同期の鍵</td>
+<td>macOS Keychain（このMacだけ。iCloud Keychainへは同期しない）</td>
+<td>同期の解除または全data削除まで</td>
+</tr>
+<tr>
+<td>同期の変更file</td>
+<td>利用者が選んだfolderの<code>Koe Sync/</code></td>
+<td>Koeは削除しない。利用者がfolderごと管理する</td>
+</tr>
+<tr>
 <td>DB backup</td>
 <td>
 <code>Application Support/Koe/Backups/</code>
@@ -323,6 +338,20 @@
 <li>「全dataを削除」はDB内利用者data、保存audio、download済みwhisper.cpp model、途中download file、旧WhisperKit model、DB backupを削除します。設定とKeychainは画面に示す個別範囲に従います。</li>
 <li>語彙候補に複製済みの根拠は、履歴だけの削除では残る場合があります。</li>
 <li>TODO、日次要約、話題、cloud AIのtoken集計を保存していた旧版DBは、更新時のmigration直前backupを作ってからそれらのtableを削除します。発話、memo、予定、音声入力履歴は変更しません。旧版でlife log用に登録したAPI keyは読み出さず、「全dataを削除」でKeychainから消します。</li>
+</ul>
+<h3 id="sync">6.1 Mac間の同期</h3>
+<ul>
+<li>設定の「同期」から、複数のMacで同じ文字dataを使えます。既定は無効です。</li>
+<li>同期するのは、life logの発話text、memo（追加・編集・削除）、音声入力履歴（生text、整形結果、status、mode snapshot、対象app名・bundle ID、provider/model、error、時間）、語彙です。</li>
+<li>録音audio、API key、設定、予定の控え（各Macが自分のcalendarから読む）、whisper.cpp model、DB backup、語彙候補、modeは同期しません。他のMacから届いた発話は保存audioを持たず、予定との関連付けも持ちません。</li>
+<li>Koeは利用者が選んだfolder（iCloud Drive、Dropbox、Syncthingなど）の中の<code>Koe Sync/</code>へ、暗号化した変更fileだけを書きます。Koe自身はnetwork通信をせず、fileの運搬はfolderの提供元に任せます。</li>
+<li>暗号化はMac内でAES-GCM（256-bit鍵）を使って行います。鍵は最初のMacで生成して「同期コード」として表示し、ほかのMacではそのコードを入力して参加します。鍵は各MacのKeychainだけに保存し、folderの提供元は中身を読めません。同期コードは参加済みのMacの設定から確認操作のあと再表示できます。参加済みのMacをすべて失い同期コードも控えていない場合、folderの内容は誰も読めません。</li>
+<li>違う同期コードはfolder内の確認fileで検出し、参加を拒否します。読めない、改ざんされた、途中までしか届いていない、新しい形式の変更fileは取り込まず、理由を設定画面とlogに出して次回の同期で再試行します。そのfileより後の同じMacの変更も、順序を保つため取り込みを待ちます。</li>
+<li>変更は数秒後にまとめて書き出します。取り込みは起動時、Koeが前面に来た時、2分ごと、「今すぐ同期」で行います。iCloud Driveでまだ手元に無いfileはdownloadを要求し、届いた後の同期で取り込みます。</li>
+<li>同じ項目を複数のMacで変更した場合は、変更時刻が新しい方を採用します。削除も時刻付きで記録し、それより古い変更で復活しません。</li>
+<li>利用者が個別に行った削除（memo、音声入力履歴1件、語彙）はほかのMacにも反映します。履歴とaudioの保持期間による自動削除、「音声入力履歴をすべて削除」「ライフログを削除」「Koeを初期化」は、このMacのdataだけを消します。</li>
+<li>同期を有効にした時点でこのMacにある対象dataはすべて書き出します。</li>
+<li>「同期を解除」と「Koeを初期化」は、このMacの同期鍵と同期状態を消し、変更の書き出しと取り込みを止めます。folder内のfileは削除しません。</li>
 </ul>
 </section>
 <section id="shortcuts">
@@ -457,6 +486,7 @@ koe memo add "本文" [--at ISO8601]</pre>
 <li>Life logは線形RMSが約-50 dBFS以上で、background noise floorに対する相対差も短時間継続した場合だけ認識jobを作る。Whisper.cppでは前のpreviewが完了している場合に限り、発話中に1.5秒cadence・直近5秒の暫定textを表示し、30秒未満の発話は1.5秒、30秒以上は1秒の無音でflushする。Burst確定時にaudioをcommitし、暫定textは永続化しない。</li>
 <li>累積有声時間0.5秒未満または有声比率20%未満の候補はpreview、最終STT、burst checkpointを開始せず、保存audioの再処理でも除外する。Main/mini timelineは末尾表示中だけ新しい項目へ追従し、末尾を離れた場合は追従を止める。</li>
 <li>whisper.cppの既知の定型hallucination「ご視聴ありがとうございました」は独立した文だけをengine境界で除外し、同じsegmentの実発話は保持する。</li>
+<li>同期を有効にした2台のMacは、folderに暗号化した変更fileだけを置いて発話text、memo、音声入力履歴、語彙を共有する。違う同期コードは拒否され、読めない変更fileは取り込まずに理由を表示し、後で届けば取り込む。個別削除は他のMacへ反映し、保持期間による削除と一括削除は反映しない。</li>
 </ol>
 </section>
 </main>

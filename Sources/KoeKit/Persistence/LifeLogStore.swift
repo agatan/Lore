@@ -52,11 +52,14 @@ public struct LifeLogStore: Sendable {
 
     /// 発話・予定・メモを同じ境界で削除する。音声ファイルは呼び出し側が先に消す。
     public func deleteAll() async throws {
+        // 一括削除はこのMacだけに適用し、同期先のMacへは伝えない。
         try await queue.write { db in
-            try db.execute(sql: "DELETE FROM life_log_utterances")
-            try db.execute(sql: "DELETE FROM life_log_memos")
-            try db.execute(sql: "DELETE FROM calendar_event_snapshots")
-            try db.execute(sql: "DELETE FROM life_log_audio_chunks")
+            try SyncStore.withoutRecordingChanges(db) {
+                try db.execute(sql: "DELETE FROM life_log_utterances")
+                try db.execute(sql: "DELETE FROM life_log_memos")
+                try db.execute(sql: "DELETE FROM calendar_event_snapshots")
+                try db.execute(sql: "DELETE FROM life_log_audio_chunks")
+            }
         }
     }
 

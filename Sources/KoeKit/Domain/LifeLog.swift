@@ -83,11 +83,12 @@ public struct LifeLogUtterance: Identifiable, Codable, Sendable, Hashable {
     public var startedAt: Date
     public var endedAt: Date
     public var text: String
-    public var audioChunkID: String
+    /// 他のMacから同期した発話は、このMacに保存audioを持たないためnil。
+    public var audioChunkID: String?
     public var calendarEventID: String?
 
     public init(id: String = UUID().uuidString, startedAt: Date, endedAt: Date, text: String,
-                audioChunkID: String, calendarEventID: String? = nil) {
+                audioChunkID: String?, calendarEventID: String? = nil) {
         self.id = id; self.startedAt = startedAt; self.endedAt = endedAt; self.text = text
         self.audioChunkID = audioChunkID; self.calendarEventID = calendarEventID
     }
