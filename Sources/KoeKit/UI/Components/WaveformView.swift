@@ -48,21 +48,3 @@ struct WaveformView: View {
         .animation(.linear(duration: 0.06), value: levels)
     }
 }
-
-/// メニューバー用の極小レベルメーター。
-struct MiniLevelMeter: View {
-    var level: Float
-    var tint: Color
-
-    var body: some View {
-        HStack(spacing: 1.5) {
-            ForEach(0..<3, id: \.self) { index in
-                let threshold = Float(index) * 0.2 + 0.05
-                Capsule()
-                    .fill(tint.opacity(level > threshold ? 1 : 0.25))
-                    .frame(width: 2, height: 5 + CGFloat(index) * 3)
-            }
-        }
-        .animation(.easeOut(duration: 0.1), value: level)
-    }
-}

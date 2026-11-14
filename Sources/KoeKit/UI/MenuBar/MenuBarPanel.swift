@@ -1,41 +1,26 @@
 import AppKit
 import SwiftUI
 
-/// メニューバーは用途ごとのquick actionだけを置き、詳細表示は各windowへ委ねる。
+/// メニューバーのpanel。ライフログと音声入力を同じ文法の二枚のcardに並べ、tabで隠さない。
+///
+/// 各cardは左に丸い主操作button（main/miniの録音buttonと同じ形）、右に状態と補足、
+/// 下に次の行き先を置く。詳細表示は各windowへ委ねる。
 struct MenuBarPanel: View {
-    private enum Tab: String, CaseIterable, Identifiable {
-        case lifeLog
-        case dictation
-
-        var id: String { rawValue }
-        var title: String { self == .lifeLog ? "ライフログ" : "音声入力" }
-        var settingsTitle: String { self == .lifeLog ? "ライフログの設定" : "音声入力の設定" }
-        var symbol: String { self == .lifeLog ? "calendar.day.timeline.left" : "waveform.and.mic" }
-    }
-
     var env: AppEnvironment
     @Environment(\.dismiss) private var dismiss
-    @State private var tab: Tab = .lifeLog
 
     private var coordinator: DictationCoordinator { env.coordinator }
 
     var body: some View {
-        GlassEffectContainer(spacing: 12) {
-            VStack(spacing: 12) {
-                header
-                tabPicker
-                Group {
-                    switch tab {
-                    case .lifeLog: lifeLogTab
-                    case .dictation: dictationTab
-                    }
-                }
-                if !notices.isEmpty { noticeArea }
-                footer
-            }
+        VStack(spacing: 10) {
+            header
+            lifeLogCard
+            dictationCard
+            if !notices.isEmpty { noticeArea }
+            footer
         }
         .padding(12)
-        .frame(width: 344)
+        .frame(width: 340)
         .task {
             coordinator.refreshPreview()
             await env.lifeLog.reload()
@@ -47,93 +32,115 @@ struct MenuBarPanel: View {
             Image(nsImage: NSApp.applicationIconImage)
                 .resizable()
                 .interpolation(.high)
-                .frame(width: 24, height: 24)
-            VStack(alignment: .leading, spacing: 1) {
-                Text("Koe").font(.system(size: 14, weight: .semibold))
-                Text("声を残す・書く")
-                    .font(.system(size: 9.5, weight: .medium))
-                    .foregroundStyle(.tertiary)
-            }
+                .frame(width: 26, height: 26)
+            Text("Koe").font(.system(size: 15, weight: .bold, design: .rounded))
             Spacer(minLength: 0)
         }
+        .padding(.horizontal, 4)
+        .padding(.top, 2)
     }
 
-    private var tabPicker: some View {
-        Picker("", selection: $tab) {
-            ForEach(Tab.allCases) { item in
-                Label(LocalizedStringKey(item.title), systemImage: item.symbol).tag(item)
-            }
-        }
-        .labelsHidden()
-        .pickerStyle(.segmented)
+    // MARK: ライフログ
+
+    private var lifeLogStatus: LifeLogCaptureStatus {
+        LifeLogCaptureStatus(lifeLog: env.lifeLog, scheduleCaption: env.lifeLogScheduleCaption)
     }
 
-    private var lifeLogTab: some View {
-        VStack(spacing: 10) {
-            LifeLogCaptureControl(
-                lifeLog: env.lifeLog,
-                scheduleCaption: env.lifeLogScheduleCaption,
-                accessibilityIdentifier: "menu.life-log.capture-toggle"
-            ) {
-                env.setLifeLogCaptureEnabled(!env.lifeLog.hasCaptureIntent)
-            }
-            .padding(12)
-            .sunkenSurface()
-
-            HStack(spacing: 8) {
-                compactButton("今日を開く", symbol: "calendar") { open(.lifeLog) }
-                compactButton("ミニウィンドウ", symbol: "rectangle.inset.filled") {
-                    dismiss()
-                    env.onToggleLifeLogMiniWindow?()
+    private var lifeLogCard: some View {
+        MenuCard(title: "ライフログ") {
+            HStack(spacing: 12) {
+                LifeLogRecordButton(
+                    lifeLog: env.lifeLog,
+                    status: lifeLogStatus,
+                    accessibilityIdentifier: "menu.life-log.capture-toggle",
+                    diameter: 36
+                ) {
+                    env.setLifeLogCaptureEnabled(!env.lifeLog.hasCaptureIntent)
                 }
-            }
-        }
-    }
-
-    private var dictationTab: some View {
-        VStack(alignment: .leading, spacing: 11) {
-            Button { coordinator.toggleFromUI() } label: {
-                Label(LocalizedStringKey(coordinator.isRecording ? "停止して文章にする" : "音声入力を開始"),
-                      systemImage: coordinator.isRecording ? "stop.fill" : "mic.fill")
-                    .font(.system(size: 13, weight: .semibold))
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 4)
-            }
-            .buttonStyle(.glassProminent)
-            .tint(coordinator.isRecording ? KoeTheme.recording : KoeTheme.accent)
-            .disabled(coordinator.isBusy && !coordinator.isRecording)
-
-            HStack {
-                Text(env.settings.hotkey.displayName)
-                    .font(.system(size: 10.5, weight: .semibold, design: .rounded))
-                    .padding(.horizontal, 6).padding(.vertical, 2)
-                    .background(.secondary.opacity(0.13), in: RoundedRectangle(cornerRadius: 5))
-                Text("短押し / 長押し")
-                    .font(.system(size: 10.5)).foregroundStyle(.secondary)
-                Spacer()
-                modeMenu
-            }
-
-            if let text = env.lastResultText, !text.isEmpty {
-                VStack(alignment: .leading, spacing: 7) {
-                    HStack {
-                        Text("直前").font(.system(size: 10.5, weight: .semibold)).foregroundStyle(.secondary)
-                        Spacer()
-                        Button { env.copyLastResult() } label: { Image(systemName: "doc.on.doc") }
-                            .buttonStyle(.plain).foregroundStyle(.secondary)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(LocalizedStringKey(lifeLogStatus.title))
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundStyle(env.lifeLog.isCapturing ? AnyShapeStyle(KoeTheme.recording) : AnyShapeStyle(.primary))
+                    if let caption = lifeLogStatus.subtitle {
+                        Text(caption)
+                            .font(.system(size: 11))
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
+                            .accessibilityIdentifier("menu.life-log.capture-toggle.schedule")
+                    } else {
+                        Text(todaySummary)
+                            .font(.system(size: 11))
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
                     }
-                    Text(text).font(.system(size: 12)).lineLimit(4)
-                        .frame(maxWidth: .infinity, alignment: .leading)
                 }
-                .padding(11)
-                .sunkenSurface()
-            } else {
-                Text("最初の音声入力がここに表示されます")
-                    .font(.system(size: 11.5)).foregroundStyle(.tertiary)
-                    .frame(maxWidth: .infinity, minHeight: 48, alignment: .center)
+                Spacer(minLength: 0)
             }
+        } footer: {
+            MenuLinkButton(title: "今日を開く", symbol: "calendar.day.timeline.left") { open(.lifeLog) }
+            MenuLinkButton(title: "ミニウィンドウ", symbol: "pip") {
+                dismiss()
+                env.onToggleLifeLogMiniWindow?()
+            }
+        }
+    }
 
-            compactButton("音声入力履歴を開く", symbol: "clock.arrow.circlepath") { open(.history) }
+    /// 停止中で自動記録の予定もない時は、今日どれだけ残したかを補足にする。
+    private var todaySummary: LocalizedStringKey {
+        let summary = LifeLogDaySummary(day: env.lifeLog.day)
+        return "今日 \(summary.utteranceCount)件の発話 · メモ \(summary.memoCount)件"
+    }
+
+    // MARK: 音声入力
+
+    private var dictationCard: some View {
+        MenuCard(title: "音声入力") {
+            VStack(alignment: .leading, spacing: 12) {
+                HStack(spacing: 12) {
+                    DictationButton(isRecording: coordinator.isRecording) { coordinator.toggleFromUI() }
+                        .disabled(coordinator.isBusy && !coordinator.isRecording)
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(LocalizedStringKey(coordinator.isRecording ? "停止して文章にする" : "音声入力を開始"))
+                            .font(.system(size: 13, weight: .semibold))
+                        HStack(spacing: 6) {
+                            KeyCap(text: env.settings.hotkey.displayName)
+                            Text("短押し / 長押し")
+                                .font(.system(size: 11))
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                    Spacer(minLength: 0)
+                }
+                lastResult
+            }
+        } footer: {
+            MenuLinkButton(title: "履歴を開く", symbol: "clock.arrow.circlepath") { open(.history) }
+            modeMenu
+        }
+    }
+
+    @ViewBuilder
+    private var lastResult: some View {
+        if let text = env.lastResultText, !text.isEmpty {
+            HStack(alignment: .top, spacing: 10) {
+                Capsule()
+                    .fill(KoeTheme.voiceGradient)
+                    .frame(width: 2.5)
+                Text(text)
+                    .font(.system(size: 12))
+                    .lineSpacing(2)
+                    .lineLimit(3)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                Button { env.copyLastResult() } label: { Image(systemName: "doc.on.doc") }
+                    .buttonStyle(.borderless)
+                    .foregroundStyle(.secondary)
+                    .help("直前の文章をコピー")
+            }
+            .fixedSize(horizontal: false, vertical: true)
+        } else {
+            Text("話した文章は、カーソルのある場所へ入ります")
+                .font(.system(size: 11))
+                .foregroundStyle(.tertiary)
         }
     }
 
@@ -145,30 +152,12 @@ struct MenuBarPanel: View {
         } label: {
             Label(coordinator.previewMode?.name ?? "Default",
                   systemImage: coordinator.pinnedModeID == nil ? "wand.and.stars" : "pin.fill")
-                .font(.system(size: 10.5, weight: .medium))
+                .font(.system(size: 11.5, weight: .medium))
         }
         .menuStyle(.borderlessButton)
         .fixedSize()
-    }
-
-    private func compactButton(_ title: String, symbol: String, action: @escaping () -> Void) -> some View {
-        Button(action: action) {
-            HStack(spacing: 7) {
-                Image(systemName: symbol)
-                    .font(.system(size: 12, weight: .semibold))
-                Text(LocalizedStringKey(title))
-                    .font(.system(size: 12, weight: .semibold))
-            }
-            .foregroundStyle(.primary)
-            .frame(maxWidth: .infinity, minHeight: 34)
-            .background(Color.primary.opacity(0.055), in: RoundedRectangle(cornerRadius: 9, style: .continuous))
-            .overlay {
-                RoundedRectangle(cornerRadius: 9, style: .continuous)
-                    .stroke(Color.primary.opacity(0.09), lineWidth: 1)
-            }
-            .contentShape(RoundedRectangle(cornerRadius: 9, style: .continuous))
-        }
-        .buttonStyle(.plain)
+        .frame(maxWidth: .infinity, alignment: .trailing)
+        .help("音声入力のモード")
     }
 
     private var noticeArea: some View {
@@ -184,21 +173,22 @@ struct MenuBarPanel: View {
         HStack(spacing: 6) {
             Button {
                 dismiss()
-                env.onShowSettings?(tab == .lifeLog ? .lifeLog : .dictation)
+                env.onShowSettings?(.lifeLog)
             } label: {
-                Label(LocalizedStringKey(tab.settingsTitle), systemImage: "gearshape")
+                Label("設定…", systemImage: "gearshape")
             }
             .buttonStyle(.borderless)
-            .font(.system(size: 11))
             Spacer()
             Button { NSApp.terminate(nil) } label: {
                 Label("終了", systemImage: "power")
-                    .labelStyle(.iconOnly)
             }
-                .buttonStyle(.borderless).help("Koeを終了")
+            .buttonStyle(.borderless)
+            .help("Koeを終了")
         }
+        .font(.system(size: 11.5))
         .foregroundStyle(.secondary)
-        .padding(.horizontal, 2)
+        .padding(.horizontal, 6)
+        .padding(.top, 2)
     }
 
     private func open(_ section: MainSection) {
@@ -243,5 +233,109 @@ struct MenuBarPanel: View {
             values.append(Notice(id: "db", title: "データを開けません", message: error))
         }
         return values
+    }
+}
+
+/// Panelの一枚。見出し、本体、区切り線の下に行き先を並べる。
+private struct MenuCard<Content: View, Footer: View>: View {
+    var title: String
+    @ViewBuilder var content: Content
+    @ViewBuilder var footer: Footer
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            Text(LocalizedStringKey(title))
+                .font(KoeTheme.sectionFont)
+                .foregroundStyle(.secondary)
+                .padding(.bottom, 10)
+            content
+            Divider()
+                .padding(.top, 12)
+                .padding(.bottom, 4)
+            HStack(spacing: 4) { footer }
+        }
+        .padding(.horizontal, 14)
+        .padding(.top, 12)
+        .padding(.bottom, 6)
+        .background(Color.primary.opacity(0.045), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .strokeBorder(Color.primary.opacity(0.06), lineWidth: 1)
+        }
+    }
+}
+
+/// Cardの下端の行き先。Glass buttonは文字をrasterizeしてにじむため、plain buttonへ直接描く。
+private struct MenuLinkButton: View {
+    var title: String
+    var symbol: String
+    var action: () -> Void
+    @State private var isHovering = false
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 6) {
+                Image(systemName: symbol)
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(KoeTheme.accent)
+                Text(LocalizedStringKey(title))
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundStyle(.primary)
+            }
+            .padding(.horizontal, 8)
+            .padding(.vertical, 6)
+            .background(Color.primary.opacity(isHovering ? 0.07 : 0), in: RoundedRectangle(cornerRadius: 7, style: .continuous))
+            .contentShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
+        }
+        .buttonStyle(.plain)
+        .onHover { isHovering = $0 }
+        .padding(.leading, -8)
+        .padding(.trailing, 4)
+    }
+}
+
+/// 音声入力の主操作。ライフログの録音buttonと同じ直径と影で、待機中はblueのmic、録音中はroseの停止。
+private struct DictationButton: View {
+    var isRecording: Bool
+    var action: () -> Void
+    @Environment(\.isEnabled) private var isEnabled
+
+    var body: some View {
+        Button(action: action) {
+            ZStack {
+                Circle()
+                    .fill(isRecording ? AnyShapeStyle(KoeTheme.recordingGradient) : AnyShapeStyle(KoeTheme.voiceGradient))
+                    .shadow(color: (isRecording ? KoeTheme.recording : KoeTheme.accent).opacity(0.35), radius: 4, y: 1)
+                Image(systemName: isRecording ? "stop.fill" : "mic.fill")
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundStyle(.white)
+                    .contentTransition(.symbolEffect(.replace))
+            }
+            .frame(width: 36, height: 36)
+            .padding(2)
+            .contentShape(Circle())
+            .opacity(isEnabled ? 1 : 0.45)
+        }
+        .buttonStyle(.plain)
+        .help(LocalizedStringKey(isRecording ? "停止して文章にする" : "音声入力を開始"))
+        .accessibilityLabel(LocalizedStringKey(isRecording ? "停止して文章にする" : "音声入力を開始"))
+        .accessibilityIdentifier("menu.dictation.toggle")
+    }
+}
+
+/// Hotkeyの表示。Keyboardのkeyのように薄い枠で囲む。
+private struct KeyCap: View {
+    var text: String
+
+    var body: some View {
+        Text(verbatim: text)
+            .font(.system(size: 10.5, weight: .semibold, design: .rounded))
+            .padding(.horizontal, 6)
+            .padding(.vertical, 2)
+            .background(Color.primary.opacity(0.06), in: RoundedRectangle(cornerRadius: 5, style: .continuous))
+            .overlay {
+                RoundedRectangle(cornerRadius: 5, style: .continuous)
+                    .strokeBorder(Color.primary.opacity(0.14), lineWidth: 1)
+            }
     }
 }

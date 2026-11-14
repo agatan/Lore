@@ -37,7 +37,7 @@ struct CalendarEventCard: View {
                             .background(KoeTheme.accentSecondary.opacity(0.14), in: Capsule())
                     }
                 }
-                Text(verbatim: detail)
+                detail
                     .font(KoeTheme.captionFont.monospacedDigit())
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
@@ -48,18 +48,18 @@ struct CalendarEventCard: View {
         .fixedSize(horizontal: false, vertical: true)
     }
 
-    private var detail: String {
-        guard !event.isAllDay else { return event.calendarTitle }
-        return "\(Self.durationText(event.endsAt.timeIntervalSince(event.startsAt))) · \(event.calendarTitle)"
+    private var detail: Text {
+        guard !event.isAllDay else { return Text(verbatim: event.calendarTitle) }
+        return Self.durationText(event.endsAt.timeIntervalSince(event.startsAt)) + Text(verbatim: " · \(event.calendarTitle)")
     }
 
-    /// 「30分」「1時間」「1時間30分」。
-    static func durationText(_ interval: TimeInterval) -> String {
+    /// 「30分」「1時間」「1時間30分」。表示言語の書式で返す。
+    static func durationText(_ interval: TimeInterval) -> Text {
         let minutes = max(0, Int((interval / 60).rounded()))
         let hours = minutes / 60
         let rest = minutes % 60
-        if hours == 0 { return "\(rest)分" }
-        return rest == 0 ? "\(hours)時間" : "\(hours)時間\(rest)分"
+        if hours == 0 { return Text("\(rest)分") }
+        return rest == 0 ? Text("\(hours)時間") : Text("\(hours)時間\(rest)分")
     }
 }
 

@@ -35,7 +35,7 @@ struct LifeLogDayInspector: View {
                 Text("話した時間")
                     .font(KoeTheme.sectionFont)
                     .foregroundStyle(.secondary)
-                Text(verbatim: Self.spokenText(value.spokenDuration))
+                Self.spokenText(value.spokenDuration)
                     .font(.system(size: 30, weight: .bold, design: .rounded).monospacedDigit())
                     .contentTransition(.numericText())
             }
@@ -66,8 +66,8 @@ struct LifeLogDayInspector: View {
     }
 
     /// 「0分」「12分」「1時間4分」。1分未満は話していれば「1分未満」。
-    static func spokenText(_ seconds: TimeInterval) -> String {
-        if seconds > 0 && seconds < 60 { return "1分未満" }
+    static func spokenText(_ seconds: TimeInterval) -> Text {
+        if seconds > 0 && seconds < 60 { return Text("1分未満") }
         return CalendarEventCard.durationText(seconds)
     }
 }

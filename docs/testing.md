@@ -49,7 +49,7 @@ make ui-test
 
 ## 見た目の確認
 
-Debug buildの`KoeUITests.app`を`--koe-screenshot-demo --koe-snapshot <dir>`で起動すると、main（ライフログ・音声入力）、全設定section、mini windowを順に開き、各windowを`<dir>`へPNGで保存して終了します。自process内のwindowだけをScreenCaptureKitで撮るため、画面収録の許可は不要です。`--koe-snapshot-appearance dark`（または`light`）を足すと外観を固定して撮ります。Release buildには含めません。
+Debug buildの`KoeUITests.app`を`--koe-screenshot-demo --koe-snapshot <dir>`で起動すると、main（ライフログ・音声入力）、全設定section、mini windowを順に開き、各windowを`<dir>`へPNGで保存します。続けて、壁紙を模した背景の上に置いたHUDの各段階（録音開始、逐次text、整形中、完了、整形skip）とmenu bar panel、明暗のmenu barに並べた全状態のmenu barアイコン（`menu-bar-icons.png`）を保存して終了します。自process内のwindowだけをScreenCaptureKitで撮るため、画面収録の許可は不要です。`--koe-snapshot-appearance dark`（または`light`）を足すと外観を固定して撮ります。Release buildには含めません。
 
 ```sh
 make ui-test-app

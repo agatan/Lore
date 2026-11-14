@@ -1,6 +1,7 @@
 #if DEBUG
 import AppKit
 import ScreenCaptureKit
+import SwiftUI
 
 /// 開発用: `--koe-snapshot <dir>`で起動すると主要windowを自身で描画してPNGへ保存し、終了する。
 /// 画面収録の権限なしでUIの見た目を確認するためのもので、Release buildには含めない。
@@ -43,10 +44,123 @@ enum DebugSnapshotter {
             presenter.toggleLifeLogMini()
             await settle(1.5)
             try await capture(KoeWindow.lifeLogMini, as: "life-log-mini", into: directory)
+            try await captureHud(env: env, into: directory)
+            try await captureHosted(
+                MenuBarPanel(env: env)
+                    .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+                    .padding(40)
+                    .background(SnapshotWallpaper()),
+                as: "menu-panel",
+                into: directory
+            )
+            try writeMenuBarIcons(into: directory)
         } catch {
             KoeLog.ui.error("UI snapshotに失敗: \(error.localizedDescription, privacy: .public)")
         }
         exit(0)
+    }
+
+    /// HUDの各段階を、壁紙を模した背景の上に置いて撮る。Glassは同じwindow内の背景を透かす。
+    private static func captureHud(env: AppEnvironment, into directory: URL) async throws {
+        guard let coordinator = env.coordinator else {
+            throw CocoaError(.fileWriteUnknown, userInfo: [NSLocalizedDescriptionKey: "音声入力の状態機械がまだありません"])
+        }
+        let levels: [Float] = (0..<DictationCoordinator.levelHistoryLength).map { index in
+            let wave = abs(sin(Double(index) / 2.4)) * (0.35 + 0.65 * Double(index) / Double(DictationCoordinator.levelHistoryLength))
+            return Float(0.08 + 0.8 * wave)
+        }
+        let states: [(String, SessionPhase, String, String?)] = [
+            ("hud-recording-start", .recording, "", nil),
+            ("hud-recording", .recording, "えーと明日の1on1なんですけど、30分後ろにずらしてもらえると助かります", nil),
+            ("hud-formatting", .formatting, "明日の1on1なんですけど、30分後ろにずらしてもらえると助かります", nil),
+            ("hud-completed", .finished(.completed), "", nil),
+            ("hud-skipped", .finished(.formattingSkipped(reason: "タイムアウト")), "明日の1on1なんですけど30分後ろにずらしてもらえると助かります", "整形をスキップしました(処理がタイムアウトしました)"),
+        ]
+        for (name, phase, transcript, detail) in states {
+            coordinator.applyPreviewState(
+                phase: phase,
+                transcript: transcript,
+                mode: BuiltinModes.defaultMode,
+                levels: levels,
+                elapsed: .seconds(7),
+                detail: detail,
+                inputDeviceName: "MacBook Pro のマイク"
+            )
+            try await captureHosted(
+                HudView(coordinator: coordinator, onCancel: {})
+                    .frame(width: 560, height: 200, alignment: .bottom)
+                    .background(SnapshotWallpaper()),
+                as: name,
+                into: directory
+            )
+        }
+        coordinator.applyPreviewState(phase: .idle)
+    }
+
+    private static func captureHosted(_ view: some View, as name: String, into directory: URL) async throws {
+        let hosting = NSHostingView(rootView: view)
+        let size = hosting.fittingSize
+        let window = NSWindow(contentRect: NSRect(origin: .zero, size: size), styleMask: [.borderless], backing: .buffered, defer: false)
+        window.identifier = NSUserInterfaceItemIdentifier("koe.snapshot.\(name)")
+        window.contentView = hosting
+        window.level = .floating
+        window.center()
+        window.orderFrontRegardless()
+        defer { window.orderOut(nil) }
+        await settle(1)
+        try await capture("koe.snapshot.\(name)", as: name, into: directory)
+    }
+
+    /// 全状態のmenu barアイコンを、明暗のmenu barを模した帯へ4倍で並べる。
+    private static func writeMenuBarIcons(into directory: URL) throws {
+        let badges: [MenuBarStatusIcon.Badge?] = [nil, .recording, .processing, .done, .attention, .reconnecting]
+        let live = MenuBarStatusIcon.image(levels: [0.1, 0.3, 0.7, 0.9, 0.5, 0.2, 0.6, 0.4, 0.15], badge: .recording)
+        let icons = badges.map { MenuBarStatusIcon.image(badge: $0) } + [live]
+        let scale: CGFloat = 4
+        let cell = NSSize(width: 40, height: 28)
+        let stripSize = NSSize(width: cell.width * CGFloat(icons.count) * scale, height: cell.height * 2 * scale)
+        let rep = NSBitmapImageRep(
+            bitmapDataPlanes: nil, pixelsWide: Int(stripSize.width), pixelsHigh: Int(stripSize.height),
+            bitsPerSample: 8, samplesPerPixel: 4, hasAlpha: true, isPlanar: false,
+            colorSpaceName: .deviceRGB, bytesPerRow: 0, bitsPerPixel: 0
+        )
+        guard let rep, let context = NSGraphicsContext(bitmapImageRep: rep) else {
+            throw CocoaError(.fileWriteUnknown, userInfo: [NSLocalizedDescriptionKey: "menu barアイコンの描画先を作れません"])
+        }
+        NSGraphicsContext.saveGraphicsState()
+        NSGraphicsContext.current = context
+        for (row, appearanceName) in [NSAppearance.Name.darkAqua, .aqua].enumerated() {
+            let appearance = NSAppearance(named: appearanceName)!
+            let rowRect = NSRect(x: 0, y: CGFloat(row) * cell.height * scale, width: stripSize.width, height: cell.height * scale)
+            (appearanceName == .aqua ? NSColor(white: 0.93, alpha: 1) : NSColor(white: 0.16, alpha: 1)).setFill()
+            rowRect.fill()
+            appearance.performAsCurrentDrawingAppearance {
+                for (index, icon) in icons.enumerated() {
+                    let rect = NSRect(
+                        x: (CGFloat(index) * cell.width + (cell.width - icon.size.width) / 2) * scale,
+                        y: rowRect.minY + (cell.height - icon.size.height) / 2 * scale,
+                        width: icon.size.width * scale,
+                        height: icon.size.height * scale
+                    )
+                    if icon.isTemplate {
+                        let tinted = NSImage(size: icon.size, flipped: false) { bounds in
+                            icon.draw(in: bounds)
+                            (appearanceName == .aqua ? NSColor.black : NSColor.white).set()
+                            bounds.fill(using: .sourceAtop)
+                            return true
+                        }
+                        tinted.draw(in: rect)
+                    } else {
+                        icon.draw(in: rect)
+                    }
+                }
+            }
+        }
+        NSGraphicsContext.restoreGraphicsState()
+        guard let data = rep.representation(using: .png, properties: [:]) else {
+            throw CocoaError(.fileWriteUnknown, userInfo: [NSLocalizedDescriptionKey: "menu barアイコンをPNGへ変換できません"])
+        }
+        try data.write(to: directory.appending(path: "menu-bar-icons.png"))
     }
 
     private static func settle(_ seconds: Double) async {
@@ -73,6 +187,32 @@ enum DebugSnapshotter {
             throw CocoaError(.fileWriteUnknown, userInfo: [NSLocalizedDescriptionKey: "\(name)をPNGへ変換できません"])
         }
         try data.write(to: directory.appending(path: "\(name).png"))
+    }
+}
+/// HUDやpanelのガラスが透かす、デスクトップの壁紙の代わり。
+private struct SnapshotWallpaper: View {
+    @Environment(\.colorScheme) private var colorScheme
+
+    var body: some View {
+        ZStack {
+            LinearGradient(
+                colors: colorScheme == .dark
+                    ? [Color(red: 0.10, green: 0.12, blue: 0.24), Color(red: 0.26, green: 0.14, blue: 0.30)]
+                    : [Color(red: 0.62, green: 0.78, blue: 0.95), Color(red: 0.96, green: 0.80, blue: 0.84)],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            )
+            Circle()
+                .fill(Color(red: 0.98, green: 0.72, blue: 0.40).opacity(colorScheme == .dark ? 0.35 : 0.55))
+                .frame(width: 220)
+                .blur(radius: 50)
+                .offset(x: -160, y: 30)
+            Circle()
+                .fill(Color(red: 0.35, green: 0.55, blue: 0.98).opacity(0.5))
+                .frame(width: 240)
+                .blur(radius: 60)
+                .offset(x: 180, y: -40)
+        }
     }
 }
 #endif

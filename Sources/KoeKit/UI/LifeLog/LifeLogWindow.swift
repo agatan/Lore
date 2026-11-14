@@ -70,7 +70,7 @@ public struct LifeLogWindow: View {
         }
         ToolbarItem(placement: .automatic) {
             Button { showsInspector.toggle() } label: { Label("この日の概要", systemImage: "sidebar.trailing") }
-                .help(showsInspector ? "この日の概要を隠す" : "この日の概要を表示")
+                .help(Text(showsInspector ? "この日の概要を隠す" : "この日の概要を表示"))
                 .accessibilityIdentifier("life-log.inspector-toggle")
         }
     }
@@ -81,7 +81,7 @@ public struct LifeLogWindow: View {
     /// 記録状態と終日の予定は日付の下に一列だけ置く。Scrollすると見出しごとtoolbarの下へ流れる。
     private var header: some View {
         VStack(alignment: .leading, spacing: 6) {
-            Text(isToday ? "今日" : env.lifeLog.selectedDate.formatted(.dateTime.year()))
+            (isToday ? Text("今日") : Text(verbatim: env.lifeLog.selectedDate.formatted(.dateTime.year())))
                 .font(.system(size: 13, weight: .semibold))
                 .foregroundStyle(isToday ? AnyShapeStyle(KoeTheme.accent) : AnyShapeStyle(.secondary))
             HStack(alignment: .firstTextBaseline, spacing: 10) {
@@ -99,7 +99,7 @@ public struct LifeLogWindow: View {
                         HeaderChip(text: "記録中", symbol: nil, tint: KoeTheme.recording, dot: true)
                     }
                     ForEach(allDayEvents) { event in
-                        HeaderChip(text: event.title, symbol: "calendar", tint: KoeTheme.accentSecondary, dot: false)
+                        HeaderChip(text: "\(event.title)", symbol: "calendar", tint: KoeTheme.accentSecondary, dot: false)
                             .accessibilityIdentifier("life-log.timeline-event-\(event.id)")
                     }
                 }
@@ -327,18 +327,18 @@ struct TimelineGapRow: View {
             firstLineCenter: 6,
             compact: compact
         ) {
-            Text(verbatim: CalendarEventCard.durationText(interval))
+            CalendarEventCard.durationText(interval)
                 .font(KoeTheme.captionFont.monospacedDigit())
                 .foregroundStyle(.tertiary)
                 .padding(.leading, compact ? 4 : 6)
         }
-        .accessibilityLabel(Text("\(CalendarEventCard.durationText(interval))の空き"))
+        .accessibilityLabel(Text("空き時間") + Text(verbatim: " ") + CalendarEventCard.durationText(interval))
     }
 }
 
 /// 日付見出しの下に並べる小さな札。記録中と終日の予定に使う。
 private struct HeaderChip: View {
-    var text: String
+    var text: LocalizedStringKey
     var symbol: String?
     var tint: Color
     var dot: Bool
@@ -347,7 +347,7 @@ private struct HeaderChip: View {
         HStack(spacing: 5) {
             if dot { Circle().fill(tint).frame(width: 6, height: 6) }
             if let symbol { Image(systemName: symbol).font(.system(size: 9.5, weight: .semibold)) }
-            Text(verbatim: text).lineLimit(1)
+            Text(text).lineLimit(1)
         }
         .font(.system(size: 11, weight: .semibold))
         .foregroundStyle(tint)

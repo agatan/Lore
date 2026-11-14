@@ -308,3 +308,27 @@
 "%lld件" = "%lld items";
 "今日 · %@" = "Today · %@";
 "いま" = "Now";
+
+/* Day inspector, HUD and menu bar panel */
+"話した時間" = "Talk time";
+"一日の流れ" = "Day at a glance";
+"この日の概要" = "Day overview";
+"この日の概要を隠す" = "Hide day overview";
+"この日の概要を表示" = "Show day overview";
+"%lld分" = "%lld min";
+"%lld時間" = "%lld hr";
+"%lld時間%lld分" = "%1$lld hr %2$lld min";
+"1分未満" = "Under 1 min";
+"空き時間" = "Gap";
+"話した長さ %@" = "Spoken for %@";
+"挿入" = "Insert";
+"このとき使われた指示文(語彙 %lld 語)" = "Instructions used (%lld vocabulary terms)";
+"今日 %lld件の発話 · メモ %lld件" = "Today: %1$lld utterances · %2$lld memos";
+"履歴を開く" = "Open History";
+"話した文章は、カーソルのある場所へ入ります" = "What you say is typed where the cursor is";
+"直前の文章をコピー" = "Copy Last Text";
+"音声入力のモード" = "Dictation mode";
+"終了" = "Quit";
+"アプリに応じて自動" = "Automatic by App";
+"入力: %@" = "Input: %@";
+"ライフログを検索" = "Search Life Log";

@@ -182,8 +182,8 @@ DBは`~/Library/Application Support/Koe/koe.sqlite`です。`DatabaseQueue`を�
 | Scene / View | 内容 |
 |---|---|
 | `KoeTheme` | app icon由来の固定blue/cyanをprimary/secondary、同じ明度と彩度へ揃えたrose/mint/goldを録音/成功/警告、goldより赤みのあるorangeをmemoの印として定義する。Viewや設定からpaletteを差し替えない。文字は本文・補足・見出しの3段と桁揃えの時刻書体に限る。Glassは浮くもの(HUD、menu、main/miniの`LifeLogComposerBar`)だけに使い、sidebarとtoolbarはsystemの素材に任せる。設定sectionは`panelSurface`の淡い塗りと細い罫線で区切る。大見出しは`titleFont`（28 pt bold rounded）の1段だけ足す。`SettingsCard`は行の間へ罫線を自動で入れ、各画面は`Divider`を置かない |
-| `MenuBarPanel` | 用途別quick action。ライフログtabはcompactなcapture状態と記録切替、今日のmain/mini window入口、音声入力tabは録音、hotkey、mode、直前結果、履歴入口を持つ。共通footerは設定と終了だけに限定する。Main/mini入口はglass buttonによるtext rasterizationを避け、plain button内にsystem fontを直接描画する |
-| `MenuBarLabel` | 音声入力のphase、入力level、ライフログcapture状態。`LifeLogCoordinator.isCapturing`中もKoe icon本体はmonochrome maskとして描画し、右下のrose色badgeだけを着色する。停止中または`isRecoveringCapture`のみの状態ではbadgeなしのmonochrome表示にする |
+| `MenuBarPanel` | 用途別quick action。Tabで隠さず、ライフログと音声入力を同じ文法の二枚のcardに並べる。各cardは左に丸い主操作（ライフログは`LifeLogRecordButton`、音声入力は同じ直径のmic/停止button）、右に状態と補足、区切り線の下に行き先を置く。ライフログcardは記録状態と自動記録の時刻（なければ今日の件数）、今日のmain/mini window入口、音声入力cardはhotkey、直前結果、履歴入口、mode menuを持つ。共通footerは設定と終了だけに限定する。行き先はglass buttonによるtext rasterizationを避け、plain button内にsystem fontを直接描画する |
+| `MenuBarLabel` | 音声入力のphase、入力level、ライフログcapture状態。どの状態でも`MenuBarStatusIcon`のKoe mark（9本の棒）を使い、状態は右下の点だけで足す。点は周囲を透明に抜き、録音中（音声入力またはライフログ）はrose、処理中はblue、完了はmint、整形skip・clipboardのみ・失敗はgold、ライフログ再接続中はgoldの輪。音声入力の状態をライフログより優先する。入力level表示が有効な録音中は棒の高さを直近の入力levelに置き換える。点がない時はtemplate画像にしてmenu barの明暗をsystemに任せ、点がある時はmarkを`labelColor`で描く |
 | `MainWindowView` | `NavigationSplitView`。全高sidebarの上部navigation rowで`lifeLog` / `history`を切り替え、`lifeLog`表示中だけnavigationの下へ`MonthActivityCalendar`を置く。Windowは`.fullSizeContentView`と`.unified` toolbarで、sidebarがtraffic lightを含む全高のsystem素材になる。初回はonboarding、通常起動は`lifeLog`を開く |
 | `LifeLogWindow` | 中央のtimelineと右の`.inspector`（`LifeLogDayInspector`）。Timeline本体はevent/utterance/dictation/memoを一列の時刻順で表示し、column headerを持たない。日付選択時はsnapshotを再取得し、inspectorとtimelineを同じ`LifeLogDay`から更新する。検索buttonは`Command-F`も受け、発話・音声入力・memoの検索結果だけをtimeline itemへ移動する。表示開始時だけ今日を読み込んで末尾へscrollし、その後のreloadでは閲覧位置を保つ。Calendarは`MainWindowView`のsidebarに置く。Timelineは約680 ptの列をwindow中央に置き、scrollする大見出し（「今日」、日付と曜日、記録状態、終日の予定）から始まる。Inspector切替/検索/書き出しはwindow toolbarの`ToolbarItemGroup`に置き、inspectorの表示は`SceneStorage`に残す。行の並び、予定区間の線の色、空き時間はUIから独立した`LifeLogTimelineLayout`が決め、`CalendarEventCard`と`TimelineEntryRow`は共通の`TimelineRail`の上に描く。最下部は`safeAreaInset`で浮かせた`LifeLogComposerBar`で、scroll edge effectがtimelineとの境界を作る |
 | `LifeLogCaptureControl` | Menu barのcapture状態と開始・停止操作。状態のsymbol、文言、semantic colorは`LifeLogCaptureStatus`で一か所に決め、main/miniの`LifeLogComposerBar`と共有する。停止中は「記録を開始」のblue、記録開始意図がある間は「停止」のrose。停止中は状態の補足文を重ねない。録音と文字起こしの内部Boolの中間状態を文言へ直接投影せず、利用者向け状態を安定させる。自動記録が有効なら、scheduleが始めた記録中は終了時刻、停止中は次の開始時刻を補足に出す |
@@ -201,7 +201,7 @@ DBは`~/Library/Application Support/Koe/koe.sqlite`です。`DatabaseQueue`を�
 | `SettingsWindowView` | 一般（表示言語を含む）、語彙、privacy、同期、連携、音声入力、AI整形、mode、ライフログ、calendar。Privacyは保存場所の下にKoe dataの合計使用量を一行で示す。各設定行は操作列を共通幅で確保し、Pickerなど可変幅controlの右端を揃える |
 | `WhisperModelSettingsView` | 音声入力とライフログで共有するcurated local modelを列挙し、選択、download進捗・cancel・再試行・削除・使用中状態を表示する。両方の設定画面で同じviewを使う |
 | `DismissibleNoticeBanner` | 継続可能なmessageと明示的な`×`を表示する。Dismiss actionは表示stateだけをclearし、capture requestやretry taskを変更しない |
-| `HudController` / `HudView` | 通常音声入力またはボイスメモのrecordingから終了までの一時表示 |
+| `HudController` / `HudView` | 通常音声入力またはボイスメモのrecordingから終了までの一時表示。普段は高さ44 ptのglass capsuleで、左から状態の印（録音中は入力levelで脈打つrose、処理中は回る弧、終了時は結果の記号）、録音中は波形と経過時間・それ以外は状態の語、mode、escを並べる。逐次textや終了時の補足があるとcapsuleの上へ本文の段が伸び、角の丸い板へ形を変える。逐次textは末尾の約100字だけを見せる。入力deviceはtooltipに置く |
 
 ## 10. 自動化境界
 
