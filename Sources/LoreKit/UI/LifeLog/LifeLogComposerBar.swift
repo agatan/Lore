@@ -111,9 +111,8 @@ struct LifeLogRecordButton: View {
                         .onDisappear { pulse = false }
                 }
                 Circle()
-                    .fill(lifeLog.hasCaptureIntent ? AnyShapeStyle(LoreTheme.recordingGradient) : AnyShapeStyle(LoreTheme.voiceGradient))
+                    .fill(lifeLog.hasCaptureIntent ? AnyShapeStyle(LoreTheme.recording) : AnyShapeStyle(LoreTheme.accent))
                     .frame(width: diameter, height: diameter)
-                    .shadow(color: (lifeLog.hasCaptureIntent ? LoreTheme.recording : LoreTheme.accent).opacity(0.35), radius: 4, y: 1)
                 if lifeLog.hasCaptureIntent {
                     RoundedRectangle(cornerRadius: 2.5, style: .continuous)
                         .fill(.white)

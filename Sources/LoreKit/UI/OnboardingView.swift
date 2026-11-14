@@ -36,7 +36,6 @@ struct OnboardingView: View {
                 .resizable()
                 .interpolation(.high)
                 .frame(width: 96, height: 96)
-                .shadow(color: LoreTheme.accent.opacity(0.25), radius: 18, y: 8)
             Text("話して過ごす毎日を、あなたの資産に。")
                 .font(.system(size: 30, weight: .bold, design: .rounded))
                 .multilineTextAlignment(.center)
@@ -180,7 +179,7 @@ private struct PermissionRow: View {
                 .font(.system(size: 13, weight: .semibold))
                 .foregroundStyle(.white)
                 .frame(width: 28, height: 28)
-                .background(LoreTheme.voiceGradient, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+                .background(LoreTheme.accent, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
             VStack(alignment: .leading, spacing: 2) {
                 Text(LocalizedStringKey(title))
                     .font(.system(size: 13, weight: .semibold))
@@ -205,33 +204,10 @@ private struct PermissionRow: View {
     }
 }
 
-/// Window全体に敷く背景。App iconのviolet/cyanを大きくぼかし、縁のない光として置く。
+/// Window全体に敷く背景。光や色のにじみは足さず、systemのwindow背景だけを敷く。
 private struct OnboardingBackdrop: View {
-    @Environment(\.colorScheme) private var colorScheme
-
     var body: some View {
-        GeometryReader { proxy in
-            let size = proxy.size
-            ZStack {
-                Color(nsColor: .windowBackgroundColor)
-                Circle()
-                    .fill(LoreTheme.accent.opacity(colorScheme == .dark ? 0.32 : 0.22))
-                    .frame(width: size.width * 0.55)
-                    .blur(radius: 120)
-                    .offset(x: -size.width * 0.22, y: -size.height * 0.28)
-                Circle()
-                    .fill(LoreTheme.accentSecondary.opacity(colorScheme == .dark ? 0.26 : 0.2))
-                    .frame(width: size.width * 0.45)
-                    .blur(radius: 120)
-                    .offset(x: size.width * 0.26, y: size.height * 0.2)
-                Circle()
-                    .fill(LoreTheme.memo.opacity(colorScheme == .dark ? 0.12 : 0.1))
-                    .frame(width: size.width * 0.3)
-                    .blur(radius: 110)
-                    .offset(x: size.width * 0.05, y: size.height * 0.42)
-            }
-            .frame(width: size.width, height: size.height)
-        }
-        .accessibilityHidden(true)
+        Color(nsColor: .windowBackgroundColor)
+            .accessibilityHidden(true)
     }
 }

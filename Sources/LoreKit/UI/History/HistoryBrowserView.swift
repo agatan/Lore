@@ -132,7 +132,7 @@ private struct HistoryDetailView: View {
                     if let text = record.formattedText, !text.isEmpty {
                         HStack(alignment: .top, spacing: 14) {
                             Capsule()
-                                .fill(LoreTheme.voiceGradient)
+                                .fill(LoreTheme.accent)
                                 .frame(width: 3)
                             Text(text)
                                 .font(.system(size: 17))
@@ -300,7 +300,7 @@ private struct LatencyBreakdown: View {
                     HStack(spacing: spacing) {
                         ForEach(parts) { part in
                             Rectangle()
-                                .fill(part.tint.gradient)
+                                .fill(part.tint)
                                 .frame(width: max(4, usable * CGFloat(part.ms) / total))
                         }
                     }

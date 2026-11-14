@@ -13,17 +13,7 @@ public enum LoreTheme {
     /// 利用者が自分で書き残したmemoの印。警告と取り違えないよう、goldより赤みを足す。
     public static let memo = Color(red: 0.93, green: 0.52, blue: 0.24)
 
-    public static let voiceGradient = LinearGradient(
-        colors: [accent, accentSecondary],
-        startPoint: .leading,
-        endPoint: .trailing
-    )
 
-    public static let recordingGradient = LinearGradient(
-        colors: [recording, recordingSecondary],
-        startPoint: .leading,
-        endPoint: .trailing
-    )
 
     public static let hudCornerRadius: CGFloat = 26
     public static let panelCornerRadius: CGFloat = 12

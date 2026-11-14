@@ -124,7 +124,7 @@ struct MenuBarPanel: View {
         if let text = env.lastResultText, !text.isEmpty {
             HStack(alignment: .top, spacing: 10) {
                 Capsule()
-                    .fill(LoreTheme.voiceGradient)
+                    .fill(LoreTheme.accent)
                     .frame(width: 2.5)
                 Text(text)
                     .font(.system(size: 12))
@@ -307,8 +307,7 @@ private struct DictationButton: View {
         Button(action: action) {
             ZStack {
                 Circle()
-                    .fill(isRecording ? AnyShapeStyle(LoreTheme.recordingGradient) : AnyShapeStyle(LoreTheme.voiceGradient))
-                    .shadow(color: (isRecording ? LoreTheme.recording : LoreTheme.accent).opacity(0.35), radius: 4, y: 1)
+                    .fill(isRecording ? AnyShapeStyle(LoreTheme.recording) : AnyShapeStyle(LoreTheme.accent))
                 Image(systemName: isRecording ? "stop.fill" : "mic.fill")
                     .font(.system(size: 14, weight: .semibold))
                     .foregroundStyle(.white)

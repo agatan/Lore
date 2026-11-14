@@ -167,7 +167,7 @@ private struct HudStatusOrb: View {
                     .scaleEffect(0.75 + CGFloat(min(1, level)) * 0.6)
                     .animation(.easeOut(duration: 0.08), value: level)
                 Circle()
-                    .fill(LoreTheme.recordingGradient)
+                    .fill(LoreTheme.recording)
                     .frame(width: 10, height: 10)
             case .recognizing, .formatting, .inserting:
                 Circle()

@@ -36,11 +36,7 @@ struct WaveformView: View {
 
             context.fill(
                 path,
-                with: .linearGradient(
-                    Gradient(colors: [LoreTheme.accent, LoreTheme.accentSecondary]),
-                    startPoint: .zero,
-                    endPoint: CGPoint(x: size.width, y: 0)
-                )
+                with: .color(LoreTheme.accent)
             )
         }
         .opacity(isActive ? 1 : 0.4)

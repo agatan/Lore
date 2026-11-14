@@ -28,7 +28,7 @@ struct LifeLogMemoComposer: View {
             Button(action: send) {
                 ZStack {
                     Circle()
-                        .fill(trimmedText.isEmpty ? AnyShapeStyle(Color.secondary.opacity(0.12)) : AnyShapeStyle(LoreTheme.voiceGradient))
+                        .fill(trimmedText.isEmpty ? AnyShapeStyle(Color.secondary.opacity(0.12)) : AnyShapeStyle(LoreTheme.accent))
                         .frame(width: actionDiameter, height: actionDiameter)
                     Image(systemName: "arrow.up")
                         .font(.system(size: 12, weight: .bold))
@@ -60,7 +60,7 @@ struct LifeLogMemoComposer: View {
                         )
                 }
                 Circle()
-                    .fill(isVoiceMemoRecording ? AnyShapeStyle(LoreTheme.recordingGradient) : AnyShapeStyle(Color.secondary.opacity(0.12)))
+                    .fill(isVoiceMemoRecording ? AnyShapeStyle(LoreTheme.recording) : AnyShapeStyle(Color.secondary.opacity(0.12)))
                     .frame(width: actionDiameter, height: actionDiameter)
                 if isPreparingVoiceMemo {
                     ProgressView()
