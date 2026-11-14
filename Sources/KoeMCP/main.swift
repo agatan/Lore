@@ -59,52 +59,13 @@ struct KoeMCP {
         case "life_log_export":
             let date = try (arguments["date"] as? String).map(parseDay) ?? Date()
             return try await service.exportDay(date, options: exportOptions(arguments["include"] as? [String]))
-        case "todo_export_open":
-            return try await service.exportOpenTodos()
         case "life_log_search":
             let query = try requiredString("query", in: arguments)
             let results = try await service.search(query, limit: arguments["limit"] as? Int ?? 100)
             return results.map { "\($0.day)\t\($0.kind.rawValue)\t\($0.text.replacingOccurrences(of: "\n", with: " "))" }.joined(separator: "\n")
-        case "todo_list":
-            let status = try (arguments["status"] as? String).flatMap { value -> LifeLogTodo.Status? in
-                if value == "all" { return nil }
-                guard let status = LifeLogTodo.Status(rawValue: value) else { throw MCPError.invalidArgument("status") }
-                return status
-            }
-            let values = try await service.todos(status: arguments["status"] == nil ? .open : status)
-            return values.map { "\($0.id)\t\($0.status.rawValue)\t\($0.title)" }.joined(separator: "\n")
-        case "todo_add":
-            let todo = try await service.addTodo(title: requiredString("title", in: arguments))
-            return "\(todo.id)\t\(todo.status.rawValue)\t\(todo.title)"
-        case "todo_update":
-            let status: LifeLogTodo.Status?
-            if let value = arguments["status"] as? String {
-                guard let parsed = LifeLogTodo.Status(rawValue: value) else { throw MCPError.invalidArgument("status") }
-                status = parsed
-            } else { status = nil }
-            let todo = try await service.updateTodo(
-                id: requiredString("id", in: arguments),
-                title: arguments["title"] as? String,
-                status: status
-            )
-            return "\(todo.id)\t\(todo.status.rawValue)\t\(todo.title)"
-        case "todo_delete":
-            try await service.deleteTodo(id: requiredString("id", in: arguments))
-            return "deleted"
-        case "prompt_get":
-            return service.prompt(try promptKind(arguments))
-        case "prompt_set":
-            try service.setPrompt(requiredString("value", in: arguments), kind: promptKind(arguments))
-            return "updated"
         default:
             throw MCPError.unknownTool(name)
         }
-    }
-
-    private static func promptKind(_ arguments: [String: Any]) throws -> KoeAutomationService.PromptKind {
-        let value = try requiredString("kind", in: arguments)
-        guard let kind = KoeAutomationService.PromptKind(rawValue: value) else { throw MCPError.invalidArgument("kind") }
-        return kind
     }
 
     private static func requiredString(_ name: String, in arguments: [String: Any]) throws -> String {
@@ -124,28 +85,18 @@ struct KoeMCP {
             includesCalendarEvents: names.contains("calendar"),
             includesUtterances: names.contains("speech"),
             includesDictations: names.contains("voice-input"),
-            includesMemos: names.contains("memos"),
-            includesSummary: names.contains("summary"),
-            includesTodosForDay: names.contains("todos")
+            includesMemos: names.contains("memos")
         )
     }
 
     private static var tools: [[String: Any]] { [
-        tool("life_log_export", "指定日の予定・発話・音声入力・メモ・要約・当日TODOを選択して読みやすいMarkdownにする", properties: [
+        tool("life_log_export", "指定日の予定・発話・音声入力・メモを選択して読みやすいMarkdownにする", properties: [
             "date": stringSchema("YYYY-MM-DD。省略時は今日"),
-            "include": ["type": "array", "items": ["type": "string", "enum": ["calendar", "speech", "voice-input", "memos", "summary", "todos"]]],
+            "include": ["type": "array", "items": ["type": "string", "enum": ["calendar", "speech", "voice-input", "memos"]]],
         ]),
-        tool("todo_export_open", "確定済みで現在未実施のTODO全体をテキストにする"),
-        tool("life_log_search", "日本語部分一致で発話・メモ・TODO・要約を横断検索する", properties: ["query": stringSchema("検索語"), "limit": ["type": "integer", "minimum": 1]], required: ["query"]),
-        tool("todo_list", "TODOを一覧する", properties: ["status": ["type": "string", "enum": ["open", "draft", "completed", "all"]]]),
-        tool("todo_add", "確定済み未実施TODOを追加する", properties: ["title": stringSchema("タイトル")], required: ["title"]),
-        tool("todo_update", "TODOのタイトルまたは状態を更新する", properties: ["id": stringSchema("TODO ID"), "title": stringSchema("新しいタイトル"), "status": ["type": "string", "enum": ["open", "draft", "completed"]]], required: ["id"]),
-        tool("todo_delete", "TODOを削除する", properties: ["id": stringSchema("TODO ID")], required: ["id"]),
-        tool("prompt_get", "ライフログの要約またはTODO抽出プロンプトを取得する", properties: ["kind": promptKindSchema], required: ["kind"]),
-        tool("prompt_set", "ライフログの要約またはTODO抽出プロンプトを更新する", properties: ["kind": promptKindSchema, "value": stringSchema("新しいプロンプト")], required: ["kind", "value"]),
+        tool("life_log_search", "日本語部分一致で発話・音声入力・メモを横断検索する", properties: ["query": stringSchema("検索語"), "limit": ["type": "integer", "minimum": 1]], required: ["query"]),
     ] }
 
-    private static var promptKindSchema: [String: Any] { ["type": "string", "enum": ["summary", "todo"]] }
     private static func stringSchema(_ description: String) -> [String: Any] { ["type": "string", "description": description] }
     private static func tool(_ name: String, _ description: String, properties: [String: Any] = [:], required: [String] = []) -> [String: Any] {
         ["name": name, "description": description, "inputSchema": ["type": "object", "properties": properties, "required": required, "additionalProperties": false]]

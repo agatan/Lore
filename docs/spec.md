@@ -46,7 +46,7 @@
 - whisper.cppには有効な語彙の表記を並び順のまま、約200 token以内のpromptとして渡します。2語以上のprompt全体をそのまま読み上げただけのsegmentは、無音から生成された写しとして結果から除きます。
 - ライフログも音声入力とは別にSpeechAnalyzerまたはローカルへダウンロードしたwhisper.cpp GGML modelを選べます。連続録音とは分離し、入力signalから検出した発話burstを保存audioから認識します。比較的大きいlocal modelでも入力確認を待たせないよう、発話中は暫定textを表示し、発話確定後にtimestamp付きの最終結果へ置き換えます。
 - 発話開始はUI用levelではなく入力signalの線形RMSを使い、約-50 dBFSの絶対下限、校正したbackground noise floorとの差と倍率、継続時間で判定します。開始候補のうち、累積有声時間が0.5秒未満、またはburst全体に占める有声比率20%未満の入力は生活音・無音として破棄し、whisper.cppを起動しません。Whisper.cpp選択時は有効な発話の開始から1.5秒後、前の暫定認識が完了していれば1.5秒ごとに直近5秒を暫定認識します。累積有声時間が30秒未満なら1.5秒、30秒以上なら1秒の連続無音でburstを確定し、wall timeが5分に達した場合も安全のため確定します。
-- 暫定textは入力確認専用で、誤認識や語尾が更新されることがあります。DB、timeline、検索、書き出し、summary/TODOへは保存せず、永続化済みaudioを使った最終認識だけを正本にします。
+- 暫定textは入力確認専用で、誤認識や語尾が更新されることがあります。DB、timeline、検索、書き出しへは保存せず、永続化済みaudioを使った最終認識だけを正本にします。
 - whisper.cppが無音・環境音から生成する既知の定型文「ご視聴ありがとうございました」は、独立した文として認識された場合に限り表示・保存しません。同じsegmentに続く実発話は残します。
 - 有効な発話を確定した時点で現在の復旧用audio chunkも原子的に確定し、参照範囲のaudioが永続化された後に最終認識を実行します。破棄した候補のためにはchunkを分割しません。発話timestampは録音開始時刻とaudio offsetから復元します。録音session開始時の語彙snapshotを完了まで固定し、保存audioの再処理でも同じ発話判定で無音区間を除き、最新の有効語彙を使います。
 - whisper.cpp modelは音声入力とライフログで共通の選択です。どちらの設定画面からも一覧、download進捗と失敗理由を確認し、downloadをcancel、再試行、削除できます。Download完了前のmodelは認識に利用できず、ライフログの記録・処理中または音声入力の処理中は削除できません。
@@ -58,7 +58,7 @@
 
 ### 3.3 文章処理
 
-音声入力とライフログの文章処理先は別々に選べます。
+文章処理は音声入力の整形だけに使います。ライフログのtextは文章処理へ渡しません。
 
 | 選択肢 | 送信境界 |
 |---|---|
@@ -96,68 +96,54 @@ cloud音声入力で送るのは今回の文字起こし、共通rule、mode指�
 - menu bar、main window、専用global hotkey、macOS Shortcutsから操作できます。
 - app起動時は常に停止状態から始まり、前回終了時に記録中だった場合も自動開始しません。記録中のsleep復帰や入力device再接続は、同じprocessに残る記録開始意図に限って自動再開します。
 - ライフログの全画面とmenu barは、実際のaudio writerの稼働状態を同じ記録状態として表示します。実際に録音している間もmenu barのKoe icon本体はmonochromeで表示し、右下の小さなrose色badgeだけを着色します。開始準備中、停止中、再接続待ちではbadgeを外し、それぞれを録音中とは表示しません。
-- 音声入力との同時利用中も、復旧可能なライフログaudioの記録は中断しません。音声入力が成功した区間はそのraw transcriptを正本とし、同じ録音時間帯にライフログ側で認識した発話はtimeline、検索、書き出し、summary/TODO生成へ重複して出しません。音声入力がcancelまたは失敗した場合は、ライフログ側の発話を残します。
+- 音声入力との同時利用中も、復旧可能なライフログaudioの記録は中断しません。音声入力が成功した区間はそのraw transcriptを正本とし、同じ録音時間帯にライフログ側で認識した発話はtimeline、検索、書き出しへ重複して出しません。音声入力がcancelまたは失敗した場合は、ライフログ側の発話を残します。
 - 入力deviceを選択できます。記録中は30秒ごと、または発話burstの確定時に復旧用`.m4a`をMac内へ確定します。audioをcloud STTへ送ることはありません。
 - audio chunkは耐久化・復旧の単位です。30秒に達する前でも発話確定時にchunkを閉じるため、最終認識は次の定期確定を待ちません。認識はadaptiveな発話burst単位で実行し、持続するnear-silenceを文字起こししません。
 - Main windowとmini windowは有効な発話と判定した時点で、記録状態とは別のlive行を表示します。最初は「聞き取り中」と入力audioの長さを示し、暫定認識が返るたびにrolling textを更新します。発話確定後は「文字起こし中」と処理経過時間へ切り替え、最終結果をtimelineへ保存したらlive行を消します。
 - Main windowとmini windowのtimelineは初回表示時に最新項目を表示し、利用者が最新位置にいる間だけ、新しい発話・メモ・予定へ自動追従します。利用者が過去へscrollした場合や検索・予定から項目へ移動した場合は追従を止め、末尾へ戻ると再開します。
 - ライフログの認識言語は「表示言語に合わせる」「自動判定」「日本語」「English」「简体中文」から選べ、既定は表示言語に合わせます。表示言語が「システム設定」の場合も解決後の対応言語を使います。この設定はライフログだけに適用し、通常の音声入力、ボイスメモ、modeには伝播しません。
-- whisper.cppのcontrol tokenとtimestamp tokenはSTT engine境界で認識結果から除き、timeline、検索、書き出し、summary/TODO入力へ新しく保存しません。過去に保存されたtextへ表示時の補正や自動書換えは行いません。
+- whisper.cppのcontrol tokenとtimestamp tokenはSTT engine境界で認識結果から除き、timeline、検索、書き出しへ新しく保存しません。過去に保存されたtextへ表示時の補正や自動書換えは行いません。
 - whisper.cppの既定modelは量子化済みWhisper Large v3 Turbo Q5_0 (574 MB)です。非TurboのLarge v3 Q5_0も明示的に選べます。
-- 保存済みaudioは文字起こしと派生処理が両方成功するまで必ず保持します。既定の「処理後削除」では成功直後にaudioだけを削除し、保存済みの発話、conversation、summary、TODOは残します。設定は「処理後削除」「7日」「30日」から選べます。
+- 保存済みaudioは文字起こしが成功し、発話をDBへ保存するまで必ず保持します。既定の「処理後削除」では成功直後にaudioだけを削除し、保存済みの発話は残します。設定は「処理後削除」「7日」「30日」から選べます。
 - 7日または30日を選んだ場合も、未処理・失敗chunkは期間を超えて保持し、次回起動後の再処理に使います。保持期間を短く変更したときは、新しい条件を満たす処理済みaudioを削除します。
 - 記録中の一時中断と、既定マイクの切替・接続解除などの音声構成変更では、現在のchunkを確定して自動再接続します。sleep時も安全に閉じ、記録意図が残ればwake後に再開します。マイク権限が失われた場合だけ自動再試行しません。
-- app終了時は進行中の操作を割り込み、復旧用audioの確定と必要なDB保存だけを短時間待ちます。終了時にsummary/TODO生成は開始せず、完了できなかった保存済みchunkは次回起動時に再処理します。
+- app終了時は進行中の操作を割り込み、復旧用audioの確定と必要なDB保存だけを短時間待ちます。完了できなかった保存済みchunkは次回起動時に再処理します。
 
 ### 4.2 日別表示
 
 - main windowは「ライフログ」と「音声入力」を切り替え、ライフログを既定表示にします。
-- ライフログは左に月間activity calendarと選択日のまとめ・時間帯、中央に選択日のtimeline、右にglobal TODOを表示します。Timelineの見出しには選択日と項目数を置き、予定、検索、書き出しのbuttonを右端へまとめます。
+- ライフログは左に月間activity calendarと選択日の時間帯、右に選択日のtimelineを表示します。Timelineの見出しには選択日と項目数を置き、予定、検索、書き出しのbuttonを右端へまとめます。
 - 通常起動時とmain windowのライフログを開いた時は今日を表示し、dataの読込後にtimeline最下部の最新項目へ一度だけscrollします。mini windowも開いた時に今日を表示して最下部へ一度だけscrollします。その後に新しい認識結果や予定が届いても利用者の閲覧位置を奪いません。
 - timeline paneは予定、発話、音声入力、text memoを一列の時刻順で表示し、column headerは置きません。右上の予定buttonは選択日の予定を時刻と件名中心の素朴な一覧で表示します。日付を選ぶとその日の予定を読み直し、一覧とtimelineの両方へ反映します。予定一覧では塗りを使いません。
-- 右上の検索buttonまたは`Command-F`で横断検索を開きます。検索結果の発話、音声入力、memoを選ぶと対象日を開いてその項目へ移動し、summaryは対象日へ移動します。TODOは一覧へ表示しますが、出典への移動操作は提供しません。
+- 右上の検索buttonまたは`Command-F`で横断検索を開きます。検索結果の発話、音声入力、memoを選ぶと対象日を開いてその項目へ移動します。
 - mini windowは予定、発話、音声入力、memoを一列の時刻順で表示し、今日進行中の予定をtimeline上部に固定します。OS標準のtitle barは表示せず、Space切替やfull-screen appの利用中も明示的に閉じるまで手前に残ります。Mini windowのtoggle hotkeyは、設定された修飾キーを含む押下と離上が対になった場合だけ切り替え、同じ文字keyだけの通常入力では開閉しません。
 - 今日のtimeline最下部とmini windowには同じchat形式の入力欄があり、送信したmemoを今日のtimelineへ即時追加します。記録状態と開始・停止操作はどちらも入力欄の直上に配置します。送信ボタンと音声入力ボタンは同じ直径の円形controlに揃えます。過去日の履歴へ現在のmemoを混入させないため、main windowの入力欄は今日を選択中だけ表示します。
 - ボイスメモも手入力と同じmemoとして今日のtimelineへ追加します。
 - ライフログの記録意図が続いている間、状態文言は実装内部の文字起こし開始・終了に追従して切り替えず、記録、開始準備、一時停止、再接続の利用者向け状態を安定して表示します。
-- 発話は90秒以上の無発話でconversationに分けます。予定との関連は前後2分のずれを許容しますが、予定境界だけではconversationを分けません。
+- 発話と予定の関連は前後2分のずれを許容します。
 - 日付をまたぐ記録は実時刻の日へ分配され、表示が今日を追従中なら新しい日へ切り替わります。
 
 ### 4.3 Calendar
 
 - 選択したcalendarの予定を読み取り、時刻、件名、calendar名、終日、参加statusのsnapshotを保存します。
-- 既定では参加済み、またはRSVPのない予定だけを表示・派生処理に含めます。このfilterは変更できます。
+- 既定では参加済み、またはRSVPのない予定だけを表示・書き出しに含めます。このfilterは変更できます。
 - Calendar設定の「予定を再取得」から、現在timelineで選択している日の予定を明示的に読み直せます。処理中は連打できず、完了後にtimelineと月間activityを更新します。
 - KoeからRSVPを変更せず、Calendar appへの操作導線も提供しません。
 - 月間activity calendarではtimelineで表示中の日をprimary colorの円で塗り、それ以外の今日はprimary colorの数字で示します。
 
-### 4.4 SummaryとTODO
+### 4.4 AIへの受け渡し
 
-- summaryとdraft TODOは30分、1時間、2時間の設定間隔、または選択日の左下Summary viewにある手動更新操作で同時更新します。手動更新は差分や設定間隔の有無にかかわらず、選択日のsource of truth全体から作り直します。
-- 定期更新は前回更新後にライフログ発話またはmemoが増えた場合だけ処理し、設定間隔が到来した時点で対象日の全発話、memo、対象予定から作り直します。通常の音声入力履歴はsummary/TODOの入力にも更新triggerにも使いません。録音停止、app終了、ボイスメモ、sleep、入力device・音声構成・語彙変更による一時停止・再接続では再要約しません。入力上限を超える場合は時系列に分割して統合します。既存のDraft、未実施、完了TODOの文言をpromptへ渡し、同じ作業を再提案しません。モデルが同じ文言を返しても保存前に除外します。
-- 既定promptは日報として読めるMarkdownを要求します。対象日の記録に根拠がある範囲だけで、会議ごとの目的・参加文脈・話題、決定事項と未決事項、考えていたこと・検討の流れ、次の行動を見出しと箇条書きで整理し、根拠のない参加者、決定、感情、因果を補いません。情報がないsectionを作り話で埋めません。
-- Summary viewは生成済みMarkdownを見出し、箇条書き、強調、linkとして描画し、raw Markdown文字列をそのまま表示しません。手動更新中は進捗を表示して重複実行を防ぎ、失敗理由を表示して既存summaryとdraft TODOを保持します。
-- 当日のライブsummaryには生成時刻を基準時点として渡し、予定を「終了済み」「進行中」「これから」に区別します。開始前の予定を実施済みの事実として書かず、「このあと予定されている」内容として明示します。
-- 日付が変わった後の最終summaryは、発話やmemoの追加がなくても対象日の全予定を含めて作り直し、`isFinal`として保存します。
-- audio chunkごと、または録音停止時にはLLMを呼びません。
-- draft TODOは未確定候補です。編集して確定、または棄却できます。次回生成時に置換されるのはdraftだけで、確定・完了TODOは変更しません。
-- TODOは`draft`、`open`、`completed`を持ち、全TODO window、CLI、MCPで追加、編集、完了、再開、削除できます。
-- Main windowと全TODO windowのTODO本文は複数行へ折り返し、長い文言でも省略せず表示・編集できます。本文に応じて行の高さを広げます。
-- TODOの発話・memo出典情報は説明可能性と将来の監査のため保存しますが、UIに「元の発言へ」などの出典移動操作は表示しません。
-- summary用とTODO用の指示文は設定、CLI、MCPから編集できます。
-- cloudを選んだ場合は対象日の発話、memo、予定の時刻と件名、各指示文を送ります。録音audio、通常の音声入力履歴、前面app情報は送りません。
-- Groqで選んだmodelにかかわらず、summaryとTODO案は再現性を優先する温度0、modelが対応する最小の推論量、共通のJSON出力contractで生成します。APIが対応する最も強いschema制約を使い、最終的にKoeが同じ型として検証します。推論本文は応答dataへ含めません。
+Koeはライフログから要約、話題、TODOを生成しません。振り返りや作業の整理は、利用者が選んだ汎用AIへCLIまたはMCPで日別の記録を渡して行います。ライフログの発話、memo、予定はKoeからLLMやcloudへ送信しません。
 
 ### 4.5 検索と書き出し
 
-連続する発話は90秒未満の間隔で途中に別の表示項目がなければ時刻範囲付きの段落へまとめます。プレビューは先頭4,000文字、書き出しは全文です。「この日の約束」は出力せず、「この日発生したタスク」と「この日完了したタスク」を作成日・完了日で抽出します。作成日の一覧には完了済みも含め、未確定Draftは除外します。話題はプロジェクト・活動のタグとして最大5件に整理し、対象日以前90日分（最大100件）の既存話題名と同じ対象なら同じ表記を再利用します。過去日の本文は参照せず、既存タグは再要約時に更新します。Day領域は縦スクロールでき、タイムラインの予定は塗りを使わず細い線と文字の強弱で区別します。
+連続する発話は90秒未満の間隔で途中に別の表示項目がなければ時刻範囲付きの段落へまとめます。プレビューは先頭4,000文字、書き出しは全文です。Day領域は縦スクロールでき、タイムラインの予定は塗りを使わず細い線と文字の強弱で区別します。
 
-- 発話、memo、TODO、summaryを日本語部分一致で横断検索します。
-- 日別書き出しはcalendar、ライフログ発話、通常の音声入力、memo、summary、その日に作成または完了したTODOを個別選択できます。ボイスメモは手入力と同じmemoに含めます。
-- 書き出しは日付を見出しにした人間向けMarkdownで、予定、発話、音声入力、memoを読みやすい時系列の箇条書き、TODOをcheckboxとして表します。機械用の英大文字tagやraw metadataは出力しません。
+- ライフログ発話、通常の音声入力、memoを日本語部分一致で横断検索します。
+- 日別書き出しはcalendar、ライフログ発話、通常の音声入力、memoを個別選択できます。ボイスメモは手入力と同じmemoに含めます。
+- 書き出しは日付を見出しにした人間向けMarkdownで、予定、発話、音声入力、memoを読みやすい時系列の箇条書きで表します。機械用の英大文字tagやraw metadataは出力しません。
 - 書き出し画面は開いた時点のdataをsnapshotとして扱い、previewをUI thread外で組み立てます。準備中はprogressを表示し、選択変更、画面を閉じる操作、ほかの音声処理をblockしません。
-- open TODO全体を別に書き出せます。
-- UIではclipboardまたはfile、Shortcutsではclipboard、返却file、指定folderへの上書き保存を利用できます。
+- UIではclipboardまたはfile、CLIでは標準出力、clipboard、fileを利用できます。
 
 ## 5. 画面と設定
 
@@ -168,14 +154,13 @@ Koeのprimary colorはapp icon由来の爽やかなblueに固定し、利用者�
 | 場所 | 公開機能 |
 |---|---|
 | Menu bar | ライフログ/音声入力の用途別quick action。ライフログは記録切替、今日の画面、mini window、音声入力は録音、mode、直前結果、履歴を各tab内にまとめ、共通footerは設定と終了だけを置く。「今日を開く」「ミニウィンドウ」はsystem fontを直接描画するcompact buttonとする |
-| Main window | 通常起動時に前面のkey windowとして1680×960 ptで開き、3ペインを同時に表示する。ライフログの今日を選択してtimelineの最新位置を表示。onboarding、ライフログ、今日のtimeline最下部からの手入力・音声memo追加、音声入力履歴。記録操作はtoolbar右肩ではなくtimeline内の状態表示に置く |
+| Main window | 通常起動時に前面のkey windowとして1680×960 ptで開き、calendar列とtimelineの2ペインを同時に表示する。ライフログの今日を選択してtimelineの最新位置を表示。onboarding、ライフログ、今日のtimeline最下部からの手入力・音声memo追加、音声入力履歴。記録操作はtoolbar右肩ではなくtimeline内の状態表示に置く |
 | Mini window | ライフログ状態、今日のtimelineへの手入力・音声memo追加。一度開いたら明示的に閉じるまで、ほかのapp、desktop Space、full-screen Spaceより手前に表示し続ける。記録操作はwindow右肩ではなく状態表示に置く |
-| 全TODO window | draft確認、編集、確定、完了、再開、削除 |
-| Settings: 共通 | 一般（表示言語を含む）、利用状況、語彙、privacy、連携 |
+| Settings: 共通 | 一般（表示言語を含む）、語彙、privacy（保存場所、このMacの使用量、削除）、連携 |
 | Settings: 音声入力 | hotkey、聞き取りengine・whisper.cpp model、feedback、履歴、AI整形、mode |
-| Settings: ライフログ | 記録・mini window・ボイスメモhotkey、入力device、STT engine・認識言語・whisper.cpp model、audio保持、summary間隔、要約/TODO AI、calendar再取得 |
+| Settings: ライフログ | 記録・mini window・ボイスメモhotkey、入力device、STT engine・認識言語・whisper.cpp model、audio保持、calendar再取得 |
 
-利用状況には音声入力回数・録音時間、ライフログの実発話時間、cloud AIの実測token数、Koe dataのstorage使用量を表示します。ライフログの実発話時間は、無音を含む連続録音時間ではなくtimelineに残る発話区間を日ごとに重複なく集計し、成功した音声入力と重なる発話は二重計上しません。local modelはcloud token集計に含みません。
+Privacy設定には、履歴、ライフログ、保存audio、whisper.cpp modelを含むKoe dataのこのMac上の合計使用量を表示します。
 
 Main window、mini window、menu barのライフログ状態表示は同じ記録操作を共有します。停止中の開始操作はblue/cyanの録音記号と「録音を開始」、記録開始意図がある間の停止操作はroseの停止記号と「録音を停止」を表示します。再接続中やボイスメモによる一時停止中も、停止操作は同じroseの外観を保ちます。
 
@@ -185,8 +170,8 @@ Main window、mini window、menu barのライフログ状態表示は同じ記�
 
 | Data | 保存先 | 既定保持 |
 |---|---|---|
-| 履歴、mode、語彙、ライフログ、TODO、利用量 | `~/Library/Application Support/Koe/koe.sqlite` | 履歴は無期限、各設定に従う |
-| ライフログaudio | Application Support配下 | 文字起こし・派生処理の成功後に削除。7日または30日へ変更可能 |
+| 履歴、mode、語彙、ライフログ | `~/Library/Application Support/Koe/koe.sqlite` | 履歴は無期限、各設定に従う |
+| ライフログaudio | Application Support配下 | 文字起こしの成功後に削除。7日または30日へ変更可能 |
 | whisper.cpp model | `~/Library/Application Support/Koe/Models/WhisperCpp/` | 利用者が個別に削除、または全データ削除まで |
 | 一般設定（表示言語を含む） | app UserDefaults | app data削除まで |
 | API key | macOS Keychain | 個別削除まで |
@@ -194,37 +179,31 @@ Main window、mini window、menu barのライフログ状態表示は同じ記�
 
 - 既存DBは未適用migrationの直前にbackupします。通常起動でも同日重複なしで1日1回backupします。
 - backupに失敗した場合はmigrationを開始しません。
-- 「全データを削除」は履歴、mode、語彙、ライフログ、TODO、保存audio、download済みwhisper.cpp model、途中のdownload file、旧WhisperKit model、DB backupを削除します。設定とKeychainは画面で示す個別範囲に従います。
+- 「全データを削除」は履歴、mode、語彙、ライフログ、保存audio、download済みwhisper.cpp model、途中のdownload file、旧WhisperKit model、DB backupを削除します。設定とKeychainは画面で示す個別範囲に従います。
 - 履歴から語彙候補へ複製済みの短い根拠は履歴とは別dataであり、履歴だけの削除では残る場合があります。
+- TODO、日次要約、話題、cloud AIのtoken集計を保存していた旧版DBは、更新時のmigration直前backupを作ってからそれらのtableを削除します。発話、memo、予定、音声入力履歴は変更しません。旧版でライフログ用に登録したAPI keyは読み出さず、「全データを削除」でKeychainから消します。
 
 ## 7. macOS Shortcuts / App Intents
 
-Koeは下記のApp Intent ActionをShortcutsへ公開します。各ActionはKoeの起動とDB初期化完了を待ってから実行します。「ライフログを開始」はマイクを扱うためKoeをforegroundで起動し、それ以外はbackgroundで実行します。
+Koeは下記のApp Intent ActionをShortcutsへ公開します。各ActionはKoeの起動とDB初期化完了を待ってから実行します。「ライフログを開始」はマイクを扱うためKoeをforegroundで起動し、「ライフログを終了」はbackgroundで実行します。
 
 | Action | Input / Output |
 |---|---|
 | ライフログを開始 | 冪等に開始。audio保存同意がなければerror |
-| ライフログを終了 | 停止し、進行中の文字起こしと保存を待つ。summary/TODOは更新しない |
-| ライフログを書き出してcopy | 任意日とinclude項目を受け、clipboardへcopy |
-| ライフログをfileにする | 任意日、include項目、folder、`{{date}}`対応filename。folder指定時は同名をatomic上書き |
-| 未実施TODOをすべてcopy | 確定済みopen TODOをclipboardへcopy |
-| 未実施TODOをfileにする | `Koe-Open-TODO.md`を返す |
+| ライフログを終了 | 停止し、進行中の文字起こしと保存を待つ |
+
+日別の書き出しはCLIまたはMCPから行います。
 
 ## 8. CLI
 
 実行名はbuild productでは`koe-cli`、配布・link後の利用名は`koe`です。成功時は標準出力、失敗時はstderrへ`koe: ...`を出してexit status 1を返します。
 
 ```text
-koe export day [--date YYYY-MM-DD] [--include calendar,speech,voice-input,memos,summary,todos] [--clipboard|--output PATH]
-koe export todos [--clipboard|--output PATH]
-koe todo list [--status open|draft|completed|all]
-koe todo add "タイトル" | complete ID | reopen ID | delete ID
-koe prompt get summary|todo
-koe prompt set summary|todo "プロンプト"   # - で標準入力
+koe export day [--date YYYY-MM-DD] [--include calendar,speech,voice-input,memos] [--clipboard|--output PATH]
 koe search "検索語" [--limit N]
 ```
 
-`--clipboard`と`--output`は同時指定できません。`--output .`は既定filenameを現在directoryへ書きます。TODO一覧と検索結果はtab区切りです。
+`--clipboard`と`--output`は同時指定できません。`--output .`は既定filenameを現在directoryへ書きます。検索結果はtab区切りです。
 
 ## 9. MCP
 
@@ -232,15 +211,8 @@ koe search "検索語" [--limit N]
 
 | Tool | Arguments |
 |---|---|
-| `life_log_export` | `date?: YYYY-MM-DD`, `include?: [calendar,speech,voice-input,memos,summary,todos]` |
-| `todo_export_open` | なし |
+| `life_log_export` | `date?: YYYY-MM-DD`, `include?: [calendar,speech,voice-input,memos]` |
 | `life_log_search` | `query: string`, `limit?: integer` |
-| `todo_list` | `status?: open|draft|completed|all`。省略時open |
-| `todo_add` | `title: string` |
-| `todo_update` | `id: string`, `title?: string`, `status?: open|draft|completed` |
-| `todo_delete` | `id: string` |
-| `prompt_get` | `kind: summary|todo` |
-| `prompt_set` | `kind: summary|todo`, `value: string` |
 
 ## 10. 障害時の外部挙動
 
@@ -261,20 +233,20 @@ koe search "検索語" [--limit N]
 7. migration前backupと日次backupが作られ、合計7file以内に保たれる。
 8. CLI、MCP、Shortcutsの公開interfaceが本書と一致する。
 9. ライフログの実録音中だけmenu barのmonochrome Koe icon右下にrose色badgeが表示され、停止または再接続待ちではbadgeなしへ戻る。
-10. ライフログ記録中に成功した音声入力は一件だけ表示・検索・書き出しへ現れ、summary/TODOには使われない。cancelまたは失敗した音声入力の時間帯はライフログ発話が失われない。
-11. 当日のsummaryは根拠のある会議、話題、決定、検討の流れ、次の行動をMarkdownの日報として表示し、未来の予定を実施済みとして書かない。手動更新は選択日のsummaryとdraft TODOを同時に更新し、失敗時は既存値を保持する。
+10. ライフログ記録中に成功した音声入力は一件だけ表示・検索・書き出しへ現れる。cancelまたは失敗した音声入力の時間帯はライフログ発話が失われない。
+11. ライフログの発話、memo、予定はKoeからLLMやcloudへ送信されず、要約・話題・TODOは生成されない。
 12. Calendar設定から予定を再取得すると、現在選択日のsnapshot、timeline、月間activityが更新される。
 13. マイク切替などの音声構成変更後も、記録開始意図が残る限りライフログcaptureが自動再開する。
 14. ボイスメモ一回につきmemoだけが一件作られ、通常の音声入力履歴とライフログutteranceには同じ内容が追加されない。
 15. 通常起動時にmain windowのライフログ画面が前面のkey windowとして開き、memo入力欄の音声ボタンは専用hotkeyと同じボイスメモを開始・停止する。
-16. 「処理後削除」でも未処理・失敗chunkは残り、文字起こしと派生処理が成功したaudioだけが削除される。
+16. 「処理後削除」でも未処理・失敗chunkは残り、文字起こしが成功したaudioだけが削除される。
 17. 通常起動時、main windowでライフログを開いた時、mini windowを開いた時は、今日のtimelineの最新項目が表示される。
-18. Timelineはheaderなしの一列で予定・発話・音声入力・memoを時刻順に表示する。日付選択時に予定一覧とtimelineが更新され、検索は`Command-F`でも開く。TODO本文は複数行へ折り返され、出典移動UIは表示しないがprovenance dataは保持する。
+18. Timelineはheaderなしの一列で予定・発話・音声入力・memoを時刻順に表示する。日付選択時に予定一覧とtimelineが更新され、検索は`Command-F`でも開く。
 19. Mini windowはtitle barなしの一列timelineで予定と記録を時刻順に表示し、進行中の予定を上部へ固定する。明示的に閉じるまでSpace切替やfull-screen appの利用中も手前に残り、通常の文字入力ではtoggleされない。
 20. Main window、mini window、menu barの記録状態は実際のaudio writerの稼働状態から同期され、同じ色、symbol、文言を使う。Main/mini windowでは開始・停止をmemo入力欄の直上に配置する。
 21. 継続可能なmessageは`×`で閉じられ、dismissしても自動再接続や記録開始意図は変わらない。
-22. 月間calendarは今日を塗り、表示中の日を枠線で示し、既存TODOと同じ作業を新しいDraft TODOとして再提案しない。
-23. Summary/TODO派生は設定間隔の到来またはSummary viewの手動更新だけで実行し、録音停止を含むcapture状態変化では実行しない。確定済みTODOのIDと新しいDraftのIDは衝突しない。
+22. 月間calendarは表示中の日をprimary colorの円で塗り、それ以外の今日をprimary colorの数字で示す。
+23. TODO・要約・token集計を持つ旧版DBを開くと、migration直前backupを残してそれらを削除し、発話、memo、検索は引き続き使える。
 24. App起動だけではライフログ記録を開始せず、前回processの記録開始意図を復元しない。
 25. 音声入力・ボイスメモとライフログは、それぞれSpeechAnalyzerまたはdownload済みwhisper.cpp modelを選べる。音声入力でwhisper.cppを選ぶと停止後に録音全体を一括認識し、modelは両用途で共有する。Download・cancel・再試行・削除の状態と容量が設定に表示され、audioはMac外へ送信されない。
 26. Life Logは起動直後に線形RMSの背景noise floorを校正し、その後も非発話中の入力から更新する。約-50 dBFSの絶対下限と直近のnoise floorに対する十分な上昇を短時間継続した場合だけ発話burstを開始し、微小noiseや持続する空調音では認識jobを作らない。Whisper.cppでは前のpreviewが完了している場合に限り、発話中に1.5秒cadence・直近5秒の暫定textを表示し、30秒未満の発話は1.5秒、30秒以上は1秒の無音でflushする。Burst確定時にaudioをcommitし、timestampは保存audio offsetに一致する。暫定textは永続化せず、語彙は録音session開始時のsnapshotで固定される。

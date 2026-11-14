@@ -19,8 +19,6 @@ struct KoeCLI {
         guard let command = arguments.first else { throw CLIError.usage(Self.usage) }
         switch command {
         case "export": try await export(Array(arguments.dropFirst()), service: service)
-        case "todo": try await todo(Array(arguments.dropFirst()), service: service)
-        case "prompt": try await prompt(Array(arguments.dropFirst()), service: service)
         case "search": try await search(Array(arguments.dropFirst()), service: service)
         case "help", "--help", "-h": print(usage)
         default: throw CLIError.usage("不明なコマンド: \(command)\n\n\(usage)")
@@ -28,62 +26,11 @@ struct KoeCLI {
     }
 
     private static func export(_ arguments: [String], service: KoeAutomationService) async throws {
-        guard let target = arguments.first else { throw CLIError.usage("使い方: koe export day|todos [options]") }
-        let text: String
-        let defaultFilename: String
-        switch target {
-        case "day":
-            let date = try value(after: "--date", in: arguments).map(parseDay) ?? Date()
-            let options = try exportOptions(value(after: "--include", in: arguments))
-            text = try await service.exportDay(date, options: options)
-            defaultFilename = "Koe-LifeLog-\(LifeLogDateKey.string(for: date)).md"
-        case "todos":
-            text = try await service.exportOpenTodos()
-            defaultFilename = "Koe-Open-TODO.md"
-        default: throw CLIError.usage("書き出し対象は day または todos です")
-        }
-        try write(text, arguments: arguments, defaultFilename: defaultFilename)
-    }
-
-    private static func todo(_ arguments: [String], service: KoeAutomationService) async throws {
-        guard let action = arguments.first else { throw CLIError.usage("使い方: koe todo list|add|complete|reopen|delete") }
-        switch action {
-        case "list":
-            let statusValue = value(after: "--status", in: arguments)
-            let status = try statusValue.flatMap { value -> LifeLogTodo.Status? in
-                if value == "all" { return nil }
-                guard let parsed = LifeLogTodo.Status(rawValue: value) else { throw CLIError.invalidValue("status", value) }
-                return parsed
-            }
-            for todo in try await service.todos(status: statusValue == nil ? .open : status) {
-                print("\(todo.id)\t\(todo.status.rawValue)\t\(todo.title)")
-            }
-        case "add":
-            let title = try positional(at: 1, in: arguments, label: "タイトル")
-            let todo = try await service.addTodo(title: title)
-            print(todo.id)
-        case "complete", "reopen":
-            let id = try positional(at: 1, in: arguments, label: "TODO ID")
-            let todo = try await service.updateTodo(id: id, status: action == "complete" ? .completed : .open)
-            print("\(todo.id)\t\(todo.status.rawValue)\t\(todo.title)")
-        case "delete":
-            try await service.deleteTodo(id: positional(at: 1, in: arguments, label: "TODO ID"))
-        default: throw CLIError.usage("不明なTODO操作: \(action)")
-        }
-    }
-
-    private static func prompt(_ arguments: [String], service: KoeAutomationService) async throws {
-        guard let action = arguments.first else { throw CLIError.usage("使い方: koe prompt get|set summary|todo") }
-        let kindValue = try positional(at: 1, in: arguments, label: "summary または todo")
-        guard let kind = KoeAutomationService.PromptKind(rawValue: kindValue) else { throw CLIError.invalidValue("prompt", kindValue) }
-        switch action {
-        case "get": print(service.prompt(kind))
-        case "set":
-            let source = try positional(at: 2, in: arguments, label: "プロンプトまたは -")
-            let text = source == "-" ? String(decoding: FileHandle.standardInput.readDataToEndOfFile(), as: UTF8.self) : source
-            try service.setPrompt(text, kind: kind)
-        default: throw CLIError.usage("不明なプロンプト操作: \(action)")
-        }
+        guard arguments.first == "day" else { throw CLIError.usage("使い方: koe export day [options]") }
+        let date = try value(after: "--date", in: arguments).map(parseDay) ?? Date()
+        let options = try exportOptions(value(after: "--include", in: arguments))
+        let text = try await service.exportDay(date, options: options)
+        try write(text, arguments: arguments, defaultFilename: "Koe-LifeLog-\(LifeLogDateKey.string(for: date)).md")
     }
 
     private static func search(_ arguments: [String], service: KoeAutomationService) async throws {
@@ -100,16 +47,14 @@ struct KoeCLI {
     private static func exportOptions(_ value: String?) throws -> LifeLogTextExporter.Options {
         guard let value else { return .init() }
         let names = Set(value.split(separator: ",").map(String.init))
-        let allowed = Set(["calendar", "speech", "voice-input", "memos", "summary", "todos"])
+        let allowed = Set(["calendar", "speech", "voice-input", "memos"])
         let unknown = names.subtracting(allowed)
         guard unknown.isEmpty else { throw CLIError.invalidValue("include", unknown.sorted().joined(separator: ",")) }
         return .init(
             includesCalendarEvents: names.contains("calendar"),
             includesUtterances: names.contains("speech"),
             includesDictations: names.contains("voice-input"),
-            includesMemos: names.contains("memos"),
-            includesSummary: names.contains("summary"),
-            includesTodosForDay: names.contains("todos")
+            includesMemos: names.contains("memos")
         )
     }
 
@@ -145,12 +90,7 @@ struct KoeCLI {
     }
 
     private static let usage = """
-    koe export day [--date YYYY-MM-DD] [--include calendar,speech,voice-input,memos,summary,todos] [--clipboard|--output PATH]
-    koe export todos [--clipboard|--output PATH]
-    koe todo list [--status open|draft|completed|all]
-    koe todo add "タイトル" | complete ID | reopen ID | delete ID
-    koe prompt get summary|todo
-    koe prompt set summary|todo "プロンプト"   # - で標準入力
+    koe export day [--date YYYY-MM-DD] [--include calendar,speech,voice-input,memos] [--clipboard|--output PATH]
     koe search "検索語" [--limit N]
     """
 }

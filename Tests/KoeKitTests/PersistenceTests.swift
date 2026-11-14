@@ -30,6 +30,62 @@ import Testing
     try FileManager.default.removeItem(at: root)
 }
 
+/// TODO・要約・token集計を廃止したv9は、発話とメモを保ったまま旧tableを消す。
+@Test func removingTodoSummaryAndUsageKeepsLifeLogText() async throws {
+    let root = FileManager.default.temporaryDirectory.appendingPathComponent("koe-v9-test-\(UUID().uuidString)")
+    let databaseURL = root.appendingPathComponent("koe.sqlite")
+    let backupDirectory = root.appendingPathComponent("Backups")
+    try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: root) }
+    do {
+        let legacy = try DatabaseQueue(path: databaseURL.path)
+        try KoeDatabase.migrator.migrate(legacy, upTo: "v8-llm-token-usage")
+        try await legacy.write { db in
+            try db.execute(sql: """
+                INSERT INTO life_log_audio_chunks (id, capture_started_at, capture_ended_at, local_path, transcription_state, processing_state)
+                  VALUES ('audio', '2026-08-29T09:00:00.000Z', '2026-08-29T09:00:30.000Z', '/tmp/v9.m4a', 'transcribed', 'extracted');
+                INSERT INTO life_log_conversations VALUES ('conversation', '2026-08-29T09:00:00.000Z', '2026-08-29T09:00:30.000Z', NULL);
+                INSERT INTO life_log_utterances VALUES ('utterance', '2026-08-29T09:00:01.000Z', '2026-08-29T09:00:05.000Z',
+                  'レセコンの移行を相談した', 'audio', NULL, 'conversation');
+                INSERT INTO life_log_memos VALUES ('memo', '2026-08-29T09:01:00.000Z', '診療報酬の確認');
+                INSERT INTO life_log_todos (id, title, status, created_at, source_utterance_ids, source_memo_ids)
+                  VALUES ('todo', '請求データを確認', 'open', '2026-08-29T09:02:00.000Z', '[]', '[]');
+                INSERT INTO daily_summaries VALUES ('2026-08-29', '移行計画', '[]', '[]', 0, 0, 1, '2026-08-29T09:02:00.000Z', 0);
+                INSERT INTO llm_usage_events VALUES ('usage', '2026-08-29T09:03:00.000Z', '2026-08-29', 'dictation', 'openAI', NULL, 1, 1, 2);
+                """)
+        }
+    }
+
+    let database = try await KoeDatabase.open(fileURL: databaseURL, backupDirectory: backupDirectory)
+
+    let results = try await database.lifeLog.search("レセコン")
+    #expect(results.map(\.id) == ["utterance-utterance"])
+    #expect(try await database.lifeLog.search("診療").map(\.kind) == [.memo])
+    let date = try PersistenceCoding.decodeDate("2026-08-29T09:00:01.000Z")
+    #expect(try await database.lifeLog.utterances(audioChunkID: "audio").map(\.text) == ["レセコンの移行を相談した"])
+    #expect(try await database.lifeLog.search("移行計画").isEmpty)
+    #expect(try await database.lifeLog.day(date).memos.map(\.id) == ["memo"])
+    let tables = try await database.queue.read { db in
+        try String.fetchAll(db, sql: "SELECT name FROM sqlite_master WHERE type = 'table'")
+    }
+    for removed in ["life_log_todos", "life_log_todos_fts", "daily_summaries", "daily_summaries_fts", "llm_usage_events", "life_log_conversations"] {
+        #expect(!tables.contains(removed))
+    }
+    let columns = try await database.queue.read { db in try db.columns(in: "life_log_utterances").map(\.name) }
+    #expect(!columns.contains("conversation_id"))
+    // 新しい発話もFTSへ入る。
+    try await database.lifeLog.save(utterance: LifeLogUtterance(
+        id: "new", startedAt: date.addingTimeInterval(10), endedAt: date.addingTimeInterval(12), text: "移行後の発話", audioChunkID: "audio"
+    ))
+    #expect(try await database.lifeLog.search("移行後").map(\.id) == ["utterance-new"])
+
+    // 消したTODOと要約はmigration直前のbackupから回収できる。
+    let backup = try #require(try FileManager.default.contentsOfDirectory(at: backupDirectory, includingPropertiesForKeys: nil)
+        .first { $0.lastPathComponent.hasPrefix("pre-migration-") })
+    let backupQueue = try DatabaseQueue(path: backup.path)
+    #expect(try await backupQueue.read { try String.fetchOne($0, sql: "SELECT title FROM life_log_todos") } == "請求データを確認")
+}
+
 @Test func dailyBackupIsAConsistentOncePerDaySnapshot() async throws {
     let root = FileManager.default.temporaryDirectory.appendingPathComponent("koe-backup-test-\(UUID().uuidString)")
     let databaseURL = root.appendingPathComponent("koe.sqlite")
@@ -103,10 +159,6 @@ import Testing
     try await database.lifeLog.save(utterance: LifeLogUtterance(
         startedAt: start, endedAt: start.addingTimeInterval(10), text: "削除発話", audioChunkID: chunk.id
     ))
-    try await database.llmUsage.record(.init(
-        id: "delete", occurredAt: start, purpose: .dictation, provider: .openAI, model: "gpt",
-        usage: .init(inputTokens: 10, outputTokens: 2, totalTokens: 12)
-    ))
 
     try await database.deleteAllUserData()
 
@@ -115,7 +167,6 @@ import Testing
     #expect(try await database.modes.all().isEmpty)
     #expect(try await database.lifeLog.day(start).utterances.isEmpty)
     #expect(try await database.lifeLog.pendingAudioChunks().isEmpty)
-    #expect(try await database.llmUsage.daily(since: .distantPast).isEmpty)
 }
 
 @Test func sessionUpsertPreservesOneAuditRow() async throws {
@@ -198,95 +249,6 @@ import Testing
     try await database.modes.save(Mode(id: "builtin.ai-agent", name: "AI Agent", prompt: "legacy"))
     try await database.modes.seedBuiltinsIfNeeded()
     #expect(try await database.modes.mode(id: "builtin.ai-agent") == nil)
-}
-
-@Test func llmUsageAggregatesByDayAndPurpose() async throws {
-    let database = try await KoeDatabase.inMemory()
-    var calendar = Calendar(identifier: .gregorian)
-    calendar.timeZone = TimeZone(secondsFromGMT: 0)!
-    let first = Date(timeIntervalSince1970: 1_787_875_200) // 2026-08-29 00:00 UTC
-    let second = first.addingTimeInterval(86_400)
-
-    try await database.llmUsage.record(.init(
-        id: "usage-1", occurredAt: first, purpose: .dictation, provider: .openAI, model: "gpt",
-        usage: .init(inputTokens: 100, outputTokens: 20, totalTokens: 120)
-    ), calendar: calendar)
-    try await database.llmUsage.record(.init(
-        id: "usage-2", occurredAt: first.addingTimeInterval(60), purpose: .dictation, provider: .groq, model: "model",
-        usage: .init(inputTokens: 50, outputTokens: 10, totalTokens: 60)
-    ), calendar: calendar)
-    try await database.llmUsage.record(.init(
-        id: "usage-3", occurredAt: second, purpose: .lifeLog, provider: .anthropic, model: "claude",
-        usage: .init(inputTokens: 500, outputTokens: 80, totalTokens: 580)
-    ), calendar: calendar)
-
-    let daily = try await database.llmUsage.daily(since: first, calendar: calendar)
-    let dictation = try #require(daily.first { $0.purpose == .dictation })
-    #expect(dictation.inputTokens == 150)
-    #expect(dictation.outputTokens == 30)
-    #expect(dictation.totalTokens == 180)
-    #expect(dictation.requestCount == 2)
-    let lifeLog = try #require(daily.first { $0.purpose == .lifeLog })
-    #expect(lifeLog.totalTokens == 580)
-    #expect(lifeLog.requestCount == 1)
-}
-
-@Test func recordingDurationAggregatesByDayAndFeature() async throws {
-    let database = try await KoeDatabase.inMemory()
-    var calendar = Calendar(identifier: .gregorian)
-    calendar.timeZone = TimeZone(secondsFromGMT: 0)!
-    let first = try #require(calendar.date(from: DateComponents(year: 2026, month: 8, day: 29)))
-    let second = first.addingTimeInterval(86_400)
-
-    try await database.history.save(makeSession(
-        id: "dictation-1", startedAt: first, status: .completed, raw: "一日目", audioDurationMs: 12_000
-    ))
-    try await database.history.save(makeSession(
-        id: "dictation-2", startedAt: second, status: .completed, raw: "二日目", audioDurationMs: 8_000
-    ))
-    try await database.lifeLog.save(audioChunk: .init(
-        id: "life-log-1", captureStartedAt: first, captureEndedAt: first.addingTimeInterval(300),
-        localPath: "/tmp/usage-life-log-1.m4a"
-    ))
-    try await database.lifeLog.save(audioChunk: .init(
-        id: "life-log-2", captureStartedAt: second, captureEndedAt: second.addingTimeInterval(450),
-        localPath: "/tmp/usage-life-log-2.m4a"
-    ))
-    let beforeMidnight = second.addingTimeInterval(86_390)
-    try await database.lifeLog.save(audioChunk: .init(
-        id: "life-log-midnight", captureStartedAt: beforeMidnight,
-        captureEndedAt: beforeMidnight.addingTimeInterval(20), localPath: "/tmp/usage-life-log-midnight.m4a"
-    ))
-    try await database.lifeLog.save(utterance: .init(
-        id: "utterance-1", startedAt: first.addingTimeInterval(15), endedAt: first.addingTimeInterval(45),
-        text: "一日目の発話", audioChunkID: "life-log-1"
-    ))
-    try await database.lifeLog.save(utterance: .init(
-        id: "utterance-shadowed-by-dictation", startedAt: first.addingTimeInterval(5),
-        endedAt: first.addingTimeInterval(10), text: "音声入力と重なる発話",
-        audioChunkID: "life-log-1"
-    ))
-    try await database.lifeLog.save(utterance: .init(
-        id: "utterance-2", startedAt: second.addingTimeInterval(10), endedAt: second.addingTimeInterval(55),
-        text: "二日目の発話", audioChunkID: "life-log-2"
-    ))
-    try await database.lifeLog.save(utterance: .init(
-        id: "utterance-2-overlap", startedAt: second.addingTimeInterval(30), endedAt: second.addingTimeInterval(60),
-        text: "重なる発話", audioChunkID: "life-log-2"
-    ))
-    try await database.lifeLog.save(utterance: .init(
-        id: "utterance-midnight", startedAt: beforeMidnight,
-        endedAt: beforeMidnight.addingTimeInterval(20), text: "日付をまたぐ発話",
-        audioChunkID: "life-log-midnight"
-    ))
-
-    let dictation = try await database.history.dailyRecordingDuration(since: first, calendar: calendar)
-    let lifeLog = try await database.lifeLog.dailyRecordingDuration(since: first, calendar: calendar)
-
-    #expect(dictation.map(\.seconds) == [8, 12])
-    #expect(lifeLog.map(\.seconds) == [10, 60, 30])
-    #expect(dictation.map(\.day) == ["2026-08-30", "2026-08-29"])
-    #expect(lifeLog.map(\.day) == ["2026-08-31", "2026-08-30", "2026-08-29"])
 }
 
 @Test func suggestionsDeduplicateKnownSurfaces() async throws {

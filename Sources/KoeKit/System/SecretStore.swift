@@ -12,6 +12,7 @@ public enum SecretStore {
         case openAIApiKey = "openai.apiKey"
         case anthropicApiKey = "anthropic.apiKey"
         case geminiApiKey = "gemini.apiKey"
+        // ライフログ要約の廃止前に保存した可能性があるキー。読み出さず、全削除でだけ消す。
         case lifeLogGroqApiKey = "lifeLog.groq.apiKey"
         case lifeLogOpenAIApiKey = "lifeLog.openai.apiKey"
         case lifeLogAnthropicApiKey = "lifeLog.anthropic.apiKey"

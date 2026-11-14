@@ -1,37 +1,30 @@
 import SwiftUI
 
-/// 音声入力の整形とライフログの派生処理は、接続先・モデル・APIキーを用途ごとに保持する。
+/// 音声入力の整形に使う接続先・モデル・APIキー。
 struct ModelsSettingsView: View {
     var env: AppEnvironment
-    var purpose: LlmPurpose = .dictation
 
     @State private var apiKeyDraft = ""
 
     private var settings: AppSettings { env.settings }
-    private var backend: FormattingBackend { settings.backend(for: purpose) }
-    private var title: String { purpose == .dictation ? "音声入力の整形" : "要約とTODO" }
+    private var backend: FormattingBackend { settings.formattingBackend }
 
     var body: some View {
         LazyVStack(alignment: .leading, spacing: 20) {
             privacyNotice
-            if purpose == .dictation { speechRecognitionCard }
-            SettingsCard(
-                title: title,
-                footnote: purpose == .dictation
-                    ? "音声入力の文章を整えます。ライフログとは別に選べます。"
-                    : "一日の要約とTODO案を作ります。音声入力とは別に選べます。"
-            ) {
+            speechRecognitionCard
+            SettingsCard(title: "音声入力の整形", footnote: "音声入力の文章を整えます。ライフログの文字は整形にも外部送信にも使いません。") {
                 providerPicker
                 engineStatus
                 if backend != .onDevice {
                     providerSettings
                 }
             }
-            if purpose == .dictation { timeoutCard } else { promptCard }
+            timeoutCard
         }
         .task {
             await env.reloadMeasuredLatencies()
-            await env.applyEngineChange(purpose: purpose, checkCredentials: !AppEnvironment.usesScreenshotDemoData)
+            await env.applyEngineChange(checkCredentials: !AppEnvironment.usesScreenshotDemoData)
         }
     }
 
@@ -47,14 +40,10 @@ struct ModelsSettingsView: View {
 
     private var noticeMessage: String {
         if backend.sendsTranscriptOffDevice {
-            return purpose == .dictation
-                ? "整形のため、文字起こしと指示文を送ります。音声ファイルは送りません。"
-                : "要約とTODO案のため、対象日の発話、メモ、予定と指示文を送ります。音声ファイルは送りません。"
+            return "整形のため、文字起こしと指示文を送ります。音声ファイルは送りません。"
         }
         if backend == .onDevice {
-            return purpose == .dictation
-                ? "聞き取りと整形をmacOS内蔵モデルで行います。"
-                : "要約とTODO案をmacOS内蔵モデルで作ります。"
+            return "聞き取りと整形をmacOS内蔵モデルで行います。"
         }
         return "文章処理をこのMac上のローカルサーバーで行います。"
     }
@@ -92,9 +81,9 @@ struct ModelsSettingsView: View {
 
     private func providerButton(_ option: FormattingBackend, icon: String) -> some View {
         Button {
-            settings.setBackend(option, for: purpose)
+            settings.formattingBackend = option
             apiKeyDraft = ""
-            Task { await env.applyEngineChange(purpose: purpose, resetConnectionState: true) }
+            Task { await env.applyEngineChange(resetConnectionState: true) }
         } label: {
             VStack(spacing: 6) {
                 Image(systemName: icon).font(.system(size: 14, weight: .medium))
@@ -124,27 +113,27 @@ struct ModelsSettingsView: View {
         HStack(alignment: .firstTextBaseline, spacing: 8) {
             Text(activeModelName).font(.system(size: 13, weight: .medium))
             Spacer()
-            availabilityLabel(env.llmAvailability(for: purpose), canInstall: false)
+            availabilityLabel(env.engines.llmAvailability, canInstall: false)
         }
     }
 
     @ViewBuilder
     private var providerSettings: some View {
         if backend.sendsTranscriptOffDevice {
-            SettingsRow(title: "API キー", caption: env.hasLlmApiKey(for: purpose) ? "この用途のキーをキーチェーンに登録済み" : "用途ごとに別のキーを登録できます") {
+            SettingsRow(title: "API キー", caption: env.hasLlmApiKey ? "キーチェーンに登録済み" : "キーチェーンに保存します") {
                 HStack(spacing: 8) {
                     SecureField("API key", text: $apiKeyDraft).textFieldStyle(.roundedBorder).frame(width: 180).onSubmit(saveKey)
                     Button("保存", action: saveKey).controlSize(.small)
                         .disabled(apiKeyDraft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-                    if env.hasLlmApiKey(for: purpose) {
-                        Button("削除") { Task { await env.setLlmApiKey("", purpose: purpose) } }.controlSize(.small)
+                    if env.hasLlmApiKey {
+                        Button("削除") { Task { await env.setLlmApiKey("") } }.controlSize(.small)
                     }
                 }
             }
         }
 
         SettingsRow(title: "モデル", caption: localServerCaption) {
-            if env.llmModels(for: purpose).isEmpty {
+            if env.llmModels.isEmpty {
                 TextField("", text: modelBinding).textFieldStyle(.roundedBorder).frame(width: 230)
             } else {
                 Picker("", selection: modelBinding) {
@@ -154,14 +143,14 @@ struct ModelsSettingsView: View {
         }
 
         HStack(spacing: 10) {
-            Button(env.isCheckingLlm(for: purpose) ? "確認中…" : "接続を確認") {
-                Task { await env.checkLlmConnection(purpose: purpose) }
+            Button(env.isCheckingLlm ? "確認中…" : "接続を確認") {
+                Task { await env.checkLlmConnection() }
             }
             .controlSize(.small)
-            .disabled(env.isCheckingLlm(for: purpose) || (backend.sendsTranscriptOffDevice && !env.hasLlmApiKey(for: purpose)))
-            if let status = env.llmStatus(for: purpose) {
+            .disabled(env.isCheckingLlm || (backend.sendsTranscriptOffDevice && !env.hasLlmApiKey))
+            if let status = env.llmStatus {
                 Text(status).font(.system(size: 10.5))
-                    .foregroundStyle(env.llmAvailability(for: purpose).isReady ? KoeTheme.success : KoeTheme.recording)
+                    .foregroundStyle(env.engines.llmAvailability.isReady ? KoeTheme.success : KoeTheme.recording)
                     .lineLimit(2)
             }
         }
@@ -169,10 +158,10 @@ struct ModelsSettingsView: View {
 
     private var modelBinding: Binding<String> {
         Binding(
-            get: { settings.model(for: backend, purpose: purpose) },
+            get: { settings.model(for: backend) },
             set: { value in
-                settings.setModel(value, for: backend, purpose: purpose)
-                Task { await env.applyEngineChange(purpose: purpose, checkCredentials: false) }
+                settings.setModel(value, for: backend)
+                Task { await env.applyEngineChange(checkCredentials: false) }
             }
         )
     }
@@ -186,28 +175,6 @@ struct ModelsSettingsView: View {
                         .font(.system(size: 11, design: .rounded)).monospacedDigit().foregroundStyle(.secondary)
                 }
             }
-        }
-    }
-
-    private var promptCard: some View {
-        SettingsCard(title: "指示文", footnote: "要約と未確定のTODO案を、この指示文から作ります。") {
-            promptEditor("日次要約", text: Binding(get: { settings.lifeLogSummaryPrompt }, set: { settings.lifeLogSummaryPrompt = $0 }))
-            promptEditor("TODO", text: Binding(get: { settings.lifeLogTodoPrompt }, set: { settings.lifeLogTodoPrompt = $0 }))
-            HStack {
-                Spacer()
-                Button("標準に戻す") {
-                    settings.lifeLogSummaryPrompt = BuiltinLifeLogPrompts.summary
-                    settings.lifeLogTodoPrompt = BuiltinLifeLogPrompts.todo
-                }
-            }
-        }
-    }
-
-    private func promptEditor(_ title: String, text: Binding<String>) -> some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Text(title).font(.system(size: 11, weight: .medium)).foregroundStyle(.secondary)
-            TextEditor(text: text).font(.system(size: 11.5, design: .monospaced))
-                .frame(height: 104).scrollContentBackground(.hidden).padding(7).sunkenSurface()
         }
     }
 
@@ -227,12 +194,12 @@ struct ModelsSettingsView: View {
     }
 
     private var activeModelName: String {
-        backend == .onDevice ? "Apple Foundation Models" : "\(backend.displayName) / \(settings.model(for: backend, purpose: purpose))"
+        backend == .onDevice ? "Apple Foundation Models" : "\(backend.displayName) / \(settings.model(for: backend))"
     }
 
     private var modelChoices: [String] {
-        let selected = settings.model(for: backend, purpose: purpose)
-        let models = env.llmModels(for: purpose)
+        let selected = settings.model(for: backend)
+        let models = env.llmModels
         return models.contains(selected) ? models : [selected] + models
     }
 
@@ -247,7 +214,7 @@ struct ModelsSettingsView: View {
     private func saveKey() {
         let key = apiKeyDraft
         apiKeyDraft = ""
-        Task { await env.setLlmApiKey(key, purpose: purpose) }
+        Task { await env.setLlmApiKey(key) }
     }
 
     static func speedLines(_ stats: LatencyStats) -> [String] {

@@ -18,10 +18,9 @@ public struct LifeLogWindow: View {
         HStack(spacing: 10) {
             left.frame(width: 288)
             timeline.frame(minWidth: 520, maxWidth: .infinity)
-            right.frame(width: 320)
         }
         .padding(10)
-        .frame(minWidth: 1_120, minHeight: 680)
+        .frame(minWidth: 840, minHeight: 680)
         .task {
             await env.lifeLog.followCurrentDay()
             await env.lifeLog.loadActivity(containing: env.lifeLog.selectedDate)
@@ -33,12 +32,19 @@ public struct LifeLogWindow: View {
             LifeLogExportSheet(
                 date: env.lifeLog.selectedDate,
                 day: env.lifeLog.day,
-                todos: env.lifeLog.todos,
                 onExport: exportSelectedDay
             )
         }
         .sheet(isPresented: $showsSearchSheet) {
             LifeLogSearchSheet(env: env)
+        }
+        .alert("書き出せませんでした", isPresented: Binding(
+            get: { exportError != nil },
+            set: { if !$0 { exportError = nil } }
+        )) {
+            Button("閉じる") { exportError = nil }
+        } message: {
+            Text(exportError ?? "不明なエラー")
         }
     }
 
@@ -59,66 +65,12 @@ public struct LifeLogWindow: View {
             )
             .padding(14)
             Divider().opacity(0.6)
-            ScrollView {
-                VStack(alignment: .leading, spacing: 18) {
-                    daySummary
-                    dayRhythm
-                }
+            dayRhythm
                 .padding(16)
                 .frame(maxWidth: .infinity, alignment: .leading)
-            }
+            Spacer(minLength: 0)
         }
         .panelSurface()
-    }
-
-    private var daySummary: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack(spacing: 6) {
-                sectionLabel("まとめ")
-                if let summary = env.lifeLog.day.summary, summary.isFinal {
-                    Image(systemName: "checkmark.seal.fill")
-                        .font(.system(size: 10))
-                        .foregroundStyle(KoeTheme.success)
-                        .help("確定済み")
-                }
-                Spacer()
-                Button {
-                    Task { await env.lifeLog.refreshSelectedDaySummary() }
-                } label: {
-                    if env.lifeLog.isDeriving {
-                        ProgressView().controlSize(.mini)
-                    } else {
-                        Image(systemName: "arrow.clockwise").font(.system(size: 11))
-                    }
-                }
-                .buttonStyle(.borderless)
-                .foregroundStyle(.secondary)
-                .disabled(env.lifeLog.isDeriving || !hasSummarySource)
-                .help("要約とTODO案を更新")
-                .accessibilityLabel("要約とTODO案を更新")
-                .accessibilityIdentifier("life-log.refresh-summary")
-            }
-            if let summary = env.lifeLog.day.summary {
-                LifeLogMarkdownSummary(markdown: summary.summary)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                if !summary.topics.isEmpty {
-                    FlowLayout(spacing: 5) {
-                        ForEach(summary.topics, id: \.self) { topic in
-                            Text(topic)
-                                .font(.system(size: 11, weight: .medium))
-                                .foregroundStyle(.secondary)
-                                .padding(.horizontal, 8)
-                                .padding(.vertical, 3)
-                                .background(Color.primary.opacity(0.06), in: Capsule())
-                        }
-                    }
-                }
-            } else {
-                Text(hasSummarySource ? "更新するとこの日の要約を作ります" : "記録が増えると要約を作ります")
-                    .font(KoeTheme.captionFont)
-                    .foregroundStyle(.tertiary)
-            }
-        }
     }
 
     private var dayRhythm: some View {
@@ -315,95 +267,6 @@ public struct LifeLogWindow: View {
         }
     }
 
-    private var right: some View {
-        todoPanel
-            .alert("書き出せませんでした", isPresented: Binding(
-                get: { exportError != nil },
-                set: { if !$0 { exportError = nil } }
-            )) {
-                Button("閉じる") { exportError = nil }
-            } message: {
-                Text(exportError ?? "不明なエラー")
-            }
-    }
-
-    private var todoPanel: some View {
-        VStack(spacing: 0) {
-            PanelHeader(title: "TODO", subtitle: openTodoCount > 0 ? "\(openTodoCount)件" : nil) {
-                HStack(spacing: 14) {
-                    Button {
-                        env.onShowLifeLogTodos?()
-                    } label: {
-                        Image(systemName: "list.bullet")
-                    }
-                    .help("すべてのTODO")
-                    .accessibilityLabel("すべてのTODO")
-                    .accessibilityIdentifier("life-log.open-all-todos")
-                    Menu {
-                        Button("未実施TODOをコピー", systemImage: "doc.on.clipboard") {
-                            exportOpenTodos(to: .clipboard)
-                        }
-                        Button("未実施TODOを保存…", systemImage: "doc.badge.arrow.up") {
-                            exportOpenTodos(to: .file)
-                        }
-                    } label: {
-                        Image(systemName: "ellipsis.circle")
-                    }
-                    .menuStyle(.borderlessButton)
-                    .menuIndicator(.hidden)
-                    .tint(.secondary)
-                    .fixedSize()
-                    .help("すべての未実施TODOを書き出す")
-                }
-                .font(.system(size: 13))
-            }
-            Divider().opacity(0.6)
-            if visibleTodos.isEmpty {
-                ContentUnavailableView {
-                    Label("未実施のTODOはありません", systemImage: "checkmark.circle")
-                } description: {
-                    Text("要約を更新すると、会話からTODO案を提案します。")
-                }
-                .foregroundStyle(.secondary)
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-            } else {
-                ScrollView {
-                    LazyVStack(alignment: .leading, spacing: 2) {
-                        ForEach(visibleTodos) { todo in
-                            todoRow(todo)
-                        }
-                    }
-                    .padding(.vertical, 8)
-                }
-            }
-        }
-        .panelSurface()
-    }
-
-    private var openTodoCount: Int {
-        env.lifeLog.todos.filter { $0.status == .open }.count
-    }
-
-    private func todoRow(_ todo: LifeLogTodo) -> some View {
-        LifeLogTodoRow(
-            todo: todo,
-            title: todoTitle(todo),
-            onToggle: { toggle(todo) },
-            onConfirm: { confirm(todo) },
-            onDelete: { Task { await env.lifeLog.delete(todoID: todo.id) } }
-        )
-    }
-
-    private var visibleTodos: [LifeLogTodo] {
-        env.lifeLog.todos.filter { $0.status != .completed }
-    }
-
-    private var hasSummarySource: Bool {
-        !env.lifeLog.day.utterances.isEmpty
-            || !env.lifeLog.day.memos.isEmpty
-            || !env.lifeLog.day.calendarEvents.isEmpty
-    }
-
     private enum ItemKind {
         case event(CalendarEventSnapshot)
         case utterance(LifeLogUtterance)
@@ -423,38 +286,8 @@ public struct LifeLogWindow: View {
         env.setLifeLogCaptureEnabled(enabled)
     }
 
-    private func toggle(_ todo: LifeLogTodo) {
-        var changed = todo
-        changed.transition(to: todo.status == .open ? .completed : .open)
-        Task { await env.lifeLog.update(todo: changed) }
-    }
-
-    private func confirm(_ todo: LifeLogTodo) {
-        var changed = todo
-        changed.transition(to: .open)
-        Task { await env.lifeLog.update(todo: changed) }
-    }
-
-    private func todoTitle(_ todo: LifeLogTodo) -> Binding<String> {
-        Binding(get: { todo.title }, set: { value in
-            var changed = todo
-            changed.title = value
-            Task { await env.lifeLog.update(todo: changed) }
-        })
-    }
-
     private func exportSelectedDay(_ text: String, date: Date, to destination: LifeLogExportDestination) async -> Bool {
         await writeExport(text, filename: "Koe-LifeLog-\(LifeLogDateKey.string(for: date)).md", to: destination)
-    }
-
-    private func exportOpenTodos(to destination: LifeLogExportDestination) {
-        let todos = env.lifeLog.todos
-        Task {
-            let text = await Task.detached(priority: .userInitiated) {
-                LifeLogTextExporter.renderOpenTodos(todos)
-            }.value
-            _ = await writeExport(text, filename: "Koe-Open-TODO.md", to: destination)
-        }
     }
 
     private func writeExport(_ text: String, filename: String, to destination: LifeLogExportDestination) async -> Bool {
@@ -487,31 +320,6 @@ public struct LifeLogWindow: View {
         }
     }
 
-}
-
-private struct LifeLogMarkdownSummary: View {
-    let markdown: String
-
-    var body: some View {
-        Text(rendered)
-            .font(.system(size: 12.5))
-            .lineSpacing(3.5)
-            .textSelection(.enabled)
-            .tint(KoeTheme.accent)
-            .accessibilityIdentifier("life-log.summary-markdown")
-    }
-
-    private var rendered: AttributedString {
-        do {
-            return try AttributedString(
-                markdown: markdown,
-                options: .init(interpretedSyntax: .full)
-            )
-        } catch {
-            // 生成済みデータは表示し続け、Markdown解釈の失敗で本文を失わない。
-            return AttributedString(markdown)
-        }
-    }
 }
 
 struct LiveWaveform: View {

@@ -85,12 +85,11 @@ public struct LifeLogUtterance: Identifiable, Codable, Sendable, Hashable {
     public var text: String
     public var audioChunkID: String
     public var calendarEventID: String?
-    public var conversationID: String?
 
     public init(id: String = UUID().uuidString, startedAt: Date, endedAt: Date, text: String,
-                audioChunkID: String, calendarEventID: String? = nil, conversationID: String? = nil) {
+                audioChunkID: String, calendarEventID: String? = nil) {
         self.id = id; self.startedAt = startedAt; self.endedAt = endedAt; self.text = text
-        self.audioChunkID = audioChunkID; self.calendarEventID = calendarEventID; self.conversationID = conversationID
+        self.audioChunkID = audioChunkID; self.calendarEventID = calendarEventID
     }
 }
 
@@ -154,77 +153,18 @@ public struct LifeLogMemo: Identifiable, Codable, Sendable, Hashable {
     }
 }
 
-public struct LifeLogConversation: Identifiable, Codable, Sendable, Hashable {
-    public var id: String
-    public var startedAt: Date
-    public var endedAt: Date
-    public var calendarEventID: String?
-    public init(id: String = UUID().uuidString, startedAt: Date, endedAt: Date, calendarEventID: String? = nil) {
-        self.id = id; self.startedAt = startedAt; self.endedAt = endedAt; self.calendarEventID = calendarEventID
-    }
-}
-
-public struct LifeLogTodo: Identifiable, Codable, Sendable, Hashable {
-    /// LLM出力は必ず draft。利用者が確認したものだけが open になる。
-    public enum Status: String, Codable, Sendable { case draft, open, completed }
-    public var id: String
-    public var title: String
-    public var status: Status
-    public var createdAt: Date
-    public var completedAt: Date?
-    public var dueAt: Date?
-    public var sourceConversationID: String?
-    public var sourceUtteranceIDs: [String]
-    public var sourceMemoIDs: [String]
-    public var confidence: Double?
-
-    public init(id: String = UUID().uuidString, title: String, status: Status = .open,
-                createdAt: Date = Date(), completedAt: Date? = nil, dueAt: Date? = nil, sourceConversationID: String? = nil,
-                sourceUtteranceIDs: [String] = [], sourceMemoIDs: [String] = [], confidence: Double? = nil) {
-        self.id = id; self.title = title; self.status = status; self.createdAt = createdAt
-        self.completedAt = status == .completed ? (completedAt ?? createdAt) : nil
-        self.dueAt = dueAt
-        self.sourceConversationID = sourceConversationID; self.sourceUtteranceIDs = sourceUtteranceIDs
-        self.sourceMemoIDs = sourceMemoIDs; self.confidence = confidence
-    }
-
-    /// 完了日時と状態を常に一緒に遷移させる。
-    public mutating func transition(to status: Status, at date: Date = Date()) {
-        self.status = status
-        completedAt = status == .completed ? date : nil
-    }
-}
-
-public struct DailySummary: Identifiable, Codable, Sendable, Hashable {
-    public var id: String { day }
-    public var day: String
-    public var summary: String
-    public var commitments: [String]
-    public var topics: [String]
-    public var calendarEventCount: Int
-    public var capturedDurationSeconds: Int
-    public var utteranceCount: Int
-    public var summarizedThrough: Date
-    public var isFinal: Bool
-}
-
 public struct LifeLogDay: Sendable {
     public var utterances: [LifeLogUtterance]
     public var dictations: [LifeLogDictation]
     public var memos: [LifeLogMemo]
-    public var conversations: [LifeLogConversation]
     public var calendarEvents: [CalendarEventSnapshot]
-    public var summary: DailySummary?
 
-    public init(utterances: [LifeLogUtterance], dictations: [LifeLogDictation] = [], memos: [LifeLogMemo] = [],
-                conversations: [LifeLogConversation], calendarEvents: [CalendarEventSnapshot],
-                summary: DailySummary?) {
+    public init(utterances: [LifeLogUtterance] = [], dictations: [LifeLogDictation] = [], memos: [LifeLogMemo] = [],
+                calendarEvents: [CalendarEventSnapshot] = []) {
         self.utterances = utterances
         self.dictations = dictations
         self.memos = memos
-        self.conversations = conversations
         self.calendarEvents = calendarEvents
-        self.summary = summary
     }
 }
 
@@ -249,16 +189,12 @@ public struct LifeLogSearchResult: Identifiable, Sendable, Equatable {
         case utterance
         case dictation
         case memo
-        case todo
-        case summary
 
         public var displayName: String {
             switch self {
             case .utterance: "発話"
             case .dictation: "音声入力"
             case .memo: "メモ"
-            case .todo: "TODO"
-            case .summary: "要約"
             }
         }
     }
@@ -268,15 +204,13 @@ public struct LifeLogSearchResult: Identifiable, Sendable, Equatable {
     public var text: String
     public var occurredAt: Date
     public var day: String
-    public var todoStatus: LifeLogTodo.Status?
 
-    public init(id: String, kind: Kind, text: String, occurredAt: Date, day: String, todoStatus: LifeLogTodo.Status? = nil) {
+    public init(id: String, kind: Kind, text: String, occurredAt: Date, day: String) {
         self.id = id
         self.kind = kind
         self.text = text
         self.occurredAt = occurredAt
         self.day = day
-        self.todoStatus = todoStatus
     }
 }
 

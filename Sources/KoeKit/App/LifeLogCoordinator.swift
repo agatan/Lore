@@ -7,8 +7,7 @@ import Observation
 public final class LifeLogCoordinator {
     public private(set) var isCapturing = false
     public private(set) var selectedDate = Date()
-    public private(set) var day = LifeLogDay(utterances: [], conversations: [], calendarEvents: [], summary: nil)
-    public private(set) var todos: [LifeLogTodo] = []
+    public private(set) var day = LifeLogDay()
     public private(set) var errorMessage: String?
     public private(set) var availableCalendars: [String] = []
     public private(set) var highlightedTimelineItemID: String?
@@ -33,9 +32,6 @@ public final class LifeLogCoordinator {
     private var engines: EngineRegistry?
     private var vocabulary: @MainActor () -> [VocabularyEntry] = { [] }
     private var transcriptionLanguage: @MainActor () -> LanguagePreference = { .auto }
-    private var todoPrompt: @MainActor () -> String = { BuiltinLifeLogPrompts.todo }
-    private var summaryPrompt: @MainActor () -> String = { BuiltinLifeLogPrompts.summary }
-    private var summaryIntervalMinutes: @MainActor () -> Int = { 60 }
     private var participatingEventsOnly: @MainActor () -> Bool = { true }
     private var audioProcessingCompleted: @MainActor () async -> Void = {}
     private var liveTranscriptionTask: Task<Void, Never>?
@@ -50,7 +46,6 @@ public final class LifeLogCoordinator {
     private var hasLiveSegments = false
     private var transcriptionFinished = false
     private var captureFinished = false
-    public private(set) var isDeriving = false
     private var isFinalizingSession = false
     private var isStartingCapture = false
     private var vocabularyRevision = 0
@@ -60,7 +55,6 @@ public final class LifeLogCoordinator {
     private var captureRetryAttempt = 0
     private var captureRetryTask: Task<Void, Never>?
     private var dayRolloverTask: Task<Void, Never>?
-    private var derivationScheduleTask: Task<Void, Never>?
     private var followsCurrentDay = true
     private var isSuspendedForSleep = false
 
@@ -80,17 +74,11 @@ public final class LifeLogCoordinator {
         engines: EngineRegistry,
         vocabulary: @MainActor @escaping () -> [VocabularyEntry],
         transcriptionLanguage: @MainActor @escaping () -> LanguagePreference = { .auto },
-        todoPrompt: @MainActor @escaping () -> String,
-        summaryPrompt: @MainActor @escaping () -> String,
-        summaryIntervalMinutes: @MainActor @escaping () -> Int,
         participatingEventsOnly: @MainActor @escaping () -> Bool,
         audioProcessingCompleted: @MainActor @escaping () async -> Void
     ) async {
         self.database = database; self.engines = engines; self.vocabulary = vocabulary
         self.transcriptionLanguage = transcriptionLanguage
-        self.todoPrompt = todoPrompt
-        self.summaryPrompt = summaryPrompt
-        self.summaryIntervalMinutes = summaryIntervalMinutes
         self.participatingEventsOnly = participatingEventsOnly
         self.audioProcessingCompleted = audioProcessingCompleted
         await reload()
@@ -117,7 +105,6 @@ public final class LifeLogCoordinator {
         captureRequested = enabled
         if enabled {
             if !wasRequested { captureRetryAttempt = 0 }
-            scheduleDerivedUpdates()
             guard !isCapturing, liveTranscriptionTask == nil else { return }
             Task { await startLiveCapture() }
             scheduleDayRollover()
@@ -128,8 +115,6 @@ public final class LifeLogCoordinator {
             isRecoveringCapture = false
             dayRolloverTask?.cancel()
             dayRolloverTask = nil
-            derivationScheduleTask?.cancel()
-            derivationScheduleTask = nil
             capture.stop()
         }
     }
@@ -151,22 +136,9 @@ public final class LifeLogCoordinator {
         return true
     }
 
-    /// Cmd-Qでは復旧可能なaudio/DB保存を優先し、終了を遅らせるsummary/TODO生成は行わない。
+    /// Cmd-Qでは復旧可能なaudio/DB保存だけを短時間待つ。
     public func stopForTermination(timeout: Duration = .seconds(3)) async -> Bool {
         return await stopAndWait(timeout: timeout)
-    }
-
-    private func scheduleDerivedUpdates() {
-        guard derivationScheduleTask == nil else { return }
-        derivationScheduleTask = Task { [weak self] in
-            while !Task.isCancelled {
-                guard let self, self.captureRequested else { return }
-                let interval = max(15, self.summaryIntervalMinutes())
-                do { try await Task.sleep(for: .seconds(interval * 60)) } catch { return }
-                guard self.captureRequested else { return }
-                await self.refreshDerivedIfDue(for: Date(), respectingInterval: false)
-            }
-        }
     }
 
     public var captureStatusText: String {
@@ -195,10 +167,10 @@ public final class LifeLogCoordinator {
         errorMessage = nil
     }
 
-    /// 終了前に音声・文字起こし・派生処理の確定を待つ必要がある状態。
+    /// 終了前に音声・文字起こし・DB保存の確定を待つ必要がある状態。
     /// 記録開始要求から実際のcapture開始までの隙間も含める。
     public var hasPendingTerminationWork: Bool {
-        captureRequested || capture.isRunning || liveTranscriptionTask != nil || isFinalizingSession || isDeriving
+        captureRequested || capture.isRunning || liveTranscriptionTask != nil || isFinalizingSession
     }
 
     /// STTの語彙contextは解析開始時に固定されるため、録音意図を保ったまま
@@ -331,8 +303,6 @@ public final class LifeLogCoordinator {
                 do { try await Task.sleep(for: .seconds(max(1, nextDay.timeIntervalSince(now)))) } catch { return }
                 guard let self, self.captureRequested else { return }
                 let newDay = Date()
-                let previousDay = newDay.addingTimeInterval(-1)
-                await self.refreshDerivedIfDue(for: previousDay, respectingInterval: false)
                 if self.followsCurrentDay {
                     self.selectedDate = newDay
                     await self.reload()
@@ -697,7 +667,7 @@ public final class LifeLogCoordinator {
         }
         pendingLiveSegments = remaining
         for date in affectedDates.values {
-            await segmentAndRefresh(for: date)
+            await refreshTimeline(for: date)
         }
     }
 
@@ -718,7 +688,7 @@ public final class LifeLogCoordinator {
                     text: liveFinalTranscript,
                     audioChunkID: chunk.id
                 ))
-                await segmentAndRefresh(for: sessionStart)
+                await refreshTimeline(for: sessionStart)
             } catch { fail(error) }
         }
         do {
@@ -836,8 +806,6 @@ public final class LifeLogCoordinator {
         await loadActivity(containing: selectedDate)
     }
 
-    public func update(todo: LifeLogTodo) async { guard let database else { return }; do { try await database.lifeLog.save(todo: todo); await reload() } catch { fail(error) } }
-    public func delete(todoID: String) async { guard let database else { return }; do { try await database.lifeLog.deleteTodo(id: todoID); await reload() } catch { fail(error) } }
     public func jumpToSearchResult(_ result: LifeLogSearchResult) async {
         let date = LifeLogDateKey.date(from: result.day) ?? result.occurredAt
         let prefix = "\(result.kind.rawValue)-"
@@ -849,10 +817,6 @@ public final class LifeLogCoordinator {
             await navigateToSource(date: date, timelineItemID: "d-\(recordID)")
         case .memo:
             await navigateToSource(date: date, timelineItemID: "m-\(recordID)")
-        case .todo:
-            await select(date: date)
-        case .summary:
-            await select(date: date)
         }
     }
 
@@ -879,7 +843,6 @@ public final class LifeLogCoordinator {
         guard let database else { return }
         do {
             day = try await database.lifeLog.day(selectedDate, participatingOnly: participatingEventsOnly())
-            todos = try await database.lifeLog.todos()
         } catch { fail(error) }
     }
 
@@ -1020,7 +983,7 @@ public final class LifeLogCoordinator {
             await audioProcessingCompleted()
             let affectedDates = Dictionary(grouping: utterances, by: { LifeLogDateKey.string(for: $0.startedAt) })
                 .compactMapValues(\.first?.startedAt)
-            for date in affectedDates.values { await segmentAndRefresh(for: date) }
+            for date in affectedDates.values { await refreshTimeline(for: date) }
         } catch {
             chunk.failureReason = error.localizedDescription
             if chunk.transcriptionState != .transcribed { chunk.transcriptionState = .failed }
@@ -1047,88 +1010,9 @@ public final class LifeLogCoordinator {
         return "\(scopeID)-\(startMilliseconds)-\(endMilliseconds)"
     }
 
-    private func segmentAndRefresh(for date: Date) async {
-        guard let database else { return }
-        do {
-            let value = try await database.lifeLog.day(date, participatingOnly: participatingEventsOnly())
-            for (conversation, items) in ConversationSegmenter().segment(value.utterances) {
-                try await database.lifeLog.save(conversation: conversation, utterances: items)
-            }
-            await refreshDerivedIfDue(for: date)
-            await reload()
-            await loadActivity(containing: date)
-        } catch { fail(error) }
-    }
-
-    private func refreshDerivedIfDue(for date: Date, respectingInterval: Bool = true, force: Bool = false) async {
-        if isDeriving {
-            guard force else { return }
-            while isDeriving {
-                do { try await Task.sleep(for: .milliseconds(100)) } catch { return }
-            }
-        }
-        guard let database, let engines else { return }
-        isDeriving = true
-        defer { isDeriving = false }
-        do {
-            try await updateSummary(for: date, respectingInterval: respectingInterval, force: force, store: database.lifeLog,
-                                    derivation: LifeLogDerivationService(llm: engines.lifeLogLlm))
-            await reload()
-        } catch { fail(error) }
-    }
-
-    /// 選択日の要約とdraft TODOを、差分や定期間隔にかかわらず再構築する。
-    public func refreshSelectedDaySummary() async {
-        await refreshDerivedIfDue(for: selectedDate, respectingInterval: false, force: true)
-    }
-
-    /// 定期実行は差分の有無を判定し、手動実行は対象日のsource of truth全体から必ず再構築する。
-    func updateSummary(
-        for date: Date,
-        respectingInterval: Bool,
-        force: Bool = false,
-        now: Date = Date(),
-        store: LifeLogStore,
-        derivation: LifeLogDerivationService
-    ) async throws {
-        let value = try await store.day(date, participatingOnly: participatingEventsOnly())
-        let previous = value.summary
-        let calendar = Calendar.current
-        guard let dayInterval = calendar.dateInterval(of: .day, for: date) else { return }
-        let isPastDay = dayInterval.end <= now
-        let shouldFinalize = isPastDay && previous?.isFinal != true
-        let additions = value.utterances.filter { $0.endedAt > (previous?.summarizedThrough ?? .distantPast) }
-        let memoAdditions = value.memos.filter { $0.createdAt > (previous?.summarizedThrough ?? .distantPast) }
-        let latestAddition = (additions.map(\.endedAt) + memoAdditions.map(\.createdAt)).max()
-        let latestSource = (value.utterances.map(\.endedAt) + value.memos.map(\.createdAt)).max()
-        guard force || latestAddition != nil || shouldFinalize else { return }
-        let latest = latestSource ?? previous?.summarizedThrough ?? dayInterval.start
-        let baseline = previous?.summarizedThrough
-            ?? (value.utterances.map(\.startedAt) + value.memos.map(\.createdAt)).min()
-            ?? latest
-        let interval = TimeInterval(max(15, summaryIntervalMinutes()) * 60)
-        guard force || shouldFinalize || !respectingInterval || isPastDay
-                || latest.timeIntervalSince(baseline) >= interval else { return }
-        let asOf = isPastDay ? dayInterval.end : now
-        let existingTodos = try await store.todos()
-        let derived = try await derivation.summarize(
-            day: value,
-            prompt: summaryPrompt(),
-            todoPrompt: todoPrompt(),
-            existingTodoTitles: existingTodos.map(\.title),
-            existingTopics: try await store.existingTopics(for: date),
-            asOf: asOf
-        )
-        let duration = value.utterances.reduce(0) { $0 + max(0, Int($1.endedAt.timeIntervalSince($1.startedAt))) }
-        let summary = DailySummary(day: LifeLogDateKey.string(for: date), summary: derived.text,
-                                   commitments: [], topics: derived.topics,
-                                   calendarEventCount: value.calendarEvents.count, capturedDurationSeconds: duration,
-                                   utteranceCount: value.utterances.count, summarizedThrough: latest,
-                                   isFinal: isPastDay)
-        let drafts = derived.todoTitles.map { title in
-            LifeLogTodo(title: title, status: .draft)
-        }
-        try await store.save(summary: summary, replacingDrafts: drafts)
+    private func refreshTimeline(for date: Date) async {
+        await reload()
+        await loadActivity(containing: date)
     }
 
     struct RecognizableSpeechBurst: Sendable {

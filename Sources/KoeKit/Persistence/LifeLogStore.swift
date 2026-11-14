@@ -50,46 +50,11 @@ public struct LifeLogStore: Sendable {
         }
     }
 
-    /// タイムラインに採用されたライフログ発話の実時間。無音と音声入力との重複は数えない。
-    public func dailyRecordingDuration(
-        since: Date,
-        calendar: Calendar = .current
-    ) async throws -> [DailyRecordingDuration] {
-        let intervals = try await queue.read { db in
-            let utterances = try Row.fetchAll(
-                db,
-                sql: """
-                    SELECT * FROM life_log_utterances
-                    WHERE started_at >= ?
-                    ORDER BY started_at
-                    """,
-                arguments: [date(since)]
-            ).map(decodeUtterance)
-            let dictations = try Row.fetchAll(
-                db,
-                sql: """
-                    SELECT * FROM sessions
-                    WHERE started_at >= ?
-                      AND status IN ('completed', 'fallback', 'clipboard_only')
-                      AND trim(raw_transcript) != ''
-                    ORDER BY started_at
-                    """,
-                arguments: [date(since)]
-            ).map(decodeDictation)
-            return LifeLogSpeechProjection.visibleUtterances(utterances, preferring: dictations)
-                .map { (start: $0.startedAt, end: $0.endedAt) }
-        }
-        return DailyRecordingDuration.aggregate(intervals: intervals, calendar: calendar)
-    }
-
-    /// 発話・予定・メモ・TODO・要約を同じ境界で削除する。音声ファイルは呼び出し側が先に消す。
+    /// 発話・予定・メモを同じ境界で削除する。音声ファイルは呼び出し側が先に消す。
     public func deleteAll() async throws {
         try await queue.write { db in
             try db.execute(sql: "DELETE FROM life_log_utterances")
-            try db.execute(sql: "DELETE FROM life_log_conversations")
             try db.execute(sql: "DELETE FROM life_log_memos")
-            try db.execute(sql: "DELETE FROM life_log_todos")
-            try db.execute(sql: "DELETE FROM daily_summaries")
             try db.execute(sql: "DELETE FROM calendar_event_snapshots")
             try db.execute(sql: "DELETE FROM life_log_audio_chunks")
         }
@@ -111,21 +76,12 @@ public struct LifeLogStore: Sendable {
     public func save(utterance value: LifeLogUtterance) async throws {
         try await queue.write { db in
             try db.execute(sql: """
-                INSERT INTO life_log_utterances VALUES (?, ?, ?, ?, ?, ?, ?)
+                INSERT INTO life_log_utterances (id, started_at, ended_at, text, audio_chunk_id, calendar_event_id)
+                VALUES (?, ?, ?, ?, ?, ?)
                 ON CONFLICT(id) DO UPDATE SET started_at=excluded.started_at, ended_at=excluded.ended_at,
-                text=excluded.text, calendar_event_id=excluded.calendar_event_id, conversation_id=excluded.conversation_id
+                text=excluded.text, calendar_event_id=excluded.calendar_event_id
                 """, arguments: [value.id, date(value.startedAt), date(value.endedAt), value.text, value.audioChunkID,
-                                   value.calendarEventID, value.conversationID])
-        }
-    }
-
-    public func save(conversation: LifeLogConversation, utterances: [LifeLogUtterance]) async throws {
-        try await queue.write { db in
-            try db.execute(sql: "INSERT OR REPLACE INTO life_log_conversations VALUES (?, ?, ?, ?)",
-                           arguments: [conversation.id, date(conversation.startedAt), date(conversation.endedAt), conversation.calendarEventID])
-            for utterance in utterances {
-                try db.execute(sql: "UPDATE life_log_utterances SET conversation_id=? WHERE id=?", arguments: [conversation.id, utterance.id])
-            }
+                                   value.calendarEventID])
         }
     }
 
@@ -143,12 +99,9 @@ public struct LifeLogStore: Sendable {
                 """, arguments: args).map(decodeDictation)
             let utterances = LifeLogSpeechProjection.visibleUtterances(storedUtterances, preferring: dictations)
             let memos = try Row.fetchAll(db, sql: "SELECT * FROM life_log_memos WHERE created_at >= ? AND created_at < ? ORDER BY created_at", arguments: args).map(decodeMemo)
-            let conversations = try Row.fetchAll(db, sql: "SELECT * FROM life_log_conversations WHERE started_at >= ? AND started_at < ? ORDER BY started_at", arguments: args).map(decodeConversation)
             let participationClause = participatingOnly ? " AND participation_status IN ('none', 'accepted')" : ""
             let events = try Row.fetchAll(db, sql: "SELECT * FROM calendar_event_snapshots WHERE ends_at > ? AND starts_at < ?\(participationClause) ORDER BY starts_at", arguments: args).map(decodeEvent)
-            let summary = try Row.fetchOne(db, sql: "SELECT * FROM daily_summaries WHERE day=?", arguments: [LifeLogDateKey.string(for: dateValue, calendar: calendar)]).map(decodeSummary)
-            return LifeLogDay(utterances: utterances, dictations: dictations, memos: memos,
-                              conversations: conversations, calendarEvents: events, summary: summary)
+            return LifeLogDay(utterances: utterances, dictations: dictations, memos: memos, calendarEvents: events)
         }
     }
 
@@ -204,14 +157,14 @@ public struct LifeLogStore: Sendable {
             let rows: [Row]
             if trimmed.count >= 3 {
                 let phrase = "\"\(trimmed.replacingOccurrences(of: "\"", with: "\"\""))\""
-                rows = try Row.fetchAll(db, sql: Self.ftsSearchSQL, arguments: [phrase, phrase, phrase, phrase, fetchLimit])
+                rows = try Row.fetchAll(db, sql: Self.ftsSearchSQL, arguments: [phrase, phrase, fetchLimit])
             } else {
                 let escaped = trimmed
                     .replacingOccurrences(of: "\\", with: "\\\\")
                     .replacingOccurrences(of: "%", with: "\\%")
                     .replacingOccurrences(of: "_", with: "\\_")
                 let pattern = "%\(escaped)%"
-                rows = try Row.fetchAll(db, sql: Self.likeSearchSQL, arguments: [pattern, pattern, pattern, pattern, pattern, pattern, fetchLimit])
+                rows = try Row.fetchAll(db, sql: Self.likeSearchSQL, arguments: [pattern, pattern, fetchLimit])
             }
             return try rows.map { row in
                 let occurredAt = try PersistenceCoding.decodeDate(row["occurred_at"])
@@ -220,8 +173,7 @@ public struct LifeLogStore: Sendable {
                     kind: LifeLogSearchResult.Kind(rawValue: row["kind"])!,
                     text: row["text"],
                     occurredAt: occurredAt,
-                    day: (row["day"] as String?) ?? LifeLogDateKey.string(for: occurredAt, calendar: calendar),
-                    todoStatus: (row["status"] as String?).flatMap(LifeLogTodo.Status.init(rawValue:))
+                    day: LifeLogDateKey.string(for: occurredAt, calendar: calendar)
                 )
             }
         }
@@ -306,71 +258,10 @@ public struct LifeLogStore: Sendable {
         }
     }
 
-    public func todos() async throws -> [LifeLogTodo] {
-        try await queue.read { db in try Row.fetchAll(db, sql: "SELECT * FROM life_log_todos ORDER BY status, created_at DESC").map(decodeTodo) }
-    }
-    public func todo(id: String) async throws -> LifeLogTodo? {
-        try await queue.read { db in
-            try Row.fetchOne(db, sql: "SELECT * FROM life_log_todos WHERE id=?", arguments: [id]).map(decodeTodo)
-        }
-    }
-    public func save(todo value: LifeLogTodo) async throws {
-        try await queue.write { db in try db.execute(sql: """
-            INSERT INTO life_log_todos (id,title,status,created_at,due_at,source_conversation_id,source_utterance_ids,confidence,source_memo_ids,completed_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            ON CONFLICT(id) DO UPDATE SET title=excluded.title,status=excluded.status,due_at=excluded.due_at,completed_at=excluded.completed_at
-            """, arguments: [value.id, value.title, value.status.rawValue, date(value.createdAt), value.dueAt.map(date),
-                               value.sourceConversationID, try PersistenceCoding.encode(value.sourceUtteranceIDs), value.confidence,
-                               try PersistenceCoding.encode(value.sourceMemoIDs), value.completedAt.map(date)]) }
-    }
-    public func deleteTodo(id: String) async throws { try await queue.write { db in try db.execute(sql: "DELETE FROM life_log_todos WHERE id=?", arguments: [id]) } }
-    /// Summaryと同じ派生処理の成果物を原子的に置き換える。確定済みTODOには触れない。
-    public func save(summary value: DailySummary, replacingDrafts drafts: [LifeLogTodo]) async throws {
-        try await queue.write { db in
-            try db.execute(sql: "DELETE FROM life_log_todos WHERE status='draft'")
-            for draft in drafts {
-                try db.execute(sql: "INSERT INTO life_log_todos (id,title,status,created_at,due_at,source_conversation_id,source_utterance_ids,confidence,source_memo_ids,completed_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", arguments: [
-                    draft.id, draft.title, draft.status.rawValue, date(draft.createdAt), draft.dueAt.map(date),
-                    draft.sourceConversationID, try PersistenceCoding.encode(draft.sourceUtteranceIDs), draft.confidence,
-                    try PersistenceCoding.encode(draft.sourceMemoIDs), draft.completedAt.map(date)
-                ])
-            }
-            try db.execute(sql: "INSERT OR REPLACE INTO daily_summaries VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)", arguments: [
-                value.day, value.summary, try PersistenceCoding.encode(value.commitments), try PersistenceCoding.encode(value.topics),
-                value.calendarEventCount, value.capturedDurationSeconds, value.utteranceCount, date(value.summarizedThrough), value.isFinal
-            ])
-        }
-    }
-    public func save(summary value: DailySummary) async throws { try await queue.write { db in try db.execute(sql: "INSERT OR REPLACE INTO daily_summaries VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)", arguments: [value.day, value.summary, try PersistenceCoding.encode(value.commitments), try PersistenceCoding.encode(value.topics), value.calendarEventCount, value.capturedDurationSeconds, value.utteranceCount, date(value.summarizedThrough), value.isFinal]) } }
-
-    /// 対象日と直前90日から、最近使った順に既存の話題名だけを読む。
-    public func existingTopics(for day: Date, calendar: Calendar = .current) async throws -> [String] {
-        let start = calendar.date(byAdding: .day, value: -90, to: calendar.startOfDay(for: day))!
-        let startKey = LifeLogDateKey.string(for: start, calendar: calendar)
-        let endKey = LifeLogDateKey.string(for: day, calendar: calendar)
-        return try await queue.read { db in
-            let rows = try Row.fetchAll(db, sql: """
-                SELECT topics FROM daily_summaries
-                WHERE day >= ? AND day <= ? ORDER BY day DESC
-                """, arguments: [startKey, endKey])
-            var seen = Set<String>()
-            var topics: [String] = []
-            for row in rows {
-                for title in try PersistenceCoding.decode([String].self, from: row["topics"]) {
-                    let title = title.trimmingCharacters(in: .whitespacesAndNewlines)
-                    let key = title.folding(options: [.caseInsensitive, .widthInsensitive], locale: Locale(identifier: "ja_JP"))
-                    if !title.isEmpty && seen.insert(key).inserted { topics.append(title) }
-                    if topics.count == 100 { return topics }
-                }
-            }
-            return topics
-        }
-    }
-
     private func date(_ value: Date) -> String { PersistenceCoding.encode(date: value) }
     private func parse(_ value: String) throws -> Date { try PersistenceCoding.decodeDate(value) }
     private func decodeChunk(_ r: Row) throws -> LifeLogAudioChunk { LifeLogAudioChunk(id: r["id"], captureStartedAt: try parse(r["capture_started_at"]), captureEndedAt: try parse(r["capture_ended_at"]), localPath: r["local_path"], transcriptionState: LifeLogProcessingState(rawValue: r["transcription_state"])!, processingState: LifeLogProcessingState(rawValue: r["processing_state"])!, failureReason: r["failure_reason"], peakLevel: r["peak_level"]) }
-    private func decodeUtterance(_ r: Row) throws -> LifeLogUtterance { LifeLogUtterance(id: r["id"], startedAt: try parse(r["started_at"]), endedAt: try parse(r["ended_at"]), text: r["text"], audioChunkID: r["audio_chunk_id"], calendarEventID: r["calendar_event_id"], conversationID: r["conversation_id"]) }
+    private func decodeUtterance(_ r: Row) throws -> LifeLogUtterance { LifeLogUtterance(id: r["id"], startedAt: try parse(r["started_at"]), endedAt: try parse(r["ended_at"]), text: r["text"], audioChunkID: r["audio_chunk_id"], calendarEventID: r["calendar_event_id"]) }
     private func decodeDictation(_ r: Row) throws -> LifeLogDictation {
         let record = try SessionRow(row: r).record()
         let endedAt = record.audioDurationMs.map { record.startedAt.addingTimeInterval(Double($0) / 1_000) }
@@ -379,32 +270,20 @@ public struct LifeLogStore: Sendable {
         return LifeLogDictation(id: record.id, startedAt: record.startedAt, endedAt: endedAt, text: record.rawTranscript)
     }
     private func decodeMemo(_ r: Row) throws -> LifeLogMemo { LifeLogMemo(id: r["id"], createdAt: try parse(r["created_at"]), text: r["text"]) }
-    private func decodeConversation(_ r: Row) throws -> LifeLogConversation { LifeLogConversation(id: r["id"], startedAt: try parse(r["started_at"]), endedAt: try parse(r["ended_at"]), calendarEventID: r["calendar_event_id"]) }
     private func decodeEvent(_ r: Row) throws -> CalendarEventSnapshot { CalendarEventSnapshot(id: r["id"], externalIdentifier: r["external_identifier"], title: r["title"], startsAt: try parse(r["starts_at"]), endsAt: try parse(r["ends_at"]), calendarTitle: r["calendar_title"], isAllDay: r["is_all_day"], participationStatus: CalendarParticipationStatus(rawValue: r["participation_status"]) ?? .unknown) }
-    private func decodeTodo(_ r: Row) throws -> LifeLogTodo { LifeLogTodo(id: r["id"], title: r["title"], status: LifeLogTodo.Status(rawValue: r["status"])!, createdAt: try parse(r["created_at"]), completedAt: try (r["completed_at"] as String?).map(parse), dueAt: try (r["due_at"] as String?).map(parse), sourceConversationID: r["source_conversation_id"], sourceUtteranceIDs: try PersistenceCoding.decode([String].self, from: r["source_utterance_ids"]), sourceMemoIDs: try PersistenceCoding.decode([String].self, from: r["source_memo_ids"]), confidence: r["confidence"]) }
-    private func decodeSummary(_ r: Row) throws -> DailySummary { DailySummary(day: r["day"], summary: r["summary"], commitments: try PersistenceCoding.decode([String].self, from: r["commitments"]), topics: try PersistenceCoding.decode([String].self, from: r["topics"]), calendarEventCount: r["calendar_event_count"], capturedDurationSeconds: r["captured_duration_seconds"], utteranceCount: r["utterance_count"], summarizedThrough: try parse(r["summarized_through"]), isFinal: r["is_final"]) }
 
     private static let ftsSearchSQL = """
-        SELECT 'utterance' kind, u.id, u.text, u.started_at occurred_at, NULL day, NULL status
+        SELECT 'utterance' kind, u.id, u.text, u.started_at occurred_at
         FROM life_log_utterances u JOIN life_log_utterances_fts f ON f.rowid=u.rowid WHERE life_log_utterances_fts MATCH ?
         UNION ALL
-        SELECT 'memo', m.id, m.text, m.created_at, NULL, NULL
+        SELECT 'memo', m.id, m.text, m.created_at
         FROM life_log_memos m JOIN life_log_memos_fts f ON f.rowid=m.rowid WHERE life_log_memos_fts MATCH ?
-        UNION ALL
-        SELECT 'todo', t.id, t.title, t.created_at, NULL, t.status
-        FROM life_log_todos t JOIN life_log_todos_fts f ON f.rowid=t.rowid WHERE life_log_todos_fts MATCH ?
-        UNION ALL
-        SELECT 'summary', s.day, s.summary, s.summarized_through, s.day, NULL
-        FROM daily_summaries s JOIN daily_summaries_fts f ON f.rowid=s.rowid WHERE daily_summaries_fts MATCH ?
         ORDER BY occurred_at DESC LIMIT ?
         """
 
     private static let likeSearchSQL = """
-        SELECT 'utterance' kind, id, text, started_at occurred_at, NULL day, NULL status FROM life_log_utterances WHERE text LIKE ? ESCAPE '\\'
-        UNION ALL SELECT 'memo', id, text, created_at, NULL, NULL FROM life_log_memos WHERE text LIKE ? ESCAPE '\\'
-        UNION ALL SELECT 'todo', id, title, created_at, NULL, status FROM life_log_todos WHERE title LIKE ? ESCAPE '\\'
-        UNION ALL SELECT 'summary', day, summary, summarized_through, day, NULL FROM daily_summaries
-          WHERE summary LIKE ? ESCAPE '\\' OR commitments LIKE ? ESCAPE '\\' OR topics LIKE ? ESCAPE '\\'
+        SELECT 'utterance' kind, id, text, started_at occurred_at FROM life_log_utterances WHERE text LIKE ? ESCAPE '\\'
+        UNION ALL SELECT 'memo', id, text, created_at FROM life_log_memos WHERE text LIKE ? ESCAPE '\\'
         ORDER BY occurred_at DESC LIMIT ?
         """
 }

@@ -91,18 +91,6 @@ struct LifeLogSettingsView: View {
                         .foregroundStyle(.secondary)
                 }
             }
-
-            SettingsCard(title: "要約とTODO", footnote: "要約とTODO案は同時に更新します。TODO案は編集して確定するまで実際のTODOにはなりません。次回更新時、未確定の案は作り直されます。") {
-                SettingsRow(title: "要約の更新") {
-                    Picker("", selection: Binding(get: { settings.lifeLogSummaryIntervalMinutes }, set: { settings.lifeLogSummaryIntervalMinutes = $0 })) {
-                        Text("30分").tag(30)
-                        Text("1時間").tag(60)
-                        Text("2時間").tag(120)
-                    }
-                    .labelsHidden().pickerStyle(.segmented).fixedSize()
-                }
-            }
-
         }
         .toggleStyle(.switch)
         .task { env.refreshLifeLogAudioSize() }

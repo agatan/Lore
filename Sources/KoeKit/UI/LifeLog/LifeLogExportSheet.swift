@@ -13,7 +13,6 @@ struct LifeLogExportSheet: View {
     private struct Snapshot: Sendable {
         var date: Date
         var day: LifeLogDay
-        var todos: [LifeLogTodo]
     }
 
     @State private var snapshot: Snapshot
@@ -30,10 +29,9 @@ struct LifeLogExportSheet: View {
     init(
         date: Date,
         day: LifeLogDay,
-        todos: [LifeLogTodo],
         onExport: @escaping (String, Date, LifeLogExportDestination) async -> Bool
     ) {
-        _snapshot = State(initialValue: Snapshot(date: date, day: day, todos: todos))
+        _snapshot = State(initialValue: Snapshot(date: date, day: day))
         self.onExport = onExport
     }
 
@@ -59,13 +57,11 @@ struct LifeLogExportSheet: View {
                 Text("含めるもの")
                     .font(.system(size: 11, weight: .semibold, design: .rounded))
                     .foregroundStyle(.secondary)
-                LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 8), count: 3), spacing: 8) {
+                LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 8), count: 2), spacing: 8) {
                     exportToggle("予定", id: "calendar", count: snapshot.day.calendarEvents.count, isOn: $options.includesCalendarEvents)
                     exportToggle("発話", id: "speech", count: snapshot.day.utterances.count, isOn: $options.includesUtterances)
                     exportToggle("音声入力", id: "voice-input", count: snapshot.day.dictations.count, isOn: $options.includesDictations)
                     exportToggle("メモ", id: "memo", count: snapshot.day.memos.count, isOn: $options.includesMemos)
-                    exportToggle("要約", id: "summary", count: snapshot.day.summary == nil ? 0 : 1, isOn: $options.includesSummary)
-                    exportToggle("この日のTODO", id: "todo", count: dayTodoCount, isOn: $options.includesTodosForDay)
                 }
             }
 
@@ -140,7 +136,6 @@ struct LifeLogExportSheet: View {
                 let text = LifeLogTextExporter.render(
                     date: snapshot.date,
                     day: snapshot.day,
-                    todos: snapshot.todos,
                     options: options
                 )
                 let prefix = String(text.prefix(4_001))
@@ -154,13 +149,6 @@ struct LifeLogExportSheet: View {
             previewText = result.1
             isPreparing = false
         }
-    }
-
-    private var dayTodoCount: Int {
-        snapshot.todos.filter {
-            ($0.status != .draft && Calendar.current.isDate($0.createdAt, inSameDayAs: snapshot.date))
-                || ($0.status == .completed && $0.completedAt.map { Calendar.current.isDate($0, inSameDayAs: snapshot.date) } == true)
-        }.count
     }
 
     private var canExport: Bool {

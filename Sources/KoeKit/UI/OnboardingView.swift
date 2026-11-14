@@ -11,7 +11,7 @@ struct OnboardingView: View {
                     .foregroundStyle(KoeTheme.voiceGradient)
                 Text("話して過ごす毎日を、あなたの資産に。")
                     .font(.system(size: 24, weight: .semibold, design: .rounded))
-                Text("Koeは、日々話したことや、ふと残したメモをAIで整理します。\n振り返り、TODO、日記が、いつもの一日から自然に積み上がります。")
+                Text("Koeは、日々話したことや、ふと残したメモをこのMacに記録します。\n振り返りも日記も、いつもの一日から自然に積み上がります。")
                     .multilineTextAlignment(.center)
                     .font(.system(size: 13))
                     .foregroundStyle(.secondary)
@@ -24,9 +24,9 @@ struct OnboardingView: View {
                     detail: "会話で生まれた考えを、そのまま一日の記録へ。"
                 )
                 valueCard(
-                    symbol: "checkmark.circle",
-                    title: "やるべきことを、取りこぼさない",
-                    detail: "約束や次の行動を、確認できるTODO候補へ。"
+                    symbol: "magnifyingglass",
+                    title: "あとから、すぐ引き出せる",
+                    detail: "発話・音声入力・メモを横断して検索し、書き出せる。"
                 )
                 valueCard(
                     symbol: "arrow.trianglehead.2.clockwise.rotate.90",

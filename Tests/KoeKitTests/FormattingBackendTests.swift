@@ -24,8 +24,7 @@ struct FormattingBackendTests {
         defaults.removePersistentDomain(forName: suite)
         let settings = AppSettings(defaults: defaults)
         #expect(settings.formattingBackend == .onDevice)
-        #expect(settings.lifeLogFormattingBackend == .onDevice)
-        #expect(settings.model(for: .groq, purpose: .dictation) == GroqLlm.defaultModel)
+        #expect(settings.model(for: .groq) == GroqLlm.defaultModel)
         #expect(settings.lifeLogAudioRetentionPolicy == .processedOnly)
         #expect(!settings.onboardingCompleted)
         #expect(!settings.lifeLogAudioStorageConfirmed)
@@ -48,29 +47,21 @@ struct FormattingBackendTests {
     }
 
     @MainActor
-    @Test("音声入力とライフログは接続先とモデルを独立して保持する")
-    func purposesAreIndependent() {
+    @Test("廃止したライフログ用の接続先設定は読み捨て、音声入力の設定を保つ")
+    func ignoresRemovedLifeLogLlmSettings() {
         let suite = #function
         let defaults = UserDefaults(suiteName: suite)!
         defaults.removePersistentDomain(forName: suite)
+        let stored = """
+        {"formattingBackend":"openAI","openAIModel":"voice-model",\
+        "lifeLogFormattingBackend":"groq","lifeLogGroqModel":"life-model",\
+        "lifeLogSummaryPrompt":"old","lifeLogTodoPrompt":"old","lifeLogSummaryIntervalMinutes":30}
+        """
+        defaults.set(Data(stored.utf8), forKey: AppSettings.defaultsKey)
+
         let settings = AppSettings(defaults: defaults)
-        settings.setBackend(.openAI, for: .dictation)
-        settings.setBackend(.groq, for: .lifeLog)
-        settings.setModel("voice-model", for: .openAI, purpose: .dictation)
-        settings.setModel("life-model", for: .groq, purpose: .lifeLog)
-
-        #expect(settings.backend(for: .dictation) == .openAI)
-        #expect(settings.backend(for: .lifeLog) == .groq)
-        #expect(settings.model(for: .openAI, purpose: .dictation) == "voice-model")
-        #expect(settings.model(for: .groq, purpose: .lifeLog) == "life-model")
-
-        let registry = EngineRegistry()
-        registry.apply(backend: .openAI, model: "voice-model", purpose: .dictation)
-        registry.apply(backend: .groq, model: "life-model", purpose: .lifeLog)
-        #expect(registry.llm.identifier == .openAI)
-        #expect(registry.llm.modelName == "voice-model")
-        #expect(registry.lifeLogLlm.identifier == .groq)
-        #expect(registry.lifeLogLlm.modelName == "life-model")
+        #expect(settings.formattingBackend == .openAI)
+        #expect(settings.model(for: .openAI) == "voice-model")
     }
 
     @MainActor
@@ -102,8 +93,8 @@ struct FormattingBackendTests {
     @Test("空のモデル ID は既定値に丸める")
     func blankModelFallsBack() {
         let settings = AppSettings(defaults: UserDefaults(suiteName: #function)!)
-        settings.setModel("   ", for: .groq, purpose: .dictation)
-        #expect(settings.model(for: .groq, purpose: .dictation) == GroqLlm.defaultModel)
+        settings.setModel("   ", for: .groq)
+        #expect(settings.model(for: .groq) == GroqLlm.defaultModel)
     }
 
     @Test("推論を垂れ流すモデルの <think> は落とす")
@@ -147,9 +138,6 @@ struct HudLingerTests {
     }
 }
 
-
-
-
 /// 消えた選択肢が設定に残っていても、**他の設定を巻き添えにしない**(C-70)。
 @Suite("設定の前方互換")
 struct SettingsForwardCompatTests {
@@ -170,7 +158,7 @@ struct SettingsForwardCompatTests {
         let settings = AppSettings(defaults: defaults)
         #expect(settings.formattingBackend == .onDevice)  // 知らない値は既定へ
         // 消えたキー(transcriptionBackend)も知らない値も、他の設定を巻き添えにしない
-        #expect(settings.model(for: .groq, purpose: .dictation) == "my-model")
+        #expect(settings.model(for: .groq) == "my-model")
         #expect(settings.formattingTimeoutMs == 20_000)
         #expect(settings.holdThresholdMs == 777)
     }

@@ -174,7 +174,7 @@ private enum KoeUIE2E {
             }
             guard AXIsProcessTrusted() else { throw UIE2EError.accessibilityPermission }
             try await runDailyReviewCUJ(appURL: appURL)
-            try await runEmptyTodoCUJ(appURL: appURL)
+            try await runEmptyDayCUJ(appURL: appURL)
             try await runAISettingsCUJ(appURL: appURL)
             terminateTestApp()
             print("✓ UI E2E: 3 CUJs passed")
@@ -187,7 +187,7 @@ private enum KoeUIE2E {
 
     @MainActor
     private static func runDailyReviewCUJ(appURL: URL) async throws {
-        print("CUJ 1: ライフログのMarkdown要約を確認し、音声入力へ切り替え、日別書き出しを調整する")
+        print("CUJ 1: ライフログを検索して移動し、音声入力へ切り替え、日別書き出しを調整する")
         let app = try await launch(appURL, arguments: ["--koe-screenshot-demo"], activates: false)
         let ui = AXDriver(pid: app.processIdentifier)
 
@@ -202,7 +202,7 @@ private enum KoeUIE2E {
         let mainWindowSize = try ui.mainWindowSize()
         guard mainWindowSize.width >= 1_680, mainWindowSize.height >= 960 else {
             throw UIE2EError.assertion(
-                "main windowが3ペインを表示できる初期サイズではありません: \(mainWindowSize)"
+                "main windowが既定の初期サイズではありません: \(mainWindowSize)"
             )
         }
         _ = try ui.waitFor(identifier: "life-log.voice-memo")
@@ -216,11 +216,11 @@ private enum KoeUIE2E {
         try ui.press(identifier: "life-log.search")
         try ui.setValue("オンボーディング", identifier: "life-log.search-input")
         try ui.press(identifier: "life-log.search-result-memo-demo-memo-1")
-        guard !ui.exists(identifier: "life-log.todo-source-demo-todo-1") else {
-            throw UIE2EError.assertion("廃止したTODO出典移動が残っています")
+        for removed in ["life-log.open-all-todos", "life-log.refresh-summary", "life-log.summary-markdown"] {
+            guard !ui.exists(identifier: removed) else {
+                throw UIE2EError.assertion("廃止したTODO・要約の表示が残っています: \(removed)")
+            }
         }
-        _ = try ui.waitFor(identifier: "life-log.refresh-summary")
-        _ = try ui.waitFor(identifier: "life-log.summary-markdown")
         try ui.press(identifier: "main.section.history")
         _ = try ui.waitFor(identifier: "history.root")
         try ui.press(identifier: "main.section.lifeLog")
@@ -230,22 +230,24 @@ private enum KoeUIE2E {
         try ui.waitFor(text: memo)
         try ui.press(identifier: "life-log.export-day")
         _ = try ui.waitFor(identifier: "export.sheet")
-        let initialPreview = try ui.waitForString(identifier: "export.preview") { $0.contains("初回体験とベータ公開に向けて") }
-        guard initialPreview.contains("オンボーディングは3つの価値が順番に伝わる構成にする"),
-              initialPreview.contains("プロダクト朝会"),
-              initialPreview.contains("初回体験とベータ公開に向けて") else {
-            throw UIE2EError.assertion("予定・メモ・要約が日別書き出しへ届いていません")
+        let initialPreview = try ui.waitForString(identifier: "export.preview") {
+            $0.contains("オンボーディングは3つの価値が順番に伝わる構成にする")
         }
-        guard try ui.stringValue(identifier: "export.include.summary") == "オン" else {
-            throw UIE2EError.assertion("要約が初期状態で選択されていません")
+        guard initialPreview.contains("プロダクト朝会") else {
+            throw UIE2EError.assertion("予定・メモが日別書き出しへ届いていません")
         }
-        try ui.press(identifier: "export.include.summary")
-        guard try ui.stringValue(identifier: "export.include.summary") == "オフ" else {
+        guard try ui.stringValue(identifier: "export.include.memo") == "オン" else {
+            throw UIE2EError.assertion("メモが初期状態で選択されていません")
+        }
+        try ui.press(identifier: "export.include.memo")
+        guard try ui.stringValue(identifier: "export.include.memo") == "オフ" else {
             throw UIE2EError.assertion("書き出し項目の選択解除が反映されません")
         }
-        let updatedPreview = try ui.waitForString(identifier: "export.preview") { !$0.contains("初回体験とベータ公開に向けて") }
-        guard !updatedPreview.contains("初回体験とベータ公開に向けて") else {
-            throw UIE2EError.assertion("除外した要約が書き出しプレビューに残っています")
+        let updatedPreview = try ui.waitForString(identifier: "export.preview") {
+            !$0.contains("オンボーディングは3つの価値が順番に伝わる構成にする")
+        }
+        guard updatedPreview.contains("プロダクト朝会") else {
+            throw UIE2EError.assertion("選択したままの予定が書き出しプレビューから消えました")
         }
         guard try ui.stringValue(identifier: "export.include.voice-input") == "オン" else {
             throw UIE2EError.assertion("音声入力が独立した書き出し項目になっていません")
@@ -257,32 +259,30 @@ private enum KoeUIE2E {
     }
 
     @MainActor
-    private static func runEmptyTodoCUJ(appURL: URL) async throws {
-        print("CUJ 2: TODOがない日に管理画面を開き、空状態を確認する")
+    private static func runEmptyDayCUJ(appURL: URL) async throws {
+        print("CUJ 2: 記録がない状態でも記録操作と書き出しへ届く")
         let app = try await launch(appURL, arguments: ["--koe-ui-test-empty"])
         let ui = AXDriver(pid: app.processIdentifier)
 
-        try ui.press(identifier: "life-log.open-all-todos")
-        _ = try ui.waitFor(identifier: "todo-manager.root")
-        _ = try ui.waitFor(identifier: "todo-manager.empty")
+        _ = try ui.waitFor(identifier: "life-log.capture-toggle")
+        try ui.press(identifier: "life-log.export-day")
+        _ = try ui.waitFor(identifier: "export.sheet")
+        try ui.press(identifier: "export.close")
     }
 
     @MainActor
     private static func runAISettingsCUJ(appURL: URL) async throws {
-        print("CUJ 3: 利用状況とモードを確認する")
-        var app = try await launch(appURL, arguments: ["--koe-screenshot-demo", "--koe-ui-test-settings-usage"])
+        print("CUJ 3: 保存容量、カレンダー、ライフログ、モードの設定を確認する")
+        var app = try await launch(appURL, arguments: ["--koe-screenshot-demo", "--koe-ui-test-settings-privacy"])
         var ui = AXDriver(pid: app.processIdentifier)
-        _ = try ui.waitFor(identifier: "usage.overview")
-        _ = try ui.waitFor(identifier: "usage.recording")
-        _ = try ui.waitFor(identifier: "usage.api")
-        _ = try ui.waitFor(identifier: "usage.storage")
+        _ = try ui.waitFor(identifier: "privacy.storage")
 
         app = try await launch(appURL, arguments: ["--koe-screenshot-demo", "--koe-ui-test-settings-calendar"])
         ui = AXDriver(pid: app.processIdentifier)
         _ = try ui.waitFor(identifier: "calendar.settings.root")
         _ = try ui.waitFor(identifier: "calendar.refresh")
 
-        app = try await launch(appURL, arguments: ["--koe-screenshot-demo", "--koe-ui-test-settings-life-log-general"])
+        app = try await launch(appURL, arguments: ["--koe-screenshot-demo", "--koe-ui-test-settings-life-log"])
         ui = AXDriver(pid: app.processIdentifier)
         _ = try ui.waitFor(identifier: "life-log.voice-memo-hotkey")
 

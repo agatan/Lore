@@ -24,7 +24,6 @@ public final class GroqLlm: LlmEngine {
     /// キーの取り出し方。既定は Keychain だが、テストが本物の Keychain を
     /// 触らずに済むよう注入できるようにしてある。
     private let apiKeySource: @Sendable () throws -> String?
-    private let usageSink = Mutex<LlmUsageSink?>(nil)
 
     public init(
         model: String = GroqLlm.defaultModel,
@@ -42,10 +41,6 @@ public final class GroqLlm: LlmEngine {
     public func apply(model newValue: String) {
         let trimmed = newValue.trimmingCharacters(in: .whitespacesAndNewlines)
         model.withLock { $0 = trimmed.isEmpty ? Self.defaultModel : trimmed }
-    }
-
-    public func setUsageSink(_ sink: LlmUsageSink?) {
-        usageSink.withLock { $0 = sink }
     }
 
     /// クラウドのモデルはコンテキスト窓が桁違いに広いが、
@@ -71,8 +66,6 @@ public final class GroqLlm: LlmEngine {
         request.httpMethod = "POST"
         request.setValue("Bearer \(key)", forHTTPHeaderField: "Authorization")
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        let structured = prompt.output.structuredContract
-        let capabilities = Self.capabilities(for: model)
         request.httpBody = try JSONEncoder().encode(
             ChatRequest(
                 model: model,
@@ -82,10 +75,7 @@ public final class GroqLlm: LlmEngine {
                 messages: [
                     .init(role: "system", content: prompt.system),
                     .init(role: "user", content: prompt.user),
-                ],
-                reasoningEffort: structured.flatMap { _ in capabilities.minimumReasoningEffort },
-                includeReasoning: structured.flatMap { _ in capabilities.canExcludeReasoning ? false : nil },
-                responseFormat: structured.map { ResponseFormat(contract: $0, strict: capabilities.supportsStrictSchema) }
+                ]
             )
         )
 
@@ -98,17 +88,6 @@ public final class GroqLlm: LlmEngine {
         let decoded = try JSONDecoder().decode(ChatResponse.self, from: data)
         guard let content = decoded.choices.first?.message.content else {
             throw EngineError.failed("Groq が空の応答を返しました")
-        }
-        if let usage = decoded.usage {
-            usageSink.withLock { $0 }?(
-                identifier,
-                modelName,
-                LlmTokenUsage(
-                    inputTokens: usage.promptTokens,
-                    outputTokens: usage.completionTokens,
-                    totalTokens: usage.totalTokens
-                )
-            )
         }
         return Self.strippingReasoning(content).trimmingCharacters(in: .whitespacesAndNewlines)
     }
@@ -155,23 +134,7 @@ public final class GroqLlm: LlmEngine {
         return String(text[close.upperBound...])
     }
 
-    private static func capabilities(for model: String) -> ModelCapabilities {
-        if model.hasPrefix("openai/gpt-oss-") {
-            return ModelCapabilities(minimumReasoningEffort: "low", canExcludeReasoning: true, supportsStrictSchema: true)
-        }
-        if model.hasPrefix("qwen/qwen3.") {
-            return ModelCapabilities(minimumReasoningEffort: "none", canExcludeReasoning: true, supportsStrictSchema: false)
-        }
-        return ModelCapabilities(minimumReasoningEffort: nil, canExcludeReasoning: false, supportsStrictSchema: false)
-    }
-
     // MARK: JSON
-
-    private struct ModelCapabilities {
-        let minimumReasoningEffort: String?
-        let canExcludeReasoning: Bool
-        let supportsStrictSchema: Bool
-    }
 
     private struct ChatRequest: Encodable {
         struct Message: Encodable {
@@ -181,86 +144,6 @@ public final class GroqLlm: LlmEngine {
         let model: String
         let temperature: Double
         let messages: [Message]
-        let reasoningEffort: String?
-        let includeReasoning: Bool?
-        let responseFormat: ResponseFormat?
-
-        enum CodingKeys: String, CodingKey {
-            case model, temperature, messages
-            case reasoningEffort = "reasoning_effort"
-            case includeReasoning = "include_reasoning"
-            case responseFormat = "response_format"
-        }
-    }
-
-    private struct ResponseFormat: Encodable {
-        let type: String
-        let jsonSchema: JSONSchema?
-
-        init(contract: StructuredOutputContract, strict: Bool) {
-            if strict {
-                type = "json_schema"
-                jsonSchema = JSONSchema(contract: contract)
-            } else {
-                type = "json_object"
-                jsonSchema = nil
-            }
-        }
-
-        enum CodingKeys: String, CodingKey {
-            case type
-            case jsonSchema = "json_schema"
-        }
-    }
-
-    private struct JSONSchema: Encodable {
-        let name: String
-        let strict = true
-        let schema: ObjectSchema
-
-        init(contract: StructuredOutputContract) {
-            name = contract.name
-            schema = ObjectSchema(contract: contract)
-        }
-    }
-
-    private struct ObjectSchema: Encodable {
-        let type = "object"
-        let properties: [String: PropertySchema]
-        let required: [String]
-        let additionalProperties = false
-
-        init(contract: StructuredOutputContract) {
-            properties = Dictionary(uniqueKeysWithValues: contract.fields.map { field in
-                (field.name, PropertySchema(value: field.value))
-            })
-            required = contract.fields.map(\.name)
-        }
-
-        enum CodingKeys: String, CodingKey {
-            case type, properties, required
-            case additionalProperties = "additionalProperties"
-        }
-    }
-
-    private struct PropertySchema: Encodable {
-        let type: String
-        let items: ItemSchema?
-
-        init(value: StructuredOutputContract.Field.Value) {
-            switch value {
-            case .string:
-                type = "string"
-                items = nil
-            case .stringArray:
-                type = "array"
-                items = ItemSchema(type: "string")
-            }
-        }
-    }
-
-    private struct ItemSchema: Encodable {
-        let type: String
     }
 
     private struct ChatResponse: Decodable {
@@ -269,18 +152,6 @@ public final class GroqLlm: LlmEngine {
             let message: Message
         }
         let choices: [Choice]
-        let usage: Usage?
-
-        struct Usage: Decodable {
-            let promptTokens: Int
-            let completionTokens: Int
-            let totalTokens: Int
-            enum CodingKeys: String, CodingKey {
-                case promptTokens = "prompt_tokens"
-                case completionTokens = "completion_tokens"
-                case totalTokens = "total_tokens"
-            }
-        }
     }
 
     private struct ModelList: Decodable {
@@ -291,12 +162,5 @@ public final class GroqLlm: LlmEngine {
     private struct ApiError: Decodable {
         struct Detail: Decodable { let message: String }
         let error: Detail
-    }
-}
-
-private extension FormattingOutput {
-    var structuredContract: StructuredOutputContract? {
-        guard case .json(let contract) = self else { return nil }
-        return contract
     }
 }

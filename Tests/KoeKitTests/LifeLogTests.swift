@@ -4,7 +4,7 @@ import Synchronization
 import Testing
 @testable import KoeKit
 
-@Suite("Daily Life Logのsource of truthと派生処理")
+@Suite("Daily Life Logのsource of truth")
 struct LifeLogTests {
     @Test("同じ認識範囲の再通知は一つの発話を更新する")
     func repeatedFinalSegmentIsIdempotent() async throws {
@@ -41,84 +41,6 @@ struct LifeLogTests {
         let utterances = try await database.lifeLog.day(startedAt).utterances
         #expect(utterances.count == 1)
         #expect(utterances.first?.id == id)
-    }
-
-    @Test("手動更新は差分がなくても選択日の全データを再要約する")
-    @MainActor
-    func manualRefreshForcesWholeDaySummary() async throws {
-        let database = try await KoeDatabase.inMemory()
-        let llm = RecordingLifeLogLlm()
-        let coordinator = LifeLogCoordinator()
-        let startedAt = Date().addingTimeInterval(-120)
-        let endedAt = startedAt.addingTimeInterval(60)
-        try await database.lifeLog.save(audioChunk: LifeLogAudioChunk(
-            id: "audio", captureStartedAt: startedAt, captureEndedAt: endedAt,
-            localPath: "/tmp/already-summarized.m4a",
-            transcriptionState: .transcribed, processingState: .extracted
-        ))
-        let utterance = LifeLogUtterance(
-            id: "already-summarized", startedAt: startedAt, endedAt: endedAt,
-            text: "前回の要約後に変更されていない発話", audioChunkID: "audio"
-        )
-        try await database.lifeLog.save(utterance: utterance)
-        try await database.lifeLog.save(summary: DailySummary(
-            day: LifeLogDateKey.string(for: startedAt), summary: "前回", commitments: [], topics: [],
-            calendarEventCount: 0, capturedDurationSeconds: 60, utteranceCount: 1,
-            summarizedThrough: endedAt, isFinal: false
-        ))
-
-        await coordinator.configure(
-            database: database,
-            engines: EngineRegistry(llm: llm),
-            vocabulary: { [] },
-            todoPrompt: { BuiltinLifeLogPrompts.todo },
-            summaryPrompt: { BuiltinLifeLogPrompts.summary },
-            summaryIntervalMinutes: { 60 },
-            participatingEventsOnly: { true },
-            audioProcessingCompleted: {}
-        )
-        await coordinator.select(date: startedAt)
-
-        await coordinator.refreshSelectedDaySummary()
-
-        #expect(llm.recordedPrompts.map(\.user).joined().contains(utterance.text))
-        #expect(try await database.lifeLog.day(startedAt).summary?.summary == "全体")
-    }
-
-    @Test("再要約の新しいDraft IDは確定済みの旧Draft IDと衝突しない")
-    @MainActor
-    func regeneratedDraftUsesUniqueID() async throws {
-        let database = try await KoeDatabase.inMemory()
-        let date = Date().addingTimeInterval(-120)
-        let day = LifeLogDateKey.string(for: date)
-        let confirmedID = "draft-\(day)-0"
-        try await database.lifeLog.save(todo: LifeLogTodo(
-            id: confirmedID, title: "既存の確定TODO", status: .open
-        ))
-        let chunk = LifeLogAudioChunk(
-            id: "draft-collision-audio", captureStartedAt: date,
-            captureEndedAt: date.addingTimeInterval(60), localPath: "/tmp/draft-collision.m4a"
-        )
-        try await database.lifeLog.save(audioChunk: chunk)
-        try await database.lifeLog.save(utterance: LifeLogUtterance(
-            id: "draft-collision-utterance", startedAt: date,
-            endedAt: date.addingTimeInterval(60), text: "新しい作業", audioChunkID: chunk.id
-        ))
-
-        let coordinator = LifeLogCoordinator()
-        try await coordinator.updateSummary(
-            for: date, respectingInterval: false, force: true,
-            store: database.lifeLog,
-            derivation: LifeLogDerivationService(llm: RecordingLifeLogLlm())
-        )
-
-        let todos = try await database.lifeLog.todos()
-        #expect(todos.contains { $0.id == confirmedID && $0.status == .open })
-        let draft = try #require(todos.first { $0.title == "TODO" })
-        #expect(draft.status == .draft)
-        #expect(draft.id != confirmedID)
-        #expect(draft.sourceUtteranceIDs.isEmpty)
-        #expect(draft.sourceMemoIDs.isEmpty)
     }
 
     @Test("スリープ中は再接続せず、復帰後に記録意図を保って再接続する")
@@ -320,32 +242,6 @@ struct LifeLogTests {
                                  localPath: "/tmp/quiet-speech.m4a", peakLevel: 0.17).isTranscriptionCandidate)
     }
 
-    @Test("calendarは参考値として扱い、時間gapだけがconversationを分ける")
-    func segmentsAtOperationalBoundaries() {
-        let base = Date(timeIntervalSince1970: 1_000)
-        let values = [
-            LifeLogUtterance(startedAt: base, endedAt: base.addingTimeInterval(5), text: "a", audioChunkID: "c", calendarEventID: "event-a"),
-            LifeLogUtterance(startedAt: base.addingTimeInterval(20), endedAt: base.addingTimeInterval(25), text: "b", audioChunkID: "c", calendarEventID: "event-a"),
-            LifeLogUtterance(startedAt: base.addingTimeInterval(30), endedAt: base.addingTimeInterval(35), text: "c", audioChunkID: "c", calendarEventID: "event-b"),
-            LifeLogUtterance(startedAt: base.addingTimeInterval(200), endedAt: base.addingTimeInterval(205), text: "d", audioChunkID: "c", calendarEventID: "event-b"),
-        ]
-        let groups = ConversationSegmenter(maximumGap: 90).segment(values)
-        #expect(groups.map { $0.1.count } == [3, 1])
-        #expect(groups.allSatisfy { group in group.1.allSatisfy { $0.conversationID == group.0.id } })
-    }
-
-    @Test("TODOはglobalに保存し、既存の出典情報を損なわない")
-    func todoKeepsProvenance() async throws {
-        let database = try await KoeDatabase.inMemory()
-        let todo = LifeLogTodo(title: "RFCを書く", sourceConversationID: "conversation",
-                              sourceUtteranceIDs: ["utterance"], sourceMemoIDs: ["memo"], confidence: 0.8)
-        try await database.lifeLog.save(todo: todo)
-        let stored = try #require(await database.lifeLog.todos().first)
-        #expect(stored.sourceUtteranceIDs == ["utterance"])
-        #expect(stored.sourceConversationID == "conversation")
-        #expect(stored.sourceMemoIDs == ["memo"])
-    }
-
     @Test("予定時刻は最も近いtimeline項目へ、検索結果は該当項目へ移動する")
     @MainActor
     func timelineNavigationTargetsExpectedItem() async throws {
@@ -360,9 +256,6 @@ struct LifeLogTests {
             database: database,
             engines: EngineRegistry(),
             vocabulary: { [] },
-            todoPrompt: { "" },
-            summaryPrompt: { "" },
-            summaryIntervalMinutes: { 60 },
             participatingEventsOnly: { true },
             audioProcessingCompleted: {}
         )
@@ -416,143 +309,6 @@ struct LifeLogTests {
         #expect(try await database.lifeLog.day(midnight).utterances.map(\.id) == ["after-midnight"])
     }
 
-    @Test("再要約はDraftだけを置き換え、確定TODOを保つ")
-    func summaryReplacesOnlyDraftTodos() async throws {
-        let database = try await KoeDatabase.inMemory()
-        let date = Date(timeIntervalSince1970: 1_725_158_400)
-        try await database.lifeLog.save(todo: LifeLogTodo(id: "confirmed", title: "確定", status: .open))
-        try await database.lifeLog.save(todo: LifeLogTodo(id: "old-draft", title: "古い案", status: .draft))
-        let summary = DailySummary(day: LifeLogDateKey.string(for: date), summary: "更新", commitments: [], topics: [],
-                                   calendarEventCount: 0, capturedDurationSeconds: 0, utteranceCount: 0,
-                                   summarizedThrough: date, isFinal: false)
-        try await database.lifeLog.save(summary: summary, replacingDrafts: [
-            LifeLogTodo(id: "new-draft", title: "新しい案", status: .draft)
-        ])
-
-        let todos = try await database.lifeLog.todos()
-        #expect(todos.contains { $0.id == "confirmed" && $0.status == .open })
-        #expect(todos.contains { $0.id == "new-draft" && $0.status == .draft })
-        #expect(!todos.contains { $0.id == "old-draft" })
-    }
-
-    @Test("SummaryとTODOはLLMのJSON出力から型付き派生データになる")
-    func llmDerivation() async throws {
-        let llm = RecordingLifeLogLlm()
-        let service = LifeLogDerivationService(llm: llm)
-        let utterance = LifeLogUtterance(startedAt: Date(), endedAt: Date(), text: "RFCを書きます", audioChunkID: "audio")
-        #expect(try await service.extractTodoTitles(from: [utterance], prompt: "抽出") == ["TODO"])
-        #expect(llm.recordedPrompts.last?.output == .json(.init(name: "life_log_todos", fields: [
-            .init("todos", .stringArray),
-        ])))
-        let summary = try await service.summarize(
-            day: LifeLogDay(utterances: [utterance], conversations: [], calendarEvents: [], summary: nil),
-            prompt: "要約"
-        )
-        #expect(summary == LifeLogDerivedSummary(text: "全体", topics: ["話題"], todoTitles: ["TODO"]))
-        #expect(llm.recordedPrompts.last?.output == .json(.init(name: "life_log_summary", fields: [
-            .init("summary", .string),
-            .init("topics", .stringArray),
-            .init("todos", .stringArray),
-        ])))
-    }
-
-    @Test("既存TODOはpromptへ渡し、同じ文言を新しいTODO案から除外する")
-    func existingTodosAreNotProposedAgain() async throws {
-        let llm = RecordingLifeLogLlm()
-        let service = LifeLogDerivationService(llm: llm)
-        let utterance = LifeLogUtterance(startedAt: Date(), endedAt: Date(), text: "TODOについて話す", audioChunkID: "audio")
-
-        let summary = try await service.summarize(
-            day: LifeLogDay(utterances: [utterance], conversations: [], calendarEvents: [], summary: nil),
-            prompt: "要約",
-            existingTodoTitles: ["ＴＯＤＯ"]
-        )
-
-        #expect(summary.todoTitles.isEmpty)
-        #expect(llm.recordedPrompts.last?.system.contains("<existing_todos>\n- ＴＯＤＯ\n</existing_todos>") == true)
-    }
-
-    @Test("再要約では当日の全データを時系列でLLMへ渡す")
-    func summaryUsesWholeDayTimeline() async throws {
-        let llm = RecordingLifeLogLlm()
-        let service = LifeLogDerivationService(llm: llm)
-        let start = Date(timeIntervalSince1970: 1_725_158_400)
-        let oldMarker = "午前の決定-" + String(repeating: "A", count: 180)
-        let newMarker = "午後の決定-" + String(repeating: "B", count: 180)
-        let day = LifeLogDay(
-            utterances: [
-                LifeLogUtterance(startedAt: start, endedAt: start.addingTimeInterval(10), text: oldMarker, audioChunkID: "a"),
-                LifeLogUtterance(startedAt: start.addingTimeInterval(3_600), endedAt: start.addingTimeInterval(3_610), text: newMarker, audioChunkID: "b"),
-            ],
-            memos: [LifeLogMemo(createdAt: start.addingTimeInterval(1_800), text: "中間メモ")],
-            conversations: [],
-            calendarEvents: [CalendarEventSnapshot(title: "朝会", startsAt: start.addingTimeInterval(-600),
-                                                   endsAt: start, calendarTitle: "Work")],
-            summary: nil
-        )
-
-        _ = try await service.summarize(day: day, prompt: "要約")
-        let sent = llm.recordedPrompts.map(\.user).joined(separator: "\n")
-        #expect(sent.contains(oldMarker))
-        #expect(sent.contains(newMarker))
-        #expect(sent.contains("中間メモ"))
-        #expect(sent.contains("朝会"))
-        #expect(!sent.contains("前回の要約"))
-    }
-
-    @Test("ライブ要約は予定を基準時点との関係で分類する")
-    func liveSummaryLabelsCalendarEventsRelativeToAsOf() async throws {
-        let llm = RecordingLifeLogLlm()
-        let service = LifeLogDerivationService(llm: llm)
-        let asOf = Date(timeIntervalSince1970: 1_800_000_000)
-        let day = LifeLogDay(
-            utterances: [],
-            conversations: [],
-            calendarEvents: [
-                CalendarEventSnapshot(title: "終了した予定", startsAt: asOf.addingTimeInterval(-7_200), endsAt: asOf.addingTimeInterval(-3_600), calendarTitle: "Work"),
-                CalendarEventSnapshot(title: "進行中の予定", startsAt: asOf.addingTimeInterval(-600), endsAt: asOf.addingTimeInterval(600), calendarTitle: "Work"),
-                CalendarEventSnapshot(title: "これからの予定", startsAt: asOf.addingTimeInterval(3_600), endsAt: asOf.addingTimeInterval(7_200), calendarTitle: "Work"),
-            ],
-            summary: nil
-        )
-
-        _ = try await service.summarize(day: day, prompt: "要約", asOf: asOf)
-        let user = llm.recordedPrompts.map(\.user).joined(separator: "\n")
-        let system = llm.recordedPrompts.map(\.system).joined(separator: "\n")
-        #expect(user.contains("[予定・終了済み"))
-        #expect(user.contains("[予定・進行中"))
-        #expect(user.contains("[予定・これから"))
-        #expect(system.contains("未実施の予定として未来形"))
-    }
-
-    @Test("日付変更後は差分がなくても全予定から最終要約を作り直す")
-    @MainActor
-    func pastDayFinalizationIncludesAllCalendarEvents() async throws {
-        let database = try await KoeDatabase.inMemory()
-        let llm = RecordingLifeLogLlm()
-        let coordinator = LifeLogCoordinator()
-        let calendar = Calendar.current
-        let now = Date()
-        let date = try #require(calendar.date(byAdding: .day, value: -1, to: calendar.startOfDay(for: now)))
-        let eventStart = date.addingTimeInterval(18 * 3_600)
-        try await database.lifeLog.save(calendarEvents: [CalendarEventSnapshot(
-            title: "夕方の予定", startsAt: eventStart, endsAt: eventStart.addingTimeInterval(3_600), calendarTitle: "Work"
-        )])
-        try await database.lifeLog.save(summary: DailySummary(
-            day: LifeLogDateKey.string(for: date), summary: "途中", commitments: [], topics: [],
-            calendarEventCount: 1, capturedDurationSeconds: 0, utteranceCount: 0,
-            summarizedThrough: date, isFinal: false
-        ))
-
-        try await coordinator.updateSummary(
-            for: date, respectingInterval: true, now: now,
-            store: database.lifeLog, derivation: LifeLogDerivationService(llm: llm)
-        )
-
-        #expect(llm.recordedPrompts.map(\.user).joined().contains("夕方の予定"))
-        #expect(try await database.lifeLog.day(date).summary?.isFinal == true)
-    }
-
     @Test("月間activityは予定と発話の密度を日別に保つ")
     func monthlyActivity() async throws {
         let database = try await KoeDatabase.inMemory()
@@ -600,23 +356,18 @@ struct LifeLogTests {
         let day = LifeLogDay(
             utterances: [utterance],
             memos: [memo],
-            conversations: [],
             calendarEvents: [CalendarEventSnapshot(
                 title: "朝会", startsAt: date, endsAt: date.addingTimeInterval(60),
                 calendarTitle: "Work", participationStatus: .accepted
-            )],
-            summary: nil
+            )]
         )
-        let todo = LifeLogTodo(title: "RFCを書く", createdAt: date.addingTimeInterval(240), sourceUtteranceIDs: [utterance.id])
-
-        let text = LifeLogTextExporter.render(date: date, day: day, todos: [todo], calendar: calendar)
+        let text = LifeLogTextExporter.render(date: date, day: day, calendar: calendar)
 
         let calendarIndex = try #require(text.range(of: "**09:00–09:01 予定**"))
         let speechIndex = try #require(text.range(of: "**09:02–09:02 発話**"))
         let memoIndex = try #require(text.range(of: "**09:03 メモ**"))
         #expect(calendarIndex.lowerBound < speechIndex.lowerBound)
         #expect(speechIndex.lowerBound < memoIndex.lowerBound)
-        #expect(text.contains("- [ ] RFCを書く（09:04に追加）"))
         #expect(!text.contains("SPEECH"))
         #expect(!text.contains("status=open"))
     }
@@ -639,11 +390,10 @@ struct LifeLogTests {
         let day = try await database.lifeLog.day(startedAt)
         #expect(day.dictations.map(\.id) == ["voice-input"])
         #expect(day.dictations.first?.text == "明日の資料を送る")
-        let export = LifeLogTextExporter.render(date: startedAt, day: day, todos: [])
+        let export = LifeLogTextExporter.render(date: startedAt, day: day)
         #expect(export.contains("音声入力**"))
         #expect(export.contains("明日の資料を送る"))
         #expect(!export.contains("取り消した入力"))
-        #expect(!LifeLogDerivationService.timelineItems(day: day).contains { $0.contains("明日の資料を送る") })
     }
 
     @Test("成功した音声入力の実録音区間はライフログ発話より優先される")
@@ -696,8 +446,8 @@ struct LifeLogTests {
         #expect(try await database.lifeLog.day(startedAt).utterances.map(\.id) == ["life-log"])
     }
 
-    @Test("日別exportは項目ごとの選択と当日作成・完了TODOを尊重する")
-    func textExportHonorsSelectionAndTodoBoundary() throws {
+    @Test("日別exportは項目ごとの選択を尊重する")
+    func textExportHonorsSelection() throws {
         var calendar = Calendar(identifier: .gregorian)
         calendar.timeZone = try #require(TimeZone(secondsFromGMT: 0))
         let date = try #require(calendar.date(from: DateComponents(year: 2026, month: 8, day: 29, hour: 9)))
@@ -705,39 +455,24 @@ struct LifeLogTests {
             utterances: [.init(startedAt: date, endedAt: date, text: "発話", audioChunkID: "audio")],
             dictations: [.init(id: "dictation", startedAt: date, endedAt: date, text: "除外する音声入力")],
             memos: [.init(createdAt: date, text: "メモ")],
-            conversations: [],
-            calendarEvents: [.init(title: "予定", startsAt: date, endsAt: date, calendarTitle: "Work")],
-            summary: .init(day: "2026-08-29", summary: "要約", commitments: ["古い約束"], topics: [], calendarEventCount: 1, capturedDurationSeconds: 1, utteranceCount: 1, summarizedThrough: date, isFinal: true)
+            calendarEvents: [.init(title: "予定", startsAt: date, endsAt: date, calendarTitle: "Work")]
         )
-        let todos = [
-            LifeLogTodo(title: "対象", createdAt: date),
-            LifeLogTodo(title: "完了", status: .completed, createdAt: date),
-            LifeLogTodo(title: "下書き", status: .draft, createdAt: date),
-            LifeLogTodo(title: "別日", createdAt: date.addingTimeInterval(-86_400)),
-        ]
         let options = LifeLogTextExporter.Options(
             includesCalendarEvents: false,
             includesUtterances: true,
             includesDictations: false,
-            includesMemos: false,
-            includesSummary: true,
-            includesTodosForDay: true
+            includesMemos: false
         )
 
-        let text = LifeLogTextExporter.render(date: date, day: day, todos: todos, options: options, calendar: calendar)
+        let text = LifeLogTextExporter.render(date: date, day: day, options: options, calendar: calendar)
 
-        #expect(text.contains("要約"))
         #expect(text.contains("発話** 発話"))
-        #expect(text.contains("対象"))
         #expect(!text.contains("予定**"))
         #expect(!text.contains("メモ**"))
         #expect(!text.contains("除外する音声入力"))
-        #expect(text.contains("- [x] 完了"))
-        #expect(text.contains("完了"))
-        #expect(!text.contains("下書き"))
-        #expect(!text.contains("別日"))
-        #expect(!text.contains("古い約束"))
-        #expect(text.contains("この日発生したタスク"))
+        #expect(!LifeLogTextExporter.Options(
+            includesCalendarEvents: false, includesUtterances: false, includesDictations: false, includesMemos: false
+        ).hasSelection)
     }
 
     @Test("exportは連続発話をまとめ、90秒の無発話とメモで区切る")
@@ -747,75 +482,15 @@ struct LifeLogTests {
             .map { start, end, text in
                 LifeLogUtterance(startedAt: date.addingTimeInterval(start), endedAt: date.addingTimeInterval(end), text: text, audioChunkID: "audio")
             }
-        let day = LifeLogDay(utterances: speech, memos: [.init(createdAt: date.addingTimeInterval(135), text: "区切り")], conversations: [], calendarEvents: [], summary: nil)
-        let text = LifeLogTextExporter.render(date: date, day: day, todos: [])
+        let day = LifeLogDay(utterances: speech, memos: [.init(createdAt: date.addingTimeInterval(135), text: "区切り")])
+        let text = LifeLogTextExporter.render(date: date, day: day)
         #expect(text.contains("発話** 一 二"))
         #expect(text.components(separatedBy: "発話**").count == 4)
         #expect(text.contains("発話** 三"))
         #expect(text.contains("発話** 四"))
     }
 
-    @Test("音声入力だけではsummaryとTODOを生成しない")
-    @MainActor
-    func dictationDoesNotTriggerDerivation() async throws {
-        let database = try await KoeDatabase.inMemory()
-        let date = Date()
-        let snapshot = ModeSnapshot(modeName: "標準", modePrompt: "", systemPrompt: "", vocabularyCount: 0, trigger: .manual)
-        try await database.history.save(SessionRecord(
-            id: "dictation-only", startedAt: date, endedAt: date.addingTimeInterval(5), status: .completed,
-            modeSnapshot: snapshot, sttEngine: EngineIdentifier("speech-analyzer"),
-            rawTranscript: "明日の資料を送ってください", formattedText: "明日の資料を送ってください"
-        ))
-        let llm = RecordingLifeLogLlm()
-        try await LifeLogCoordinator().updateSummary(
-            for: date,
-            respectingInterval: false,
-            store: database.lifeLog,
-            derivation: LifeLogDerivationService(llm: llm)
-        )
-
-        #expect(llm.recordedPrompts.isEmpty)
-        #expect(try await database.lifeLog.day(date).summary == nil)
-        #expect(try await database.lifeLog.todos().isEmpty)
-    }
-
-    @Test("全TODO exportは確定済み未実施だけを含む")
-    func openTodoExport() {
-        let text = LifeLogTextExporter.renderOpenTodos([
-            LifeLogTodo(title: "未実施"),
-            LifeLogTodo(title: "完了", status: .completed),
-            LifeLogTodo(title: "下書き", status: .draft),
-        ])
-        #expect(text.contains("未実施"))
-        #expect(!text.contains("完了"))
-        #expect(!text.contains("下書き"))
-    }
-
-    @Test("日別書き出しのファイル名は対象日を展開する")
-    func lifeLogExportFilenameExpandsDate() throws {
-        var calendar = Calendar(identifier: .gregorian)
-        calendar.timeZone = try #require(TimeZone(secondsFromGMT: 0))
-        let date = try #require(calendar.date(from: DateComponents(year: 2026, month: 8, day: 30)))
-
-        #expect(try LifeLogExportFilename.resolve(
-            template: "lifelog-{{date}}.md",
-            date: date,
-            calendar: calendar
-        ) == "lifelog-20260830.md")
-    }
-
-    @Test("日別書き出しのファイル名からフォルダ外へ出られない")
-    func lifeLogExportFilenameRejectsPathAndUnknownPlaceholder() throws {
-        let date = Date(timeIntervalSince1970: 1_777_777_700)
-        #expect(throws: LifeLogExportFilenameError.pathComponent) {
-            try LifeLogExportFilename.resolve(template: "../lifelog-{{date}}.md", date: date)
-        }
-        #expect(throws: LifeLogExportFilenameError.unknownPlaceholder) {
-            try LifeLogExportFilename.resolve(template: "lifelog-{{day}}.md", date: date)
-        }
-    }
-
-    @Test("日本語trigram検索は発話・メモ・TODO・要約を横断し短い語にも対応する")
+    @Test("日本語trigram検索は発話・メモを横断し短い語にも対応する")
     func japaneseLifeLogSearch() async throws {
         let database = try await KoeDatabase.inMemory()
         let date = Date(timeIntervalSince1970: 1_725_158_400)
@@ -826,71 +501,13 @@ struct LifeLogTests {
             id: "utterance", startedAt: date, endedAt: date, text: "レセコンの移行を相談した", audioChunkID: "audio"
         ))
         try await database.lifeLog.save(memo: .init(id: "memo", createdAt: date, text: "診療報酬の確認"))
-        try await database.lifeLog.save(todo: .init(id: "todo", title: "請求データを確認", createdAt: date))
-        try await database.lifeLog.save(summary: .init(
-            day: LifeLogDateKey.string(for: date), summary: "移行計画を整理した", commitments: ["来週共有"], topics: ["レセプト"],
-            calendarEventCount: 0, capturedDurationSeconds: 1, utteranceCount: 1, summarizedThrough: date, isFinal: false
-        ))
 
         #expect(try await database.lifeLog.search("レセコン").map(\.kind) == [.utterance])
         #expect(try await database.lifeLog.search("診療").map(\.kind) == [.memo])
-        #expect(try await database.lifeLog.search("請求").map(\.kind) == [.todo])
-        #expect(try await database.lifeLog.search("移行計画").map(\.kind).contains(.summary))
-        #expect(try await database.lifeLog.search("共有").map(\.kind) == [.summary])
+        #expect(try await database.lifeLog.search("移行").map(\.kind) == [.utterance])
     }
 
-    @MainActor
-    @Test("自動化サービスはTODO操作とプロンプト変更を共通境界で扱う")
-    func automationServiceMutations() async throws {
-        let database = try await KoeDatabase.inMemory()
-        let suite = #function
-        let defaults = try #require(UserDefaults(suiteName: suite))
-        defaults.removePersistentDomain(forName: suite)
-        let settings = AppSettings(defaults: defaults)
-        let service = KoeAutomationService(database: database, settings: settings)
-
-        let added = try await service.addTodo(title: "自動化を確認")
-        #expect(try await service.todos(status: .open).map(\.id) == [added.id])
-        let completed = try await service.updateTodo(id: added.id, status: .completed)
-        #expect(completed.status == .completed)
-        #expect(completed.completedAt != nil)
-        #expect(try await database.lifeLog.todo(id: added.id)?.completedAt != nil)
-        let reopened = try await service.updateTodo(id: added.id, status: .open)
-        #expect(reopened.status == .open)
-        #expect(reopened.completedAt == nil)
-        try await service.deleteTodo(id: added.id)
-        #expect(try await service.todos().isEmpty)
-
-        try service.setPrompt("新しい要約プロンプト", kind: .summary)
-        #expect(service.prompt(.summary) == "新しい要約プロンプト")
-    }
-
-    @MainActor
-    @Test("旧標準要約プロンプトだけを新標準へ更新し、カスタム値は保つ")
-    func migratesOnlyLegacySummaryPrompt() throws {
-        let legacySuite = #function + ".legacy"
-        let legacyDefaults = try #require(UserDefaults(suiteName: legacySuite))
-        legacyDefaults.removePersistentDomain(forName: legacySuite)
-        var legacyStorage = AppSettings.Storage()
-        legacyStorage.lifeLogSummaryPrompt = BuiltinLifeLogPrompts.legacySummary
-        legacyDefaults.set(try JSONEncoder().encode(legacyStorage), forKey: AppSettings.defaultsKey)
-
-        let migrated = AppSettings(defaults: legacyDefaults)
-        #expect(migrated.lifeLogSummaryPrompt == BuiltinLifeLogPrompts.summary)
-        #expect(migrated.lifeLogSummaryPrompt != BuiltinLifeLogPrompts.legacySummary)
-
-        let customSuite = #function + ".custom"
-        let customDefaults = try #require(UserDefaults(suiteName: customSuite))
-        customDefaults.removePersistentDomain(forName: customSuite)
-        var customStorage = AppSettings.Storage()
-        customStorage.lifeLogSummaryPrompt = "自分用の日報プロンプト"
-        customDefaults.set(try JSONEncoder().encode(customStorage), forKey: AppSettings.defaultsKey)
-
-        let preserved = AppSettings(defaults: customDefaults)
-        #expect(preserved.lifeLogSummaryPrompt == "自分用の日報プロンプト")
-    }
-
-    @Test("ライフログ削除はすべての派生データとsource of truthを同時に消す")
+    @Test("ライフログ削除は発話・メモ・予定・音声chunkを同時に消す")
     func deleteAllLifeLogData() async throws {
         let database = try await KoeDatabase.inMemory()
         let start = Date(timeIntervalSince1970: 1_725_158_400)
@@ -906,7 +523,6 @@ struct LifeLogTests {
         try await database.lifeLog.save(calendarEvents: [CalendarEventSnapshot(
             title: "予定", startsAt: start, endsAt: start.addingTimeInterval(60), calendarTitle: "Work"
         )])
-        try await database.lifeLog.save(todo: LifeLogTodo(title: "TODO"))
 
         try await database.lifeLog.deleteAll()
 
@@ -914,8 +530,6 @@ struct LifeLogTests {
         #expect(day.utterances.isEmpty)
         #expect(day.memos.isEmpty)
         #expect(day.calendarEvents.isEmpty)
-        #expect(day.summary == nil)
-        #expect(try await database.lifeLog.todos().isEmpty)
         #expect(try await database.lifeLog.pendingAudioChunks().isEmpty)
     }
 }
@@ -1214,32 +828,4 @@ struct LifeLogWhisperSettingsTests {
     func whisperCppModelHasPinnedDigest() {
         #expect(WhisperModel.largeV3Turbo.sha256 == "394221709cd5ad1f40c46e6031ca61bce88931e6e088c188294c6d5a55ffa7e2")
     }
-}
-
-private struct StubLifeLogLlm: LlmEngine {
-    let identifier = EngineIdentifier.foundationModels
-    var modelName: String? { "stub" }
-    var inputCharacterBudget: Int { 2_200 }
-    func availability() async -> EngineAvailability { .ready }
-    func complete(prompt: FormattingPrompt, timeout: Duration) async throws -> String {
-        if prompt.system.contains("\"summary\"") { return #"{"summary":"RFCの作成を約束した。","topics":["RFC"],"todos":["RFCを書く"]}"# }
-        if prompt.system.contains("\"todos\"") { return #"{"todos":["RFCを書く"]}"# }
-        return #"{"summary":"RFCの作成を約束した。","topics":["RFC"],"todos":[]}"#
-    }
-    func unload() async {}
-}
-
-private final class RecordingLifeLogLlm: LlmEngine, @unchecked Sendable {
-    let identifier = EngineIdentifier.foundationModels
-    var modelName: String? { "recording" }
-    var inputCharacterBudget: Int { 700 }
-    private let prompts = Mutex<[FormattingPrompt]>([])
-    var recordedPrompts: [FormattingPrompt] { prompts.withLock { $0 } }
-
-    func availability() async -> EngineAvailability { .ready }
-    func complete(prompt: FormattingPrompt, timeout: Duration) async throws -> String {
-        prompts.withLock { $0.append(prompt) }
-        return #"{"summary":"全体","topics":["話題"],"todos":["TODO"]}"#
-    }
-    func unload() async {}
 }

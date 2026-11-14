@@ -30,9 +30,6 @@ enum DebugSnapshotter {
             presenter.toggleLifeLogMini()
             await settle(1.5)
             try await capture(KoeWindow.lifeLogMini, as: "life-log-mini", into: directory)
-            presenter.showLifeLogTodos()
-            await settle(1)
-            try await capture(KoeWindow.lifeLogTodos, as: "life-log-todos", into: directory)
         } catch {
             KoeLog.ui.error("UI snapshotに失敗: \(error.localizedDescription, privacy: .public)")
         }

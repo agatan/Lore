@@ -63,21 +63,6 @@ final class KoeWindowPresenter {
         env.applyLifeLogMiniWindowLevel()
     }
 
-    func showLifeLogTodos() {
-        show(
-            id: KoeWindow.lifeLogTodos,
-            title: "すべてのTODO",
-            size: NSSize(width: 680, height: 520),
-            root: AnyView(
-                LifeLogTodoManagerWindow(env: env)
-                    .environment(\.locale, env.settings.applicationLanguage.resolvedLocale())
-                    .koeWindow()
-                    .tint(KoeTheme.accent)
-                    .accentColor(KoeTheme.accent)
-            )
-        )
-    }
-
     private func show(
         id: String,
         title: String,

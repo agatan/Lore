@@ -14,7 +14,7 @@ struct LifeLogSearchSheet: View {
         VStack(spacing: 0) {
             HStack(spacing: 10) {
                 Image(systemName: "magnifyingglass").foregroundStyle(.secondary)
-                TextField("発話、メモ、TODO、要約を検索", text: $query)
+                TextField("発話、音声入力、メモを検索", text: $query)
                     .textFieldStyle(.plain)
                     .font(.system(size: 14))
                     .focused($focusesSearch)
@@ -51,10 +51,6 @@ struct LifeLogSearchSheet: View {
                                         .foregroundStyle(tint(for: result.kind))
                                     Text(result.day)
                                         .font(.system(size: 10, design: .monospaced)).foregroundStyle(.tertiary)
-                                    if let status = result.todoStatus {
-                                        Text(status == .open ? "未実施" : status == .draft ? "Draft" : "完了")
-                                            .font(.system(size: 9.5, weight: .medium)).foregroundStyle(.secondary)
-                                    }
                                 }
                                 Text(result.text)
                                     .font(.system(size: 12.5)).foregroundStyle(.primary)
@@ -119,8 +115,6 @@ struct LifeLogSearchSheet: View {
         case .utterance: "waveform"
         case .dictation: "keyboard.badge.ellipsis"
         case .memo: "text.bubble"
-        case .todo: "checkmark.circle"
-        case .summary: "sparkles"
         }
     }
 
@@ -129,8 +123,6 @@ struct LifeLogSearchSheet: View {
         case .utterance: KoeTheme.accent
         case .dictation: KoeTheme.accent
         case .memo: KoeTheme.accentSecondary
-        case .todo: KoeTheme.success
-        case .summary: KoeTheme.warning
         }
     }
 }

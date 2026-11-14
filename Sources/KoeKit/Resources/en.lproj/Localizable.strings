@@ -3,7 +3,6 @@
 "Koeを終了" = "Quit Koe";
 "設定…" = "Settings…";
 "一般" = "General";
-"利用状況" = "Usage";
 "AI整形" = "AI Formatting";
 "プライバシー" = "Privacy";
 "連携" = "Integrations";
@@ -11,7 +10,6 @@
 "モード" = "Modes";
 "語彙" = "Vocabulary";
 "ライフログ" = "Life Log";
-"要約とTODO" = "Summary & TODOs";
 "カレンダー" = "Calendar";
 "共通" = "Common";
 "起動" = "Startup";
@@ -31,11 +29,8 @@
 
 /* Onboarding */
 "話して過ごす毎日を、あなたの資産に。" = "Turn your spoken days into something valuable.";
-"Koeは、日々話したことや、ふと残したメモをAIで整理します。\n振り返り、TODO、日記が、いつもの一日から自然に積み上がります。" = "Koe uses AI to organize what you say and the notes you jot down.\nReflections, TODOs, and a journal build naturally from your everyday life.";
 "気づきを、流さない" = "Keep every insight";
 "会話で生まれた考えを、そのまま一日の記録へ。" = "Turn ideas from conversations directly into your daily record.";
-"やるべきことを、取りこぼさない" = "Never miss what needs doing";
-"約束や次の行動を、確認できるTODO候補へ。" = "Turn commitments and next steps into TODO suggestions you can review.";
 "振り返るほど、次がよくなる" = "Reflect today, improve tomorrow";
 "発話・メモ・予定から、一日の流れを短時間で把握。" = "Quickly understand your day from speech, notes, and events.";
 "気づけば、日記になっている" = "A journal, without the effort";
@@ -100,7 +95,6 @@
 /* Life Log */
 "ライフログ ミニ" = "Life Log Mini";
 "ライフログ ミニウィンドウ" = "Life Log Mini Window";
-"すべてのTODO" = "All TODOs";
 "今日" = "Today";
 "今日を開く" = "Open Today";
 "この日の記録はありません" = "No Records for This Day";
@@ -108,7 +102,6 @@
 "予定" = "Events";
 "発話" = "Speech";
 "メモ" = "Notes";
-"要約" = "Summary";
 "この日の予定" = "Events for This Day";
 "予定はありません" = "No Events";
 "再取得" = "Refresh";
@@ -117,16 +110,7 @@
 "メモを追加…" = "Add a Note…";
 "メモを追加" = "Add Note";
 "メモを削除" = "Delete Note";
-"TODOにする" = "Make TODO";
-"TODOはありません" = "No TODOs";
-"この日のTODO" = "TODOs for This Day";
-"未実施" = "Open";
-"完了したTODOはありません" = "No Completed TODOs";
-"完了した項目は、いつでも未実施へ戻せます" = "You can return completed items to Open at any time.";
-"完了にする" = "Mark Complete";
-"未実施に戻す" = "Mark Open";
 "ライフログを検索 (⌘F)" = "Search Life Log (⌘F)";
-"発話、メモ、TODO、要約を検索" = "Search speech, notes, TODOs, and summaries";
 "日本語の部分一致で横断検索します" = "Searches all records using partial matches";
 "ライフログ記録中" = "Life Log Recording";
 "ライフログ一時停止中" = "Life Log Paused";
@@ -158,20 +142,12 @@
 "30日" = "30 Days";
 "無期限" = "Forever";
 "現在の音声" = "Current Audio";
-"要約の更新" = "Summary Refresh";
-"30分" = "30 Minutes";
-"1時間" = "1 Hour";
-"2時間" = "2 Hours";
-"一日の要約とTODO案を作ります。音声入力とは別に選べます。" = "Creates a daily summary and TODO suggestions. This can be configured separately from dictation.";
-"音声入力の文章を整えます。ライフログとは別に選べます。" = "Formats dictated text. This can be configured separately from Life Log.";
 "モデル" = "Model";
 "API キー" = "API Key";
 "接続を確認" = "Check Connection";
 "確認中…" = "Checking…";
 "使えます" = "Available";
 "接続確認で利用可能なモデルを取得" = "Check the connection to retrieve available models";
-"用途ごとに別のキーを登録できます" = "You can register a separate key for each use";
-"この用途のキーをキーチェーンに登録済み" = "A key for this use is stored in Keychain";
 "モードを追加" = "Add Mode";
 "新しいモード" = "New Mode";
 "名前" = "Name";
@@ -179,7 +155,6 @@
 "このモードを使うアプリ" = "Apps Using This Mode";
 "アプリを選択…" = "Choose Apps…";
 "未設定(既定のモードとして使われます)" = "Not Set (Used as the Default Mode)";
-"標準に戻す" = "Restore Default";
 "複製" = "Duplicate";
 "共通ルール" = "Common Rules";
 "標準の内容に戻す" = "Restore Default Content";
@@ -229,15 +204,6 @@
 "インストール" = "Install";
 "インストール済み" = "Installed";
 "インストールできませんでした" = "Could Not Install";
-"今日の記録" = "Today's Activity";
-"7日間のAPI" = "7-Day API Usage";
-"ローカル保存" = "Local Storage";
-"記録時間" = "Recording Time";
-"クラウドAI" = "Cloud AI";
-"ストレージ" = "Storage";
-"合計" = "Total";
-"ライフログ音声" = "Life Log Audio";
-"履歴・設定" = "History & Settings";
 
 /* Permissions and errors */
 "許可する" = "Allow";
@@ -257,28 +223,9 @@
 "Koeのライフログ記録を開始します。" = "Starts Life Log recording in Koe.";
 "ライフログを終了" = "Stop Life Log";
 "Koeのライフログ記録を終了し、保存と文字起こしが確定するまで待ちます。" = "Stops Life Log recording in Koe and waits for audio saving and transcription to finish.";
-"ライフログを書き出してコピー" = "Export and Copy Life Log";
-"予定・発話・音声入力・メモを、読みやすいMarkdownとしてクリップボードへコピーします。" = "Copies events, speech, dictation, and notes to the clipboard as readable Markdown.";
-"対象日（未指定なら今日）" = "Date (Today if Not Specified)";
-"空欄のまま実行すると、その時点の今日を書き出します。" = "Leave blank to export the current day when the action runs.";
-"この日に作成・完了したTODO" = "TODOs Created or Completed on This Day";
-"ライフログをコピーしました。" = "Life Log Copied.";
-"ライフログをファイルにする" = "Create Life Log File";
-"日付を省略すると今日のライフログを書き出します。出力先フォルダを指定すると、そのフォルダへ直接保存します。" = "Exports today's Life Log when the date is omitted. If you choose a destination folder, the file is saved there directly.";
-"出力先フォルダ（未指定なら次へ渡す）" = "Destination Folder (Pass to Next Action if Not Specified)";
-"指定するとKoeが直接保存します。空欄なら、作成したファイルを次のアクションへ渡します。" = "If specified, Koe saves the file directly. If left blank, the created file is passed to the next action.";
-"ファイル名（{{date}}＝yyyyMMdd）" = "File Name ({{date}} = yyyyMMdd)";
-"例: lifelog-{{date}}.md は lifelog-20260830.md になります。" = "Example: lifelog-{{date}}.md becomes lifelog-20260830.md.";
-"未実施TODOをすべてコピー" = "Copy All Open TODOs";
-"確定済みで未実施のTODO全体をクリップボードへコピーします。" = "Copies all confirmed open TODOs to the clipboard.";
-"未実施TODOをコピーしました。" = "Open TODOs Copied.";
-"未実施TODOをファイルにする" = "Create Open TODOs File";
-"確定済みで未実施のTODO全体をテキストファイルとして渡します。" = "Provides all confirmed open TODOs as a text file.";
 "Koeの起動準備が完了していません。もう一度実行してください。" = "Koe is not ready yet. Please run the action again.";
 "Koeを開き、ライフログ音声の保存を一度確認してください。" = "Open Koe and confirm Life Log audio storage once.";
 "クリップボードへ書き込めませんでした。" = "Could Not Write to the Clipboard.";
-"書き出す項目を1つ以上選んでください。" = "Select at Least One Item to Export.";
-"書き出し先のフォルダを選び直してください。" = "Choose the Export Folder Again.";
 "保存と文字起こしの完了を待てませんでした。保存済み音声は次回起動時に再処理されます。" = "Audio saving and transcription did not finish in time. Saved audio will be processed the next time Koe starts.";
 "表示言語" = "Display Language";
 "システム設定" = "System Settings";
@@ -294,3 +241,12 @@
 "whisper.cppはキーを離した後に録音全体をMac内で一括認識します。録音中の暫定表示はありません。ボイスメモにも適用します。" = "whisper.cpp transcribes the whole recording on this Mac after you release the key. No live preview is shown while recording. Also applies to voice memos.";
 "音声入力とライフログで共通です" = "Shared by dictation and Life Log.";
 "SpeechAnalyzerを選んだ音声入力とライフログで使います。whisper.cppは各設定で選べます。語彙は両方で共有します。" = "Used by dictation and Life Log when SpeechAnalyzer is selected. whisper.cpp can be chosen in each section. Vocabulary is shared by both.";
+"Koeは、日々話したことや、ふと残したメモをこのMacに記録します。\n振り返りも日記も、いつもの一日から自然に積み上がります。" = "Koe records what you say each day and the notes you jot down, right on this Mac.\nReflection and journaling build up naturally from your everyday life.";
+"あとから、すぐ引き出せる" = "Find it again, instantly";
+"発話・音声入力・メモを横断して検索し、書き出せる。" = "Search and export across speech, dictation, and notes.";
+"発話、音声入力、メモを検索" = "Search speech, dictation, and notes";
+"音声入力の文章を整えます。ライフログの文字は整形にも外部送信にも使いません。" = "Polishes dictated text. Life Log text is never formatted or sent anywhere.";
+"キーチェーンに登録済み" = "Saved in Keychain";
+"キーチェーンに保存します" = "Stored in Keychain";
+"このMacの使用量" = "Storage on This Mac";
+"履歴、ライフログ、保存音声、whisper.cpp modelの合計です" = "Total of history, Life Log, saved audio, and whisper.cpp models.";

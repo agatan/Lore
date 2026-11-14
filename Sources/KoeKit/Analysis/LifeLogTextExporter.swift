@@ -7,50 +7,32 @@ public enum LifeLogTextExporter {
         public var includesUtterances: Bool
         public var includesDictations: Bool
         public var includesMemos: Bool
-        public var includesSummary: Bool
-        public var includesTodosForDay: Bool
 
         public init(
             includesCalendarEvents: Bool = true,
             includesUtterances: Bool = true,
             includesDictations: Bool = true,
-            includesMemos: Bool = true,
-            includesSummary: Bool = true,
-            includesTodosForDay: Bool = true
+            includesMemos: Bool = true
         ) {
             self.includesCalendarEvents = includesCalendarEvents
             self.includesUtterances = includesUtterances
             self.includesDictations = includesDictations
             self.includesMemos = includesMemos
-            self.includesSummary = includesSummary
-            self.includesTodosForDay = includesTodosForDay
         }
 
         public var hasSelection: Bool {
-            includesCalendarEvents || includesUtterances || includesDictations || includesMemos || includesSummary || includesTodosForDay
+            includesCalendarEvents || includesUtterances || includesDictations || includesMemos
         }
     }
 
     public static func render(
         date: Date,
         day: LifeLogDay,
-        todos: [LifeLogTodo],
         options: Options = Options(),
         calendar: Calendar = .current
     ) -> String {
         let dateComponents = calendar.dateComponents([.year, .month, .day], from: date)
         var lines = ["# \(dateComponents.year ?? 0)年\(dateComponents.month ?? 0)月\(dateComponents.day ?? 0)日のライフログ", ""]
-
-        if options.includesSummary, let summary = day.summary {
-            lines.append("## 一日のまとめ")
-            lines.append(summary.summary)
-            if !summary.topics.isEmpty {
-                lines.append("")
-                lines.append("### 主な話題")
-                lines.append(contentsOf: summary.topics.map { "- \($0)" })
-            }
-            lines.append("")
-        }
 
         if options.includesCalendarEvents || options.includesUtterances || options.includesDictations || options.includesMemos {
             lines.append("## タイムライン")
@@ -86,37 +68,6 @@ public enum LifeLogTextExporter {
             }
         }
 
-        let createdTodos = todos.filter {
-            $0.status != .draft && calendar.isDate($0.createdAt, inSameDayAs: date)
-        }
-        let completedTodos = todos.filter {
-            $0.status == .completed && $0.completedAt.map { calendar.isDate($0, inSameDayAs: date) } == true
-        }
-        if options.includesTodosForDay {
-            if !createdTodos.isEmpty {
-                lines.append("")
-                lines.append("## この日発生したタスク")
-                lines.append(contentsOf: createdTodos.map { todoLine($0, calendar: calendar) })
-            }
-            if !completedTodos.isEmpty {
-                lines.append("")
-                lines.append("## この日完了したタスク")
-                lines.append(contentsOf: completedTodos.map { completedTodoLine($0, calendar: calendar) })
-            }
-        }
-
-        lines.append("")
-        return lines.joined(separator: "\n")
-    }
-
-    public static func renderOpenTodos(_ todos: [LifeLogTodo], calendar: Calendar = .current) -> String {
-        var lines = ["# 未実施TODO", ""]
-        let open = todos.filter { $0.status == .open }.sorted { $0.createdAt < $1.createdAt }
-        if open.isEmpty {
-            lines.append("未実施のTODOはありません。")
-        } else {
-            lines.append(contentsOf: open.map { todoLine($0, calendar: calendar) })
-        }
         lines.append("")
         return lines.joined(separator: "\n")
     }
@@ -140,16 +91,6 @@ public enum LifeLogTextExporter {
 
     private static func memoLine(_ value: LifeLogMemo, calendar: Calendar) -> String {
         "- **\(time(value.createdAt, calendar: calendar)) メモ** \(readable(value.text))"
-    }
-
-    private static func todoLine(_ value: LifeLogTodo, calendar: Calendar) -> String {
-        let due = value.dueAt.map { "、期限 \(LifeLogDateKey.string(for: $0, calendar: calendar))" } ?? ""
-        return "- [\(value.status == .completed ? "x" : " ")] \(readable(value.title))（\(time(value.createdAt, calendar: calendar))に追加\(due)）"
-    }
-
-    private static func completedTodoLine(_ value: LifeLogTodo, calendar: Calendar) -> String {
-        let completed = value.completedAt.map { time($0, calendar: calendar) } ?? "時刻不明"
-        return "- [x] \(readable(value.title))（\(completed)に完了）"
     }
 
     private static func time(_ date: Date, calendar: Calendar) -> String {

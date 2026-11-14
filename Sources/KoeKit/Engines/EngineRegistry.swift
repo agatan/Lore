@@ -30,12 +30,6 @@ public final class EngineRegistry {
     @ObservationIgnored public let gemini: RemoteLlm
     @ObservationIgnored public let ollama: RemoteLlm
     @ObservationIgnored public let lmStudio: RemoteLlm
-    @ObservationIgnored private let lifeLogGroq: GroqLlm
-    @ObservationIgnored private let lifeLogOpenAI: RemoteLlm
-    @ObservationIgnored private let lifeLogAnthropic: RemoteLlm
-    @ObservationIgnored private let lifeLogGemini: RemoteLlm
-    @ObservationIgnored private let lifeLogOllama: RemoteLlm
-    @ObservationIgnored private let lifeLogLmStudio: RemoteLlm
     /// prepare() で判明した希望フォーマットのキャッシュ。録音開始を待たせないために持つ。
     @ObservationIgnored private var preparedFormat: AVAudioFormat?
 
@@ -45,10 +39,8 @@ public final class EngineRegistry {
     public private(set) var whisperAvailability: EngineAvailability = .ready
     /// いま選ばれている仕上げの利用可否。
     public private(set) var llmAvailability: EngineAvailability = .ready
-    public private(set) var lifeLogLlmAvailability: EngineAvailability = .ready
     /// 仕上げをどこで動かすか。設定から `apply(...)` で流し込む。
     public private(set) var backend: FormattingBackend = .onDevice
-    public private(set) var lifeLogBackend: FormattingBackend = .onDevice
 
     public init(
         stt: any SttEngine = SpeechAnalyzerStt(),
@@ -70,12 +62,6 @@ public final class EngineRegistry {
         self.gemini = gemini
         self.ollama = ollama
         self.lmStudio = lmStudio
-        lifeLogGroq = GroqLlm(apiKeySource: { try SecretStore.read(.lifeLogGroqApiKey) })
-        lifeLogOpenAI = RemoteLlm(identifier: .openAI, providerName: "OpenAI", api: .openAI, model: "gpt-5.4-mini", apiKeySource: { try SecretStore.read(.lifeLogOpenAIApiKey) })
-        lifeLogAnthropic = RemoteLlm(identifier: .anthropic, providerName: "Claude", api: .anthropic, model: "claude-sonnet-5", apiKeySource: { try SecretStore.read(.lifeLogAnthropicApiKey) })
-        lifeLogGemini = RemoteLlm(identifier: .gemini, providerName: "Gemini", api: .gemini, model: "gemini-3.6-flash", apiKeySource: { try SecretStore.read(.lifeLogGeminiApiKey) })
-        lifeLogOllama = RemoteLlm(identifier: .ollama, providerName: "Ollama", api: .openAICompatible(baseURL: URL(string: "http://localhost:11434/v1")!, authorizationValue: nil), model: "gpt-oss:20b")
-        lifeLogLmStudio = RemoteLlm(identifier: .lmStudio, providerName: "LM Studio", api: .openAICompatible(baseURL: URL(string: "http://localhost:1234/v1")!, authorizationValue: nil), model: "openai/gpt-oss-20b")
     }
 
     /// いま整形に使うエンジン。セッション開始時にここから 1 つ取り、
@@ -89,18 +75,6 @@ public final class EngineRegistry {
         case .groq: groq
         case .ollama: ollama
         case .lmStudio: lmStudio
-        }
-    }
-
-    public var lifeLogLlm: any LlmEngine {
-        switch lifeLogBackend {
-        case .onDevice: onDeviceLlm
-        case .openAI: lifeLogOpenAI
-        case .anthropic: lifeLogAnthropic
-        case .gemini: lifeLogGemini
-        case .groq: lifeLogGroq
-        case .ollama: lifeLogOllama
-        case .lmStudio: lifeLogLmStudio
         }
     }
 
@@ -133,58 +107,32 @@ public final class EngineRegistry {
         if lifeLogWhisper.model != model { lifeLogWhisper = WhisperCppStt(model: model) }
     }
 
-    /// API応答に含まれる実測usageへ、呼び出し用途を付けて上位へ渡す。
-    public func setUsageSink(_ sink: @escaping @Sendable (LlmUsageEvent) -> Void) {
-        let dictation: LlmUsageSink = { provider, model, usage in
-            sink(LlmUsageEvent(purpose: .dictation, provider: provider, model: model, usage: usage))
-        }
-        let lifeLog: LlmUsageSink = { provider, model, usage in
-            sink(LlmUsageEvent(purpose: .lifeLog, provider: provider, model: model, usage: usage))
-        }
-        groq.setUsageSink(dictation)
-        openAI.setUsageSink(dictation)
-        anthropic.setUsageSink(dictation)
-        gemini.setUsageSink(dictation)
-        lifeLogGroq.setUsageSink(lifeLog)
-        lifeLogOpenAI.setUsageSink(lifeLog)
-        lifeLogAnthropic.setUsageSink(lifeLog)
-        lifeLogGemini.setUsageSink(lifeLog)
-    }
-
     /// 履歴を読む語彙分析は、外部送信の選択とは独立して常にオンデバイスで行う。
     /// `llm` を使うとクラウド選択時に過去の履歴まで送信され、UI の「文章処理だけ」という
     /// 説明とプライバシー境界が崩れる。
     var analysisLlm: any LlmEngine { onDeviceLlm }
     public func apply(backend: FormattingBackend, model: String) {
-        apply(backend: backend, model: model, purpose: .dictation)
-    }
-
-    public func apply(backend: FormattingBackend, model: String, purpose: LlmPurpose) {
-        if purpose == .dictation { self.backend = backend } else { lifeLogBackend = backend }
+        self.backend = backend
         switch backend {
         case .onDevice: break
-        case .openAI: (purpose == .dictation ? openAI : lifeLogOpenAI).apply(model: model)
-        case .anthropic: (purpose == .dictation ? anthropic : lifeLogAnthropic).apply(model: model)
-        case .gemini: (purpose == .dictation ? gemini : lifeLogGemini).apply(model: model)
-        case .groq: (purpose == .dictation ? groq : lifeLogGroq).apply(model: model)
-        case .ollama: (purpose == .dictation ? ollama : lifeLogOllama).apply(model: model)
-        case .lmStudio: (purpose == .dictation ? lmStudio : lifeLogLmStudio).apply(model: model)
+        case .openAI: openAI.apply(model: model)
+        case .anthropic: anthropic.apply(model: model)
+        case .gemini: gemini.apply(model: model)
+        case .groq: groq.apply(model: model)
+        case .ollama: ollama.apply(model: model)
+        case .lmStudio: lmStudio.apply(model: model)
         }
     }
 
     public func availableModels(for backend: FormattingBackend) async throws -> [String] {
-        try await availableModels(for: backend, purpose: .dictation)
-    }
-
-    public func availableModels(for backend: FormattingBackend, purpose: LlmPurpose) async throws -> [String] {
         switch backend {
         case .onDevice: []
-        case .openAI: try await (purpose == .dictation ? openAI : lifeLogOpenAI).availableModels()
-        case .anthropic: try await (purpose == .dictation ? anthropic : lifeLogAnthropic).availableModels()
-        case .gemini: try await (purpose == .dictation ? gemini : lifeLogGemini).availableModels()
-        case .groq: try await (purpose == .dictation ? groq : lifeLogGroq).availableModels()
-        case .ollama: try await (purpose == .dictation ? ollama : lifeLogOllama).availableModels()
-        case .lmStudio: try await (purpose == .dictation ? lmStudio : lifeLogLmStudio).availableModels()
+        case .openAI: try await openAI.availableModels()
+        case .anthropic: try await anthropic.availableModels()
+        case .gemini: try await gemini.availableModels()
+        case .groq: try await groq.availableModels()
+        case .ollama: try await ollama.availableModels()
+        case .lmStudio: try await lmStudio.availableModels()
         }
     }
 
@@ -222,10 +170,7 @@ public final class EngineRegistry {
 
     public func refreshAvailability(languagePreference: LanguagePreference = .auto, checkLlm: Bool = true) async {
         await refreshSttAvailability(languagePreference: languagePreference)
-        if checkLlm {
-            await refreshLlmAvailability(for: .dictation)
-            await refreshLlmAvailability(for: .lifeLog)
-        }
+        if checkLlm { await refreshLlmAvailability() }
     }
 
     public func refreshSttAvailability(languagePreference: LanguagePreference = .auto) async {
@@ -238,12 +183,8 @@ public final class EngineRegistry {
         whisperAvailability = await dictationWhisper.availability(languagePreference: languagePreference)
     }
 
-    public func refreshLlmAvailability(for purpose: LlmPurpose) async {
-        if purpose == .dictation {
-            llmAvailability = await llm.availability()
-        } else {
-            lifeLogLlmAvailability = await lifeLogLlm.availability()
-        }
+    public func refreshLlmAvailability() async {
+        llmAvailability = await llm.availability()
     }
 
     /// 日本語の音声モデルを取得する。OS が管理する資産だが、取得は明示操作で行う。
@@ -270,9 +211,6 @@ public final class EngineRegistry {
         await stt.unload()
         await dictationWhisper.unload()
         await llm.unload()
-        if backend != .onDevice || lifeLogBackend != .onDevice {
-            await lifeLogLlm.unload()
-        }
     }
 
     /// ライフログ記録の停止時に、ライフログ用whisper.cpp stateを解放する。

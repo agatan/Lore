@@ -1,38 +1,6 @@
 import Foundation
 import NaturalLanguage
 
-/// LLMへ要求する出力の形。呼び出し側が意味contractを宣言し、provider adapterが
-/// 対応する最も強い制約へ変換する。
-public enum FormattingOutput: Sendable, Equatable {
-    case text
-    case json(StructuredOutputContract)
-}
-
-public struct StructuredOutputContract: Sendable, Equatable {
-    public struct Field: Sendable, Equatable {
-        public enum Value: Sendable, Equatable {
-            case string
-            case stringArray
-        }
-
-        public var name: String
-        public var value: Value
-
-        public init(_ name: String, _ value: Value) {
-            self.name = name
-            self.value = value
-        }
-    }
-
-    public var name: String
-    public var fields: [Field]
-
-    public init(name: String, fields: [Field]) {
-        self.name = name
-        self.fields = fields
-    }
-}
-
 /// LLM に渡すプロンプト。
 public struct FormattingPrompt: Sendable, Equatable {
     public var system: String
@@ -44,18 +12,15 @@ public struct FormattingPrompt: Sendable, Equatable {
     /// 履歴分析は数十文字の JSON しか返らない。同じ見積もりを当てると、
     /// 分析側で応答用に確保した枠が入力を押し出して**コンテキスト超過で失敗する**。
     public var expectedOutputCharacters: Int?
-    public var output: FormattingOutput
 
     public init(
         system: String,
         user: String,
-        expectedOutputCharacters: Int? = nil,
-        output: FormattingOutput = .text
+        expectedOutputCharacters: Int? = nil
     ) {
         self.system = system
         self.user = user
         self.expectedOutputCharacters = expectedOutputCharacters
-        self.output = output
     }
 }
 

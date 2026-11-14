@@ -14,10 +14,8 @@ Daily Life LogのContinuous Captureを利用者が明示的に有効にした場
 - 共通ルール
 - 選択されたモードの指示
 - 登録された語彙
-- Daily Life LogのSummary・TODO案生成対象となる当日の全発話とテキストメモ、予定の時刻と件名、Life Logの指示文
-- 同じ作業の再提案防止に使う既存TODOの文言、および日をまたぐタグ統一に使う対象日以前90日分・最大100件の話題名（過去日の本文は含めません）
 
-録音した音声、通常の口述履歴、前面アプリの情報は送信しません。語彙の自動提案も、クラウドLLMの選択にかかわらずオンデバイスで実行します。モデル一覧取得と接続確認では、保存されたAPIキーを選択先APIの認証に使用します。
+録音した音声、通常の口述履歴、Daily Life Logの発話・メモ・予定、前面アプリの情報は送信しません。Koeはライフログを要約・分析するためにLLMやクラウドへ送信することはありません。ライフログをAIで振り返る場合は、利用者がCLIまたはMCPで選んだAIクライアントへ渡します。その送信先と条件は、そのクライアントの設定に従います。語彙の自動提案も、クラウドLLMの選択にかかわらずオンデバイスで実行します。モデル一覧取得と接続確認では、保存されたAPIキーを選択先APIの認証に使用します。
 
 クラウドAPIに送信したデータには、選択したサービス側の利用条件とプライバシーポリシーが適用されます。
 
@@ -30,17 +28,19 @@ Koe は `~/Library/Application Support/Koe/koe.sqlite` に次のデータを保�
 - 録音開始時の前面アプリ名と bundle ID
 - 処理結果、エラー、処理時間
 - モード、共通ルール、語彙、語彙候補
-- Daily Life Logの音声、timestamp付き発話とテキストメモ、予定snapshot、conversation、TODOと出典、日次summary
+- Daily Life Logの音声、timestamp付き発話とテキストメモ、予定snapshot
 
-whisper.cpp modelを選んだ場合、model fileとdownload途中の一時fileを `~/Library/Application Support/Koe/Models/WhisperCpp/` に保存します。Model取得先へ送るのはmodel fileを取得するためのrequestだけで、音声、文字起こし、予定、TODO、履歴、前面app情報を含めません。設定画面でmodelごとの容量、download進捗、失敗を確認し、cancel、再試行、削除できます。使用中のmodelは停止または切替完了まで削除しません。
+whisper.cpp modelを選んだ場合、model fileとdownload途中の一時fileを `~/Library/Application Support/Koe/Models/WhisperCpp/` に保存します。Model取得先へ送るのはmodel fileを取得するためのrequestだけで、音声、文字起こし、予定、履歴、前面app情報を含めません。設定画面でmodelごとの容量、download進捗、失敗を確認し、cancel、再試行、削除できます。使用中のmodelは停止または切替完了まで削除しません。
 
 構造化データは、DBマイグレーション前および1日1回の起動時に `~/Library/Application Support/Koe/Backups/` へSQLiteスナップショットとして保存します。直近7世代を保持します。ライフログ音声は容量と機微性が大きいため複製せず、元ファイルの保持期間を適用します。
 
 API キーは macOS Keychain に保存し、設定ファイル、履歴 DB、ログには保存しません。ログには発話内容、整形結果、語彙、API キーを出力しません。
 
-口述履歴の既定保持期間は無期限です。ライフログ音声は文字起こしと派生処理の成功後に削除するのが既定で、7日または30日へ変更できます。whisper.cpp modelは利用者が個別に削除するか、全データを削除するまで保持します。語彙候補には根拠となる短い抜粋が別に保存されます。
+口述履歴の既定保持期間は無期限です。ライフログ音声は文字起こしの成功後に削除するのが既定で、7日または30日へ変更できます。whisper.cpp modelは利用者が個別に削除するか、全データを削除するまで保持します。語彙候補には根拠となる短い抜粋が別に保存されます。
 
-設定の「プライバシー」では、音声入力履歴だけ、ライフログ一式、またはKoeの全データを選んで削除できます。全データの削除には、履歴、バックアップ、ライフログ音声、発話、メモ、予定の控え、要約、TODO、語彙、プロンプト、download済みwhisper.cpp modelと途中file、旧WhisperKit model、設定、Keychain内の各APIキーが含まれます。
+設定の「プライバシー」では、音声入力履歴だけ、ライフログ一式、またはKoeの全データを選んで削除できます。全データの削除には、履歴、バックアップ、ライフログ音声、発話、メモ、予定の控え、語彙、モード、download済みwhisper.cpp modelと途中file、旧WhisperKit model、設定、Keychain内の各APIキー（旧版でライフログ用に登録したキーを含む）が含まれます。
+
+TODO、日次要約、話題、クラウドAIのtoken集計を保存していた旧版から更新すると、Koeはmigration直前のバックアップを作ってからそれらのデータをDBから削除します。そのバックアップも通常どおり7世代の保持と全データ削除の対象です。
 
 ## 権限
 

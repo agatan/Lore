@@ -58,7 +58,6 @@ public final class AppEnvironment {
     @ObservationIgnored public var onToggleLifeLogMiniWindow: (() -> Void)?
     @ObservationIgnored public var onShowMainWindow: (() -> Void)?
     @ObservationIgnored public var onShowSettings: ((SettingsSection) -> Void)?
-    @ObservationIgnored public var onShowLifeLogTodos: (() -> Void)?
 
     /// 音声モデル取得の進捗(0...1)。nil = 実行中でない。
     public private(set) var speechAssetProgress: Double?
@@ -70,16 +69,8 @@ public final class AppEnvironment {
     public private(set) var llmModels: [String] = []
     public private(set) var llmStatus: String?
     public private(set) var isCheckingLlm = false
-    public private(set) var lifeLogHasLlmApiKey = false
-    public private(set) var lifeLogLlmModels: [String] = []
-    public private(set) var lifeLogLlmStatus: String?
-    public private(set) var isCheckingLifeLogLlm = false
     /// エンジン別の実測レイテンシ。
     public private(set) var measuredLatencies = MeasuredLatencies()
-    /// クラウドAIのAPI応答から記録した日別トークン利用量。
-    public private(set) var dailyLlmUsage: [DailyLlmUsage] = []
-    public private(set) var dailyDictationDuration: [DailyRecordingDuration] = []
-    public private(set) var dailyLifeLogDuration: [DailyRecordingDuration] = []
 
     /// このプロセスが生きている長さ。起動し直すべきかの判断に使う。
     private let launchedAt = ContinuousClock.now
@@ -106,11 +97,6 @@ public final class AppEnvironment {
                 onNeedsAppRestart: { [weak self] in self?.relaunchForLostSpeechInventory() }
             )
         )
-        engines.setUsageSink { [weak self] event in
-            Task { @MainActor [weak self] in
-                await self?.recordLlmUsage(event)
-            }
-        }
         wireHotkeys()
         wirePowerNotifications()
         wireAutomationNotifications()
@@ -124,10 +110,6 @@ public final class AppEnvironment {
                 await self?.lifeLog.reload()
                 if let date = self?.lifeLog.selectedDate { await self?.lifeLog.loadActivity(containing: date) }
             }
-        })
-        automationObservers.append(center.addObserver(forName: KoeAutomationNotification.settingsChanged, object: nil, queue: .main) {
-            [weak self] _ in
-            Task { @MainActor [weak self] in self?.settings.reload() }
         })
     }
 
@@ -204,9 +186,6 @@ public final class AppEnvironment {
                         applicationLanguage: settings.applicationLanguage
                     )
                 },
-                todoPrompt: { [weak self] in self?.settings.lifeLogTodoPrompt ?? BuiltinLifeLogPrompts.todo },
-                summaryPrompt: { [weak self] in self?.settings.lifeLogSummaryPrompt ?? BuiltinLifeLogPrompts.summary },
-                summaryIntervalMinutes: { [weak self] in self?.settings.lifeLogSummaryIntervalMinutes ?? 60 },
                 participatingEventsOnly: { [weak self] in self?.settings.lifeLogParticipatingEventsOnly ?? true },
                 audioProcessingCompleted: { [weak self] in await self?.purgeExpiredLifeLogAudio() }
             )
@@ -217,7 +196,6 @@ public final class AppEnvironment {
             await reloadSharedRules()
             await reloadVocabulary()
             await reloadHistory()
-            await reloadUsageStatistics()
             await purgeExpiredHistory()
             await purgeExpiredLifeLogAudio()
             refreshStorageSizes()
@@ -240,59 +218,6 @@ public final class AppEnvironment {
         // crash等で残った前回のruntime stateを起動意図として復元しない。
         settings.lifeLogCaptureEnabled = false
         scheduleBackgroundAnalysis()
-    }
-
-    public func reloadLlmUsage() async {
-        guard let database else { dailyLlmUsage = []; return }
-        let since = Calendar.current.date(byAdding: .day, value: -30, to: Date()) ?? Date()
-        do {
-            dailyLlmUsage = try await database.llmUsage.daily(since: since)
-        } catch {
-            dataOperationError = error.localizedDescription
-        }
-    }
-
-    public func reloadUsageStatistics() async {
-        await reloadLlmUsage()
-        guard let database else {
-            dailyDictationDuration = []
-            dailyLifeLogDuration = []
-            refreshStorageSizes()
-            return
-        }
-        let calendar = Calendar.current
-        let startOfToday = calendar.startOfDay(for: Date())
-        let since = calendar.date(byAdding: .day, value: -6, to: startOfToday) ?? startOfToday
-        do {
-            async let dictation = database.history.dailyRecordingDuration(since: since, calendar: calendar)
-            async let lifeLog = database.lifeLog.dailyRecordingDuration(since: since, calendar: calendar)
-            (dailyDictationDuration, dailyLifeLogDuration) = try await (dictation, lifeLog)
-#if DEBUG
-            if Self.usesScreenshotDemoData {
-                let demo = ScreenshotDemoData.recordingDurations(calendar: calendar)
-                dailyDictationDuration = demo.dictation
-                dailyLifeLogDuration = demo.lifeLog
-            }
-#endif
-        } catch {
-            dataOperationError = error.localizedDescription
-        }
-        refreshStorageSizes()
-    }
-
-    public func llmUsage(for purpose: LlmPurpose) -> [DailyLlmUsage] {
-        dailyLlmUsage.filter { $0.purpose == purpose }
-    }
-
-    private func recordLlmUsage(_ event: LlmUsageEvent) async {
-        guard let database else { return }
-        do {
-            try await database.llmUsage.record(event)
-            await reloadLlmUsage()
-        } catch {
-            dataOperationError = error.localizedDescription
-            KoeLog.persistence.error("LLM利用量を保存できません: \(error.localizedDescription, privacy: .public)")
-        }
     }
 
     static var usesScreenshotDemoData: Bool {
@@ -327,11 +252,10 @@ public final class AppEnvironment {
 #if DEBUG
         let arguments = ProcessInfo.processInfo.arguments
         if arguments.contains("--koe-ui-test-settings-dictation") { return .models }
-        if arguments.contains("--koe-ui-test-settings-life-log") { return .lifeLogAI }
-        if arguments.contains("--koe-ui-test-settings-life-log-general") { return .lifeLog }
-        if arguments.contains("--koe-ui-test-settings-usage") { return .usage }
+        if arguments.contains("--koe-ui-test-settings-life-log") { return .lifeLog }
         if arguments.contains("--koe-ui-test-settings-modes") { return .modes }
         if arguments.contains("--koe-ui-test-settings-calendar") { return .calendar }
+        if arguments.contains("--koe-ui-test-settings-privacy") { return .privacy }
 #endif
         return nil
     }
@@ -860,13 +784,7 @@ public final class AppEnvironment {
             settings.resetAll()
             engines.apply(
                 backend: settings.formattingBackend,
-                model: settings.model(for: settings.formattingBackend, purpose: .dictation),
-                purpose: .dictation
-            )
-            engines.apply(
-                backend: settings.lifeLogFormattingBackend,
-                model: settings.model(for: settings.lifeLogFormattingBackend, purpose: .lifeLog),
-                purpose: .lifeLog
+                model: settings.model(for: settings.formattingBackend)
             )
             applySttSelection()
             try await database.modes.seedBuiltinsIfNeeded()
@@ -1131,125 +1049,87 @@ public final class AppEnvironment {
     }
 
     public func applyEngineChange(
-        purpose: LlmPurpose? = nil,
         checkCredentials: Bool = true,
         resetConnectionState: Bool = false
     ) async {
         applySttSelection()
-        if purpose == nil || purpose == .dictation {
-            await applyEngineChange(for: .dictation, checkCredentials: checkCredentials, resetConnectionState: resetConnectionState)
-        }
-        if purpose == nil || purpose == .lifeLog {
-            await applyEngineChange(for: .lifeLog, checkCredentials: checkCredentials, resetConnectionState: resetConnectionState)
-        }
-        await engines.refreshSttAvailability()
-        for target in LlmPurpose.allCases where purpose == nil || purpose == target {
-            if checkCredentials || settings.backend(for: target) == .onDevice {
-                await engines.refreshLlmAvailability(for: target)
-            }
-        }
-    }
-
-    private func applyEngineChange(for purpose: LlmPurpose, checkCredentials: Bool, resetConnectionState: Bool) async {
-        let backend = settings.backend(for: purpose)
-        engines.apply(backend: backend, model: settings.model(for: backend, purpose: purpose), purpose: purpose)
+        let backend = settings.formattingBackend
+        engines.apply(backend: backend, model: settings.model(for: backend))
         if resetConnectionState {
-            setLlmModels([], for: purpose)
-            setLlmStatus(nil, for: purpose)
+            llmModels = []
+            llmStatus = nil
         }
         if checkCredentials {
             do {
-                let hasKey = if let key = secretKey(for: backend, purpose: purpose) {
+                hasLlmApiKey = if let key = secretKey(for: backend) {
                     try SecretStore.read(key)?.isEmpty == false
                 } else {
                     true
                 }
-                setHasLlmApiKey(hasKey, for: purpose)
             } catch {
-                setHasLlmApiKey(false, for: purpose)
-                setLlmStatus(error.localizedDescription, for: purpose)
+                hasLlmApiKey = false
+                llmStatus = error.localizedDescription
                 KoeLog.engine.error("API キーの確認に失敗: \(error.localizedDescription, privacy: .public)")
             }
+        }
+        await engines.refreshSttAvailability()
+        if checkCredentials || backend == .onDevice {
+            await engines.refreshLlmAvailability()
         }
     }
 
     // MARK: 文章処理エンジン
 
     /// API キーを Keychain に保存する(空文字なら削除)。値は保持しない。
-    public func setLlmApiKey(_ key: String, purpose: LlmPurpose = .dictation) async {
-        let backend = settings.backend(for: purpose)
-        guard let secretKey = secretKey(for: backend, purpose: purpose) else { return }
-        setLlmStatus(nil, for: purpose)
+    public func setLlmApiKey(_ key: String) async {
+        guard let secretKey = secretKey(for: settings.formattingBackend) else { return }
+        llmStatus = nil
         do {
             try SecretStore.write(key, for: secretKey)
         } catch {
-            setLlmStatus(error.localizedDescription, for: purpose)
+            llmStatus = error.localizedDescription
             KoeLog.engine.error("API キーの保存に失敗: \(error.localizedDescription, privacy: .public)")
             return
         }
-        setLlmModels([], for: purpose)
-        await applyEngineChange(purpose: purpose)
+        llmModels = []
+        await applyEngineChange()
     }
 
     /// キーとモデルが実際に通るかを 1 往復して確かめる。
     ///
     /// 整形は失敗しても生テキストにフォールバックするので、設定ミスは
     /// 「なんとなく仕上がらない」形でしか表に出ない。ここで明示的に確かめられるようにする。
-    public func checkLlmConnection(purpose: LlmPurpose = .dictation) async {
-        guard !isCheckingLlm(for: purpose) else { return }
-        setIsCheckingLlm(true, for: purpose)
-        setLlmStatus(nil, for: purpose)
-        defer { setIsCheckingLlm(false, for: purpose) }
+    public func checkLlmConnection() async {
+        guard !isCheckingLlm else { return }
+        isCheckingLlm = true
+        llmStatus = nil
+        defer { isCheckingLlm = false }
 
         do {
-            let backend = settings.backend(for: purpose)
-            setLlmModels(try await engines.availableModels(for: backend, purpose: purpose), for: purpose)
-            let engine = purpose == .dictation ? engines.llm : engines.lifeLogLlm
-            let reply = try await engine.complete(
+            let backend = settings.formattingBackend
+            llmModels = try await engines.availableModels(for: backend)
+            let reply = try await engines.llm.complete(
                 prompt: FormattingPrompt(system: "入力をそのまま返してください。", user: "疎通確認"),
                 timeout: .seconds(20)
             )
-            setLlmStatus(reply.isEmpty
+            llmStatus = reply.isEmpty
                 ? "接続できましたが、応答が空でした"
-                : "\(settings.model(for: backend, purpose: purpose)) に接続できました", for: purpose)
+                : "\(settings.model(for: backend)) に接続できました"
         } catch {
-            setLlmStatus(error.localizedDescription, for: purpose)
+            llmStatus = error.localizedDescription
             KoeLog.engine.error("LLM の疎通確認に失敗: \(error.localizedDescription, privacy: .public)")
         }
-        await engines.refreshLlmAvailability(for: purpose)
+        await engines.refreshLlmAvailability()
     }
 
-    private func secretKey(for backend: FormattingBackend, purpose: LlmPurpose) -> SecretStore.Key? {
-        switch (purpose, backend) {
-        case (.dictation, .openAI): .openAIApiKey
-        case (.dictation, .anthropic): .anthropicApiKey
-        case (.dictation, .gemini): .geminiApiKey
-        case (.dictation, .groq): .groqApiKey
-        case (.lifeLog, .openAI): .lifeLogOpenAIApiKey
-        case (.lifeLog, .anthropic): .lifeLogAnthropicApiKey
-        case (.lifeLog, .gemini): .lifeLogGeminiApiKey
-        case (.lifeLog, .groq): .lifeLogGroqApiKey
-        case (_, .onDevice), (_, .ollama), (_, .lmStudio): nil
+    private func secretKey(for backend: FormattingBackend) -> SecretStore.Key? {
+        switch backend {
+        case .openAI: .openAIApiKey
+        case .anthropic: .anthropicApiKey
+        case .gemini: .geminiApiKey
+        case .groq: .groqApiKey
+        case .onDevice, .ollama, .lmStudio: nil
         }
-    }
-
-    public func hasLlmApiKey(for purpose: LlmPurpose) -> Bool { purpose == .dictation ? hasLlmApiKey : lifeLogHasLlmApiKey }
-    public func llmModels(for purpose: LlmPurpose) -> [String] { purpose == .dictation ? llmModels : lifeLogLlmModels }
-    public func llmStatus(for purpose: LlmPurpose) -> String? { purpose == .dictation ? llmStatus : lifeLogLlmStatus }
-    public func isCheckingLlm(for purpose: LlmPurpose) -> Bool { purpose == .dictation ? isCheckingLlm : isCheckingLifeLogLlm }
-    public func llmAvailability(for purpose: LlmPurpose) -> EngineAvailability { purpose == .dictation ? engines.llmAvailability : engines.lifeLogLlmAvailability }
-
-    private func setHasLlmApiKey(_ value: Bool, for purpose: LlmPurpose) {
-        if purpose == .dictation { hasLlmApiKey = value } else { lifeLogHasLlmApiKey = value }
-    }
-    private func setLlmModels(_ value: [String], for purpose: LlmPurpose) {
-        if purpose == .dictation { llmModels = value } else { lifeLogLlmModels = value }
-    }
-    private func setLlmStatus(_ value: String?, for purpose: LlmPurpose) {
-        if purpose == .dictation { llmStatus = value } else { lifeLogLlmStatus = value }
-    }
-    private func setIsCheckingLlm(_ value: Bool, for purpose: LlmPurpose) {
-        if purpose == .dictation { isCheckingLlm = value } else { isCheckingLifeLogLlm = value }
     }
 
     func currentHints() -> SttHints {

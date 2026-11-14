@@ -44,7 +44,6 @@ public enum KoeWindow {
     public static let main = "koe.main"
     public static let settings = "koe.settings"
     public static let lifeLogMini = "koe.life-log-mini"
-    public static let lifeLogTodos = "koe.life-log-todos"
 }
 
 /// `NSApp.terminate`、Cmd+Q、システム終了を同じ非同期の保存境界へ集約する。
@@ -68,7 +67,6 @@ final class KoeApplicationDelegate: NSObject, NSApplicationDelegate {
             environment.onShowMainWindow = { [weak presenter] in presenter?.showMain() }
             environment.onToggleLifeLogMiniWindow = { [weak presenter] in presenter?.toggleLifeLogMini() }
             environment.onShowSettings = { [weak presenter] section in presenter?.showSettings(section) }
-            environment.onShowLifeLogTodos = { [weak presenter] in presenter?.showLifeLogTodos() }
 
             let hud = HudController(coordinator: environment.coordinator, settings: environment.settings)
             hud.start()

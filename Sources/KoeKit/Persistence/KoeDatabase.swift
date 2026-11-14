@@ -49,7 +49,6 @@ public final class KoeDatabase: Sendable {
     public var vocabulary: VocabularyStore { VocabularyStore(queue: queue) }
     public var meta: MetaStore { MetaStore(queue: queue) }
     public var lifeLog: LifeLogStore { LifeLogStore(queue: queue) }
-    public var llmUsage: LlmUsageStore { LlmUsageStore(queue: queue) }
 
     /// 「Koeの全データを削除」にバックアップも含める。DB単体の削除では復旧点を残す。
     public func deleteBackups() throws {
@@ -117,10 +116,7 @@ public final class KoeDatabase: Sendable {
     public func deleteAllUserData() async throws {
         try await queue.write { db in
             try db.execute(sql: "DELETE FROM life_log_utterances")
-            try db.execute(sql: "DELETE FROM life_log_conversations")
             try db.execute(sql: "DELETE FROM life_log_memos")
-            try db.execute(sql: "DELETE FROM life_log_todos")
-            try db.execute(sql: "DELETE FROM daily_summaries")
             try db.execute(sql: "DELETE FROM calendar_event_snapshots")
             try db.execute(sql: "DELETE FROM life_log_audio_chunks")
             try db.execute(sql: "DELETE FROM sessions")
@@ -128,7 +124,6 @@ public final class KoeDatabase: Sendable {
             try db.execute(sql: "DELETE FROM vocabulary")
             try db.execute(sql: "DELETE FROM modes")
             try db.execute(sql: "DELETE FROM meta")
-            try db.execute(sql: "DELETE FROM llm_usage_events")
         }
     }
 
@@ -140,7 +135,7 @@ public final class KoeDatabase: Sendable {
         return configuration
     }
 
-    private static var migrator: DatabaseMigrator {
+    static var migrator: DatabaseMigrator {
         var migrator = DatabaseMigrator()
         migrator.registerMigration("v1") { db in
             try db.execute(sql: """
@@ -367,6 +362,50 @@ public final class KoeDatabase: Sendable {
                   total_tokens INTEGER NOT NULL
                 );
                 CREATE INDEX llm_usage_events_day_purpose ON llm_usage_events(day, purpose);
+                """)
+        }
+        migrator.registerMigration("v9-remove-todo-summary-usage") { db in
+            // TODO、日次要約、話題、LLM token集計を廃止した。会話区切りは要約の入力にだけ使っていた。
+            try db.execute(sql: """
+                DROP TRIGGER life_log_todos_fts_insert;
+                DROP TRIGGER life_log_todos_fts_delete;
+                DROP TRIGGER life_log_todos_fts_update;
+                DROP TABLE life_log_todos_fts;
+                DROP TABLE life_log_todos;
+                DROP TRIGGER daily_summaries_fts_insert;
+                DROP TRIGGER daily_summaries_fts_delete;
+                DROP TRIGGER daily_summaries_fts_update;
+                DROP TABLE daily_summaries_fts;
+                DROP TABLE daily_summaries;
+                DROP TABLE llm_usage_events;
+
+                DROP TRIGGER life_log_utterances_fts_insert;
+                DROP TRIGGER life_log_utterances_fts_delete;
+                DROP TRIGGER life_log_utterances_fts_update;
+                DROP TABLE life_log_utterances_fts;
+                CREATE TABLE life_log_utterances_new (
+                  id TEXT PRIMARY KEY, started_at TEXT NOT NULL, ended_at TEXT NOT NULL, text TEXT NOT NULL,
+                  audio_chunk_id TEXT NOT NULL REFERENCES life_log_audio_chunks(id),
+                  calendar_event_id TEXT REFERENCES calendar_event_snapshots(id)
+                );
+                INSERT INTO life_log_utterances_new (id, started_at, ended_at, text, audio_chunk_id, calendar_event_id)
+                  SELECT id, started_at, ended_at, text, audio_chunk_id, calendar_event_id FROM life_log_utterances;
+                DROP TABLE life_log_utterances;
+                ALTER TABLE life_log_utterances_new RENAME TO life_log_utterances;
+                DROP TABLE life_log_conversations;
+                CREATE INDEX life_log_utterances_started_at ON life_log_utterances(started_at);
+                CREATE VIRTUAL TABLE life_log_utterances_fts USING fts5(text, content='life_log_utterances', content_rowid='rowid', tokenize='trigram');
+                CREATE TRIGGER life_log_utterances_fts_insert AFTER INSERT ON life_log_utterances BEGIN
+                  INSERT INTO life_log_utterances_fts(rowid, text) VALUES (new.rowid, new.text);
+                END;
+                CREATE TRIGGER life_log_utterances_fts_delete AFTER DELETE ON life_log_utterances BEGIN
+                  INSERT INTO life_log_utterances_fts(life_log_utterances_fts, rowid, text) VALUES ('delete', old.rowid, old.text);
+                END;
+                CREATE TRIGGER life_log_utterances_fts_update AFTER UPDATE ON life_log_utterances BEGIN
+                  INSERT INTO life_log_utterances_fts(life_log_utterances_fts, rowid, text) VALUES ('delete', old.rowid, old.text);
+                  INSERT INTO life_log_utterances_fts(rowid, text) VALUES (new.rowid, new.text);
+                END;
+                INSERT INTO life_log_utterances_fts(life_log_utterances_fts) VALUES ('rebuild');
                 """)
         }
         return migrator

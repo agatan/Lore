@@ -3,21 +3,6 @@ import Foundation
 
 /// LP・マニュアル用の実画面撮影だけに使う、利用者データと分離したインメモリデータ。
 enum ScreenshotDemoData {
-    static func recordingDurations(
-        now: Date = Date(),
-        calendar: Calendar = .current
-    ) -> (dictation: [DailyRecordingDuration], lifeLog: [DailyRecordingDuration]) {
-        let day = calendar.startOfDay(for: now)
-        func sample(_ offset: Int, _ minutes: Double) -> DailyRecordingDuration {
-            let date = calendar.date(byAdding: .day, value: offset, to: day) ?? day
-            return .init(day: LifeLogDateKey.string(for: date, calendar: calendar), seconds: minutes * 60)
-        }
-        return (
-            [sample(0, 18), sample(-1, 24), sample(-2, 11), sample(-3, 31), sample(-4, 16)],
-            [sample(0, 326), sample(-1, 402), sample(-2, 288), sample(-3, 360), sample(-4, 245)]
-        )
-    }
-
     static func seed(database: KoeDatabase, now: Date = Date(), calendar: Calendar = .current) async throws {
         let day = calendar.startOfDay(for: now)
         func time(_ hour: Int, _ minute: Int = 0, dayOffset: Int = 0) -> Date {
@@ -61,51 +46,12 @@ enum ScreenshotDemoData {
         try await database.lifeLog.save(memo: LifeLogMemo(id: "demo-memo-1", createdAt: time(11, 6), text: "オンボーディングは3つの価値が順番に伝わる構成にする"))
         try await database.lifeLog.save(memo: LifeLogMemo(id: "demo-memo-2", createdAt: time(15, 20), text: "マニュアルには日別エクスポートの選択画面も載せる"))
 
-        try await database.lifeLog.save(todo: LifeLogTodo(id: "demo-todo-1", title: "外部ベータの確認項目をまとめる", createdAt: time(10, 25), sourceUtteranceIDs: ["demo-utterance-2"]))
-        try await database.lifeLog.save(todo: LifeLogTodo(id: "demo-todo-2", title: "LP用スクリーンショットを選ぶ", createdAt: time(14, 48), sourceUtteranceIDs: ["demo-utterance-4"]))
-        try await database.lifeLog.save(todo: LifeLogTodo(id: "demo-todo-3", title: "書き出し結果を別のLLMで試す", status: .draft, createdAt: time(16, 20), sourceUtteranceIDs: ["demo-utterance-5"]))
-        try await database.lifeLog.save(todo: LifeLogTodo(id: "demo-todo-4", title: "初回体験の文言を確認する", status: .completed, createdAt: time(9, 5), completedAt: time(12, 10)))
-
-        try await database.lifeLog.save(summary: DailySummary(
-            day: LifeLogDateKey.string(for: day),
-            summary: "初回体験とベータ公開に向けて、タスク管理・書き出し・画面表現を確認した一日。",
-            commitments: ["外部ベータの確認項目をまとめる"],
-            topics: ["Beta", "Export", "Design"],
-            calendarEventCount: events.count,
-            capturedDurationSeconds: 210,
-            utteranceCount: utteranceSpecs.count,
-            summarizedThrough: time(16, 13),
-            isFinal: false
-        ))
-
         // 月間カレンダーの密度が自然に見えるよう、過去数日に匿名の活動量だけを作る。
         for (index, offset) in [-2, -4, -7, -9, -13].enumerated() {
             let startedAt = time(10 + index, dayOffset: offset)
             let chunk = LifeLogAudioChunk(id: "demo-past-audio-\(index)", captureStartedAt: startedAt, captureEndedAt: startedAt.addingTimeInterval(30), localPath: "/tmp/koe-demo-past-\(index).m4a", transcriptionState: .transcribed, processingState: .extracted, peakLevel: 0.35)
             try await database.lifeLog.save(audioChunk: chunk)
             try await database.lifeLog.save(utterance: LifeLogUtterance(id: "demo-past-utterance-\(index)", startedAt: startedAt, endedAt: startedAt.addingTimeInterval(30), text: "日々の記録", audioChunkID: chunk.id))
-        }
-
-        let usageSamples: [(Int, LlmPurpose, Int, Int)] = [
-            (0, .dictation, 1_840, 420), (0, .lifeLog, 4_920, 780),
-            (-1, .dictation, 1_120, 260), (-1, .lifeLog, 3_860, 620),
-            (-2, .dictation, 2_240, 510), (-2, .lifeLog, 5_430, 910),
-            (-4, .dictation, 760, 180), (-4, .lifeLog, 2_940, 480),
-        ]
-        for (index, sample) in usageSamples.enumerated() {
-            let occurredAt = time(18, index, dayOffset: sample.0)
-            try await database.llmUsage.record(LlmUsageEvent(
-                id: "demo-usage-\(index)",
-                occurredAt: occurredAt,
-                purpose: sample.1,
-                provider: .groq,
-                model: GroqLlm.defaultModel,
-                usage: LlmTokenUsage(
-                    inputTokens: sample.2,
-                    outputTokens: sample.3,
-                    totalTokens: sample.2 + sample.3
-                )
-            ))
         }
     }
 }

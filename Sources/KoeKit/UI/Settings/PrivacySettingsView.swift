@@ -36,9 +36,15 @@ struct PrivacySettingsView: View {
                         .font(.system(size: 11))
                         .foregroundStyle(.tertiary)
                 }
+                SettingsRow(title: "このMacの使用量", caption: "履歴、ライフログ、保存音声、whisper.cpp modelの合計です") {
+                    Text(ByteCountFormatter.string(fromByteCount: env.appDataBytes, countStyle: .file))
+                        .font(KoeTheme.timeFont)
+                        .foregroundStyle(.secondary)
+                        .accessibilityIdentifier("privacy.storage")
+                }
             }
 
-            SettingsCard(title: "データの削除", footnote: "削除した内容は元に戻せません。ライフログの削除には、発話、メモ、予定の控え、要約、TODO、保存音声が含まれます。") {
+            SettingsCard(title: "データの削除", footnote: "削除した内容は元に戻せません。ライフログの削除には、発話、メモ、予定の控え、保存音声が含まれます。") {
                 HStack(spacing: 12) {
                     Text("\(env.historyCount) 件の履歴が保存されています")
                         .font(.system(size: 11.5))
@@ -66,7 +72,7 @@ struct PrivacySettingsView: View {
                     .controlSize(.small)
                 }
                 HStack(spacing: 12) {
-                    Text("設定、語彙、プロンプト、APIキーを含むすべて")
+                    Text("設定、語彙、モード、APIキーを含むすべて")
                         .font(.system(size: 11.5))
                         .foregroundStyle(.secondary)
                     Spacer()
@@ -104,7 +110,7 @@ struct PrivacySettingsView: View {
         } message: {
             Text(deleteTarget?.message ?? "元に戻せません。")
         }
-        .task { env.refreshLifeLogAudioSize() }
+        .task { env.refreshStorageSizes() }
     }
 
     private enum DeleteTarget {
@@ -133,9 +139,9 @@ struct PrivacySettingsView: View {
             case .history:
                 "生の文字起こしと整形後の文章を削除します。語彙とライフログは残ります。"
             case .lifeLog:
-                "発話、メモ、予定の控え、要約、TODO、保存音声を削除します。音声入力履歴と設定は残ります。"
+                "発話、メモ、予定の控え、保存音声を削除します。音声入力履歴と設定は残ります。"
             case .application:
-                "履歴、ライフログ、保存音声、語彙、プロンプト、設定、APIキーを削除します。元に戻せません。"
+                "履歴、ライフログ、保存音声、語彙、モード、設定、APIキーを削除します。元に戻せません。"
             }
         }
     }
