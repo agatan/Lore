@@ -33,6 +33,7 @@ struct ModelsSettingsView: View {
             title: backend.sendsTranscriptOffDevice ? "文章だけを \(backend.displayName) に送ります" : "この Mac の中だけで動きます",
             message: noticeMessage,
             tint: backend.sendsTranscriptOffDevice ? LoreTheme.warning : LoreTheme.accent,
+            symbol: backend.sendsTranscriptOffDevice ? "exclamationmark.triangle.fill" : "lock.fill",
             actionTitle: nil,
             action: nil
         )

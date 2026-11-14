@@ -2,9 +2,10 @@ import SwiftUI
 
 /// 見た目の定数。色とコーナー半径をここに集約して、画面ごとにばらけないようにする。
 public enum LoreTheme {
-    /// App iconのblue/cyanを全画面の固定brand colorとして使う。
-    public static let accent = Color(red: 0.30, green: 0.53, blue: 0.92)
-    public static let accentSecondary = Color(red: 0.25, green: 0.70, blue: 0.87)
+    /// App iconの「L.」の線と同じviolet→cyanを全画面の固定brand colorとして使う。
+    /// Violetは操作と選択、cyanは予定（時間の区間）に使う。
+    public static let accent = Color(red: 0.42, green: 0.40, blue: 0.96)
+    public static let accentSecondary = Color(red: 0.24, green: 0.74, blue: 0.92)
     public static let recording = Color(red: 0.89, green: 0.33, blue: 0.44)
     public static let recordingSecondary = Color(red: 0.94, green: 0.46, blue: 0.52)
     public static let success = Color(red: 0.22, green: 0.68, blue: 0.55)

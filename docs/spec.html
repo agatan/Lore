@@ -217,7 +217,7 @@
 </article>
 <article class="card">
 <h3>Timeline</h3>
-<p>Main windowは全高の半透明sidebarを持つsplit viewで、sidebar上部の「ライフログ」「音声入力」で表示を切り替えます。Life log表示中は三列です。Sidebarはnavigationの下に月間activity calendarを置きます。中央は選択日のtimelineで、読みやすい幅の列をwindow中央に置き、先頭に大きな日付と曜日、今日なら「今日」と記録状態、終日の予定を表示します。右のinspector「この日」は話した時間、発話・メモ・音声入力の件数と、予定のblockと記録の印を時刻の縦軸へ並べた一日の流れを表示し、予定blockや一日の流れの位置を選ぶとtimelineのその時刻へ移動します。今日なら現在時刻の線を引きます。Inspectorはtoolbarのbuttonで隠せ、表示状態は次回も保ちます。記録がない日は件数の代わりに記録がないことだけを示し、過去日で予定も記録もなければ一日の流れを出しません。記録がない日のtimelineは、縦線の位置に記録の始め方（今日）または記録がないこと（過去日）を一行で示します。検索と書き出しのbuttonもwindow toolbarに置きます。Timeline paneは時刻の予定、発話、音声入力、text memoを一列の時刻順で表示し、column headerは置きません。時刻の右に縦の線を通し、各行は線上の印で種類を示します（発話は小さな点、メモと音声入力は記号、予定は輪）。予定の開始から終了までに入る区間は線を予定の色で塗り、予定の行は件名と長さ・calendar名を表示します。前の項目から1時間以上空いた所には空いた時間を示します。日付を選ぶとinspectorとtimelineを更新します。検索buttonまたはCommand-Fで横断検索を開き、発話、音声入力、memoは対象項目へ移動します。Mini windowも予定と記録を一列表示します。Main windowとmini windowの最下部にはtimelineの上に浮かぶ一本のcapsule barを置き、左端に記録の開始・停止buttonと記録状態、続いてmemo入力、音声memo、送信を並べます。Timelineはbarの下までscrollでき、最後の行も隠れません。Main windowの入力欄は今日を選択中だけ表示し、過去日のbarは記録操作と状態だけを持ちます。</p>
+<p>Main windowは全高の半透明sidebarを持つsplit viewで、sidebar上部の「ライフログ」「音声入力」で表示を切り替えます。Life log表示中は三列です。Sidebarはnavigationの下に月間activity calendarを置きます。中央は選択日のtimelineで、読みやすい幅の列をwindow中央に置き、先頭に大きな日付と曜日、今日なら「今日」と記録状態、終日の予定を表示します。右のinspector「この日」は話した時間、発話・メモ・音声入力の件数と、予定のblockと記録の印を時刻の縦軸へ並べた一日の流れを表示し、予定blockや一日の流れの位置を選ぶとtimelineのその時刻へ移動します。今日なら現在時刻の線を引きます。Inspectorはtoolbarのbuttonで隠せ、表示状態は次回も保ちます。記録がない日は件数の代わりに記録がないことだけを示し、過去日で予定も記録もなければ一日の流れを出しません。記録がない日のtimelineは、縦線の位置に記録の始め方（今日）または記録がないこと（過去日）を一行で示します。検索と書き出しのbuttonもwindow toolbarに置きます。Timeline paneは時刻の予定、発話、音声入力、text memoを一列の時刻順で表示し、column headerは置きません。時刻の右に縦の線を通し、各行は線上の印で種類を示します（発話は小さな点、メモと音声入力は記号、予定は輪）。予定の開始から終了までに入る区間は線を予定の色で塗り、予定の行は件名と長さ・calendar名を表示します。前の項目から1時間以上空いた所には空いた時間を示します。日付を選ぶとinspectorとtimelineを更新します。検索buttonまたはCommand-Fで横断検索を開き、発話、音声入力、memoは対象項目へ移動します。検索結果は種類をtimelineと同じ印と色で示し、一致した語を強調し、日付と時刻を添えます。入力欄から手を離さずに↑↓で結果を選び、Returnで開けます。Mini windowも予定と記録を一列表示します。Main windowとmini windowの最下部にはtimelineの上に浮かぶ一本のcapsule barを置き、左端に記録の開始・停止buttonと記録状態、続いてmemo入力、音声memo、送信を並べます。Timelineはbarの下までscrollでき、最後の行も隠れません。Main windowの入力欄は今日を選択中だけ表示し、過去日のbarは記録操作と状態だけを持ちます。</p>
 <p>Loreのmemoは声や短い入力で素早く残す下書きです。本格的な清書や別のメモアプリ・タスク管理への転記は、MCPやCLIで読み出した外部AIが行います。Lore側は誤字直し程度の編集だけを提供します。</p>
 <p>Main windowとmini windowのmemoは、hover時の編集buttonまたは本文のdouble-clickでその場で編集できます。Returnで保存、Option-Returnで改行、Escで取り消します。空の本文は保存せず、memoの作成時刻は変わりません。削除はmain windowのhover時の削除buttonで行います。Main windowのtimelineは本文を読みやすい幅（約800 pt）に抑えます。</p>
 </article>
@@ -274,7 +274,7 @@
 </tr>
 </tbody>
 </table>
-<p>Main window、mini window、menu barのlife-log状態表示は同じ記録操作を共有します。停止中の開始操作はblue/cyanの録音記号と「録音を開始」、記録開始意図がある間の停止操作はroseの停止記号と「録音を停止」を表示します。再接続中やボイスメモによる一時停止中も、停止操作は同じroseの外観を保ちます。</p>
+<p>Main window、mini window、menu barのlife-log状態表示は同じ記録操作を共有します。停止中の開始操作はviolet/cyanの録音記号と「録音を開始」、記録開始意図がある間の停止操作はroseの停止記号と「録音を停止」を表示します。再接続中やボイスメモによる一時停止中も、停止操作は同じroseの外観を保ちます。</p>
 <p>音声構成変更や処理失敗など、継続操作を妨げないmessageはdismiss可能なbannerとして表示し、右端の<code>×</code>で閉じられます。閉じる操作はmessageだけを消し、記録開始意図、自動再接続、保存済みdataには影響しません。</p>
 <p>Privacy設定には、履歴、life log、保存audio、whisper.cpp modelを含むLore dataのこのMac上の合計使用量を表示します。</p>
 </section>

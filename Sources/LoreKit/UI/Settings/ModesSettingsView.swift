@@ -153,7 +153,9 @@ struct ModesSettingsView: View {
             ) {
                 TextEditor(text: $sharedDraft)
                     .font(.system(size: 12, design: .monospaced))
-                    .frame(minHeight: 200, maxHeight: .infinity)
+                    // 理想の高さを本文の長さにすると、長い指示文でpane全体がwindowより高くなり、
+                    // sidebarまで押し上げられる。理想は小さく取り、余った高さだけを使う。
+                    .frame(minHeight: 160, idealHeight: 160, maxHeight: .infinity)
                     .scrollContentBackground(.hidden)
                     .padding(8)
                     .sunkenSurface()
@@ -225,7 +227,7 @@ struct ModesSettingsView: View {
                 ) {
                     TextEditor(text: bind(\.prompt))
                         .font(.system(size: 12, design: .monospaced))
-                        .frame(minHeight: 140, maxHeight: .infinity)
+                        .frame(minHeight: 140, idealHeight: 140, maxHeight: .infinity)
                         .scrollContentBackground(.hidden)
                         .padding(8)
                         .sunkenSurface()

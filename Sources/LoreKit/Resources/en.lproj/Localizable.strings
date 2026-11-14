@@ -166,7 +166,7 @@
 "参加する予定だけ" = "Attending Events Only";
 "表示する予定" = "Events to Show";
 "利用できるカレンダーがありません" = "No Calendars Available";
-"選んだカレンダーの予定を、発話タイムラインの参考情報と日次要約に使います。" = "Uses events from selected calendars as context for the speech timeline and daily summary.";
+"選んだカレンダーの予定を、タイムラインと「この日」の一日の流れに並べます。" = "Events from the selected calendars appear in the timeline and in the day overview.";
 "アクセシビリティ" = "Accessibility";
 "グローバルショートカットの検知と、仕上げた文章の貼り付けに使います。画面やウィンドウ内の文字は読み取りません。" = "Used to detect global shortcuts and paste formatted text. Lore does not read text from your screen or windows.";
 "保存場所" = "Storage Location";
@@ -336,3 +336,7 @@
 
 /* Rename from Koe */
 "以前のKoeのデータを確認してください" = "Check Your Data from Koe";
+
+/* Search */
+"移動" = "Move";
+"開く" = "Open";

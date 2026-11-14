@@ -205,7 +205,7 @@ private struct PermissionRow: View {
     }
 }
 
-/// Window全体に敷く背景。App iconのblue/cyanを大きくぼかし、縁のない光として置く。
+/// Window全体に敷く背景。App iconのviolet/cyanを大きくぼかし、縁のない光として置く。
 private struct OnboardingBackdrop: View {
     @Environment(\.colorScheme) private var colorScheme
 

@@ -9,7 +9,7 @@ struct LifeLogCalendarSettingsView: View {
         LazyVStack(alignment: .leading, spacing: 20) {
             SettingsCard(
                 title: "表示する予定",
-                footnote: "選んだカレンダーの予定を、発話タイムラインの参考情報と日次要約に使います。"
+                footnote: "選んだカレンダーの予定を、タイムラインと「この日」の一日の流れに並べます。"
             ) {
                 SettingsToggle(
                     title: "参加する予定だけ",

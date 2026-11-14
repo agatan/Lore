@@ -75,6 +75,8 @@ struct SettingsWindowView: View {
         }
         .frame(minWidth: 960, minHeight: 680)
         .toolbarBackgroundVisibility(.hidden, for: .windowToolbar)
+        // Sidebarの記号と選択色もsystemの青ではなくLoreのvioletに揃える。
+        .tint(LoreTheme.accent)
     }
 
     private func row(_ section: SettingsSection) -> some View {
@@ -87,9 +89,13 @@ struct SettingsWindowView: View {
     private var detail: some View {
         switch env.settingsSection {
         case .modes:
-            ModesSettingsView(env: env)
-                .padding(22)
-                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+            // Modeの編集はscrollせず、windowの高さの中で入力欄を伸び縮みさせる。
+            // 高さをwindowに固定し、中身の理想の高さでpaneが押し広げられないようにする。
+            GeometryReader { proxy in
+                ModesSettingsView(env: env)
+                    .padding(22)
+                    .frame(width: proxy.size.width, height: proxy.size.height, alignment: .topLeading)
+            }
         default:
             ScrollView {
                 settingsPane

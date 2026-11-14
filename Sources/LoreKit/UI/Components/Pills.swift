@@ -246,13 +246,15 @@ struct NoticeBanner: View {
     var title: String
     var message: String
     var tint: Color = LoreTheme.warning
+    /// 注意ではなく安心を伝える通知では、警告の三角を使わない。
+    var symbol = "exclamationmark.triangle.fill"
     var actionTitle: String?
     var action: (() -> Void)?
     var onDismiss: (() -> Void)? = nil
 
     var body: some View {
         HStack(alignment: .top, spacing: 10) {
-            Image(systemName: "exclamationmark.triangle.fill")
+            Image(systemName: symbol)
                 .foregroundStyle(tint)
                 .font(.system(size: 13))
             VStack(alignment: .leading, spacing: 2) {

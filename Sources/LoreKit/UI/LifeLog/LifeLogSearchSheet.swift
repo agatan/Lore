@@ -2,12 +2,16 @@ import SwiftUI
 
 struct LifeLogSearchSheet: View {
     var env: AppEnvironment
+    /// 開いた時点の検索語。Debugの画面撮影で結果の並びを確かめるために使う。
+    var initialQuery = ""
 
     @Environment(\.dismiss) private var dismiss
     @State private var query = ""
     @State private var results: [LifeLogSearchResult] = []
     @State private var isSearching = false
     @State private var errorMessage: String?
+    /// ↑↓で動かし、Returnで開く結果。Spotlightと同じく、入力欄から手を離さずに選べる。
+    @State private var selectedIndex = 0
     @FocusState private var focusesSearch: Bool
 
     var body: some View {
@@ -18,6 +22,9 @@ struct LifeLogSearchSheet: View {
                     .textFieldStyle(.plain)
                     .font(.system(size: 14))
                     .focused($focusesSearch)
+                    .onKeyPress(.downArrow) { moveSelection(1); return .handled }
+                    .onKeyPress(.upArrow) { moveSelection(-1); return .handled }
+                    .onSubmit { if results.indices.contains(selectedIndex) { select(results[selectedIndex]) } }
                     .accessibilityIdentifier("life-log.search-input")
                 if isSearching { ProgressView().controlSize(.small) }
                 if !query.isEmpty {
@@ -39,36 +46,40 @@ struct LifeLogSearchSheet: View {
             } else if !isSearching && results.isEmpty {
                 emptyState("見つかりませんでした", symbol: "magnifyingglass")
             } else {
-                List(results) { result in
-                    Button { select(result) } label: {
-                        HStack(alignment: .top, spacing: 12) {
-                            Image(systemName: symbol(for: result.kind))
-                                .foregroundStyle(tint(for: result.kind)).frame(width: 18)
-                            VStack(alignment: .leading, spacing: 5) {
-                                HStack(spacing: 7) {
-                                    Text(LocalizedStringKey(result.kind.displayName))
-                                        .font(.system(size: 10.5, weight: .semibold, design: .rounded))
-                                        .foregroundStyle(tint(for: result.kind))
-                                    Text(result.day)
-                                        .font(.system(size: 10, design: .monospaced)).foregroundStyle(.tertiary)
-                                }
-                                Text(result.text)
-                                    .font(.system(size: 12.5)).foregroundStyle(.primary)
-                                    .lineLimit(3).multilineTextAlignment(.leading)
+                ScrollViewReader { proxy in
+                    ScrollView {
+                        LazyVStack(spacing: 2) {
+                            ForEach(Array(results.enumerated()), id: \.element.id) { index, result in
+                                resultRow(result, isSelected: index == selectedIndex)
+                                    .id(result.id)
+                                    .onHover { if $0 { selectedIndex = index } }
                             }
-                            Spacer(minLength: 0)
-                            Image(systemName: "chevron.right").font(.system(size: 9)).foregroundStyle(.quaternary)
                         }
-                        .padding(.vertical, 5)
+                        .padding(8)
                     }
-                    .buttonStyle(.plain)
-                    .accessibilityIdentifier("life-log.search-result-\(result.id)")
+                    .onChange(of: selectedIndex) { _, index in
+                        guard results.indices.contains(index) else { return }
+                        proxy.scrollTo(results[index].id)
+                    }
                 }
-                .listStyle(.plain)
+                HStack(spacing: 14) {
+                    Text("\(results.count)件")
+                    Spacer()
+                    Label("移動", systemImage: "arrow.up.arrow.down")
+                    Label("開く", systemImage: "return")
+                }
+                .font(.system(size: 10.5))
+                .foregroundStyle(.tertiary)
+                .padding(.horizontal, 16)
+                .padding(.vertical, 8)
+                .overlay(alignment: .top) { Divider() }
             }
         }
         .frame(width: 620, height: 520)
-        .task { focusesSearch = true }
+        .task {
+            if query.isEmpty { query = initialQuery }
+            focusesSearch = true
+        }
         .task(id: query) { await runSearch() }
     }
 
@@ -85,6 +96,7 @@ struct LifeLogSearchSheet: View {
             isSearching = true
             errorMessage = nil
             results = try await database.lifeLog.search(value)
+            selectedIndex = 0
             isSearching = false
         } catch is CancellationError {
             return
@@ -92,6 +104,64 @@ struct LifeLogSearchSheet: View {
             isSearching = false
             errorMessage = error.localizedDescription
         }
+    }
+
+    private func moveSelection(_ delta: Int) {
+        guard !results.isEmpty else { return }
+        selectedIndex = min(results.count - 1, max(0, selectedIndex + delta))
+    }
+
+    /// 一件の結果。印と色はtimelineと同じにし、語の一致した所だけを太く色付けする。
+    private func resultRow(_ result: LifeLogSearchResult, isSelected: Bool) -> some View {
+        Button { select(result) } label: {
+            HStack(alignment: .top, spacing: 12) {
+                Image(systemName: symbol(for: result.kind))
+                    .font(.system(size: 10, weight: .semibold))
+                    .foregroundStyle(tint(for: result.kind))
+                    .frame(width: 24, height: 24)
+                    .background(tint(for: result.kind).opacity(0.14), in: Circle())
+                VStack(alignment: .leading, spacing: 4) {
+                    HStack(spacing: 6) {
+                        Text(LocalizedStringKey(result.kind.displayName))
+                            .font(.system(size: 11, weight: .semibold))
+                            .foregroundStyle(.secondary)
+                        Text(result.occurredAt.formatted(.dateTime.month().day().weekday(.abbreviated).hour().minute()))
+                            .font(LoreTheme.timeFont)
+                            .foregroundStyle(.tertiary)
+                    }
+                    Text(highlighted(result.text))
+                        .font(.system(size: 13))
+                        .lineSpacing(3)
+                        .lineLimit(3)
+                        .multilineTextAlignment(.leading)
+                }
+                Spacer(minLength: 0)
+                Image(systemName: "return")
+                    .font(.system(size: 10, weight: .semibold))
+                    .foregroundStyle(.tertiary)
+                    .opacity(isSelected ? 1 : 0)
+            }
+            .padding(.horizontal, 10)
+            .padding(.vertical, 8)
+            .background(isSelected ? LoreTheme.accent.opacity(0.12) : .clear, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+            .contentShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+        }
+        .buttonStyle(.plain)
+        .accessibilityIdentifier("life-log.search-result-\(result.id)")
+    }
+
+    private func highlighted(_ text: String) -> AttributedString {
+        var value = AttributedString(text)
+        let needle = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !needle.isEmpty else { return value }
+        var searchStart = value.startIndex
+        while searchStart < value.endIndex,
+              let range = value[searchStart...].range(of: needle, options: [.caseInsensitive, .widthInsensitive]) {
+            value[range].foregroundColor = LoreTheme.accent
+            value[range].font = .system(size: 13, weight: .semibold)
+            searchStart = range.upperBound
+        }
+        return value
     }
 
     private func select(_ result: LifeLogSearchResult) {
@@ -113,16 +183,16 @@ struct LifeLogSearchSheet: View {
     private func symbol(for kind: LifeLogSearchResult.Kind) -> String {
         switch kind {
         case .utterance: "waveform"
-        case .dictation: "keyboard.badge.ellipsis"
-        case .memo: "text.bubble"
+        case .dictation: "keyboard"
+        case .memo: "pencil"
         }
     }
 
     private func tint(for kind: LifeLogSearchResult.Kind) -> Color {
         switch kind {
-        case .utterance: LoreTheme.accent
+        case .utterance: .secondary
         case .dictation: LoreTheme.accent
-        case .memo: LoreTheme.accentSecondary
+        case .memo: LoreTheme.memo
         }
     }
 }

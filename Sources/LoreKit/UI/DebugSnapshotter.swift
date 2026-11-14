@@ -69,6 +69,12 @@ enum DebugSnapshotter {
                 into: directory
             )
             try writeMenuBarIcons(into: directory)
+            try await captureHosted(
+                LifeLogSearchSheet(env: env, initialQuery: "整理")
+                    .background(.background),
+                as: "search",
+                into: directory
+            )
         } catch {
             LoreLog.ui.error("UI snapshotに失敗: \(error.localizedDescription, privacy: .public)")
             FileHandle.standardError.write(Data("UI snapshotに失敗: \(error.localizedDescription)\n".utf8))
@@ -130,7 +136,7 @@ enum DebugSnapshotter {
     /// 全状態のmenu barアイコンを、明暗のmenu barを模した帯へ4倍で並べる。
     private static func writeMenuBarIcons(into directory: URL) throws {
         let badges: [MenuBarStatusIcon.Badge?] = [nil, .recording, .processing, .done, .attention, .reconnecting]
-        let live = MenuBarStatusIcon.image(levels: [0.1, 0.3, 0.7, 0.9, 0.5, 0.2, 0.6, 0.4, 0.15], badge: .recording)
+        let live = MenuBarStatusIcon.image(level: 0.9, badge: .recording)
         let icons = badges.map { MenuBarStatusIcon.image(badge: $0) } + [live]
         let scale: CGFloat = 4
         let cell = NSSize(width: 40, height: 28)

@@ -123,7 +123,7 @@ cloud音声入力で送るのは今回の文字起こし、共通rule、mode指�
 - ライフログ表示中は三列です。Sidebarはnavigationの下に月間activity calendarを置きます。中央は選択日のtimelineで、読みやすい幅の列をwindow中央に置き、先頭に大きな日付と曜日、今日なら「今日」と記録状態、終日の予定を表示します。右のinspector「この日」は話した時間、発話・メモ・音声入力の件数と、予定のblockと記録の印を時刻の縦軸へ並べた一日の流れを表示します。予定blockや一日の流れの位置を選ぶと、timelineのその時刻へ移動します。今日なら現在時刻の線を引きます。Inspectorはtoolbarのbuttonで隠せ、表示状態は次回も保ちます。記録がない日は件数の代わりに記録がないことだけを示し、過去日で予定も記録もなければ一日の流れを出しません。記録がない日のtimelineは、縦線の位置に記録の始め方（今日）または記録がないこと（過去日）を一行で示します。検索と書き出しのbuttonもwindow toolbarに置きます。
 - 通常起動時とmain windowのライフログを開いた時は今日を表示し、dataの読込後にtimeline最下部の最新項目へ一度だけscrollします。mini windowも開いた時に今日を表示して最下部へ一度だけscrollします。その後に新しい認識結果や予定が届いても利用者の閲覧位置を奪いません。
 - timeline paneは時刻の予定、発話、音声入力、text memoを一列の時刻順で表示し、column headerは置きません。時刻の右に縦の線を通し、各行はその線上の印で種類を示します（発話は小さな点、メモと音声入力は記号、予定は輪）。予定の開始から終了までに入る区間は線を予定の色で塗り、予定の行は件名と長さ・calendar名を表示します。前の項目から1時間以上空いた所には空いた時間を示します。日付を選ぶとその日の予定を読み直し、inspectorとtimelineの両方へ反映します。
-- toolbarの検索buttonまたは`Command-F`で横断検索を開きます。検索結果の発話、音声入力、memoを選ぶと対象日を開いてその項目へ移動します。
+- toolbarの検索buttonまたは`Command-F`で横断検索を開きます。検索結果は種類をtimelineと同じ印と色で示し、一致した語を強調し、日付と時刻を添えます。入力欄から手を離さずに↑↓で結果を選び、Returnで開けます。検索結果の発話、音声入力、memoを選ぶと対象日を開いてその項目へ移動します。
 - mini windowは予定、発話、音声入力、memoを一列の時刻順で表示し、今日進行中の予定をtimeline上部に固定します。OS標準のtitle barは表示せず、Space切替やfull-screen appの利用中も明示的に閉じるまで手前に残ります。Mini windowのtoggle hotkeyは、設定された修飾キーを含む押下と離上が対になった場合だけ切り替え、同じ文字keyだけの通常入力では開閉しません。
 - Main windowとmini windowの最下部には、timelineの上に浮かぶ一本のcapsule barがあります。左端に記録の開始・停止buttonと記録状態、続いてchat形式のmemo入力欄、音声memo button、送信buttonを並べ、送信したmemoを今日のtimelineへ即時追加します。送信ボタンと音声入力ボタンは同じ直径の円形controlに揃えます。Timelineはbarの下までscrollでき、最後の行もbarに隠れません。過去日の履歴へ現在のmemoを混入させないため、main windowの入力欄は今日を選択中だけ表示し、過去日のbarは記録操作と状態だけを持ちます。
 - ボイスメモも手入力と同じmemoとして今日のtimelineへ追加します。
@@ -173,7 +173,7 @@ Loreのprimary colorはapp icon由来の爽やかなblueに固定し、利用者
 
 Privacy設定には、履歴、ライフログ、保存audio、whisper.cpp modelを含むLore dataのこのMac上の合計使用量を表示します。
 
-Main window、mini window、menu barのライフログ状態表示は同じ記録操作を共有します。停止中の開始操作はblue/cyanの録音記号と「録音を開始」、記録開始意図がある間の停止操作はroseの停止記号と「録音を停止」を表示します。再接続中やボイスメモによる一時停止中も、停止操作は同じroseの外観を保ちます。
+Main window、mini window、menu barのライフログ状態表示は同じ記録操作を共有します。停止中の開始操作はviolet/cyanの録音記号と「録音を開始」、記録開始意図がある間の停止操作はroseの停止記号と「録音を停止」を表示します。再接続中やボイスメモによる一時停止中も、停止操作は同じroseの外観を保ちます。
 
 音声構成変更や処理失敗など、継続操作を妨げないmessageはdismiss可能なbannerとして表示し、右端の`×`で閉じられます。閉じる操作はmessageだけを消し、記録開始意図、自動再接続、保存済みdataには影響しません。
 
