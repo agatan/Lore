@@ -84,7 +84,8 @@ public struct MainWindowView: View {
     }
 }
 
-/// Main windowのsidebar。上から navigation、ライフログ表示中だけ月間calendarと時間帯。
+/// Main windowのsidebar。上から navigation、ライフログ表示中だけ月間calendar。
+/// その日の流れは右のinspectorが受け持ち、sidebarは「どこを見るか」だけを選ぶ場所にする。
 /// 面や枠は足さず、system sidebarの素材と見出しだけで区切る。
 private struct MainSidebar: View {
     var env: AppEnvironment
@@ -123,13 +124,6 @@ private struct MainSidebar: View {
                     .padding(.top, 2)
                     .padding(.bottom, 6)
                     .selectionDisabled()
-                }
-                Section("時間帯") {
-                    DayRhythmView(day: env.lifeLog.day)
-                        .frame(height: 52)
-                        .padding(.vertical, 4)
-                        .selectionDisabled()
-                        .accessibilityIdentifier("life-log.day-insights")
                 }
             }
         }

@@ -40,7 +40,11 @@ enum ScreenshotDemoData {
             modeSnapshot: ModeSnapshot(modeName: "標準", modePrompt: "", systemPrompt: "", vocabularyCount: 0, trigger: .manual),
             sttEngine: EngineIdentifier("speech-analyzer"),
             rawTranscript: "レビューで確認したい観点を三つに整理する",
-            formattedText: "レビューで確認したい観点を3つに整理する。"
+            formattedText: "レビューで確認したい観点を3つに整理する。",
+            audioDurationMs: 4_200,
+            sttLatencyMs: 380,
+            llmLatencyMs: 640,
+            insertLatencyMs: 1_140
         ))
 
         try await database.lifeLog.save(memo: LifeLogMemo(id: "demo-memo-1", createdAt: time(11, 6), text: "オンボーディングは3つの価値が順番に伝わる構成にする"))

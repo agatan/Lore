@@ -15,14 +15,12 @@ struct LifeLogMiniWindow: View {
 
             ScrollViewReader { proxy in
                 ScrollView {
-                    LazyVStack(alignment: .leading, spacing: 1) {
-                        ForEach(items) { item in
-                            switch item.kind {
-                            case .utterance(let utterance): utteranceRow(utterance)
-                            case .dictation(let dictation): dictationRow(dictation)
-                            case .memo(let memo): memoRow(memo)
-                            case .event(let event): eventRow(event)
+                    LazyVStack(alignment: .leading, spacing: 0) {
+                        ForEach(items) { row in
+                            if let gap = row.gapBefore {
+                                TimelineGapRow(interval: gap, compact: true)
                             }
+                            rowView(row)
                         }
                         Color.clear.frame(height: 1).id("bottom")
                     }
@@ -87,49 +85,33 @@ struct LifeLogMiniWindow: View {
         }
     }
 
-    private enum ItemKind {
-        case utterance(LifeLogUtterance)
-        case dictation(LifeLogDictation)
-        case memo(LifeLogMemo)
-        case event(CalendarEventSnapshot)
-    }
-    private struct Item: Identifiable {
-        var id: String
-        var date: Date
-        var kind: ItemKind
-    }
-    private var items: [Item] {
-        (env.lifeLog.day.utterances.map { Item(id: "u-\($0.id)", date: $0.startedAt, kind: .utterance($0)) }
-         + env.lifeLog.day.dictations.map { Item(id: "d-\($0.id)", date: $0.startedAt, kind: .dictation($0)) }
-         + env.lifeLog.day.memos.map { Item(id: "m-\($0.id)", date: $0.createdAt, kind: .memo($0)) }
-         + env.lifeLog.day.calendarEvents.filter { !$0.isAllDay }.map { Item(id: "e-\($0.id)", date: $0.startsAt, kind: .event($0)) })
-            .sorted { $0.date < $1.date }
-    }
+    private var items: [LifeLogTimelineLayout.Row] { LifeLogTimelineLayout.rows(for: env.lifeLog.day) }
 
-    private func eventRow(_ event: CalendarEventSnapshot) -> some View {
-        CalendarEventCard(event: event, compact: true)
-            .id("e-\(event.id)")
-    }
-
-    private func dictationRow(_ dictation: LifeLogDictation) -> some View {
-        TimelineEntryRow(date: dictation.startedAt, kind: .dictation, text: dictation.text, compact: true)
-            .id("d-\(dictation.id)")
-    }
-
-    private func utteranceRow(_ utterance: LifeLogUtterance) -> some View {
-        TimelineEntryRow(date: utterance.startedAt, kind: .utterance, text: utterance.text, compact: true)
-            .id("u-\(utterance.id)")
-    }
-
-    private func memoRow(_ memo: LifeLogMemo) -> some View {
-        TimelineEntryRow(
-            date: memo.createdAt,
-            kind: .memo,
-            text: memo.text,
-            compact: true,
-            accessibilityPrefix: "life-log-mini.memo-\(memo.id)",
-            onEdit: { text in await env.lifeLog.updateMemo(id: memo.id, text: text) }
-        )
-            .id("m-\(memo.id)")
+    @ViewBuilder
+    private func rowView(_ row: LifeLogTimelineLayout.Row) -> some View {
+        Group {
+            switch row.kind {
+            case .event(let event):
+                CalendarEventCard(event: event, above: row.above, below: row.below, compact: true)
+            case .dictation(let dictation):
+                TimelineEntryRow(date: dictation.startedAt, kind: .dictation, text: dictation.text,
+                                 above: row.above, below: row.below, compact: true)
+            case .utterance(let utterance):
+                TimelineEntryRow(date: utterance.startedAt, kind: .utterance, text: utterance.text,
+                                 above: row.above, below: row.below, compact: true)
+            case .memo(let memo):
+                TimelineEntryRow(
+                    date: memo.createdAt,
+                    kind: .memo,
+                    text: memo.text,
+                    above: row.above,
+                    below: row.below,
+                    compact: true,
+                    accessibilityPrefix: "life-log-mini.memo-\(memo.id)",
+                    onEdit: { text in await env.lifeLog.updateMemo(id: memo.id, text: text) }
+                )
+            }
+        }
+        .id(row.id)
     }
 }

@@ -120,9 +120,9 @@ cloud音声入力で送るのは今回の文字起こし、共通rule、mode指�
 ### 4.2 日別表示
 
 - main windowは全高の半透明sidebarを持つsplit viewです。Sidebar上部の「ライフログ」「音声入力」で表示を切り替え、ライフログを既定表示にします。
-- ライフログ表示中のsidebarは、navigationの下に月間activity calendarと選択日の時間帯を置きます。右のcontentは選択日のtimelineで、先頭に大きな日付見出しと曜日・項目数、今日なら記録状態を表示します。予定、検索、書き出しのbuttonはwindow toolbarへまとめます。
+- ライフログ表示中は三列です。Sidebarはnavigationの下に月間activity calendarを置きます。中央は選択日のtimelineで、読みやすい幅の列をwindow中央に置き、先頭に大きな日付と曜日、今日なら「今日」と記録状態、終日の予定を表示します。右のinspector「この日」は話した時間、発話・メモ・音声入力の件数と、予定のblockと記録の印を時刻の縦軸へ並べた一日の流れを表示します。予定blockや一日の流れの位置を選ぶと、timelineのその時刻へ移動します。今日なら現在時刻の線を引きます。Inspectorはtoolbarのbuttonで隠せます。検索と書き出しのbuttonもwindow toolbarに置きます。
 - 通常起動時とmain windowのライフログを開いた時は今日を表示し、dataの読込後にtimeline最下部の最新項目へ一度だけscrollします。mini windowも開いた時に今日を表示して最下部へ一度だけscrollします。その後に新しい認識結果や予定が届いても利用者の閲覧位置を奪いません。
-- timeline paneは予定、発話、音声入力、text memoを一列の時刻順で表示し、column headerは置きません。toolbarの予定buttonは選択日の予定を時刻と件名中心の素朴な一覧で表示します。日付を選ぶとその日の予定を読み直し、一覧とtimelineの両方へ反映します。予定一覧では塗りを使いません。
+- timeline paneは時刻の予定、発話、音声入力、text memoを一列の時刻順で表示し、column headerは置きません。時刻の右に縦の線を通し、各行はその線上の印で種類を示します（発話は小さな点、メモと音声入力は記号、予定は輪）。予定の開始から終了までに入る区間は線を予定の色で塗り、予定の行は件名と長さ・calendar名を表示します。前の項目から1時間以上空いた所には空いた時間を示します。日付を選ぶとその日の予定を読み直し、inspectorとtimelineの両方へ反映します。
 - toolbarの検索buttonまたは`Command-F`で横断検索を開きます。検索結果の発話、音声入力、memoを選ぶと対象日を開いてその項目へ移動します。
 - mini windowは予定、発話、音声入力、memoを一列の時刻順で表示し、今日進行中の予定をtimeline上部に固定します。OS標準のtitle barは表示せず、Space切替やfull-screen appの利用中も明示的に閉じるまで手前に残ります。Mini windowのtoggle hotkeyは、設定された修飾キーを含む押下と離上が対になった場合だけ切り替え、同じ文字keyだけの通常入力では開閉しません。
 - Main windowとmini windowの最下部には、timelineの上に浮かぶ一本のcapsule barがあります。左端に記録の開始・停止buttonと記録状態、続いてchat形式のmemo入力欄、音声memo button、送信buttonを並べ、送信したmemoを今日のtimelineへ即時追加します。送信ボタンと音声入力ボタンは同じ直径の円形controlに揃えます。Timelineはbarの下までscrollでき、最後の行もbarに隠れません。過去日の履歴へ現在のmemoを混入させないため、main windowの入力欄は今日を選択中だけ表示し、過去日のbarは記録操作と状態だけを持ちます。
@@ -165,7 +165,7 @@ Koeのprimary colorはapp icon由来の爽やかなblueに固定し、利用者�
 | 場所 | 公開機能 |
 |---|---|
 | Menu bar | ライフログ/音声入力の用途別quick action。ライフログは記録切替、今日の画面、mini window、音声入力は録音、mode、直前結果、履歴を各tab内にまとめ、共通footerは設定と終了だけを置く。「今日を開く」「ミニウィンドウ」はsystem fontを直接描画するcompact buttonとする |
-| Main window | 通常起動時に前面のkey windowとして1680×960 ptで開き、全高のsidebar（navigation、calendar、時間帯）とcontentのsplit viewを表示する。ライフログの今日を選択してtimelineの最新位置を表示。onboarding、ライフログ、最下部の浮いたbarからの手入力・音声memo追加と記録操作、音声入力履歴（一覧と詳細）。予定・検索・書き出しはwindow toolbarに置く |
+| Main window | 通常起動時に前面のkey windowとして1680×960 ptで開き、全高のsidebar（navigation、calendar）、中央のtimeline、右のinspector「この日」の三列を表示する。ライフログの今日を選択してtimelineの最新位置を表示。onboarding、ライフログ、最下部の浮いたbarからの手入力・音声memo追加と記録操作、音声入力履歴（一覧と詳細）。inspectorの表示切替・検索・書き出しはwindow toolbarに置く。音声入力履歴の詳細は中央の読みやすい幅に置く |
 | Mini window | ライフログ状態、今日のtimelineへの手入力・音声memo追加。一度開いたら明示的に閉じるまで、ほかのapp、desktop Space、full-screen Spaceより手前に表示し続ける。記録操作は最下部の浮いたbarに置く。窓全体を半透明の素材で描く |
 | Settings: 共通 | 一般（表示言語を含む）、語彙、privacy（保存場所、このMacの使用量、削除）、同期、連携 |
 | Settings: 音声入力 | hotkey、聞き取りengine・whisper.cpp model、feedback、履歴、AI整形、mode |

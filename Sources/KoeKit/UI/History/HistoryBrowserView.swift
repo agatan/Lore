@@ -116,57 +116,83 @@ private struct HistoryRow: View {
     }
 }
 
+/// 履歴1件の詳細。読みやすい幅の列を中央に置き、挿入した文章を本文として一番大きく見せる。
+/// 聞き取った文字と内訳は、なぜその文章になったかを確かめる補助として下に続ける。
 private struct HistoryDetailView: View {
     var record: SessionRecord
     var onDelete: () -> Void
 
     var body: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 18) {
+            VStack(alignment: .leading, spacing: 28) {
                 header
 
-                textCard(
-                    title: "挿入した文章",
-                    text: record.formattedText,
-                    placeholder: "仕上げをせず、聞き取った文字をそのまま挿入しました",
-                    emphasized: true
-                )
-                textCard(title: "聞き取った文字", text: record.rawTranscript, placeholder: nil, emphasized: false)
+                VStack(alignment: .leading, spacing: 10) {
+                    sectionTitle("挿入した文章", copying: record.formattedText)
+                    if let text = record.formattedText, !text.isEmpty {
+                        HStack(alignment: .top, spacing: 14) {
+                            Capsule()
+                                .fill(KoeTheme.voiceGradient)
+                                .frame(width: 3)
+                            Text(text)
+                                .font(.system(size: 17))
+                                .lineSpacing(6)
+                                .textSelection(.enabled)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                        }
+                        .fixedSize(horizontal: false, vertical: true)
+                    } else {
+                        Text("仕上げをせず、聞き取った文字をそのまま挿入しました")
+                            .font(.system(size: 12))
+                            .foregroundStyle(.tertiary)
+                    }
+                }
+
+                VStack(alignment: .leading, spacing: 10) {
+                    sectionTitle("聞き取った文字", copying: record.rawTranscript)
+                    Text(record.rawTranscript.isEmpty ? "—" : record.rawTranscript)
+                        .font(.system(size: 13))
+                        .lineSpacing(4)
+                        .foregroundStyle(.secondary)
+                        .textSelection(.enabled)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(.horizontal, 14)
+                        .padding(.vertical, 12)
+                        .background(Color.primary.opacity(0.04), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+                }
 
                 if let error = record.error {
                     NoticeBanner(title: "このとき起きたこと", message: error, actionTitle: nil, action: nil)
                 }
 
-                metrics
+                LatencyBreakdown(record: record)
                 promptSnapshot
 
-                HStack {
-                    Spacer()
-                    Button("この履歴を削除", role: .destructive, action: onDelete)
-                        .buttonStyle(.bordered)
-                        .controlSize(.small)
-                }
+                Button("この履歴を削除", role: .destructive, action: onDelete)
+                    .buttonStyle(.borderless)
+                    .foregroundStyle(KoeTheme.recording)
+                    .font(.system(size: 12))
             }
-            .padding(.horizontal, 32)
-            .padding(.top, 20)
-            .padding(.bottom, 28)
-            .frame(maxWidth: 760, alignment: .leading)
-            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.horizontal, 40)
+            .padding(.top, 24)
+            .padding(.bottom, 40)
+            .frame(maxWidth: 720, alignment: .leading)
+            .frame(maxWidth: .infinity)
         }
         .scrollEdgeEffectStyle(.soft, for: .top)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
     private var header: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: 10) {
             VStack(alignment: .leading, spacing: 4) {
-                Text(record.startedAt.formatted(date: .omitted, time: .shortened))
-                    .font(KoeTheme.titleFont)
-                    .accessibilityAddTraits(.isHeader)
-                HStack(spacing: 8) {
-                    Text(record.startedAt.formatted(.dateTime.year().month(.wide).day().weekday(.wide)))
-                        .font(.system(size: 13))
-                        .foregroundStyle(.secondary)
+                Text(record.startedAt.formatted(.dateTime.year().month(.wide).day().weekday(.wide)))
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(.secondary)
+                HStack(alignment: .firstTextBaseline, spacing: 10) {
+                    Text(record.startedAt.formatted(date: .omitted, time: .shortened))
+                        .font(KoeTheme.titleFont)
+                        .accessibilityAddTraits(.isHeader)
                     StatusBadge(status: record.status)
                 }
             }
@@ -184,89 +210,122 @@ private struct HistoryDetailView: View {
         }
     }
 
-    @ViewBuilder
-    private func textCard(title: String, text: String?, placeholder: String?, emphasized: Bool) -> some View {
-        VStack(alignment: .leading, spacing: 6) {
-            HStack {
-                Text(title)
-                    .font(.system(size: 12, weight: .semibold))
-                    .foregroundStyle(.secondary)
-                Spacer()
-                if let text, !text.isEmpty {
-                    Button {
-                        TextInserter.copyToClipboard(text)
-                    } label: {
-                        Label("コピー", systemImage: "doc.on.doc")
-                            .font(.system(size: 10.5))
-                    }
-                    .buttonStyle(.borderless)
-                }
-            }
-            if let text, !text.isEmpty {
-                Text(text)
-                    .font(.system(size: emphasized ? 13 : 12))
-                    .textSelection(.enabled)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(12)
-                    .background {
-                        RoundedRectangle(cornerRadius: KoeTheme.cardCornerRadius, style: .continuous)
-                            .fill(emphasized ? KoeTheme.accent.opacity(0.08) : Color.secondary.opacity(0.07))
-                    }
-            } else if let placeholder {
-                Text(placeholder)
-                    .font(.system(size: 11.5))
-                    .foregroundStyle(.tertiary)
-            }
-        }
-    }
-
-    private var metrics: some View {
-        SettingsCard(title: "かかった時間") {
-            HStack(spacing: 22) {
-                metric("話した長さ", ms: record.audioDurationMs)
-                metric("聞き取り", ms: record.sttLatencyMs)
-                metric("仕上げ", ms: record.llmLatencyMs)
-                metric("話し終わってから挿入まで", ms: record.insertLatencyMs, highlight: true)
-            }
-        }
-    }
-
-    private func metric(_ label: String, ms: Int?, highlight: Bool = false) -> some View {
-        VStack(alignment: .leading, spacing: 2) {
-            Text(label)
-                .font(.system(size: 10))
+    private func sectionTitle(_ title: String, copying text: String?) -> some View {
+        HStack {
+            Text(LocalizedStringKey(title))
+                .font(KoeTheme.sectionFont)
                 .foregroundStyle(.secondary)
-            Text(ms.map { $0 >= 1_000 ? String(format: "%.2f 秒", Double($0) / 1_000) : "\($0) ms" } ?? "—")
-                .font(.system(size: highlight ? 15 : 13, weight: .semibold, design: .rounded))
-                .monospacedDigit()
-                .foregroundStyle(highlight ? KoeTheme.accent : .primary)
+            Spacer()
+            if let text, !text.isEmpty {
+                Button {
+                    TextInserter.copyToClipboard(text)
+                } label: {
+                    Label("コピー", systemImage: "doc.on.doc")
+                        .font(.system(size: 11))
+                }
+                .buttonStyle(.borderless)
+            }
         }
     }
 
     private var promptSnapshot: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            DisclosureGroup {
-                VStack(alignment: .leading, spacing: 10) {
-                    Text("このときモデルに渡した指示文の全文です。あとから設定を変えても、この記録は当時の内容のまま残ります。")
-                        .font(.system(size: 10.5))
-                        .foregroundStyle(.tertiary)
-                    Text(record.modeSnapshot.systemPrompt)
-                        .font(.system(size: 10.5, design: .monospaced))
-                        .textSelection(.enabled)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .padding(10)
-                        .background {
-                            RoundedRectangle(cornerRadius: 8, style: .continuous)
-                                .fill(Color.secondary.opacity(0.07))
-                        }
-                }
-                .padding(.top, 6)
-            } label: {
-                Text("このとき使われた指示文(語彙 \(record.modeSnapshot.vocabularyCount) 語)")
-                    .font(.system(size: 12, weight: .semibold))
+        DisclosureGroup {
+            VStack(alignment: .leading, spacing: 10) {
+                Text("このときモデルに渡した指示文の全文です。あとから設定を変えても、この記録は当時の内容のまま残ります。")
+                    .font(.system(size: 11))
+                    .foregroundStyle(.tertiary)
+                Text(record.modeSnapshot.systemPrompt.isEmpty ? "—" : record.modeSnapshot.systemPrompt)
+                    .font(.system(size: 11, design: .monospaced))
+                    .textSelection(.enabled)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(12)
+                    .background(Color.primary.opacity(0.04), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+            }
+            .padding(.top, 8)
+        } label: {
+            Text("このとき使われた指示文(語彙 \(record.modeSnapshot.vocabularyCount) 語)")
+                .font(KoeTheme.sectionFont)
+                .foregroundStyle(.secondary)
+        }
+    }
+}
+
+/// 話し終わってから挿入までを、聞き取り・仕上げ・挿入の帯に分けて見せる。
+/// 計測のない区間は帯に含めず、合計だけが分かる場合は一本の帯にする。
+private struct LatencyBreakdown: View {
+    var record: SessionRecord
+
+    private struct Part: Identifiable {
+        var label: String
+        var ms: Int
+        var tint: Color
+        var id: String { label }
+    }
+
+    private var parts: [Part] {
+        guard let total = record.insertLatencyMs, total > 0 else { return [] }
+        let stt = record.sttLatencyMs ?? 0
+        let llm = record.llmLatencyMs ?? 0
+        let rest = max(0, total - stt - llm)
+        return [
+            Part(label: "聞き取り", ms: stt, tint: KoeTheme.accent),
+            Part(label: "仕上げ", ms: llm, tint: KoeTheme.accentSecondary),
+            Part(label: "挿入", ms: rest, tint: KoeTheme.success),
+        ].filter { $0.ms > 0 }
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("かかった時間")
+                .font(KoeTheme.sectionFont)
+                .foregroundStyle(.secondary)
+            HStack(alignment: .firstTextBaseline, spacing: 8) {
+                Text(verbatim: record.insertLatencyMs.map(Self.seconds) ?? "—")
+                    .font(.system(size: 24, weight: .bold, design: .rounded).monospacedDigit())
+                Text("話し終わってから挿入まで")
+                    .font(.system(size: 12))
                     .foregroundStyle(.secondary)
+                Spacer(minLength: 12)
+                if let audio = record.audioDurationMs {
+                    Text("話した長さ \(Self.seconds(audio))")
+                        .font(.system(size: 12).monospacedDigit())
+                        .foregroundStyle(.secondary)
+                }
+            }
+            if !parts.isEmpty {
+                GeometryReader { proxy in
+                    let total = CGFloat(parts.reduce(0) { $0 + $1.ms })
+                    let spacing: CGFloat = 2
+                    let usable = proxy.size.width - spacing * CGFloat(parts.count - 1)
+                    HStack(spacing: spacing) {
+                        ForEach(parts) { part in
+                            Rectangle()
+                                .fill(part.tint.gradient)
+                                .frame(width: max(4, usable * CGFloat(part.ms) / total))
+                        }
+                    }
+                    .clipShape(Capsule())
+                }
+                .frame(height: 8)
+                .accessibilityHidden(true)
+                HStack(spacing: 18) {
+                    ForEach(parts) { part in
+                        HStack(spacing: 6) {
+                            Circle().fill(part.tint).frame(width: 7, height: 7)
+                            Text(LocalizedStringKey(part.label))
+                                .foregroundStyle(.secondary)
+                            Text(verbatim: Self.seconds(part.ms))
+                                .monospacedDigit()
+                        }
+                        .font(.system(size: 12))
+                    }
+                }
             }
         }
+    }
+
+    static func seconds(_ ms: Int) -> String {
+        ms >= 1_000 ? String(format: "%.2f 秒", Double(ms) / 1_000) : "\(ms) ms"
     }
 }
 

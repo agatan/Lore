@@ -4,11 +4,12 @@ import UniformTypeIdentifiers
 
 public struct LifeLogWindow: View {
     var env: AppEnvironment
-    static let readableTimelineWidth: CGFloat = 800
+    /// 時刻列と縦線を含めた列の幅。広いwindowでは中央に置き、左右の余白を釣り合わせる。
+    static let readableTimelineWidth: CGFloat = 720
     @State private var exportError: String?
     @State private var showsExportSheet = false
     @State private var showsSearchSheet = false
-    @State private var showsCalendarEvents = false
+    @SceneStorage("lifeLog.showsInspector") private var showsInspector = true
     @State private var timelineIsAtBottom = true
     @State private var timelineFollowsLatest = true
     @State private var memoDraft = ""
@@ -19,6 +20,14 @@ public struct LifeLogWindow: View {
         timeline
             .frame(minWidth: 560, minHeight: 600)
             .toolbar { toolbarItems }
+            .inspector(isPresented: $showsInspector) {
+                LifeLogDayInspector(
+                    day: env.lifeLog.day,
+                    date: env.lifeLog.selectedDate,
+                    onJump: { date in Task { await env.lifeLog.jumpToTime(date) } }
+                )
+                .inspectorColumnWidth(min: 260, ideal: 300, max: 380)
+            }
             .task {
                 await env.lifeLog.followCurrentDay()
                 await env.lifeLog.loadActivity(containing: env.lifeLog.selectedDate)
@@ -51,18 +60,6 @@ public struct LifeLogWindow: View {
         // 操作はcontentの右肩へ寄せ、systemにglassの1グループとしてまとめさせる。
         ToolbarSpacer(.flexible)
         ToolbarItemGroup(placement: .automatic) {
-            Button { showsCalendarEvents = true } label: { Label("この日の予定", systemImage: "calendar") }
-                .help("この日の予定")
-                .accessibilityIdentifier("life-log.calendar-events")
-                .popover(isPresented: $showsCalendarEvents, arrowEdge: .bottom) {
-                    LifeLogCalendarEventList(
-                        events: env.lifeLog.day.calendarEvents,
-                        onSelect: { event in
-                            showsCalendarEvents = false
-                            Task { await env.lifeLog.jumpToTime(event.startsAt) }
-                        }
-                    )
-                }
             Button { showsSearchSheet = true } label: { Label("ライフログを検索", systemImage: "magnifyingglass") }
                 .help("ライフログを検索 (⌘F)")
                 .keyboardShortcut("f", modifiers: .command)
@@ -71,49 +68,52 @@ public struct LifeLogWindow: View {
                 .help("この日を書き出す")
                 .accessibilityIdentifier("life-log.export-day")
         }
+        ToolbarItem(placement: .automatic) {
+            Button { showsInspector.toggle() } label: { Label("この日の概要", systemImage: "sidebar.trailing") }
+                .help(showsInspector ? "この日の概要を隠す" : "この日の概要を表示")
+                .accessibilityIdentifier("life-log.inspector-toggle")
+        }
     }
 
     private var isToday: Bool { Calendar.current.isDateInToday(env.lifeLog.selectedDate) }
 
-    /// Things 3のように、その日を大きな日付で始める。Scrollすると見出しごとtoolbarの下へ流れる。
+    /// Things 3のように、その日を大きな日付で始める。小さな見出しで今日か何年かを示し、
+    /// 記録状態と終日の予定は日付の下に一列だけ置く。Scrollすると見出しごとtoolbarの下へ流れる。
     private var header: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Text(env.lifeLog.selectedDate.formatted(.dateTime.month(.wide).day()))
-                .font(KoeTheme.titleFont)
-                .accessibilityAddTraits(.isHeader)
-            HStack(spacing: 8) {
-                headerSubtitle
-                    .font(.system(size: 13))
+        VStack(alignment: .leading, spacing: 6) {
+            Text(isToday ? "今日" : env.lifeLog.selectedDate.formatted(.dateTime.year()))
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundStyle(isToday ? AnyShapeStyle(KoeTheme.accent) : AnyShapeStyle(.secondary))
+            HStack(alignment: .firstTextBaseline, spacing: 10) {
+                Text(env.lifeLog.selectedDate.formatted(.dateTime.month(.wide).day()))
+                    .font(KoeTheme.titleFont)
+                Text(env.lifeLog.selectedDate.formatted(.dateTime.weekday(.wide)))
+                    .font(.system(size: 20, weight: .medium, design: .rounded))
                     .foregroundStyle(.secondary)
-                if isToday && env.lifeLog.isCapturing {
-                    HStack(spacing: 5) {
-                        Circle().fill(KoeTheme.recording).frame(width: 6, height: 6)
-                        Text("記録中")
+            }
+            .accessibilityElement(children: .combine)
+            .accessibilityAddTraits(.isHeader)
+            if showsHeaderChips {
+                HStack(spacing: 6) {
+                    if isToday && env.lifeLog.isCapturing {
+                        HeaderChip(text: "記録中", symbol: nil, tint: KoeTheme.recording, dot: true)
                     }
-                    .font(.system(size: 11, weight: .semibold))
-                    .foregroundStyle(KoeTheme.recording)
-                    .padding(.horizontal, 8)
-                    .padding(.vertical, 2)
-                    .background(KoeTheme.recording.opacity(0.12), in: Capsule())
+                    ForEach(allDayEvents) { event in
+                        HeaderChip(text: event.title, symbol: "calendar", tint: KoeTheme.accentSecondary, dot: false)
+                            .accessibilityIdentifier("life-log.timeline-event-\(event.id)")
+                    }
                 }
+                .padding(.top, 4)
             }
         }
-        .padding(.leading, Self.rowLeading)
+        .padding(.leading, TimelineRowFrame<EmptyView>.timeWidth(compact: false) + TimelineRail.width(compact: false) + 6)
         .padding(.top, 8)
-        .padding(.bottom, 18)
+        .padding(.bottom, 22)
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 
-    private var headerSubtitle: Text {
-        let weekday = env.lifeLog.selectedDate.formatted(.dateTime.weekday(.wide))
-        let day = env.lifeLog.day
-        let count = day.utterances.count + day.dictations.count + day.memos.count
-        let lead = isToday ? Text("今日 · \(weekday)") : Text(verbatim: weekday)
-        return count == 0 ? lead : Text("\(lead) · \(Text("\(count)件"))")
-    }
-
-    /// Timeline行の本文左端と見出しを揃えるための余白。
-    static let rowLeading: CGFloat = 16
+    private var allDayEvents: [CalendarEventSnapshot] { LifeLogTimelineLayout.allDayEvents(in: env.lifeLog.day) }
+    private var showsHeaderChips: Bool { (isToday && env.lifeLog.isCapturing) || !allDayEvents.isEmpty }
 
     private var timeline: some View {
         ScrollViewReader { proxy in
@@ -121,11 +121,14 @@ public struct LifeLogWindow: View {
                 VStack(alignment: .leading, spacing: 0) {
                     header
                     LazyVStack(alignment: .leading, spacing: 0) {
-                        ForEach(timelineItems, id: \.id) { item in
-                            timelineRow(item)
+                        ForEach(timelineRows) { row in
+                            if let gap = row.gapBefore {
+                                TimelineGapRow(interval: gap)
+                            }
+                            timelineRow(row)
                         }
                     }
-                    if timelineItems.isEmpty {
+                    if timelineRows.isEmpty {
                         timelineEmptyState
                             .frame(maxWidth: .infinity, minHeight: 320)
                     }
@@ -136,7 +139,7 @@ public struct LifeLogWindow: View {
                 .padding(.horizontal, 28)
                 .padding(.top, 12)
                 .padding(.bottom, 12)
-                .frame(maxWidth: .infinity, alignment: .leading)
+                .frame(maxWidth: .infinity)
             }
             .scrollEdgeEffectHidden(true, for: .top)
             .scrollEdgeEffectStyle(.soft, for: .bottom)
@@ -148,7 +151,7 @@ public struct LifeLogWindow: View {
                 timelineFollowsLatest = false
                 withAnimation { proxy.scrollTo(id, anchor: .center) }
             }
-            .onChange(of: timelineItems.last?.id) { _, _ in
+            .onChange(of: timelineRows.last?.id) { _, _ in
                 guard timelineFollowsLatest else { return }
                 Task { @MainActor in
                     await Task.yield()
@@ -198,11 +201,11 @@ public struct LifeLogWindow: View {
                 acceptsMemo: isToday
             )
         }
-        .frame(maxWidth: Self.readableTimelineWidth)
+        .frame(maxWidth: Self.readableTimelineWidth - 40)
         .padding(.horizontal, 28)
         .padding(.bottom, 16)
         .padding(.top, 6)
-        .frame(maxWidth: .infinity, alignment: .leading)
+        .frame(maxWidth: .infinity)
     }
 
     private var timelineEmptyState: some View {
@@ -219,54 +222,54 @@ public struct LifeLogWindow: View {
         .foregroundStyle(.secondary)
     }
 
-    private func timelineRow(_ item: TimelineItem) -> some View {
-        activityCell(item)
-            .frame(maxWidth: .infinity, alignment: .topLeading)
-        .id(item.id)
-    }
-
     @ViewBuilder
-    private func activityCell(_ item: TimelineItem) -> some View {
-        switch item.kind {
-        case .utterance(let value):
-            TimelineEntryRow(
-                date: value.startedAt,
-                kind: .utterance,
-                text: value.text,
-                isHighlighted: env.lifeLog.highlightedTimelineItemID == "u-\(value.id)"
-            )
-        case .event(let value):
-            CalendarEventCard(event: value)
+    private func timelineRow(_ row: LifeLogTimelineLayout.Row) -> some View {
+        Group {
+            switch row.kind {
+            case .utterance(let value):
+                TimelineEntryRow(
+                    date: value.startedAt,
+                    kind: .utterance,
+                    text: value.text,
+                    above: row.above,
+                    below: row.below,
+                    isHighlighted: env.lifeLog.highlightedTimelineItemID == row.id
+                )
+            case .event(let value):
+                CalendarEventCard(
+                    event: value,
+                    above: row.above,
+                    below: row.below,
+                    isCurrent: isToday && value.contains(Date())
+                )
                 .accessibilityIdentifier("life-log.timeline-event-\(value.id)")
-        case .dictation(let value):
-            TimelineEntryRow(date: value.startedAt, kind: .dictation, text: value.text)
-        case .memo(let value):
-            TimelineEntryRow(
-                date: value.createdAt,
-                kind: .memo,
-                text: value.text,
-                isHighlighted: env.lifeLog.highlightedTimelineItemID == "m-\(value.id)",
-                accessibilityPrefix: "life-log.memo-\(value.id)",
-                onEdit: { text in await env.lifeLog.updateMemo(id: value.id, text: text) },
-                onDelete: { Task { await env.lifeLog.deleteMemo(id: value.id) } }
-            )
+            case .dictation(let value):
+                TimelineEntryRow(
+                    date: value.startedAt,
+                    kind: .dictation,
+                    text: value.text,
+                    above: row.above,
+                    below: row.below,
+                    isHighlighted: env.lifeLog.highlightedTimelineItemID == row.id
+                )
+            case .memo(let value):
+                TimelineEntryRow(
+                    date: value.createdAt,
+                    kind: .memo,
+                    text: value.text,
+                    above: row.above,
+                    below: row.below,
+                    isHighlighted: env.lifeLog.highlightedTimelineItemID == row.id,
+                    accessibilityPrefix: "life-log.memo-\(value.id)",
+                    onEdit: { text in await env.lifeLog.updateMemo(id: value.id, text: text) },
+                    onDelete: { Task { await env.lifeLog.deleteMemo(id: value.id) } }
+                )
+            }
         }
+        .id(row.id)
     }
 
-    private enum ItemKind {
-        case event(CalendarEventSnapshot)
-        case utterance(LifeLogUtterance)
-        case dictation(LifeLogDictation)
-        case memo(LifeLogMemo)
-    }
-    private struct TimelineItem { var id: String; var date: Date; var kind: ItemKind }
-    private var timelineItems: [TimelineItem] {
-        (env.lifeLog.day.calendarEvents.map { TimelineItem(id: "e-\($0.id)", date: $0.startsAt, kind: .event($0)) }
-         + env.lifeLog.day.utterances.map { TimelineItem(id: "u-\($0.id)", date: $0.startedAt, kind: .utterance($0)) }
-         + env.lifeLog.day.dictations.map { TimelineItem(id: "d-\($0.id)", date: $0.startedAt, kind: .dictation($0)) }
-         + env.lifeLog.day.memos.map { TimelineItem(id: "m-\($0.id)", date: $0.createdAt, kind: .memo($0)) })
-            .sorted { $0.date < $1.date }
-    }
+    private var timelineRows: [LifeLogTimelineLayout.Row] { LifeLogTimelineLayout.rows(for: env.lifeLog.day) }
 
     private func setCaptureEnabled(_ enabled: Bool) {
         env.setLifeLogCaptureEnabled(enabled)
@@ -308,35 +311,48 @@ public struct LifeLogWindow: View {
 
 }
 
-struct DayRhythmView: View {
-    var day: LifeLogDay
+/// 予定の外で長く空いた区間。点線の続きに、空いた長さだけを小さく置く。
+struct TimelineGapRow: View {
+    var interval: TimeInterval
+    var compact = false
 
     var body: some View {
-        VStack(spacing: 6) {
-            HStack(alignment: .bottom, spacing: 2) {
-                ForEach(0..<24, id: \.self) { hour in
-                    let value = intensity(hour)
-                    Capsule()
-                        .fill(value > 0 ? AnyShapeStyle(KoeTheme.accent.opacity(0.45 + value * 0.55)) : AnyShapeStyle(Color.primary.opacity(0.08)))
-                        .frame(height: 3 + value * 29)
-                        .frame(maxWidth: .infinity, alignment: .bottom)
-                }
-            }
-            HStack {
-                ForEach([0, 6, 12, 18, 24], id: \.self) { value in
-                    Text("\(value)")
-                    if value != 24 { Spacer() }
-                }
-            }
-            .font(.system(size: 9).monospacedDigit())
-            .foregroundStyle(.tertiary)
+        TimelineRowFrame(
+            time: nil,
+            node: .none,
+            above: .gap,
+            below: .gap,
+            topPadding: compact ? 4 : 6,
+            bottomPadding: compact ? 4 : 6,
+            firstLineCenter: 6,
+            compact: compact
+        ) {
+            Text(verbatim: CalendarEventCard.durationText(interval))
+                .font(KoeTheme.captionFont.monospacedDigit())
+                .foregroundStyle(.tertiary)
+                .padding(.leading, compact ? 4 : 6)
         }
+        .accessibilityLabel(Text("\(CalendarEventCard.durationText(interval))の空き"))
     }
+}
 
-    private func intensity(_ hour: Int) -> CGFloat {
-        let calendar = Calendar.current
-        let utterances = day.utterances.filter { calendar.component(.hour, from: $0.startedAt) == hour }.count
-        let events = day.calendarEvents.filter { !$0.isAllDay && calendar.component(.hour, from: $0.startsAt) == hour }.count
-        return min(1, CGFloat(utterances) / 4 + CGFloat(events) / 3)
+/// 日付見出しの下に並べる小さな札。記録中と終日の予定に使う。
+private struct HeaderChip: View {
+    var text: String
+    var symbol: String?
+    var tint: Color
+    var dot: Bool
+
+    var body: some View {
+        HStack(spacing: 5) {
+            if dot { Circle().fill(tint).frame(width: 6, height: 6) }
+            if let symbol { Image(systemName: symbol).font(.system(size: 9.5, weight: .semibold)) }
+            Text(verbatim: text).lineLimit(1)
+        }
+        .font(.system(size: 11, weight: .semibold))
+        .foregroundStyle(tint)
+        .padding(.horizontal, 9)
+        .padding(.vertical, 3)
+        .background(tint.opacity(0.13), in: Capsule())
     }
 }

@@ -2,7 +2,7 @@ import SwiftUI
 
 /// ライフログの発話・音声入力・メモを、main / miniで同じ文法で並べる1行。
 ///
-/// 種類は時刻の下の小さな記号だけで示し、本文の読みやすさを優先する。
+/// 種類は時刻の右の縦線上の印だけで示し、本文の読みやすさを優先する。
 /// 編集・削除などの操作はhover中だけ出す。
 struct TimelineEntryRow: View {
     enum Kind {
@@ -10,11 +10,11 @@ struct TimelineEntryRow: View {
         case dictation
         case memo
 
-        var symbol: String? {
+        var node: TimelineRail.Node {
             switch self {
-            case .utterance: nil
-            case .dictation: "keyboard"
-            case .memo: "note.text"
+            case .utterance: .dot
+            case .dictation: .symbol("keyboard", KoeTheme.accent)
+            case .memo: .symbol("pencil", KoeTheme.memo)
             }
         }
 
@@ -30,6 +30,8 @@ struct TimelineEntryRow: View {
     var date: Date
     var kind: Kind
     var text: String
+    var above: LifeLogTimelineLayout.Segment = .none
+    var below: LifeLogTimelineLayout.Segment = .none
     var isHighlighted = false
     var compact = false
     /// 操作controlのaccessibility identifier接頭辞。例: `life-log.memo-<id>`
@@ -44,40 +46,41 @@ struct TimelineEntryRow: View {
     @State private var isSaving = false
     @FocusState private var editorFocused: Bool
 
+    private var bodySize: CGFloat { compact ? 12.5 : 14 }
+
     var body: some View {
-        HStack(alignment: .firstTextBaseline, spacing: compact ? 10 : 14) {
-            HStack(spacing: 4) {
-                Text(date.formatted(date: .omitted, time: .shortened))
-                    .font(KoeTheme.timeFont)
-                    .foregroundStyle(.secondary)
-                if let symbol = kind.symbol {
-                    Image(systemName: symbol)
-                        .font(.system(size: 9.5, weight: .medium))
-                        .foregroundStyle(KoeTheme.accent.opacity(0.85))
-                        .help(LocalizedStringKey(kind.label))
-                        .accessibilityLabel(LocalizedStringKey(kind.label))
+        TimelineRowFrame(
+            time: Text(date.formatted(date: .omitted, time: .shortened)),
+            node: kind.node,
+            nodeLabel: kind == .utterance ? nil : kind.label,
+            above: above,
+            below: below,
+            topPadding: compact ? 5 : 7,
+            bottomPadding: compact ? 5 : 7,
+            firstLineCenter: bodySize * 0.62,
+            isHighlighted: isHighlighted,
+            compact: compact
+        ) {
+            HStack(alignment: .firstTextBaseline, spacing: 8) {
+                if isEditing {
+                    editor
+                } else {
+                    Text(text)
+                        .font(.system(size: bodySize))
+                        .lineSpacing(compact ? 3 : 5)
+                        .textSelection(.enabled)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .simultaneousGesture(TapGesture(count: 2).onEnded { beginEditing() }, including: onEdit == nil ? .none : .all)
+                    actions
                 }
             }
-            .frame(width: compact ? 52 : 60, alignment: .leading)
-
-            if isEditing {
-                editor
-            } else {
-                Text(text)
-                    .font(.system(size: compact ? 12.5 : 13.5))
-                    .lineSpacing(compact ? 3 : 4)
-                    .textSelection(.enabled)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .simultaneousGesture(TapGesture(count: 2).onEnded { beginEditing() }, including: onEdit == nil ? .none : .all)
-                actions
-            }
+            .padding(.leading, compact ? 4 : 6)
         }
-        .padding(.horizontal, compact ? 12 : 16)
-        .padding(.vertical, compact ? 6 : 7)
+        .padding(.trailing, compact ? 12 : 8)
         .background {
             RoundedRectangle(cornerRadius: compact ? 8 : 10, style: .continuous)
-                .fill(isHighlighted ? KoeTheme.accent.opacity(0.14) : (isHovering && !isEditing ? Color.primary.opacity(0.035) : .clear))
-                .padding(.horizontal, compact ? 4 : 2)
+                .fill(isHighlighted ? KoeTheme.accent.opacity(0.12) : (isHovering && !isEditing ? Color.primary.opacity(0.035) : .clear))
+                .padding(.leading, TimelineRowFrame<EmptyView>.timeWidth(compact: compact) + TimelineRail.width(compact: compact) - 4)
         }
         .onHover { isHovering = $0 }
         .animation(.easeOut(duration: 0.12), value: isHovering)

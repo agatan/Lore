@@ -9,6 +9,8 @@ public enum KoeTheme {
     public static let recordingSecondary = Color(red: 0.94, green: 0.46, blue: 0.52)
     public static let success = Color(red: 0.22, green: 0.68, blue: 0.55)
     public static let warning = Color(red: 0.90, green: 0.62, blue: 0.25)
+    /// 利用者が自分で書き残したmemoの印。警告と取り違えないよう、goldより赤みを足す。
+    public static let memo = Color(red: 0.93, green: 0.52, blue: 0.24)
 
     public static let voiceGradient = LinearGradient(
         colors: [accent, accentSecondary],

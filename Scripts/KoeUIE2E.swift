@@ -210,7 +210,11 @@ private enum KoeUIE2E {
         guard !ui.exists(identifier: "life-log.timeline-divider") else {
             throw UIE2EError.assertion("単一timelineに廃止したcolumn dividerが残っています")
         }
-        try ui.press(identifier: "life-log.calendar-events")
+        guard !ui.exists(identifier: "life-log.calendar-events") else {
+            throw UIE2EError.assertion("inspectorへ移した予定popoverのbuttonが残っています")
+        }
+        _ = try ui.waitFor(identifier: "life-log.inspector-toggle")
+        _ = try ui.waitFor(identifier: "life-log.day-map")
         try ui.press(identifier: "life-log.calendar-event-demo-event-1")
         _ = try ui.waitFor(identifier: "life-log.timeline-event-demo-event-1")
         try ui.press(identifier: "life-log.search")

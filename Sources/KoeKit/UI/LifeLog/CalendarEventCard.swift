@@ -1,28 +1,32 @@
 import SwiftUI
 
-/// 予定はtimelineを区切る静かな見出し行として描く。塗りは使わず、calendar色の小さな印と
-/// 文字の強弱だけで発話と区別する。時刻の列は`TimelineEntryRow`と揃える。
+/// 予定はtimelineの縦線上の輪と、件名の見出しで描く。開始時刻は左の時刻列に任せ、
+/// 見出しの下には長さとcalendar名だけを置く。区間の長さは縦線の色が示す。
 struct CalendarEventCard: View {
     var event: CalendarEventSnapshot
+    var above: LifeLogTimelineLayout.Segment = .none
+    var below: LifeLogTimelineLayout.Segment = .none
     var isCurrent = false
     var compact = false
 
+    private var titleSize: CGFloat { compact ? 12.5 : 14 }
+
     var body: some View {
-        HStack(alignment: .firstTextBaseline, spacing: compact ? 10 : 14) {
-            Group {
-                if event.isAllDay { Text("終日") } else { Text(event.startsAt.formatted(date: .omitted, time: .shortened)) }
-            }
-                .font(KoeTheme.timeFont)
-                .foregroundStyle(.secondary)
-                .frame(width: compact ? 52 : 60, alignment: .leading)
+        TimelineRowFrame(
+            time: event.isAllDay ? Text("終日") : Text(event.startsAt.formatted(date: .omitted, time: .shortened)),
+            node: .event,
+            nodeLabel: "予定",
+            above: above,
+            below: below,
+            topPadding: compact ? 8 : 14,
+            bottomPadding: compact ? 5 : 8,
+            firstLineCenter: titleSize * 0.62,
+            compact: compact
+        ) {
             VStack(alignment: .leading, spacing: 2) {
                 HStack(alignment: .firstTextBaseline, spacing: 7) {
-                    Circle()
-                        .fill(KoeTheme.accentSecondary)
-                        .frame(width: 7, height: 7)
-                        .alignmentGuide(.firstTextBaseline) { $0[VerticalAlignment.center] + 4 }
                     Text(event.title)
-                        .font(.system(size: compact ? 12.5 : 13, weight: .semibold))
+                        .font(.system(size: titleSize, weight: .semibold))
                         .fixedSize(horizontal: false, vertical: true)
                     if isCurrent {
                         Text("いま")
@@ -33,22 +37,29 @@ struct CalendarEventCard: View {
                             .background(KoeTheme.accentSecondary.opacity(0.14), in: Capsule())
                     }
                 }
-                Text(verbatim: event.isAllDay ? event.calendarTitle : "\(timeRange) · \(event.calendarTitle)")
+                Text(verbatim: detail)
                     .font(KoeTheme.captionFont.monospacedDigit())
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
-                    .padding(.leading, 14)
             }
-            Spacer(minLength: 0)
+            .padding(.leading, compact ? 4 : 6)
         }
-        .padding(.horizontal, compact ? 12 : 16)
-        .padding(.top, compact ? 10 : 18)
-        .padding(.bottom, compact ? 4 : 6)
+        .padding(.trailing, compact ? 12 : 8)
         .fixedSize(horizontal: false, vertical: true)
     }
 
-    private var timeRange: String {
-        return "\(event.startsAt.formatted(date: .omitted, time: .shortened))–\(event.endsAt.formatted(date: .omitted, time: .shortened))"
+    private var detail: String {
+        guard !event.isAllDay else { return event.calendarTitle }
+        return "\(Self.durationText(event.endsAt.timeIntervalSince(event.startsAt))) · \(event.calendarTitle)"
+    }
+
+    /// 「30分」「1時間」「1時間30分」。
+    static func durationText(_ interval: TimeInterval) -> String {
+        let minutes = max(0, Int((interval / 60).rounded()))
+        let hours = minutes / 60
+        let rest = minutes % 60
+        if hours == 0 { return "\(rest)分" }
+        return rest == 0 ? "\(hours)時間" : "\(hours)時間\(rest)分"
     }
 }
 
