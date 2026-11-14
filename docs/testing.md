@@ -1,11 +1,11 @@
 # テスト方針とCUJ
 
-Koeの自動テストは二層に分けます。
+Loreの自動テストは二層に分けます。
 
 - `make test`: ドメイン状態遷移、永続化、音声・LLM境界、書き出し形式を高速に検証する。
-- `make ui-test`: 署名済みのKoeUITests.appをテスト専用インモリDBで起動し、macOS Accessibility APIで実画面を操作する。
+- `make ui-test`: 署名済みのLoreUITests.appをテスト専用インモリDBで起動し、macOS Accessibility APIで実画面を操作する。
 
-UI E2Eは内部のView構造ではなく、利用者が認識する操作とアクセシビリティ識別子だけに依存します。`KoeUITests.app`は本番と別のbundle ID、process instance、UserDefaultsドメインを持ち、常にインメモリDBを開きます。global hotkeyと権限監視を起動しないため、起動中の本番Koeのプロセス、設定、利用者DBに干渉しません。E2E runnerが終了するのはテスト用bundle IDだけで、本番の`Koe.app`を渡すと実行を拒否します。
+UI E2Eは内部のView構造ではなく、利用者が認識する操作とアクセシビリティ識別子だけに依存します。`LoreUITests.app`は本番と別のbundle ID、process instance、UserDefaultsドメインを持ち、常にインメモリDBを開きます。global hotkeyと権限監視を起動しないため、起動中の本番Loreのプロセス、設定、利用者DBに干渉しません。E2E runnerが終了するのはテスト用bundle IDだけで、本番の`Lore.app`を渡すと実行を拒否します。
 
 ## 変更の進め方
 
@@ -17,7 +17,7 @@ UI E2Eは内部のView構造ではなく、利用者が認識する操作とア�
 
 ### CUJ 1: 一日の記録を確認して持ち出す
 
-1. Koeを開くとライフログが表示され、TODOと要約の表示はない。
+1. Loreを開くとライフログが表示され、TODOと要約の表示はない。
 2. 予定一覧と検索から該当項目へ移動できる。
 3. 音声入力へ切り替え、履歴画面が表示される。
 4. ライフログへ戻り、「この日を書き出す」を開く。
@@ -49,9 +49,9 @@ make ui-test
 
 ## 見た目の確認
 
-Debug buildの`KoeUITests.app`を`--koe-screenshot-demo --koe-snapshot <dir>`で起動すると、main（ライフログ・音声入力）、全設定section、mini windowを順に開き、各windowを`<dir>`へPNGで保存します。続けて、壁紙を模した背景の上に置いたHUDの各段階（録音開始、逐次text、整形中、完了、整形skip）とmenu bar panel、明暗のmenu barに並べた全状態のmenu barアイコン（`menu-bar-icons.png`）を保存して終了します。自process内のwindowだけをScreenCaptureKitで撮るため、画面収録の許可は不要です。`--koe-snapshot-appearance dark`（または`light`）を足すと外観を固定して撮ります。Release buildには含めません。
+Debug buildの`LoreUITests.app`を`--lore-screenshot-demo --lore-snapshot <dir>`で起動すると、main（ライフログ・音声入力）、全設定section、mini windowを順に開き、各windowを`<dir>`へPNGで保存します。続けて、壁紙を模した背景の上に置いたHUDの各段階（録音開始、逐次text、整形中、完了、整形skip）とmenu bar panel、明暗のmenu barに並べた全状態のmenu barアイコン（`menu-bar-icons.png`）を保存して終了します。自process内のwindowだけをScreenCaptureKitで撮るため、画面収録の許可は不要です。`--lore-snapshot-appearance dark`（または`light`）を足すと外観を固定して撮ります。Release buildには含めません。
 
 ```sh
 make ui-test-app
-open -n -W build/KoeUITests.app --args --koe-screenshot-demo --koe-snapshot /tmp/koe-shots --koe-snapshot-appearance dark
+open -n -W build/LoreUITests.app --args --lore-screenshot-demo --lore-snapshot /tmp/lore-shots --lore-snapshot-appearance dark
 ```

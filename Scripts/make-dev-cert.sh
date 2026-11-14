@@ -1,5 +1,5 @@
 #!/bin/bash
-# 「Koe Dev」という自己署名のコード署名証明書を login キーチェーンに作る。
+# 「Lore Dev」という自己署名のコード署名証明書を login キーチェーンに作る。
 #
 # なぜ必要か: ad-hoc 署名(codesign -s -)は identity が cdhash 自身なので、
 # リビルドするたび別アプリ扱いになり、アクセシビリティの許可が毎回無効になる。
@@ -12,7 +12,7 @@
 #   codesign は問題なく使える(Gatekeeper 用ではなくローカル実行用なので十分)。
 set -euo pipefail
 
-NAME="Koe Dev"
+NAME="Lore Dev"
 KEYCHAIN="$HOME/Library/Keychains/login.keychain-db"
 
 if security find-identity -p codesigning 2>/dev/null | grep -q "\"$NAME\""; then
@@ -29,7 +29,7 @@ distinguished_name = dn
 x509_extensions = ext
 prompt = no
 [ dn ]
-CN = Koe Dev
+CN = Lore Dev
 [ ext ]
 basicConstraints = critical,CA:false
 keyUsage = critical,digitalSignature
@@ -46,7 +46,7 @@ security import "$TMP/cert.pem" -k "$KEYCHAIN" -T /usr/bin/codesign
 
 if ! security find-identity -p codesigning | grep -q "\"$NAME\""; then
 	echo "失敗: identity が見つかりません。Keychain Access の 証明書アシスタント から" >&2
-	echo "      「Koe Dev」という名前でコード署名用の自己署名証明書を作ってください。" >&2
+	echo "      「Lore Dev」という名前でコード署名用の自己署名証明書を作ってください。" >&2
 	exit 1
 fi
 

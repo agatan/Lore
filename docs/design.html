@@ -3,13 +3,13 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Koe 内部設計リファレンス</title>
+<title>Lore 内部設計リファレンス</title>
 <link rel="stylesheet" href="reference.css">
 </head>
 <body>
 <header>
 <p class="eyebrow">Implementation reference</p>
-<h1>Koe 内部設計</h1>
+<h1>Lore 内部設計</h1>
 <p class="lead">現在のtarget、論理module、runtime flow、永続化、公開adapterをコードに対応づけた実装俯瞰です。設計思想ではなく、変更時にどこを読むかを示します。</p>
 <p class="links">
 <a href="design.md">Markdown版</a>
@@ -47,62 +47,62 @@
 <tbody>
 <tr>
 <td>
-<code>Koe.app</code>
+<code>Lore.app</code>
 </td>
 <td>
-<code>Sources/Koe/main.swift</code>
+<code>Sources/Lore/main.swift</code>
 <br>
-<code>Sources/Koe/AppIntents.swift</code>
+<code>Sources/Lore/AppIntents.swift</code>
 </td>
 <td>SwiftUI app、menu bar、windows、App Intents</td>
 </tr>
 <tr>
 <td>
-<code>koe-cli</code>
+<code>lore-cli</code>
 </td>
 <td>
-<code>Sources/KoeCLI/main.swift</code>
+<code>Sources/LoreCLI/main.swift</code>
 </td>
 <td>CLI</td>
 </tr>
 <tr>
 <td>
-<code>koe-mcp</code>
+<code>lore-mcp</code>
 </td>
 <td>
-<code>Sources/KoeMCP/main.swift</code>
+<code>Sources/LoreMCP/main.swift</code>
 </td>
 <td>stdio JSON-RPC MCP server</td>
 </tr>
 <tr>
 <td>
-<code>KoeKit</code>
+<code>LoreKit</code>
 </td>
 <td>
-<code>Sources/KoeKit/</code>
+<code>Sources/LoreKit/</code>
 </td>
 <td>domain、use case、adapter、UI</td>
 </tr>
 <tr>
 <td>
-<code>KoeKitTests</code>
+<code>LoreKitTests</code>
 </td>
 <td>
-<code>Tests/KoeKitTests/</code>
+<code>Tests/LoreKitTests/</code>
 </td>
 <td>単体・統合test</td>
 </tr>
 </tbody>
 </table>
-<pre>Koe ─────┐
-KoeCLI ──┼──&gt; KoeKit ──&gt; GRDB / whisper.cpp
-KoeMCP ──┘</pre>
-<p>外部依存はGRDB Swift Packageと公式whisper.cpp XCFrameworkです。<code>Domain</code>、<code>App</code>、<code>Engines</code>などは単一の<code>KoeKit</code> target内の論理モジュールです。</p>
+<pre>Lore ─────┐
+LoreCLI ──┼──&gt; LoreKit ──&gt; GRDB / whisper.cpp
+LoreMCP ──┘</pre>
+<p>外部依存はGRDB Swift Packageと公式whisper.cpp XCFrameworkです。<code>Domain</code>、<code>App</code>、<code>Engines</code>などは単一の<code>LoreKit</code> target内の論理モジュールです。</p>
 <p class="callout">
-<code>Domain</code>や<code>App</code>は単一の<code>KoeKit</code> target内の論理moduleです。folder間依存はSwift moduleとして強制されていません。</p>
+<code>Domain</code>や<code>App</code>は単一の<code>LoreKit</code> target内の論理moduleです。folder間依存はSwift moduleとして強制されていません。</p>
 </section>
 <section id="modules">
-<h2>2. KoeKit modules</h2>
+<h2>2. LoreKit modules</h2>
 <table>
 <thead>
 <tr>
@@ -144,7 +144,7 @@ KoeMCP ──┘</pre>
 <code>Persistence/</code>
 </td>
 <td>
-<code>KoeDatabase</code>、各Store</td>
+<code>LoreDatabase</code>、各Store</td>
 <td>schema、migration、query、backup</td>
 </tr>
 <tr>
@@ -170,7 +170,7 @@ KoeMCP ──┘</pre>
 <code>Automation/</code>
 </td>
 <td>
-<code>KoeAutomationService</code>
+<code>LoreAutomationService</code>
 </td>
 <td>CLI/MCP共通の日一覧・期間取得・日別export・検索・memo追加use case</td>
 </tr>
@@ -188,7 +188,7 @@ KoeMCP ──┘</pre>
 <code>UI/</code>
 </td>
 <td>
-<code>KoeApp</code>、windows、settings、HUD</td>
+<code>LoreApp</code>、windows、settings、HUD</td>
 <td>app lifecycle、window所有、SwiftUI表示・操作</td>
 </tr>
 </tbody>
@@ -197,7 +197,7 @@ KoeMCP ──┘</pre>
 <section id="boot">
 <h2>3. Processと起動</h2>
 <p>
-<code>KoeApp</code>はMenuBarExtraを常設します。<code>KoeApplicationDelegate</code>はwindow sceneの生成有無に依存せずruntimeを起動し、<code>KoeWindowPresenter</code>がmain、settings、life-log miniの各windowを一意に所有します。Main windowは1680×960 ptで生成します。Presenterはwindowをkey windowにした後、activation policyの切替がwindow serverへ反映されるまで短く待ち、activeになるまで最大1秒だけactivateを再要求します。明示的な表示要求では対象windowを前面にします。UI、menu、hotkeyは<code>AppEnvironment</code>の同じ表示actionを呼び、同種windowを重複生成しません。<code>AppEnvironment</code>は<code>@MainActor @Observable</code>のcomposition rootです。</p>
+<code>LoreApp</code>はMenuBarExtraを常設します。<code>LoreApplicationDelegate</code>はwindow sceneの生成有無に依存せずruntimeを起動し、<code>LoreWindowPresenter</code>がmain、settings、life-log miniの各windowを一意に所有します。Main windowは1680×960 ptで生成します。Presenterはwindowをkey windowにした後、activation policyの切替がwindow serverへ反映されるまで短く待ち、activeになるまで最大1秒だけactivateを再要求します。明示的な表示要求では対象windowを前面にします。UI、menu、hotkeyは<code>AppEnvironment</code>の同じ表示actionを呼び、同種windowを重複生成しません。<code>AppEnvironment</code>は<code>@MainActor @Observable</code>のcomposition rootです。</p>
 <div class="flow">
 <div class="step">Settings / Engines生成</div>
 <div class="arrow">→</div>
@@ -266,7 +266,7 @@ KoeMCP ──┘</pre>
 <div class="arrow">→</div>
 <div class="step">Timeline / activity再読込</div>
 </div>
-<p>Life logから要約、話題、TODOを生成するLLM経路は持ちません。振り返りや作業整理は外部の汎用AIがCLI/MCPの日別exportと検索を読む前提で、Koeはsource of truthの記録、検索、書き出しだけを担います。</p>
+<p>Life logから要約、話題、TODOを生成するLLM経路は持ちません。振り返りや作業整理は外部の汎用AIがCLI/MCPの日別exportと検索を読む前提で、Loreはsource of truthの記録、検索、書き出しだけを担います。</p>
 <ul>
 <li>音声入力とは独立してaudioを連続耐久化し、Life Log STTはadaptiveな発話burstごとのpreviewと確定jobです。</li>
 <li>Audio chunkは復旧単位です。30秒ごとに加えてburst確定時にもwriter queue上の入力を原子的にcommitし、最終認識は対応するcommit callback後に開始します。Checkpoint後は定期rotationを30秒後へ再設定し、同時rotationによる空chunkを作りません。</li>
@@ -385,19 +385,20 @@ KoeMCP ──┘</pre>
 </tr>
 </tbody>
 </table>
+<p>旧名Koeからの移行は<code>Persistence/LegacyKoeMigration</code>に閉じ込め、旧名（<code>dev.agatan.Koe</code>、<code>Koe/</code>、<code>koe.sqlite</code>、<code>koe.settings.v1</code>）はこのfileとそのtestだけが知ります。<code>LoreDatabase.openDefault()</code>はDBを開く前（既存のmigration直前backupより前）に旧folderを同じvolume内のrenameで<code>Lore/</code>へ移し、<code>koe.sqlite</code>と<code>-wal</code>/<code>-shm</code>/<code>-journal</code>を<code>lore.sqlite</code>側へ改名します（本体を最後に移し、途中で止まっても次回続きから改名）。新旧両方があれば混ぜずに旧folderを残し、<code>AppEnvironment.dataMigrationIssue</code>としてmenu barに出します。移動が失敗したら例外を返してDBを開きません。保存audioの絶対pathは<code>LifeLogStore.rewriteAudioPaths</code>が開くたびに旧folder配下の行だけ付け替えます。backup名はapp名を含まないため、移した後も7世代の数に入ります。設定は<code>AppEnvironment.settings</code>の生成前に旧domainを一度だけ写し（鍵は<code>lore.settings.v1</code>へ改名、新domainに設定があれば写さない）、Keychainは起動直後に<code>SecretStore.migrateLegacyKoeService</code>が旧serviceから写してから旧itemを消し、写せなかったものは旧itemを残して理由を出します。CLI/MCPは設定とfolderの移行を同じ手順で行い、Keychainには触れません。UI test bundleとscreenshot demoは移行しません。</p>
 <p>Named migrationは<code>v1</code>から<code>v11</code>です。<code>v9-remove-todo-summary-usage</code>はTODO、日次要約、token集計、会話区切りのtableとFTSを削除し、<code>life_log_utterances</code>を<code>conversation_id</code>なしで作り直してFTSを再構築します。削除前の内容はmigration直前backupに残ります。<code>v10-sync</code>は同期用tableとtriggerを追加し、<code>life_log_utterances.audio_chunk_id</code>をNULL許容へ作り直します（<a href="#sync">7.1</a>）。<code>v11-remove-vocab-suggestions</code>は履歴からの語彙候補を廃止したため<code>vocab_suggestions</code>を削除し、候補から登録済みの語彙は<code>vocabulary</code>に残します。</p>
-<p>DBは<code>Application Support/Koe/koe.sqlite</code>、whisper.cpp modelと途中downloadは<code>Application Support/Koe/Models/WhisperCpp/</code>です。既存DBはmigration前と1日1回backupし、最新7fileを保持します。全data削除はbackup、新旧model、途中fileも削除します。</p>
+<p>DBは<code>Application Support/Lore/lore.sqlite</code>、whisper.cpp modelと途中downloadは<code>Application Support/Lore/Models/WhisperCpp/</code>です。既存DBはmigration前と1日1回backupし、最新7fileを保持します。全data削除はbackup、新旧model、途中fileも削除します。</p>
 </section>
 <section id="sync">
 <h2>7.1 Mac間同期</h2>
-<p><code>Sync/</code>は利用者が選んだfolderを経由するMac間同期です。Koeはnetworkへ接続せず、folderの提供元が運ぶ暗号化fileだけを読み書きします。</p>
+<p><code>Sync/</code>は利用者が選んだfolderを経由するMac間同期です。Loreはnetworkへ接続せず、folderの提供元が運ぶ暗号化fileだけを読み書きします。</p>
 <ul>
 <li><strong>変更の記録</strong>: <code>v10-sync</code>が<code>life_log_utterances</code>、<code>life_log_memos</code>、<code>sessions</code>、<code>vocabulary</code>のINSERT/UPDATE/DELETE triggerを作り、<code>sync_control</code>の<code>enabled=1</code>かつ<code>suppressed=0</code>の間だけ<code>sync_outbox(entity, record_id, changed_at)</code>へ記録します。CLI/MCPは読み取り専用のため、別processからの書き込みはありません。保持期間による削除、一括削除、全data削除、他のMacからの適用は<code>suppressed=1</code>の同じtransaction内で行い、outboxへ載せません。</li>
-<li><strong>書き出し</strong>: <code>SyncEngine.export</code>はoutboxを読み、行が残っていれば現在の列値をupsert、無ければtombstoneにしたbatchを作ります。<code>&lt;folder&gt;/Koe Sync/devices/&lt;device-id&gt;/&lt;10桁seq&gt;.koesync</code>へ一時fileを書いてrenameし、その後のtransactionで、書き出し時と<code>changed_at</code>が同じoutbox行だけを消して<code>sync_versions</code>へ版を記録します。seqはDBの次番号と既存file最大値+1の大きい方で、file書込後のcrashでも番号を再利用しません。</li>
+<li><strong>書き出し</strong>: <code>SyncEngine.export</code>はoutboxを読み、行が残っていれば現在の列値をupsert、無ければtombstoneにしたbatchを作ります。<code>&lt;folder&gt;/Lore Sync/devices/&lt;device-id&gt;/&lt;10桁seq&gt;.loresync</code>へ一時fileを書いてrenameし、その後のtransactionで、書き出し時と<code>changed_at</code>が同じoutbox行だけを消して<code>sync_versions</code>へ版を記録します。seqはDBの次番号と既存file最大値+1の大きい方で、file書込後のcrashでも番号を再利用しません。</li>
 <li><strong>取り込み</strong>: 自分以外のdevice directoryを<code>sync_cursors</code>の次seqから連番で読みます。復号・検証・適用とcursor更新を1 transactionで行い、失敗したfileで止めて同じdeviceの後続を待たせます。iCloud Driveの<code>.icloud</code> placeholderはdownloadを要求して次回へ回します。</li>
 <li><strong>競合</strong>: 版は<code>(changed_at, device_id)</code>の辞書順で比較し、新しい方だけを適用します（後勝ち）。未書き出しのoutbox行も自分の版として比較に含めます。Tombstoneも<code>sync_versions</code>に<code>deleted=1</code>で残し、古いupsertで復活させません。</li>
 <li><strong>列の範囲</strong>: 発話は<code>id</code>、時刻、<code>text</code>だけを送り、他のMacでは<code>audio_chunk_id</code>と<code>calendar_event_id</code>をNULLで保存します。このため<code>v10-sync</code>は<code>life_log_utterances.audio_chunk_id</code>をNULL許容へ作り直し、FTSを再構築します。履歴は<code>sessions</code>の全列、語彙は<code>vocabulary</code>の全列、memoは全列です。Audio、calendar snapshot、mode、設定、API keyは対象外です。</li>
-<li><strong>file形式</strong>: <code>KOESYNC</code> magic、format version 1 byte、header JSON長(UInt32 big endian)、header JSON（<code>device</code>, <code>seq</code>）、AES-GCM combined box（nonce 12 byte + 暗号文 + tag 16 byte）。Magicからheader JSONまでをassociated dataとして認証します。平文はLZFSE圧縮したbatch JSONです。<code>Koe Sync/keycheck.koesync</code>は既知の平文を同じ鍵で封じたfileで、参加時に同期コードを検証します。</li>
+<li><strong>file形式</strong>: <code>LORESYNC</code> magic、format version 1 byte、header JSON長(UInt32 big endian)、header JSON（<code>device</code>, <code>seq</code>）、AES-GCM combined box（nonce 12 byte + 暗号文 + tag 16 byte）。Magicからheader JSONまでをassociated dataとして認証します。平文はLZFSE圧縮したbatch JSONです。<code>Lore Sync/keycheck.loresync</code>は既知の平文を同じ鍵で封じたfileで、参加時に同期コードを検証します。</li>
 <li><strong>鍵と状態</strong>: 256-bit鍵は<code>SecretStore</code>の<code>sync.key</code>（non-synchronizable generic password）に同期コード文字列として保存します。同期コードは鍵32 byteとSHA-256先頭2 byteをRFC 4648 base32にして4文字ずつ区切ったものです。Device ID、folder bookmark、次seq、最終同期時刻、最後のerrorは<code>sync_control</code>の1行に置き、全data削除と同期解除で消します。</li>
 <li><strong>実行契機</strong>: <code>SyncCoordinator</code>(<code>@MainActor</code>)はoutboxの変更をGRDBの<code>DatabaseRegionObservation</code>で受けて5秒debounceで書き出し、起動時、app activation、120秒timer、「今すぐ同期」で書き出しと取り込みを行います。取り込みで行が変わった場合は履歴、語彙、life logを再読込します。</li>
 </ul>
@@ -408,11 +409,11 @@ KoeMCP ──┘</pre>
 </section>
 <section id="ui">
 <h2>9. UIとwindow対応</h2>
-<table><thead><tr><th>View</th><th>内容</th></tr></thead><tbody><tr><td><code>KoeTheme</code></td><td>固定brand palette。Glassは浮くもの(HUD、menu、main/miniの<code>LifeLogComposerBar</code>)だけに使い、sidebarとtoolbarはsystemの素材に任せる。設定sectionは淡い塗りと細い罫線で区切る。大見出しは<code>titleFont</code>の1段だけ足す。<code>SettingsCard</code>が行間の罫線を入れる</td></tr><tr><td><code>MenuBarPanel</code></td><td>用途別quick action。Tabで隠さず、ライフログと音声入力を同じ文法の二枚のcard（左に丸い主操作、右に状態、下に行き先）に並べる。共通footerは設定と終了だけ</td></tr><tr><td><code>HudController</code> / <code>HudView</code></td><td>音声入力とボイスメモの一時表示。普段は高さ44 ptのglass capsule（状態の印、録音中は波形と経過時間・それ以外は状態の語、mode、esc）で、逐次textや終了時の補足があると上へ本文の段が伸びて角の丸い板になる。逐次textは末尾の約100字だけ、入力deviceはtooltip</td></tr><tr><td><code>MenuBarLabel</code></td><td>どの状態でもKoe markを使い、状態は右下の点（録音rose、処理中blue、完了mint、要確認gold、再接続中はgoldの輪）で足す。入力level表示が有効な録音中は棒が入力levelで動く。点がない時はtemplate画像</td></tr><tr><td><code>MainWindowView</code></td><td><code>NavigationSplitView</code>。全高sidebarのnavigation rowでlife log/historyを切り替え、life log表示中はcalendarもsidebarに置く。<code>.fullSizeContentView</code>と<code>.unified</code> toolbar</td></tr><tr><td><code>LifeLogWindow</code></td><td>中央に置いた約680 ptの一列timelineと右の<code>.inspector</code>。Timelineは大見出し（「今日」、日付と曜日、記録状態、終日の予定）から始まり、行の並び・予定区間の線の色・空き時間を<code>LifeLogTimelineLayout</code>が決め、行は共通の<code>TimelineRail</code>上に描く。Inspector切替/検索/書き出しはwindow toolbar、最下部は浮いた<code>LifeLogComposerBar</code></td></tr><tr><td><code>LifeLogCaptureControl</code></td><td>Menu barの記録状態と「記録を開始」/「停止」のcapsule button。状態の文言・symbol・色は<code>LifeLogCaptureStatus</code>でmain/miniの<code>LifeLogComposerBar</code>と共有する。自動記録が有効なら、scheduleが始めた記録中は終了時刻、停止中は次の開始時刻を補足に出す</td></tr><tr><td><code>LifeLogScheduleSettingsView</code></td><td>Life log設定の「自動記録」card。有効化、曜日capsule、開始・終了時刻を<code>AppEnvironment.updateLifeLogSchedule</code>へ渡し、次の時間帯を補足に示す</td></tr><tr><td><code>LifeLogTranscriptionProgressRow</code></td><td>実際のSTT job中だけShimmer、対象audio長、処理経過時間を表示</td></tr><tr><td><code>LifeLogExportSheet</code></td><td>人間向けMarkdownをbackground生成して共有</td></tr><tr><td><code>LifeLogComposerBar</code></td><td>Main/mini最下部に浮くglass capsule。左端の記録buttonと状態、続いてmemo入力を並べる</td></tr><tr><td><code>LifeLogMemoComposer</code></td><td>手入力とボイスメモを同じmemoとして追加</td></tr><tr><td><code>TimelineEntryRow</code></td><td>main/miniで共有する1行。Memoだけはhoverの編集buttonかdouble-clickでinline編集し、空文字を除いて<code>LifeLogCoordinator.updateMemo</code>へ渡す。作成時刻は変えない。左の時刻列と<code>TimelineRail</code>の印（発話は点、memo・音声入力は記号）を持つ</td></tr><tr><td><code>HistoryBrowserView</code></td><td>音声入力履歴の一覧columnと詳細。詳細は大見出しの時刻から始まり、読みやすい幅で中央に置く。挿入した文章を本文として大きく、聞き取った文字を補助として示し、かかった時間は話し終わってから挿入までを聞き取り・仕上げ・挿入の帯に分ける。コピー、削除</td></tr><tr><td><code>LifeLogDayInspector</code></td><td>Inspector「この日」。話した時間（発話のstart〜endの合計）と件数、<code>LifeLogDayMap</code>。Day mapは<code>LifeLogDayMapLayout</code>が決めた時間範囲（記録と予定を含み最低9〜18時）を縦に割り、時刻目盛り、記録の印、重なりを列に分けた予定block、今日の現在時刻線を描く。予定blockと位置のclickは<code>LifeLogCoordinator.jumpToTime</code>へ渡す</td></tr><tr><td><code>LifeLogMiniWindow</code></td><td>予定と記録の常時手前window。全体を半透明素材で描き、mainと同じ浮いたbarを持つ</td></tr><tr><td><code>WhisperModelSettingsView</code></td><td>音声入力とlife logで共有するmodelの選択、download進捗・cancel・再試行・削除・使用中状態。両設定画面で同じviewを使う</td></tr><tr><td><code>SyncSettingsView</code></td><td>共通の「同期」section。新しく始める（folder選択→同期コード表示）、同期コードで参加、状態・最終同期・error、今すぐ同期、確認つきの同期コード再表示、同期の解除</td></tr><tr><td><code>SettingsWindowView</code></td><td>10 settings section。Privacyは保存場所の下にKoe dataの合計使用量を一行で示す。各設定行は操作列を共通幅で確保し、可変幅controlの右端を揃える</td></tr><tr><td>HUD</td><td>通常音声入力またはボイスメモの状態表示</td></tr></tbody></table>
+<table><thead><tr><th>View</th><th>内容</th></tr></thead><tbody><tr><td><code>LoreTheme</code></td><td>固定brand palette。Glassは浮くもの(HUD、menu、main/miniの<code>LifeLogComposerBar</code>)だけに使い、sidebarとtoolbarはsystemの素材に任せる。設定sectionは淡い塗りと細い罫線で区切る。大見出しは<code>titleFont</code>の1段だけ足す。<code>SettingsCard</code>が行間の罫線を入れる</td></tr><tr><td><code>MenuBarPanel</code></td><td>用途別quick action。Tabで隠さず、ライフログと音声入力を同じ文法の二枚のcard（左に丸い主操作、右に状態、下に行き先）に並べる。共通footerは設定と終了だけ</td></tr><tr><td><code>HudController</code> / <code>HudView</code></td><td>音声入力とボイスメモの一時表示。普段は高さ44 ptのglass capsule（状態の印、録音中は波形と経過時間・それ以外は状態の語、mode、esc）で、逐次textや終了時の補足があると上へ本文の段が伸びて角の丸い板になる。逐次textは末尾の約100字だけ、入力deviceはtooltip</td></tr><tr><td><code>MenuBarLabel</code></td><td>どの状態でもLore markを使い、状態は右下の点（録音rose、処理中blue、完了mint、要確認gold、再接続中はgoldの輪）で足す。入力level表示が有効な録音中は棒が入力levelで動く。点がない時はtemplate画像</td></tr><tr><td><code>MainWindowView</code></td><td><code>NavigationSplitView</code>。全高sidebarのnavigation rowでlife log/historyを切り替え、life log表示中はcalendarもsidebarに置く。<code>.fullSizeContentView</code>と<code>.unified</code> toolbar</td></tr><tr><td><code>LifeLogWindow</code></td><td>中央に置いた約680 ptの一列timelineと右の<code>.inspector</code>。Timelineは大見出し（「今日」、日付と曜日、記録状態、終日の予定）から始まり、行の並び・予定区間の線の色・空き時間を<code>LifeLogTimelineLayout</code>が決め、行は共通の<code>TimelineRail</code>上に描く。Inspector切替/検索/書き出しはwindow toolbar、最下部は浮いた<code>LifeLogComposerBar</code></td></tr><tr><td><code>LifeLogCaptureControl</code></td><td>Menu barの記録状態と「記録を開始」/「停止」のcapsule button。状態の文言・symbol・色は<code>LifeLogCaptureStatus</code>でmain/miniの<code>LifeLogComposerBar</code>と共有する。自動記録が有効なら、scheduleが始めた記録中は終了時刻、停止中は次の開始時刻を補足に出す</td></tr><tr><td><code>LifeLogScheduleSettingsView</code></td><td>Life log設定の「自動記録」card。有効化、曜日capsule、開始・終了時刻を<code>AppEnvironment.updateLifeLogSchedule</code>へ渡し、次の時間帯を補足に示す</td></tr><tr><td><code>LifeLogTranscriptionProgressRow</code></td><td>実際のSTT job中だけShimmer、対象audio長、処理経過時間を表示</td></tr><tr><td><code>LifeLogExportSheet</code></td><td>人間向けMarkdownをbackground生成して共有</td></tr><tr><td><code>LifeLogComposerBar</code></td><td>Main/mini最下部に浮くglass capsule。左端の記録buttonと状態、続いてmemo入力を並べる</td></tr><tr><td><code>LifeLogMemoComposer</code></td><td>手入力とボイスメモを同じmemoとして追加</td></tr><tr><td><code>TimelineEntryRow</code></td><td>main/miniで共有する1行。Memoだけはhoverの編集buttonかdouble-clickでinline編集し、空文字を除いて<code>LifeLogCoordinator.updateMemo</code>へ渡す。作成時刻は変えない。左の時刻列と<code>TimelineRail</code>の印（発話は点、memo・音声入力は記号）を持つ</td></tr><tr><td><code>HistoryBrowserView</code></td><td>音声入力履歴の一覧columnと詳細。詳細は大見出しの時刻から始まり、読みやすい幅で中央に置く。挿入した文章を本文として大きく、聞き取った文字を補助として示し、かかった時間は話し終わってから挿入までを聞き取り・仕上げ・挿入の帯に分ける。コピー、削除</td></tr><tr><td><code>LifeLogDayInspector</code></td><td>Inspector「この日」。話した時間（発話のstart〜endの合計）と件数、<code>LifeLogDayMap</code>。Day mapは<code>LifeLogDayMapLayout</code>が決めた時間範囲（記録と予定を含み最低9〜18時）を縦に割り、時刻目盛り、記録の印、重なりを列に分けた予定block、今日の現在時刻線を描く。予定blockと位置のclickは<code>LifeLogCoordinator.jumpToTime</code>へ渡す</td></tr><tr><td><code>LifeLogMiniWindow</code></td><td>予定と記録の常時手前window。全体を半透明素材で描き、mainと同じ浮いたbarを持つ</td></tr><tr><td><code>WhisperModelSettingsView</code></td><td>音声入力とlife logで共有するmodelの選択、download進捗・cancel・再試行・削除・使用中状態。両設定画面で同じviewを使う</td></tr><tr><td><code>SyncSettingsView</code></td><td>共通の「同期」section。新しく始める（folder選択→同期コード表示）、同期コードで参加、状態・最終同期・error、今すぐ同期、確認つきの同期コード再表示、同期の解除</td></tr><tr><td><code>SettingsWindowView</code></td><td>10 settings section。Privacyは保存場所の下にLore dataの合計使用量を一行で示す。各設定行は操作列を共通幅で確保し、可変幅controlの右端を揃える</td></tr><tr><td>HUD</td><td>通常音声入力またはボイスメモの状態表示</td></tr></tbody></table>
 </section>
 <section id="automation">
 <h2>10. 自動化境界</h2>
-<p>App Intents、CLI、MCPを公開します。CLI/MCPは<code>KoeAutomationService</code>を共有し、記録がある日の一覧、期間の構造化項目、日別export、横断検索を読み取り専用で提供します。期間取得は画面と同じ<code>LifeLogStore.day</code>を日ごとに読み、音声入力優先の発話projectionと参加中予定filterをそのまま使います。Koeへの書き込みは提供しません。App Intentsは<code>AppEnvironment.boot()</code>の完了後にcapture開始・終了だけを実行します。開始Actionはマイクを扱うためforeground mode、終了Actionはbackground modeです。Shortcutsからの実行にはmacOSが検証できるbundle署名が必要なため、buildは有効な<code>Apple Development</code> identityを自己署名より優先します。公開commandとtool schemaは外部仕様に列挙します。</p>
+<p>App Intents、CLI、MCPを公開します。CLI/MCPは<code>LoreAutomationService</code>を共有し、記録がある日の一覧、期間の構造化項目、日別export、横断検索を読み取り専用で提供します。期間取得は画面と同じ<code>LifeLogStore.day</code>を日ごとに読み、音声入力優先の発話projectionと参加中予定filterをそのまま使います。Loreへの書き込みは提供しません。App Intentsは<code>AppEnvironment.boot()</code>の完了後にcapture開始・終了だけを実行します。開始Actionはマイクを扱うためforeground mode、終了Actionはbackground modeです。Shortcutsからの実行にはmacOSが検証できるbundle署名が必要なため、buildは有効な<code>Apple Development</code> identityを自己署名より優先します。公開commandとtool schemaは外部仕様に列挙します。</p>
 <p>LifeLogTextExporterは90秒未満の連続発話を別種の表示項目で区切ってまとめます。LifeLogExportSheetはプレビューもbackgroundで4,000文字に制限します。Timelineの予定rowは淡い塗りと左端の色帯で発話と区別します。</p>
 </section>
 <section id="concurrency">
@@ -464,7 +465,7 @@ KoeMCP ──┘</pre>
 </tr>
 <tr>
 <td>主要window</td>
-<td>KoeApp、View、AppEnvironment</td>
+<td>LoreApp、View、AppEnvironment</td>
 <td>
 <code>make ui-test</code>、spec/design</td>
 </tr>
@@ -485,7 +486,7 @@ KoeMCP ──┘</pre>
 </section>
 <section id="tests">
 <h2>13. Test配置</h2>
-<p><code>Tests/KoeKitTests</code>はnoise floor校正と追従、相対level差による発話開始、1.5/1秒tier、whisper.cppの1.5秒preview cadenceと5秒rolling window、5分flushをdomain testで固定します。<code>make ui-test</code>は本番と別のbundle IDを持つ署名済み<code>KoeUITests.app</code>を別process instanceとして起動して主要CUJを検証します。UI test bundleは専用UserDefaultsとインモリDBを使い、global hotkeyと権限監視を起動しません。E2E runnerは専用bundle ID以外のappを終了せず、本番bundle IDを指定された場合は実行を拒否します。同期は<code>SyncTests</code>が、同期コードとfileの暗号（違う鍵、改ざん、途中まで、新形式）と、2つのin-memory DBと一時folderによる往復（memo・履歴・語彙・発話、後勝ち、tombstone、保持期間と一括削除の非伝播、初回snapshot、読めないfileでのcursor停止、番号の非再利用、解除）、<code>v10-sync</code> migrationを検証します。</p>
+<p><code>Tests/LoreKitTests</code>はnoise floor校正と追従、相対level差による発話開始、1.5/1秒tier、whisper.cppの1.5秒preview cadenceと5秒rolling window、5分flushをdomain testで固定します。<code>make ui-test</code>は本番と別のbundle IDを持つ署名済み<code>LoreUITests.app</code>を別process instanceとして起動して主要CUJを検証します。UI test bundleは専用UserDefaultsとインモリDBを使い、global hotkeyと権限監視を起動しません。E2E runnerは専用bundle ID以外のappを終了せず、本番bundle IDを指定された場合は実行を拒否します。同期は<code>SyncTests</code>が、同期コードとfileの暗号（違う鍵、改ざん、途中まで、新形式）と、2つのin-memory DBと一時folderによる往復（memo・履歴・語彙・発話、後勝ち、tombstone、保持期間と一括削除の非伝播、初回snapshot、読めないfileでのcursor停止、番号の非再利用、解除）、<code>v10-sync</code> migrationを検証します。</p>
 </section>
 </main>
 <footer>詳細な型と経路は <a href="design.md">Markdown版</a>、利用者との契約は <a href="spec.html">外部仕様</a> を参照してください。</footer>

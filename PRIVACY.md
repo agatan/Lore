@@ -1,12 +1,12 @@
-# Koe のデータ取り扱い
+# Lore のデータ取り扱い
 
-Koe は音声認識をMac上で実行し、Cloud STTは使用しません。通常の音声入力・ボイスメモとDaily Life Logは、それぞれApple SpeechAnalyzer、または利用者がローカルへダウンロードしたwhisper.cpp GGML modelを選べます。whisper.cpp modelは両用途で共有し、Mac内だけで実行します。Life Logの録音は連続して耐久化します。発話中のrolling暫定textは入力確認のためメモリだけに保持し、DBへ保存しません。発話量と有声比率を満たさない生活音・無音はSTTへ渡さず、有効な発話だけを保存audioから最終認識します。通常の口述音声は処理中のメモリだけで扱い、保存も送信もしません。
+Lore は音声認識をMac上で実行し、Cloud STTは使用しません。通常の音声入力・ボイスメモとDaily Life Logは、それぞれApple SpeechAnalyzer、または利用者がローカルへダウンロードしたwhisper.cpp GGML modelを選べます。whisper.cpp modelは両用途で共有し、Mac内だけで実行します。Life Logの録音は連続して耐久化します。発話中のrolling暫定textは入力確認のためメモリだけに保持し、DBへ保存しません。発話量と有声比率を満たさない生活音・無音はSTTへ渡さず、有効な発話だけを保存audioから最終認識します。通常の口述音声は処理中のメモリだけで扱い、保存も送信もしません。
 
-Daily Life LogのContinuous Captureを利用者が明示的に有効にした場合は例外です。文字起こしや後段処理に失敗しても発話を回収できるよう、短い音声チャンクを `~/Library/Application Support/Koe/LifeLog/` に保存します。保存音声を外部サービスへ送信しません。
+Daily Life LogのContinuous Captureを利用者が明示的に有効にした場合は例外です。文字起こしや後段処理に失敗しても発話を回収できるよう、短い音声チャンクを `~/Library/Application Support/Lore/LifeLog/` に保存します。保存音声を外部サービスへ送信しません。
 
 ## 文章の仕上げ
 
-既定のApple Foundation Models、およびローカルのOllama／LM Studioでは、文字起こしと指示文をこのMac内で処理し、外部サービスへ送信しません。Koeが接続するローカルAPIはlocalhostに固定しています。
+既定のApple Foundation Models、およびローカルのOllama／LM Studioでは、文字起こしと指示文をこのMac内で処理し、外部サービスへ送信しません。Loreが接続するローカルAPIはlocalhostに固定しています。
 
 利用者が設定画面でOpenAI、Claude、Gemini、Groqのいずれかを明示的に選んだ場合に限り、次のデータを選択したサービスのAPIへ送信します。
 
@@ -15,13 +15,13 @@ Daily Life LogのContinuous Captureを利用者が明示的に有効にした場
 - 選択されたモードの指示
 - 登録された語彙
 
-録音した音声、通常の口述履歴、Daily Life Logの発話・メモ・予定、前面アプリの情報は送信しません。Koeはライフログを要約・分析するためにLLMやクラウドへ送信することはありません。ライフログをAIで振り返る場合は、利用者がCLIまたはMCPで選んだAIクライアントへ渡します。その送信先と条件は、そのクライアントの設定に従います。CLIとMCPサーバー（`koe-mcp`）はMac内で動き、標準入出力でつないだクライアントへだけ結果を返します。Koe側から外部へ通信せず、Koeのデータを読むだけで変更しません。モデル一覧取得と接続確認では、保存されたAPIキーを選択先APIの認証に使用します。
+録音した音声、通常の口述履歴、Daily Life Logの発話・メモ・予定、前面アプリの情報は送信しません。Loreはライフログを要約・分析するためにLLMやクラウドへ送信することはありません。ライフログをAIで振り返る場合は、利用者がCLIまたはMCPで選んだAIクライアントへ渡します。その送信先と条件は、そのクライアントの設定に従います。CLIとMCPサーバー（`lore-mcp`）はMac内で動き、標準入出力でつないだクライアントへだけ結果を返します。Lore側から外部へ通信せず、Loreのデータを読むだけで変更しません。モデル一覧取得と接続確認では、保存されたAPIキーを選択先APIの認証に使用します。
 
 クラウドAPIに送信したデータには、選択したサービス側の利用条件とプライバシーポリシーが適用されます。
 
 ## Mac に保存するデータ
 
-Koe は `~/Library/Application Support/Koe/koe.sqlite` に次のデータを保存します。
+Lore は `~/Library/Application Support/Lore/lore.sqlite` に次のデータを保存します。旧名Koeで使っていた場合は、初回起動時に `~/Library/Application Support/Koe/` を丸ごとこの場所へ移し、Keychainの旧項目（service `dev.agatan.Koe`）を新しい項目（service `dev.agatan.Lore`）へ写してから消します。この移行はMac内で完結し、外部へは何も送りません。
 
 - 生の文字起こしと整形後の文章
 - 利用したモード、指示文、エンジン、モデル
@@ -30,17 +30,17 @@ Koe は `~/Library/Application Support/Koe/koe.sqlite` に次のデータを保�
 - モード、共通ルール、語彙
 - Daily Life Logの音声、timestamp付き発話とテキストメモ、予定snapshot
 
-whisper.cpp modelを選んだ場合、model fileとdownload途中の一時fileを `~/Library/Application Support/Koe/Models/WhisperCpp/` に保存します。Model取得先へ送るのはmodel fileを取得するためのrequestだけで、音声、文字起こし、予定、履歴、前面app情報を含めません。設定画面でmodelごとの容量、download進捗、失敗を確認し、cancel、再試行、削除できます。使用中のmodelは停止または切替完了まで削除しません。
+whisper.cpp modelを選んだ場合、model fileとdownload途中の一時fileを `~/Library/Application Support/Lore/Models/WhisperCpp/` に保存します。Model取得先へ送るのはmodel fileを取得するためのrequestだけで、音声、文字起こし、予定、履歴、前面app情報を含めません。設定画面でmodelごとの容量、download進捗、失敗を確認し、cancel、再試行、削除できます。使用中のmodelは停止または切替完了まで削除しません。
 
-構造化データは、DBマイグレーション前および1日1回の起動時に `~/Library/Application Support/Koe/Backups/` へSQLiteスナップショットとして保存します。直近7世代を保持します。ライフログ音声は容量と機微性が大きいため複製せず、元ファイルの保持期間を適用します。
+構造化データは、DBマイグレーション前および1日1回の起動時に `~/Library/Application Support/Lore/Backups/` へSQLiteスナップショットとして保存します。直近7世代を保持します。ライフログ音声は容量と機微性が大きいため複製せず、元ファイルの保持期間を適用します。
 
 API キーと同期鍵は macOS Keychain に保存し、設定ファイル、履歴 DB、ログには保存しません。ログには発話内容、整形結果、語彙、API キーを出力しません。
 
 口述履歴の既定保持期間は無期限です。ライフログ音声は文字起こしの成功後に削除するのが既定で、7日または30日へ変更できます。whisper.cpp modelは利用者が個別に削除するか、全データを削除するまで保持します。
 
-設定の「プライバシー」では、音声入力履歴だけ、ライフログ一式、またはKoeの全データを選んで削除できます。全データの削除には、履歴、バックアップ、ライフログ音声、発話、メモ、予定の控え、語彙、モード、download済みwhisper.cpp modelと途中file、旧WhisperKit model、設定、Keychain内の各APIキー（旧版でライフログ用に登録したキーを含む）と同期鍵が含まれます。同期フォルダ内のファイルは削除しません。
+設定の「プライバシー」では、音声入力履歴だけ、ライフログ一式、またはLoreの全データを選んで削除できます。全データの削除には、履歴、バックアップ、ライフログ音声、発話、メモ、予定の控え、語彙、モード、download済みwhisper.cpp modelと途中file、旧WhisperKit model、設定、Keychain内の各APIキー（旧版でライフログ用に登録したキーを含む）と同期鍵が含まれます。同期フォルダ内のファイルは削除しません。
 
-TODO、日次要約、話題、クラウドAIのtoken集計を保存していた旧版から更新すると、Koeはmigration直前のバックアップを作ってからそれらのデータをDBから削除します。そのバックアップも通常どおり7世代の保持と全データ削除の対象です。
+TODO、日次要約、話題、クラウドAIのtoken集計を保存していた旧版から更新すると、Loreはmigration直前のバックアップを作ってからそれらのデータをDBから削除します。そのバックアップも通常どおり7世代の保持と全データ削除の対象です。
 
 ## Mac間の同期（任意）
 
@@ -48,10 +48,10 @@ TODO、日次要約、話題、クラウドAIのtoken集計を保存していた
 
 - 同期するのは、ライフログの発話テキスト、メモ、音声入力履歴（生の文字起こし、整形後の文章、状態、モードの指示、録音開始時の前面アプリ名と bundle ID、エンジンとモデル、エラー、処理時間）、語彙です。
 - 録音した音声、APIキー、設定、予定の控え、whisper.cpp model、バックアップ、モードは同期しません。
-- Koeは利用者が選んだフォルダ（iCloud Drive、Dropbox、Syncthingなど）の中の `Koe Sync/` に、Mac内で暗号化した変更ファイルだけを書きます。Koe自身は通信せず、ファイルの運搬はフォルダの提供元が行います。
+- Loreは利用者が選んだフォルダ（iCloud Drive、Dropbox、Syncthingなど）の中の `Lore Sync/` に、Mac内で暗号化した変更ファイルだけを書きます。Lore自身は通信せず、ファイルの運搬はフォルダの提供元が行います。
 - 暗号化にはAES-GCM（256-bit鍵）を使います。鍵は「同期コード」として最初のMacで生成し、各MacのKeychainだけに保存します（iCloud Keychainへは同期しません）。フォルダの提供元や、同期コードを持たない第三者はファイルの中身を読めません。ファイルの数、大きさ、更新時刻と、Macごとに無作為に作る識別子は暗号化されずに見えます。
 - 同期コードを知っている人は、そのフォルダの内容を読めます。同期コードは他人に渡さず、参加するMacにだけ入力してください。
-- 同期を解除するか「Koeを初期化」すると、このMacの同期鍵と同期状態を消します。フォルダ内のファイルは削除しないため、不要になったら利用者がフォルダごと削除してください。
+- 同期を解除するか「Loreを初期化」すると、このMacの同期鍵と同期状態を消します。フォルダ内のファイルは削除しないため、不要になったら利用者がフォルダごと削除してください。
 
 ## 権限
 
@@ -60,4 +60,4 @@ TODO、日次要約、話題、クラウドAIのtoken集計を保存していた
 - アクセシビリティ: グローバルホットキーの監視と、前面アプリへのテキスト挿入に使用します。
 - 入力監視: Option+文字keyをグローバルホットキーに設定した場合だけ、その組み合わせの押下・離上を検知するために使用します。それ以外の文字入力は保存・処理しません。
 
-Koe は前面アプリの名前と bundle ID を取得しますが、画面、ウィンドウ、入力欄の内容は読み取りません。
+Lore は前面アプリの名前と bundle ID を取得しますが、画面、ウィンドウ、入力欄の内容は読み取りません。

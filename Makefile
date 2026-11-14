@@ -1,25 +1,26 @@
-# Koe — build / bundle / run
+# Lore — build / bundle / run
 #
 # 権限 (マイク・アクセシビリティ) は .app に対して付与されるため、開発中も
-# 常に `make run` で Koe.app を組み立てて起動する。素の実行ファイルでは
+# 常に `make run` で Lore.app を組み立てて起動する。素の実行ファイルでは
 # CGEventTap もマイクも動かない。
 
 CONFIG ?= debug
-APP := build/Koe.app
+APP := build/Lore.app
 CONTENTS := $(APP)/Contents
-BUNDLE_ID := dev.agatan.Koe
-UI_TEST_APP := build/KoeUITests.app
-UI_TEST_BUNDLE_ID := dev.agatan.Koe.UIE2E
+BUNDLE_ID := dev.agatan.Lore
+UI_TEST_APP := build/LoreUITests.app
+UI_TEST_BUNDLE_ID := dev.agatan.Lore.UIE2E
 
 # 署名 identity。ShortcutsのApp Intentに必要なApple Developmentを優先する。
-# なければ「Koe Dev」を使う(make dev-cert で作れる)。
+# なければ「Lore Dev」を使う(make dev-cert で作れる)。
 # 自己署名は信頼されない扱い(CSSMERR_TP_NOT_TRUSTED)なので find-identity に -v は付けない。
 # ad-hoc 署名だとリビルドごとに identity が変わり、アクセシビリティの許可が毎回無効になる。
 APPLE_DEV_IDENTITY := $(shell security find-identity -v -p codesigning 2>/dev/null | awk '/"Apple Development:/{print $$2; exit}')
-DEV_IDENTITY := $(shell security find-identity -p codesigning 2>/dev/null | grep -o "Koe Dev" | head -1)
-CODESIGN_ID := $(if $(APPLE_DEV_IDENTITY),$(APPLE_DEV_IDENTITY),$(if $(DEV_IDENTITY),Koe Dev,-))
+DEV_IDENTITY := $(shell security find-identity -p codesigning 2>/dev/null | grep -o "Lore Dev" | head -1)
+CODESIGN_ID := $(if $(APPLE_DEV_IDENTITY),$(APPLE_DEV_IDENTITY),$(if $(DEV_IDENTITY),Lore Dev,-))
 BUILD_DIR = .build/$(CONFIG)
-WHISPER_FRAMEWORK = .build/artifacts/koe/WhisperFramework/whisper.xcframework/macos-arm64_x86_64/whisper.framework
+# SwiftPMはroot packageのartifactsをcheckout directory名(小文字)の下に置く。
+WHISPER_FRAMEWORK = .build/artifacts/$(shell basename "$(CURDIR)" | tr A-Z a-z)/WhisperFramework/whisper.xcframework/macos-arm64_x86_64/whisper.framework
 
 .PHONY: all build tools app ui-test-app run stop test ui-test clean install icon dev-cert reset-permissions
 
@@ -28,26 +29,26 @@ all: app
 # 既定の推論はOS内蔵。クラウド／ローカルLLMもURLSessionだけで接続する。
 # xcodebuild も Metal ツールチェーンも要らず、SwiftPM だけでビルドできる。
 build:
-	swift build -c $(CONFIG) --product Koe
+	swift build -c $(CONFIG) --product Lore
 
 ## Shortcutsより細かい自動化向けのCLIとstdio MCPサーバー
 tools:
-	swift build -c $(CONFIG) --product koe-cli
-	swift build -c $(CONFIG) --product koe-mcp
+	swift build -c $(CONFIG) --product lore-cli
+	swift build -c $(CONFIG) --product lore-mcp
 	@mkdir -p build/tools
-	@cp "$(BUILD_DIR)/koe-cli" build/tools/koe
-	@cp "$(BUILD_DIR)/koe-mcp" build/tools/koe-mcp
-	@echo "built build/tools/koe and build/tools/koe-mcp"
+	@cp "$(BUILD_DIR)/lore-cli" build/tools/lore
+	@cp "$(BUILD_DIR)/lore-mcp" build/tools/lore-mcp
+	@echo "built build/tools/lore and build/tools/lore-mcp"
 
-## Koe.app を組み立てて署名する
+## Lore.app を組み立てて署名する
 app: build tools
 	@rm -rf "$(APP)"
 	@mkdir -p "$(CONTENTS)/MacOS" "$(CONTENTS)/Helpers" "$(CONTENTS)/Frameworks" "$(CONTENTS)/Resources/Skills"
-	@cp "$(BUILD_DIR)/Koe" "$(CONTENTS)/MacOS/Koe"
-	@cp build/tools/koe "$(CONTENTS)/Helpers/koe"
-	@cp build/tools/koe-mcp "$(CONTENTS)/Helpers/koe-mcp"
+	@cp "$(BUILD_DIR)/Lore" "$(CONTENTS)/MacOS/Lore"
+	@cp build/tools/lore "$(CONTENTS)/Helpers/lore"
+	@cp build/tools/lore-mcp "$(CONTENTS)/Helpers/lore-mcp"
 	@cp -R "$(WHISPER_FRAMEWORK)" "$(CONTENTS)/Frameworks/whisper.framework"
-	@cp -R Resources/Skills/koe "$(CONTENTS)/Resources/Skills/koe"
+	@cp -R Resources/Skills/lore "$(CONTENTS)/Resources/Skills/lore"
 	@cp Resources/Info.plist "$(CONTENTS)/Info.plist"
 	@cp THIRD_PARTY_NOTICES "$(CONTENTS)/Resources/THIRD_PARTY_NOTICES.txt"
 	@printf 'APPL????' > "$(CONTENTS)/PkgInfo"
@@ -55,16 +56,16 @@ app: build tools
 	@for b in $(BUILD_DIR)/*.bundle; do \
 		[ -e "$$b" ] && cp -R "$$b" "$(CONTENTS)/Resources/" || true; \
 	done
-	@for l in Sources/KoeKit/Resources/*.lproj; do \
+	@for l in Sources/LoreKit/Resources/*.lproj; do \
 		[ -e "$$l" ] && cp -R "$$l" "$(CONTENTS)/Resources/" || true; \
 	done
 	@zsh Scripts/extract-app-intents.sh "$(BUILD_DIR)" "$(CONTENTS)"
 	@codesign --force --sign "$(CODESIGN_ID)" --timestamp=none \
 		"$(CONTENTS)/Frameworks/whisper.framework"
 	@codesign --force --sign "$(CODESIGN_ID)" --identifier $(BUNDLE_ID).cli \
-		--timestamp=none "$(CONTENTS)/Helpers/koe"
+		--timestamp=none "$(CONTENTS)/Helpers/lore"
 	@codesign --force --sign "$(CODESIGN_ID)" --identifier $(BUNDLE_ID).mcp \
-		--timestamp=none "$(CONTENTS)/Helpers/koe-mcp"
+		--timestamp=none "$(CONTENTS)/Helpers/lore-mcp"
 	@codesign --force --sign "$(CODESIGN_ID)" --identifier $(BUNDLE_ID) \
 		--timestamp=none "$(APP)" 2>/dev/null \
 		|| codesign --force --sign "$(CODESIGN_ID)" --identifier $(BUNDLE_ID) "$(APP)"
@@ -73,7 +74,7 @@ ifeq ($(CODESIGN_ID),-)
 	@echo "note: ad-hoc 署名です。リビルドごとにアクセシビリティの許可が外れます → make dev-cert"
 endif
 
-## 本番Koeとbundle ID、UserDefaults、process instanceを共有しないUI E2E専用app
+## 本番Loreとbundle ID、UserDefaults、process instanceを共有しないUI E2E専用app
 ui-test-app: app
 	@rm -rf "$(UI_TEST_APP)"
 	@cp -R "$(APP)" "$(UI_TEST_APP)"
@@ -83,13 +84,13 @@ ui-test-app: app
 		|| codesign --force --sign "$(CODESIGN_ID)" --identifier $(UI_TEST_BUNDLE_ID) "$(UI_TEST_APP)"
 	@echo "built $(UI_TEST_APP) (signed with: $(CODESIGN_ID))"
 
-## 起動中の Koe を落としてから再起動する
+## 起動中の Lore を落としてから再起動する
 run: stop app
 	@open "$(APP)"
-	@echo "Koe を起動しました (メニューバーを確認)"
+	@echo "Lore を起動しました (メニューバーを確認)"
 
 stop:
-	@pkill -x Koe >/dev/null 2>&1 || true
+	@pkill -x Lore >/dev/null 2>&1 || true
 
 test:
 	swift test
@@ -97,8 +98,8 @@ test:
 ## 署名済みアプリを実際に操作する主要CUJのUI E2E
 ui-test: ui-test-app
 	@mkdir -p .build/ui-e2e
-	@xcrun swiftc -parse-as-library Scripts/KoeUIE2E.swift -o .build/ui-e2e/KoeUIE2E
-	@.build/ui-e2e/KoeUIE2E "$(abspath $(UI_TEST_APP))"
+	@xcrun swiftc -parse-as-library Scripts/LoreUIE2E.swift -o .build/ui-e2e/LoreUIE2E
+	@.build/ui-e2e/LoreUIE2E "$(abspath $(UI_TEST_APP))"
 
 clean:
 	rm -rf .build build
@@ -107,12 +108,12 @@ clean:
 ## bundle ID が同じコピーが複数あると TCC が混乱するので、build/ のコピーは残さない
 install: CONFIG = release
 install: app
-	@pkill -x Koe >/dev/null 2>&1 || true
-	@rm -rf /Applications/Koe.app
+	@pkill -x Lore >/dev/null 2>&1 || true
+	@rm -rf /Applications/Lore.app
 	@cp -R "$(APP)" /Applications/
 	@rm -rf "$(APP)"
-	@echo "installed /Applications/Koe.app"
-	@open /Applications/Koe.app
+	@echo "installed /Applications/Lore.app"
+	@open /Applications/Lore.app
 
 ## 署名 identity を固定してアクセシビリティの許可が毎回外れないようにする (一度だけ)
 dev-cert:

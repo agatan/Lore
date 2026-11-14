@@ -1,3 +1,0 @@
-"NSMicrophoneUsageDescription" = "Koe 使用麦克风进行语音输入，以及在您明确启用后将生活日志音频存储在本机。";
-"NSCalendarsFullAccessUsageDescription" = "Koe 使用日历将日程显示在生活日志时间线上，并保存日程与语音的关联。";
-"NSSpeechRecognitionUsageDescription" = "Koe 使用设备端语音识别在此 Mac 上转写。音频不会离开此 Mac。";

@@ -1,8 +1,8 @@
-# Koe repository instructions
+# Lore repository instructions
 
 ## Outcome
 
-Keep Koe's implementation, external specification, and internal design aligned while preserving user data and observable behavior.
+Keep Lore's implementation, external specification, and internal design aligned while preserving user data and observable behavior.
 
 ## Sources of truth
 

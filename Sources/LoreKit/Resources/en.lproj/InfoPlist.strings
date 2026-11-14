@@ -1,0 +1,3 @@
+"NSMicrophoneUsageDescription" = "Lore uses the microphone for dictation and for local life-log audio storage when you explicitly enable it.";
+"NSCalendarsFullAccessUsageDescription" = "Lore uses your calendars to place events on the life-log timeline and preserve their relationship to speech.";
+"NSSpeechRecognitionUsageDescription" = "Lore transcribes speech on this Mac using on-device recognition. Audio never leaves this Mac.";

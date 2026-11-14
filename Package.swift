@@ -8,14 +8,14 @@ let appIntentsProtocols = URL(fileURLWithPath: #filePath)
     .path
 
 let package = Package(
-    name: "Koe",
+    name: "Lore",
     defaultLocalization: "en",
     platforms: [.macOS("26.0")],
     products: [
-        .executable(name: "Koe", targets: ["Koe"]),
-        .executable(name: "koe-cli", targets: ["KoeCLI"]),
-        .executable(name: "koe-mcp", targets: ["KoeMCP"]),
-        .library(name: "KoeKit", targets: ["KoeKit"]),
+        .executable(name: "Lore", targets: ["Lore"]),
+        .executable(name: "lore-cli", targets: ["LoreCLI"]),
+        .executable(name: "lore-mcp", targets: ["LoreMCP"]),
+        .library(name: "LoreKit", targets: ["LoreKit"]),
     ],
     // 通常音声入力はOS内蔵認識を使い、Life Logでは選択時だけローカルwhisper.cppを使う。
     // クラウド／ローカルLLMはURLSessionで接続する。
@@ -24,7 +24,7 @@ let package = Package(
     ],
     targets: [
         .target(
-            name: "KoeKit",
+            name: "LoreKit",
             dependencies: [
                 .product(name: "GRDB", package: "GRDB.swift"),
                 "WhisperFramework",
@@ -32,8 +32,8 @@ let package = Package(
             resources: [.process("Resources")]
         ),
         .executableTarget(
-            name: "Koe",
-            dependencies: ["KoeKit"],
+            name: "Lore",
+            dependencies: ["LoreKit"],
             swiftSettings: [.unsafeFlags([
                 "-emit-const-values",
                 "-Xfrontend", "-const-gather-protocols-file",
@@ -45,24 +45,24 @@ let package = Package(
             ])]
         ),
         .executableTarget(
-            name: "KoeCLI",
-            dependencies: ["KoeKit"],
+            name: "LoreCLI",
+            dependencies: ["LoreKit"],
             linkerSettings: [.unsafeFlags([
                 "-Xlinker", "-rpath",
                 "-Xlinker", "@executable_path/../Frameworks",
             ])]
         ),
         .executableTarget(
-            name: "KoeMCP",
-            dependencies: ["KoeKit"],
+            name: "LoreMCP",
+            dependencies: ["LoreKit"],
             linkerSettings: [.unsafeFlags([
                 "-Xlinker", "-rpath",
                 "-Xlinker", "@executable_path/../Frameworks",
             ])]
         ),
         .testTarget(
-            name: "KoeKitTests",
-            dependencies: ["KoeKit"]
+            name: "LoreKitTests",
+            dependencies: ["LoreKit"]
         ),
         .binaryTarget(
             name: "WhisperFramework",

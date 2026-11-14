@@ -1,6 +1,6 @@
-# Koe
+# Lore
 
-macOS 専用の音声入力アプリです。口述入力と、自分の発話・予定・メモを一日の時間軸に残す **ライフログ** を提供します。要約やTODOの整理はKoeでは行わず、CLI/MCPで好きなAIへ渡します。
+macOS 専用の音声入力アプリです。口述入力と、自分の発話・予定・メモを一日の時間軸に残す **ライフログ** を提供します。要約やTODOの整理はLoreでは行わず、CLI/MCPで好きなAIへ渡します。
 
 音声認識と既定の文章整形は Mac 上で動作します。口述音声は保存しません。ライフログを明示的に有効にした場合だけ、再処理可能な音声チャンクをMac内へ保存します。音声は外部へ送信しません。詳しくは [データ取り扱い](PRIVACY.md) を参照してください。
 
@@ -24,12 +24,12 @@ make run
 
 | コマンド | 内容 |
 |---|---|
-| `make run` | ビルドして `Koe.app` を起動 |
-| `make app` | `Koe.app` の組み立てまで実行 |
+| `make run` | ビルドして `Lore.app` を起動 |
+| `make app` | `Lore.app` の組み立てまで実行 |
 | `make test` | ユニットテストを実行 |
 | `make ui-test` | 主要CUJを実アプリで操作するUI E2Eを実行 |
 | `make install` | Release ビルドを `/Applications` へ配置 |
-| `make stop` | 起動中の Koe を終了 |
+| `make stop` | 起動中の Lore を終了 |
 
 テスト対象のCUJと実行条件は [テスト方針](docs/testing.md) にまとめています。
 
@@ -71,19 +71,19 @@ macOSのショートカットAppには「ライフログを開始」「ライフ
 
 より細かい自動化向けに、同じDB・エクスポート定義を使うCLIとstdio MCPサーバーがあります。
 
-Koeの「設定 > 連携」からCLIとAgent Skillをインストールできます。CLIは`~/.local/bin/koe`からKoe.app内の実体へリンクするため、PATHやシェル設定を書き換えず、アプリの更新と同時に更新されます。Agent Skillは`~/.agents/skills/koe`へ配置し、Claudeからも同じ内容を参照します。
+Loreの「設定 > 連携」からCLIとAgent Skillをインストールできます。CLIは`~/.local/bin/lore`からLore.app内の実体へリンクするため、PATHやシェル設定を書き換えず、アプリの更新と同時に更新されます。Agent Skillは`~/.agents/skills/lore`へ配置し、Claudeからも同じ内容を参照します。
 
 ```sh
-koe export day --date 2026-08-29 --include speech,memos
-koe search "レセコン"
-koe days --from 2026-08-01
-koe range --from 2026-08-25 --to 2026-08-29 --include speech,memos
+lore export day --date 2026-08-29 --include speech,memos
+lore search "レセコン"
+lore days --from 2026-08-01
+lore range --from 2026-08-25 --to 2026-08-29 --include speech,memos
 ```
 
-`/Applications/Koe.app/Contents/Helpers/koe-mcp` は標準入出力のMCPサーバーです。記録がある日の一覧（`life_log_days`）、期間の項目をJSONで取る`life_log_range`、日別Markdownの`life_log_export`、横断検索の`life_log_search`を公開します。どれも読み取り専用です。Koeのメモは声で素早く残す下書きと割り切り、振り返り・要約・TODO整理や、雑なメモを清書して別のメモアプリやタスク管理へ転記する作業はMCPクライアント側のAIに任せます。サーバーはMac内のDBを読むだけです。
+`/Applications/Lore.app/Contents/Helpers/lore-mcp` は標準入出力のMCPサーバーです。記録がある日の一覧（`life_log_days`）、期間の項目をJSONで取る`life_log_range`、日別Markdownの`life_log_export`、横断検索の`life_log_search`を公開します。どれも読み取り専用です。Loreのメモは声で素早く残す下書きと割り切り、振り返り・要約・TODO整理や、雑なメモを清書して別のメモアプリやタスク管理へ転記する作業はMCPクライアント側のAIに任せます。サーバーはMac内のDBを読むだけです。
 
 ```sh
-claude mcp add koe -- /Applications/Koe.app/Contents/Helpers/koe-mcp
+claude mcp add lore -- /Applications/Lore.app/Contents/Helpers/lore-mcp
 ```
 
 開発中にCLIとMCPだけを組み立てる場合は`make tools`を使います。
@@ -95,7 +95,7 @@ claude mcp add koe -- /Applications/Koe.app/Contents/Helpers/koe-mcp
 1. 1台目で「新しく同期を始める」を選び、iCloud Drive・Dropbox・Syncthingなど他のMacからも見えるフォルダを指定します。表示される同期コードを控えます。
 2. 2台目以降で「同期コードで参加」を選び、同期コードを入力して同じフォルダを指定します。
 
-Koeはフォルダ内の `Koe Sync/` に、Mac内で暗号化した変更ファイルだけを書きます。Koe自身は通信せず、フォルダの提供元は中身を読めません。同じ項目を複数のMacで変えた場合は、後から変えた方を採用します。
+Loreはフォルダ内の `Lore Sync/` に、Mac内で暗号化した変更ファイルだけを書きます。Lore自身は通信せず、フォルダの提供元は中身を読めません。同じ項目を複数のMacで変えた場合は、後から変えた方を採用します。
 
 ## 文章の仕上げ
 
@@ -107,7 +107,7 @@ Koeはフォルダ内の `Koe Sync/` に、Mac内で暗号化した変更ファ�
 ## 構成
 
 ```text
-Sources/KoeKit/
+Sources/LoreKit/
 ├── Domain/        セッション状態、モード、整形ルール、語彙
 ├── Engines/       SpeechAnalyzer、WhisperKit、Foundation Models、クラウド／ローカルLLM
 ├── System/        ホットキー、録音、挿入、Keychain、macOS 統合
@@ -120,8 +120,8 @@ Sources/KoeKit/
 
 中心となる不変条件は「発話を失わない」ことです。STT 確定後の文字起こしを先に永続化してから整形・挿入へ進み、整形失敗時は生テキストへ、挿入失敗時はクリップボードへ退避します。ライフログでは30秒ごとの復旧用音声を保存しながら入力signalから発話区間を切り出し、適応的な無音境界で後追い認識します。入力障害時は保存済み音声から再開し、利用者が記録を有効にしている間は自動再接続します。
 
-構造化データは起動時に `~/Library/Application Support/Koe/Backups/` へSQLiteスナップショットとして保存します。未適用のDBマイグレーションがある場合は変更前に必ず作成し、通常時は1日1回、直近7世代を保持します。
-復元が必要な場合は、Koeを停止して元DBを退避してから [バックアップと復旧](docs/recovery.md) の手順を実行します。
+構造化データは起動時に `~/Library/Application Support/Lore/Backups/` へSQLiteスナップショットとして保存します。未適用のDBマイグレーションがある場合は変更前に必ず作成し、通常時は1日1回、直近7世代を保持します。
+復元が必要な場合は、Loreを停止して元DBを退避してから [バックアップと復旧](docs/recovery.md) の手順を実行します。
 
 ## License
 

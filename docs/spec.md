@@ -1,7 +1,7 @@
-# Koe 外部仕様
+# Lore 外部仕様
 
 
-本書はKoeの利用者と自動化クライアントから観測できる仕様をまとめた正本です。[HTML版](spec.html)も同じ公開面を扱います。内部構造は[design.md](design.md)、データの詳細は[PRIVACY.md](../PRIVACY.md)を参照してください。
+本書はLoreの利用者と自動化クライアントから観測できる仕様をまとめた正本です。[HTML版](spec.html)も同じ公開面を扱います。内部構造は[design.md](design.md)、データの詳細は[PRIVACY.md](../PRIVACY.md)を参照してください。
 
 ## 1. 動作環境と製品境界
 
@@ -24,10 +24,11 @@
 
 - 初回はwindow全体を使うonboardingを表示し、ライフログ、音声入力、声のメモの三つの機能、マイク・入力操作・任意のcalendar権限とそれぞれの許可状況、保存範囲を説明します。
 - 通常起動ではメニューバー常駐に加えてmain windowを開き、ライフログを選択した状態で表示します。
+- アプリ名をKoeからLoreへ変えました。Lore（bundle ID `dev.agatan.Lore`）の初回起動時は、旧Koe（`dev.agatan.Koe`）のdataを一度だけ引き継ぎます。`~/Library/Application Support/Koe/`を`~/Library/Application Support/Lore/`へ移してDB fileを`lore.sqlite`へ改名し、保存audioの参照先も付け替えます。設定は旧Koeの値を写し、Lore側にすでに設定があれば写しません。Keychainに保存したAPI keyと同期の鍵は新しい保存先へ写してから旧itemを消します。Lore側のfolderがすでにある場合は混ぜずに旧folderを残し、menu barに残した場所を表示します。folderを移せない場合はDBを開かず、理由を表示します（旧dataはそのまま残ります）。macOSの権限（マイク、アクセシビリティ、入力監視、calendar）とログイン項目はbundle IDごとのため、Loreで改めて許可・設定します。CLIは`lore`、MCP serverは`lore-mcp`になり、AIクライアントへ登録し直します。CLI/MCPが先に起動した場合も、同じ手順でdataを移します。
 - 前回processの記録開始意図は復元しません。ライフログ記録は起動後の明示的なUI、hotkey、Shortcuts操作か、利用者が有効にした自動記録の時間帯でだけ開始します（4.1）。
 - マイク権限がなければ録音できません。アクセシビリティ権限がなければ結果を対象appへ挿入できません。Option+文字keyのhotkeyは入力監視権限がなければ開始しません。
 - calendar権限は音声入力には不要です。
-- ライフログ開始時は、30秒単位の復旧用audioをMac内へ保存することを初回だけ確認します。同意前にShortcutsから開始した場合は、Koeを開いて同意するようエラーを返します。
+- ライフログ開始時は、30秒単位の復旧用audioをMac内へ保存することを初回だけ確認します。同意前にShortcutsから開始した場合は、Loreを開いて同意するようエラーを返します。
 
 ## 3. 音声入力
 
@@ -84,7 +85,7 @@ cloud音声入力で送るのは今回の文字起こし、共通rule、mode指�
 ### 3.5 ボイスメモ
 
 - 専用global hotkey、main windowとmini windowのmemo入力欄にある音声ボタンは、いずれも押すたびに録音開始・停止を切り替え、認識した生textを今日のライフログmemoとして保存します。文章整形、前面appへの挿入、通常の音声入力履歴への保存は行いません。
-- memo入力欄の音声ボタンは、開始準備中をprogress表示、録音中をKoeのblueと調和するrose色とpulse animationで示し、通常の音声入力など別の音声処理中は新規開始できません。
+- memo入力欄の音声ボタンは、開始準備中をprogress表示、録音中をLoreのblueと調和するrose色とpulse animationで示し、通常の音声入力など別の音声処理中は新規開始できません。
 - ライフログ記録中に開始した場合は、現在の復旧用audio chunkを確定してライフログcaptureを一時停止します。ボイスメモの完了、cancel、失敗後は、利用者の記録開始意図が残っている場合だけライフログを自動再開します。
 - この排他境界により、一回のボイスメモはmemo一件だけを作り、通常の音声入力履歴やライフログutteranceへ同じ内容を追加しません。
 
@@ -102,7 +103,7 @@ cloud音声入力で送るのは今回の文字起こし、共通rule、mode指�
   - 録音audio保存への初回同意がない場合は自動開始せず、一度手動で開始して同意するようbannerで案内します。マイク権限がない場合は手動開始と同じ失敗表示になり、自動で再試行しません。
   - 設定画面は次の自動開始・停止時刻を示します。自動記録中の状態表示は「自動記録中・18:00まで」のように終了時刻を、自動記録の待機中は「次の自動記録 9:00」のように次の開始時刻を示します。
   - 時刻判定はMacのcalendarとtime zoneに従い、時計やtime zoneの変更、sleep復帰で次の切替時刻を計算し直します。
-- ライフログの全画面とmenu barは、実際のaudio writerの稼働状態を同じ記録状態として表示します。実際に録音している間もmenu barのKoe icon本体はmonochromeで表示し、右下の小さなrose色badgeだけを着色します。開始準備中、停止中、再接続待ちではbadgeを外し、それぞれを録音中とは表示しません。
+- ライフログの全画面とmenu barは、実際のaudio writerの稼働状態を同じ記録状態として表示します。実際に録音している間もmenu barのLore icon本体はmonochromeで表示し、右下の小さなrose色badgeだけを着色します。開始準備中、停止中、再接続待ちではbadgeを外し、それぞれを録音中とは表示しません。
 - 音声入力との同時利用中も、復旧可能なライフログaudioの記録は中断しません。音声入力が成功した区間はそのraw transcriptを正本とし、同じ録音時間帯にライフログ側で認識した発話はtimeline、検索、書き出しへ重複して出しません。音声入力がcancelまたは失敗した場合は、ライフログ側の発話を残します。
 - 入力deviceを選択できます。記録中は30秒ごと、または発話burstの確定時に復旧用`.m4a`をMac内へ確定します。audioをcloud STTへ送ることはありません。
 - audio chunkは耐久化・復旧の単位です。30秒に達する前でも発話確定時にchunkを閉じるため、最終認識は次の定期確定を待ちません。認識はadaptiveな発話burst単位で実行し、持続するnear-silenceを文字起こししません。
@@ -126,7 +127,7 @@ cloud音声入力で送るのは今回の文字起こし、共通rule、mode指�
 - mini windowは予定、発話、音声入力、memoを一列の時刻順で表示し、今日進行中の予定をtimeline上部に固定します。OS標準のtitle barは表示せず、Space切替やfull-screen appの利用中も明示的に閉じるまで手前に残ります。Mini windowのtoggle hotkeyは、設定された修飾キーを含む押下と離上が対になった場合だけ切り替え、同じ文字keyだけの通常入力では開閉しません。
 - Main windowとmini windowの最下部には、timelineの上に浮かぶ一本のcapsule barがあります。左端に記録の開始・停止buttonと記録状態、続いてchat形式のmemo入力欄、音声memo button、送信buttonを並べ、送信したmemoを今日のtimelineへ即時追加します。送信ボタンと音声入力ボタンは同じ直径の円形controlに揃えます。Timelineはbarの下までscrollでき、最後の行もbarに隠れません。過去日の履歴へ現在のmemoを混入させないため、main windowの入力欄は今日を選択中だけ表示し、過去日のbarは記録操作と状態だけを持ちます。
 - ボイスメモも手入力と同じmemoとして今日のtimelineへ追加します。
-- Koeのmemoは声や短い入力で素早く残す下書きです。本格的な清書や別のメモアプリ・タスク管理への転記は、MCPやCLIで読み出した外部AIが行います。Koe側は誤字直し程度の編集だけを提供します。
+- Loreのmemoは声や短い入力で素早く残す下書きです。本格的な清書や別のメモアプリ・タスク管理への転記は、MCPやCLIで読み出した外部AIが行います。Lore側は誤字直し程度の編集だけを提供します。
 - Main windowとmini windowのmemoは、hover時の編集buttonまたは本文のdouble-clickでその場で編集できます。Returnで保存、Option-Returnで改行、Escで取り消します。空の本文は保存せず、memoの作成時刻は変わりません。削除はmain windowのhover時の削除buttonで行います。
 - Main windowのtimelineは本文を読みやすい幅（約800 pt）に抑え、window幅を広げても行を伸ばしすぎません。
 - ライフログの記録意図が続いている間、状態文言は実装内部の文字起こし開始・終了に追従して切り替えず、記録、開始準備、一時停止、再接続の利用者向け状態を安定して表示します。
@@ -138,12 +139,12 @@ cloud音声入力で送るのは今回の文字起こし、共通rule、mode指�
 - 選択したcalendarの予定を読み取り、時刻、件名、calendar名、終日、参加statusのsnapshotを保存します。
 - 既定では参加済み、またはRSVPのない予定だけを表示・書き出しに含めます。このfilterは変更できます。
 - Calendar設定の「予定を再取得」から、現在timelineで選択している日の予定を明示的に読み直せます。処理中は連打できず、完了後にtimelineと月間activityを更新します。
-- KoeからRSVPを変更せず、Calendar appへの操作導線も提供しません。
+- LoreからRSVPを変更せず、Calendar appへの操作導線も提供しません。
 - 月間activity calendarではtimelineで表示中の日をprimary colorの円で塗り、それ以外の今日はprimary colorの数字で示します。
 
 ### 4.4 AIへの受け渡し
 
-Koeはライフログから要約、話題、TODOを生成しません。振り返りや作業の整理は、利用者が選んだ汎用AIへCLIまたはMCPで日別の記録を渡して行います。ライフログの発話、memo、予定はKoeからLLMやcloudへ送信しません。
+Loreはライフログから要約、話題、TODOを生成しません。振り返りや作業の整理は、利用者が選んだ汎用AIへCLIまたはMCPで日別の記録を渡して行います。ライフログの発話、memo、予定はLoreからLLMやcloudへ送信しません。
 
 ### 4.5 検索と書き出し
 
@@ -157,7 +158,7 @@ Koeはライフログから要約、話題、TODOを生成しません。振り�
 
 ## 5. 画面と設定
 
-Koeのprimary colorはapp icon由来の爽やかなblueに固定し、利用者がcolor themeを切り替える設定は持ちません。録音、成功、警告は同じbrand paletteに合わせたsemantic colorを全画面で共有します。
+Loreのprimary colorはapp icon由来の爽やかなblueに固定し、利用者がcolor themeを切り替える設定は持ちません。録音、成功、警告は同じbrand paletteに合わせたsemantic colorを全画面で共有します。
 
 表示言語は「システム設定」「English」「日本語」「简体中文」から選べ、選択は再起動後も保持します。「システム設定」はmacOSの優先言語から最初の対応言語を使い、対応言語がない場合は英語へfallbackします。繁体字中国語を簡体字中国語へ暗黙に置き換えません。変更はmenu bar、各windowの内容、onboarding、settings、HUD、dialog、noticeへ直ちに反映します。ライフログの認識言語で「表示言語に合わせる」を明示的に選んだ場合だけSTT hintへ使い、通常の音声入力、ボイスメモ、mode、prompt、保存済みtext、検索、書き出し内容、CLI/MCPの機械向けinterfaceは変更しません。
 
@@ -170,7 +171,7 @@ Koeのprimary colorはapp icon由来の爽やかなblueに固定し、利用者�
 | Settings: 音声入力 | hotkey、聞き取りengine・whisper.cpp model、feedback、履歴、AI整形、mode |
 | Settings: ライフログ | 記録・mini window・ボイスメモhotkey、自動記録の曜日と時間帯、入力device、STT engine・認識言語・whisper.cpp model、audio保持、calendar再取得 |
 
-Privacy設定には、履歴、ライフログ、保存audio、whisper.cpp modelを含むKoe dataのこのMac上の合計使用量を表示します。
+Privacy設定には、履歴、ライフログ、保存audio、whisper.cpp modelを含むLore dataのこのMac上の合計使用量を表示します。
 
 Main window、mini window、menu barのライフログ状態表示は同じ記録操作を共有します。停止中の開始操作はblue/cyanの録音記号と「録音を開始」、記録開始意図がある間の停止操作はroseの停止記号と「録音を停止」を表示します。再接続中やボイスメモによる一時停止中も、停止操作は同じroseの外観を保ちます。
 
@@ -180,14 +181,14 @@ Main window、mini window、menu barのライフログ状態表示は同じ記�
 
 | Data | 保存先 | 既定保持 |
 |---|---|---|
-| 履歴、mode、語彙、ライフログ | `~/Library/Application Support/Koe/koe.sqlite` | 履歴は無期限、各設定に従う |
+| 履歴、mode、語彙、ライフログ | `~/Library/Application Support/Lore/lore.sqlite` | 履歴は無期限、各設定に従う |
 | ライフログaudio | Application Support配下 | 文字起こしの成功後に削除。7日または30日へ変更可能 |
-| whisper.cpp model | `~/Library/Application Support/Koe/Models/WhisperCpp/` | 利用者が個別に削除、または全データ削除まで |
+| whisper.cpp model | `~/Library/Application Support/Lore/Models/WhisperCpp/` | 利用者が個別に削除、または全データ削除まで |
 | 一般設定（表示言語を含む） | app UserDefaults | app data削除まで |
 | API key | macOS Keychain | 個別削除まで |
 | 同期の鍵 | macOS Keychain（このMacだけ。iCloud Keychainへは同期しない） | 同期の解除または全データ削除まで |
-| 同期の変更file | 利用者が選んだfolderの`Koe Sync/` | Koeは削除しない。利用者がfolderごと管理する |
-| DB backup | `~/Library/Application Support/Koe/Backups/` | 最新7file |
+| 同期の変更file | 利用者が選んだfolderの`Lore Sync/` | Loreは削除しない。利用者がfolderごと管理する |
+| DB backup | `~/Library/Application Support/Lore/Backups/` | 最新7file |
 
 - 既存DBは未適用migrationの直前にbackupします。通常起動でも同日重複なしで1日1回backupします。
 - backupに失敗した場合はmigrationを開始しません。
@@ -199,18 +200,18 @@ Main window、mini window、menu barのライフログ状態表示は同じ記�
 - 設定の「同期」から、複数のMacで同じ文字dataを使えます。既定は無効です。
 - 同期するのは、ライフログの発話text、memo（追加・編集・削除）、音声入力履歴（生text、整形結果、status、mode snapshot、対象app名・bundle ID、provider/model、error、時間）、語彙です。
 - 録音audio、API key、設定、予定の控え（各Macが自分のcalendarから読む）、whisper.cpp model、DB backup、modeは同期しません。他のMacから届いた発話は保存audioを持たず、予定との関連付けも持ちません。
-- Koeは利用者が選んだfolder（iCloud Drive、Dropbox、Syncthingなど）の中の`Koe Sync/`へ、暗号化した変更fileだけを書きます。Koe自身はnetwork通信をせず、fileの運搬はfolderの提供元に任せます。
+- Loreは利用者が選んだfolder（iCloud Drive、Dropbox、Syncthingなど）の中の`Lore Sync/`へ、暗号化した変更fileだけを書きます。Lore自身はnetwork通信をせず、fileの運搬はfolderの提供元に任せます。
 - 暗号化はMac内でAES-GCM（256-bit鍵）を使って行います。鍵は最初のMacで生成して「同期コード」として表示し、ほかのMacではそのコードを入力して参加します。鍵は各MacのKeychainだけに保存し、folderの提供元は中身を読めません。同期コードは参加済みのMacの設定から確認操作のあと再表示できます。参加済みのMacをすべて失い同期コードも控えていない場合、folderの内容は誰も読めません。
 - 違う同期コードはfolder内の確認fileで検出し、参加を拒否します。読めない、改ざんされた、途中までしか届いていない、新しい形式の変更fileは取り込まず、理由を設定画面とlogに出して次回の同期で再試行します。そのfileより後の同じMacの変更も、順序を保つため取り込みを待ちます。
-- 変更は数秒後にまとめて書き出します。取り込みは起動時、Koeが前面に来た時、2分ごと、「今すぐ同期」で行います。iCloud Driveでまだ手元に無いfileはdownloadを要求し、届いた後の同期で取り込みます。
+- 変更は数秒後にまとめて書き出します。取り込みは起動時、Loreが前面に来た時、2分ごと、「今すぐ同期」で行います。iCloud Driveでまだ手元に無いfileはdownloadを要求し、届いた後の同期で取り込みます。
 - 同じ項目を複数のMacで変更した場合は、変更時刻が新しい方を採用します。削除も時刻付きで記録し、それより古い変更で復活しません。
-- 利用者が個別に行った削除（memo、音声入力履歴1件、語彙）はほかのMacにも反映します。履歴とaudioの保持期間による自動削除、「音声入力履歴をすべて削除」「ライフログを削除」「Koeを初期化」は、このMacのdataだけを消します。
+- 利用者が個別に行った削除（memo、音声入力履歴1件、語彙）はほかのMacにも反映します。履歴とaudioの保持期間による自動削除、「音声入力履歴をすべて削除」「ライフログを削除」「Loreを初期化」は、このMacのdataだけを消します。
 - 同期を有効にした時点でこのMacにある対象dataはすべて書き出します。
-- 「同期を解除」と「Koeを初期化」は、このMacの同期鍵と同期状態を消し、変更の書き出しと取り込みを止めます。folder内のfileは削除しません。
+- 「同期を解除」と「Loreを初期化」は、このMacの同期鍵と同期状態を消し、変更の書き出しと取り込みを止めます。folder内のfileは削除しません。
 
 ## 7. macOS Shortcuts / App Intents
 
-Koeは下記のApp Intent ActionをShortcutsへ公開します。各ActionはKoeの起動とDB初期化完了を待ってから実行します。「ライフログを開始」はマイクを扱うためKoeをforegroundで起動し、「ライフログを終了」はbackgroundで実行します。
+Loreは下記のApp Intent ActionをShortcutsへ公開します。各ActionはLoreの起動とDB初期化完了を待ってから実行します。「ライフログを開始」はマイクを扱うためLoreをforegroundで起動し、「ライフログを終了」はbackgroundで実行します。
 
 | Action | Input / Output |
 |---|---|
@@ -221,20 +222,20 @@ Koeは下記のApp Intent ActionをShortcutsへ公開します。各ActionはKoe
 
 ## 8. CLI
 
-実行名はbuild productでは`koe-cli`、配布・link後の利用名は`koe`です。成功時は標準出力、失敗時はstderrへ`koe: ...`を出してexit status 1を返します。
+実行名はbuild productでは`lore-cli`、配布・link後の利用名は`lore`です。成功時は標準出力、失敗時はstderrへ`lore: ...`を出してexit status 1を返します。
 
 ```text
-koe export day [--date YYYY-MM-DD] [--include calendar,speech,voice-input,memos] [--clipboard|--output PATH]
-koe search "検索語" [--limit N]
-koe days [--from YYYY-MM-DD] [--to YYYY-MM-DD]
-koe range --from YYYY-MM-DD [--to YYYY-MM-DD] [--include calendar,speech,voice-input,memos]
+lore export day [--date YYYY-MM-DD] [--include calendar,speech,voice-input,memos] [--clipboard|--output PATH]
+lore search "検索語" [--limit N]
+lore days [--from YYYY-MM-DD] [--to YYYY-MM-DD]
+lore range --from YYYY-MM-DD [--to YYYY-MM-DD] [--include calendar,speech,voice-input,memos]
 ```
 
 `--clipboard`と`--output`は同時指定できません。`--output .`は既定filenameを現在directoryへ書きます。検索結果はtab区切りです。`days`と`range`はMCPの`life_log_days`、`life_log_range`と同じJSONを出します。CLIは読み取り専用です。
 
 ## 9. MCP
 
-`koe-mcp`は1行1JSONのstdio JSON-RPC serverです。MCP protocol versionは`2025-03-26`、server versionは`1.0.0`です。notificationには応答しません。tool errorはJSON-RPC成功response内の`isError: true`とtextで返します。
+`lore-mcp`は1行1JSONのstdio JSON-RPC serverです。MCP protocol versionは`2025-03-26`、server versionは`1.0.0`です。notificationには応答しません。tool errorはJSON-RPC成功response内の`isError: true`とtextで返します。
 
 | Tool | Arguments | 結果 |
 |---|---|---|
@@ -244,7 +245,7 @@ koe range --from YYYY-MM-DD [--to YYYY-MM-DD] [--include calendar,speech,voice-i
 | `life_log_search` | `query: string`, `limit?: integer` | `day`、`kind`、本文のtab区切り行 |
 
 - 時刻はISO8601のlocal時差付き文字列です。予定はライフログ設定の参加中filterに従い、成功した音声入力と重なるライフログ発話は画面・書き出しと同じく除きます。
-- MCPは読み取り専用です。Koeへの書き戻しは提供せず、読み出した発話やmemoを別のアプリへ清書・転記するのはMCP client側のAIの役割です。serverはMac内のDBを読むだけで、外部へ通信しません。
+- MCPは読み取り専用です。Loreへの書き戻しは提供せず、読み出した発話やmemoを別のアプリへ清書・転記するのはMCP client側のAIの役割です。serverはMac内のDBを読むだけで、外部へ通信しません。
 
 ## 10. 障害時の外部挙動
 
@@ -264,9 +265,9 @@ koe range --from YYYY-MM-DD [--to YYYY-MM-DD] [--include calendar,speech,voice-i
 6. 保留ライフログchunkは再起動後に再処理される。
 7. migration前backupと日次backupが作られ、合計7file以内に保たれる。
 8. CLI、MCP、Shortcutsの公開interfaceが本書と一致する。
-9. ライフログの実録音中だけmenu barのmonochrome Koe icon右下にrose色badgeが表示され、停止または再接続待ちではbadgeなしへ戻る。
+9. ライフログの実録音中だけmenu barのmonochrome Lore icon右下にrose色badgeが表示され、停止または再接続待ちではbadgeなしへ戻る。
 10. ライフログ記録中に成功した音声入力は一件だけ表示・検索・書き出しへ現れる。cancelまたは失敗した音声入力の時間帯はライフログ発話が失われない。
-11. ライフログの発話、memo、予定はKoeからLLMやcloudへ送信されず、要約・話題・TODOは生成されない。
+11. ライフログの発話、memo、予定はLoreからLLMやcloudへ送信されず、要約・話題・TODOは生成されない。
 12. Calendar設定から予定を再取得すると、現在選択日のsnapshot、timeline、月間activityが更新される。
 13. マイク切替などの音声構成変更後も、記録開始意図が残る限りライフログcaptureが自動再開する。
 14. ボイスメモ一回につきmemoだけが一件作られ、通常の音声入力履歴とライフログutteranceには同じ内容が追加されない。
