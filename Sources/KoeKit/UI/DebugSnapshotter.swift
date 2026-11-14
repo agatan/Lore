@@ -17,6 +17,9 @@ enum DebugSnapshotter {
     static func run(env: AppEnvironment, presenter: KoeWindowPresenter, into directory: URL) async {
         do {
             try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+            // 自動記録の表示も確認できるよう、現在時刻を含まない時間帯で有効にする。
+            let minute = (Calendar.current.component(.hour, from: Date()) + 2) % 24 * 60
+            env.updateLifeLogSchedule(LifeLogSchedule(isEnabled: true, startMinute: minute, endMinute: (minute + 9 * 60) % (24 * 60)))
             await settle(3)
             try await capture(KoeWindow.main, as: "main-life-log", into: directory)
             env.mainSection = .history

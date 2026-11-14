@@ -74,6 +74,7 @@ struct LifeLogMiniWindow: View {
             Divider().opacity(0.6)
             LifeLogCaptureControl(
                 lifeLog: env.lifeLog,
+                scheduleCaption: env.lifeLogScheduleCaption,
                 accessibilityIdentifier: "life-log-mini.capture-toggle"
             ) {
                 env.setLifeLogCaptureEnabled(!env.lifeLog.hasCaptureIntent)

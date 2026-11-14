@@ -23,7 +23,7 @@
 
 - 初回はonboardingを表示し、マイク、入力操作、任意のcalendar権限と保存範囲を説明します。
 - 通常起動ではメニューバー常駐に加えてmain windowを開き、ライフログを選択した状態で表示します。
-- app起動だけではライフログ記録を開始しません。前回processの記録開始意図は復元せず、起動後の明示的なUI、hotkey、Shortcuts操作でだけ開始します。
+- 前回processの記録開始意図は復元しません。ライフログ記録は起動後の明示的なUI、hotkey、Shortcuts操作か、利用者が有効にした自動記録の時間帯でだけ開始します（4.1）。
 - マイク権限がなければ録音できません。アクセシビリティ権限がなければ結果を対象appへ挿入できません。Option+文字keyのhotkeyは入力監視権限がなければ開始しません。
 - calendar権限は音声入力には不要です。
 - ライフログ開始時は、30秒単位の復旧用audioをMac内へ保存することを初回だけ確認します。同意前にShortcutsから開始した場合は、Koeを開いて同意するようエラーを返します。
@@ -94,7 +94,14 @@ cloud音声入力で送るのは今回の文字起こし、共通rule、mode指�
 
 - ライフログは通常の音声入力と独立して開始・停止でき、同時利用できます。
 - menu bar、main window、専用global hotkey、macOS Shortcutsから操作できます。
-- app起動時は常に停止状態から始まり、前回終了時に記録中だった場合も自動開始しません。記録中のsleep復帰や入力device再接続は、同じprocessに残る記録開始意図に限って自動再開します。
+- app起動時は停止状態から始まり、前回終了時に記録中だったことを理由には開始しません。自動記録の時間帯の中で起動した場合だけ、自動記録として開始します。記録中のsleep復帰や入力device再接続は、同じprocessに残る記録開始意図に限って自動再開します。
+- 設定の「自動記録」を有効にすると、選んだ曜日の開始時刻から終了時刻までライフログを自動で記録します。既定は無効、月〜金、9:00〜18:00です。終了時刻が開始時刻以前なら日付をまたぐ一つの時間帯として扱い、開始日の曜日に属します。
+  - 時間帯に入った時、またはapp起動・sleep復帰・設定変更の時点で時間帯の中にいる場合は、記録していなければ開始します。
+  - 時間帯を出た時は、自動記録が開始した記録だけを停止します。利用者がUI、hotkey、Shortcutsで開始した記録は自動では停止しません。
+  - 時間帯の途中で利用者が停止した場合、その時間帯の残りでは再開せず、次の時間帯から自動記録を再開します。
+  - 録音audio保存への初回同意がない場合は自動開始せず、一度手動で開始して同意するようbannerで案内します。マイク権限がない場合は手動開始と同じ失敗表示になり、自動で再試行しません。
+  - 設定画面は次の自動開始・停止時刻を示します。自動記録中の状態表示は「自動記録中・18:00まで」のように終了時刻を、自動記録の待機中は「次の自動記録 9:00」のように次の開始時刻を示します。
+  - 時刻判定はMacのcalendarとtime zoneに従い、時計やtime zoneの変更、sleep復帰で次の切替時刻を計算し直します。
 - ライフログの全画面とmenu barは、実際のaudio writerの稼働状態を同じ記録状態として表示します。実際に録音している間もmenu barのKoe icon本体はmonochromeで表示し、右下の小さなrose色badgeだけを着色します。開始準備中、停止中、再接続待ちではbadgeを外し、それぞれを録音中とは表示しません。
 - 音声入力との同時利用中も、復旧可能なライフログaudioの記録は中断しません。音声入力が成功した区間はそのraw transcriptを正本とし、同じ録音時間帯にライフログ側で認識した発話はtimeline、検索、書き出しへ重複して出しません。音声入力がcancelまたは失敗した場合は、ライフログ側の発話を残します。
 - 入力deviceを選択できます。記録中は30秒ごと、または発話burstの確定時に復旧用`.m4a`をMac内へ確定します。audioをcloud STTへ送ることはありません。
@@ -160,7 +167,7 @@ Koeのprimary colorはapp icon由来の爽やかなblueに固定し、利用者�
 | Mini window | ライフログ状態、今日のtimelineへの手入力・音声memo追加。一度開いたら明示的に閉じるまで、ほかのapp、desktop Space、full-screen Spaceより手前に表示し続ける。記録操作はwindow右肩ではなく状態表示に置く |
 | Settings: 共通 | 一般（表示言語を含む）、語彙、privacy（保存場所、このMacの使用量、削除）、連携 |
 | Settings: 音声入力 | hotkey、聞き取りengine・whisper.cpp model、feedback、履歴、AI整形、mode |
-| Settings: ライフログ | 記録・mini window・ボイスメモhotkey、入力device、STT engine・認識言語・whisper.cpp model、audio保持、calendar再取得 |
+| Settings: ライフログ | 記録・mini window・ボイスメモhotkey、自動記録の曜日と時間帯、入力device、STT engine・認識言語・whisper.cpp model、audio保持、calendar再取得 |
 
 Privacy設定には、履歴、ライフログ、保存audio、whisper.cpp modelを含むKoe dataのこのMac上の合計使用量を表示します。
 
@@ -259,7 +266,7 @@ koe memo add "本文" [--at ISO8601]
 21. 継続可能なmessageは`×`で閉じられ、dismissしても自動再接続や記録開始意図は変わらない。
 22. 月間calendarは表示中の日をprimary colorの円で塗り、それ以外の今日をprimary colorの数字で示す。
 23. TODO・要約・token集計を持つ旧版DBを開くと、migration直前backupを残してそれらを削除し、発話、memo、検索は引き続き使える。
-24. App起動だけではライフログ記録を開始せず、前回processの記録開始意図を復元しない。
+24. App起動時に前回processの記録開始意図を復元しない。自動記録が有効なら、時間帯の中での起動・復帰・時間帯の開始で記録を始め、時間帯の終了では自動記録が始めた記録だけを止める。時間帯の途中で手動停止した場合は次の時間帯まで再開しない。
 25. 音声入力・ボイスメモとライフログは、それぞれSpeechAnalyzerまたはdownload済みwhisper.cpp modelを選べる。音声入力でwhisper.cppを選ぶと停止後に録音全体を一括認識し、modelは両用途で共有する。Download・cancel・再試行・削除の状態と容量が設定に表示され、audioはMac外へ送信されない。
 26. Life Logは起動直後に線形RMSの背景noise floorを校正し、その後も非発話中の入力から更新する。約-50 dBFSの絶対下限と直近のnoise floorに対する十分な上昇を短時間継続した場合だけ発話burstを開始し、微小noiseや持続する空調音では認識jobを作らない。Whisper.cppでは前のpreviewが完了している場合に限り、発話中に1.5秒cadence・直近5秒の暫定textを表示し、30秒未満の発話は1.5秒、30秒以上は1秒の無音でflushする。Burst確定時にaudioをcommitし、timestampは保存audio offsetに一致する。暫定textは永続化せず、語彙は録音session開始時のsnapshotで固定される。
 27. 累積有声時間0.5秒未満または有声比率20%未満の候補はpreview、最終STT、burst checkpointを開始せず、保存audioの再処理でも除外する。Main/mini timelineは末尾表示中だけ新しい項目へ追従し、過去へscrollまたはsource移動した場合は追従を止め、末尾へ戻ると再開する。

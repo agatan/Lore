@@ -167,6 +167,12 @@ public final class LifeLogCoordinator {
         errorMessage = nil
     }
 
+    /// 処理失敗ではないが利用者の操作が必要な案内を、同じdismiss可能なbannerへ出す。
+    public func showNotice(_ message: String) {
+        errorMessage = message
+        KoeLog.session.notice("ライフログの案内: \(message, privacy: .public)")
+    }
+
     /// 終了前に音声・文字起こし・DB保存の確定を待つ必要がある状態。
     /// 記録開始要求から実際のcapture開始までの隙間も含める。
     public var hasPendingTerminationWork: Bool {

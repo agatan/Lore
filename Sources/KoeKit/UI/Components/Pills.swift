@@ -179,6 +179,8 @@ extension View {
 struct SettingsRow<Control: View>: View {
     var title: String
     var caption: String?
+    /// 時刻などを差し込む補足。翻訳keyに値を埋め込むため`caption`とは別に持つ。
+    var detail: LocalizedStringKey? = nil
     @ViewBuilder var control: () -> Control
 
     var body: some View {
@@ -188,6 +190,12 @@ struct SettingsRow<Control: View>: View {
                     .font(KoeTheme.bodyFont)
                 if let caption {
                     Text(LocalizedStringKey(caption))
+                        .font(KoeTheme.captionFont)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                if let detail {
+                    Text(detail)
                         .font(KoeTheme.captionFont)
                         .foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)

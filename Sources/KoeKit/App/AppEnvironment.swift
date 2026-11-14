@@ -80,6 +80,10 @@ public final class AppEnvironment {
     private var analysisTask: Task<Void, Never>?
     @ObservationIgnored private var powerObservers: [any NSObjectProtocol] = []
     @ObservationIgnored private var automationObservers: [any NSObjectProtocol] = []
+    @ObservationIgnored private var clockObservers: [any NSObjectProtocol] = []
+    @ObservationIgnored private var scheduleTask: Task<Void, Never>?
+    /// 自動記録の判断状態。表示（自動記録中か）にも使うため観測対象にする。
+    public private(set) var lifeLogScheduleState = LifeLogScheduleController()
     static let analysisIntervalHours = 20.0
     static let lastAnalysisRunKey = "vocab_analysis_last_run"
 
@@ -124,8 +128,18 @@ public final class AppEnvironment {
         })
         powerObservers.append(center.addObserver(forName: NSWorkspace.didWakeNotification, object: nil, queue: .main) {
             [weak self] _ in
-            Task { @MainActor [weak self] in self?.lifeLog.systemDidWake() }
+            Task { @MainActor [weak self] in
+                self?.lifeLog.systemDidWake()
+                self?.applyLifeLogSchedule()
+            }
         })
+        // 時計やtime zoneが変わると、次の切替時刻の計算が古くなる。
+        let local = NotificationCenter.default
+        for name in [Notification.Name.NSSystemClockDidChange, .NSSystemTimeZoneDidChange] {
+            clockObservers.append(local.addObserver(forName: name, object: nil, queue: .main) { [weak self] _ in
+                Task { @MainActor [weak self] in self?.applyLifeLogSchedule() }
+            })
+        }
     }
 
     /// 音声モデルの在庫 API が死んだので、プロセスを作り直す(C-15d)。
@@ -218,6 +232,8 @@ public final class AppEnvironment {
         // crash等で残った前回のruntime stateを起動意図として復元しない。
         settings.lifeLogCaptureEnabled = false
         scheduleBackgroundAnalysis()
+        // 前回の記録意図ではなく、利用者が決めた時間帯の中にいる場合だけ自動で開始する。
+        if database != nil, !Self.isUITestBundle { applyLifeLogSchedule() }
     }
 
     static var usesScreenshotDemoData: Bool {
@@ -261,7 +277,13 @@ public final class AppEnvironment {
     }
 
     /// UI、global hotkey、App Intentが共有するライフログ記録の状態遷移。
+    /// 手動の開始・停止は自動記録の所有から外し、時間帯の途中の停止は次の時間帯まで再開しない。
     public func setLifeLogCaptureEnabled(_ enabled: Bool) {
+        lifeLogScheduleState.userChangedCapture(enabled: enabled, schedule: settings.lifeLogSchedule, now: Date())
+        applyLifeLogCapture(enabled)
+    }
+
+    private func applyLifeLogCapture(_ enabled: Bool) {
         if enabled, !settings.lifeLogAudioStorageConfirmed {
             settings.lifeLogCaptureEnabled = false
             presentsLifeLogAudioConsent = true
@@ -284,6 +306,67 @@ public final class AppEnvironment {
         setLifeLogCaptureEnabled(true)
     }
 
+    // MARK: 自動記録
+
+    public enum LifeLogScheduleCaption: Equatable, Sendable {
+        case recordingUntil(String)
+        case nextStart(String)
+    }
+
+    public func updateLifeLogSchedule(_ schedule: LifeLogSchedule) {
+        settings.lifeLogSchedule = schedule
+        applyLifeLogSchedule()
+    }
+
+    /// 現在時刻で自動記録の開始・停止を判断し、次の切替時刻に一度だけ起きる。
+    func applyLifeLogSchedule(now: Date = Date()) {
+        scheduleTask?.cancel()
+        scheduleTask = nil
+        let schedule = settings.lifeLogSchedule
+        switch lifeLogScheduleState.evaluate(schedule: schedule, now: now, hasCaptureIntent: lifeLog.hasCaptureIntent) {
+        case .start:
+            if settings.lifeLogAudioStorageConfirmed {
+                applyLifeLogCapture(true)
+            } else {
+                // 同意画面を勝手に開かない。不在時に起きた時間帯の開始でwindowを奪わないため。
+                lifeLogScheduleState.startFailed(schedule: schedule, now: now)
+                lifeLog.showNotice("自動記録を始められませんでした。録音の保存に同意するため、一度手動でライフログを開始してください")
+            }
+        case .stop:
+            applyLifeLogCapture(false)
+        case .none:
+            break
+        }
+        guard let next = schedule.nextTransition(after: now) else { return }
+        scheduleTask = Task { [weak self] in
+            // 境界ちょうどの時刻は時間帯の外/内の判定が揺れないよう、わずかに過ぎてから評価する。
+            let delay = max(0, next.timeIntervalSinceNow) + 0.5
+            do { try await Task.sleep(for: .seconds(delay)) } catch { return }
+            self?.applyLifeLogSchedule()
+        }
+    }
+
+    /// 自動記録の状態表示。自動記録中は終了時刻、待機中は次の開始時刻を返す。
+    public var lifeLogScheduleCaption: LifeLogScheduleCaption? {
+        let schedule = settings.lifeLogSchedule
+        guard schedule.isEnabled else { return nil }
+        let now = Date()
+        if lifeLog.hasCaptureIntent {
+            guard lifeLogScheduleState.ownsCapture,
+                  let window = schedule.window(containing: now) else { return nil }
+            return .recordingUntil(Self.scheduleTimeText(window.end, now: now))
+        }
+        guard let next = schedule.nextWindow(after: now) else { return nil }
+        return .nextStart(Self.scheduleTimeText(next.start, now: now))
+    }
+
+    /// 今日なら時刻だけ、別の日なら曜日を添える。
+    static func scheduleTimeText(_ date: Date, now: Date = Date(), calendar: Calendar = .current) -> String {
+        let time = date.formatted(date: .omitted, time: .shortened)
+        if calendar.isDate(date, inSameDayAs: now) { return time }
+        return date.formatted(.dateTime.month(.defaultDigits).day().weekday(.abbreviated)) + " " + time
+    }
+
     public func cancelLifeLogAudioStorageConsent() {
         settings.lifeLogCaptureEnabled = false
         presentsLifeLogAudioConsent = false
@@ -302,6 +385,7 @@ public final class AppEnvironment {
         voiceMemoHotkeys.stop()
         permissionWatcher?.cancel()
         analysisTask?.cancel()
+        scheduleTask?.cancel()
         settings.lifeLogCaptureEnabled = false
 
         async let lifeLogFinished = lifeLog.stopForTermination()

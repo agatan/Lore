@@ -3,6 +3,8 @@ import SwiftUI
 /// ライフログの状態と開始・停止操作を、main / mini / menu barで同じ意味に揃える。
 struct LifeLogCaptureControl: View {
     var lifeLog: LifeLogCoordinator
+    /// 自動記録中の終了時刻、または待機中の次の開始時刻。
+    var scheduleCaption: AppEnvironment.LifeLogScheduleCaption? = nil
     var accessibilityIdentifier: String
     var onToggle: () -> Void
 
@@ -19,11 +21,13 @@ struct LifeLogCaptureControl: View {
                 Text(LocalizedStringKey(statusTitle))
                     .font(.system(size: 12, weight: .medium))
                 // 停止中は見出しだけで状態が伝わるため、同じ意味の補足を重ねない。
-                if lifeLog.hasCaptureIntent {
-                    Text(LocalizedStringKey(lifeLog.captureStatusText))
+                // 自動記録の時刻は停止中でも次の動きを示す情報なので出す。
+                if let caption = subtitle {
+                    Text(caption)
                         .font(KoeTheme.captionFont)
                         .foregroundStyle(.secondary)
                         .lineLimit(1)
+                        .accessibilityIdentifier("\(accessibilityIdentifier).schedule")
                 }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -41,6 +45,13 @@ struct LifeLogCaptureControl: View {
             .accessibilityLabel(LocalizedStringKey(actionLabel))
             .accessibilityIdentifier(accessibilityIdentifier)
         }
+    }
+
+    private var subtitle: LocalizedStringKey? {
+        guard lifeLog.hasCaptureIntent else { return scheduleCaption?.text }
+        // 再接続や一時停止は自動記録の時刻より優先して伝える。
+        if lifeLog.isCapturing, let scheduleCaption { return scheduleCaption.text }
+        return LocalizedStringKey(lifeLog.captureStatusText)
     }
 
     private var buttonTitle: String {
@@ -70,5 +81,14 @@ struct LifeLogCaptureControl: View {
 
     private var actionLabel: String {
         lifeLog.hasCaptureIntent ? "ライフログ録音を停止" : "ライフログ録音を開始"
+    }
+}
+
+extension AppEnvironment.LifeLogScheduleCaption {
+    var text: LocalizedStringKey {
+        switch self {
+        case .recordingUntil(let time): "自動記録中・\(time)まで"
+        case .nextStart(let time): "次の自動記録 \(time)"
+        }
     }
 }

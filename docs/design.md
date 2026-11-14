@@ -24,7 +24,7 @@ KoeMCP ──┘
 
 | Path | 主要型 | 現在の責務 |
 |---|---|---|
-| `Domain/` | `SessionDraft`, `SessionRecord`, `Mode`, `FormattingPolicy`, `LifeLogDay`, `LifeLogMemo` | 永続化やUIに依存しない状態、値、遷移、整形規則 |
+| `Domain/` | `SessionDraft`, `SessionRecord`, `Mode`, `FormattingPolicy`, `LifeLogDay`, `LifeLogMemo`, `LifeLogSchedule` | 永続化やUIに依存しない状態、値、遷移、整形規則 |
 | `App/` | `AppEnvironment`, `DictationCoordinator`, `LifeLogCoordinator`, `AppSettings` | composition rootと二つの実行パイプライン |
 | `Engines/` | `SttEngine`, `SpeechAnalyzerStt`, `WhisperCppStt`, `LlmEngine`, `EngineRegistry` | 音声認識、local model管理、LLMの共通境界とprovider実装 |
 | `Persistence/` | `KoeDatabase`, `HistoryStore`, `LifeLogStore`, `ModeStore`, `VocabularyStore` | GRDB schema、migration、query、backup |
@@ -47,7 +47,9 @@ KoeMCP ──┘
 6. `LifeLogCoordinator.configure`後、保留audio chunkをバックグラウンド再処理する。
 7. UI test用の明示的なsettings遷移がなければ`mainSection = .lifeLog`としてmain windowを開く。
 
-起動時の`captureRequested`は必ず`false`です。保存設定から以前のruntime記録意図を復元せず、保留chunkの再処理だけを行います。UI、hotkey、App Intentからの明示操作だけが新しい記録意図を作ります。
+起動時の`captureRequested`は必ず`false`です。保存設定から以前のruntime記録意図を復元せず、保留chunkの再処理だけを行います。UI、hotkey、App Intentからの明示操作と、有効な自動記録scheduleだけが新しい記録意図を作ります。
+
+自動記録は三層に分けます。`Domain/LifeLogSchedule`は曜日・開始分・終了分だけを持つ値で、`window(containing:)`と`nextTransition(after:)`をCalendar経由で計算します（日付またぎとDSTを含む）。`Domain/LifeLogScheduleController`は「scheduleが開始した記録か」「手動停止で抑止中の時間帯の開始時刻」だけを状態に持つ純粋な状態機械で、現在時刻と記録意図から開始・停止・何もしないを決めます。`AppEnvironment`は起動完了、設定変更、wake、`NSSystemClockDidChange`、`NSSystemTimeZoneDidChange`で評価し、次の切替時刻までsleepする単一の`Task`を張り直します。Polling loopは使いません。手動の開始・停止は`setLifeLogCaptureEnabled`から状態機械へ通知し、scheduleの開始は同じcapture遷移を`bySchedule`で通します。録音audio保存への同意がなければscheduleは開始せず、bannerで手動開始を案内します。
 
 `LifeLogWindow`と`LifeLogMiniWindow`は表示開始時に`LifeLogCoordinator.followCurrentDay()`で今日を読み込み、初回だけtimeline末尾へscrollします。以後のreloadや認識結果追加では閲覧位置を動かしません。
 
@@ -155,7 +157,7 @@ DBは`~/Library/Application Support/Koe/koe.sqlite`です。`DatabaseQueue`を�
 
 - `AppSettings.Storage`はsuite `dev.agatan.Koe`のUserDefaults key `koe.settings.v1`へJSONで保存します。
 - `ApplicationLanguage`は`system`、`en`、`ja`、`zh-Hans`の閉じた値として保存し、既定は`system`です。`system`はmacOSの優先言語から最初の対応localeを選び、なければ`en`へ解決します。`zh-Hant`は`zh-Hans`へ暗黙変換しません。既存設定にfieldがなければ`system`で補完し、GRDB migrationは追加しません。
-- 整形のprovider/modelは音声入力だけの設定です。通常音声入力、ライフログcapture、mini window、ボイスメモのhotkey、保持期間、calendar filterをここに入れます。廃止したライフログ用provider、prompt、要約間隔のkeyは読み捨て、保存し直した時点で消えます。Mini windowは常時手前を不変条件とし、表示levelの設定は持ちません。Color themeも設定として保持せず、`KoeTheme`の固定brand tokenを使います。
+- 整形のprovider/modelは音声入力だけの設定です。通常音声入力、ライフログcapture、mini window、ボイスメモのhotkey、自動記録schedule（`lifeLogSchedule`、既定は無効）、保持期間、calendar filterをここに入れます。廃止したライフログ用provider、prompt、要約間隔のkeyは読み捨て、保存し直した時点で消えます。Mini windowは常時手前を不変条件とし、表示levelの設定は持ちません。Color themeも設定として保持せず、`KoeTheme`の固定brand tokenを使います。
 - `dictationSttBackend`と`lifeLogSttBackend`は用途ごとのengine選択です。whisper.cpp modelは両用途で共有し、保存keyは共有化前の`lifeLogWhisperModel`を維持します。`LifeLogTranscriptionLanguage`はライフログ設定だけに置き、音声入力はmodeの言語設定を使います。認識言語の既定値`applicationLanguage`は`ApplicationLanguage`を`ja`、`en`、`zh-Hans`の固定hintへ解決し、明示的な`auto`も選べます。Runtimeの`captureRequested`は設定として永続化しません。GGML model本体と途中downloadは`Application Support/Koe/Models/WhisperCpp/`へ置き、全データ削除に含めます。
 - `AppEnvironment`の設定から解決した`Locale`を全SwiftUI表示へ注入します。localization resourceの開発言語と欠損keyのfallbackは英語です。表示言語はUI shellだけのvariation pointで、ライフログ設定が明示する`applicationLanguage`解決以外はSTT locale、mode、prompt、保存data、export、CLI/MCP contractへ伝播させません。
 - API keyはUserDefaultsやDBには入れずKeychainへ保存します。
@@ -170,7 +172,8 @@ DBは`~/Library/Application Support/Koe/koe.sqlite`です。`DatabaseQueue`を�
 | `MenuBarLabel` | 音声入力のphase、入力level、ライフログcapture状態。`LifeLogCoordinator.isCapturing`中もKoe icon本体はmonochrome maskとして描画し、右下のrose色badgeだけを着色する。停止中または`isRecoveringCapture`のみの状態ではbadgeなしのmonochrome表示にする |
 | `MainWindowView` | `lifeLog` / `history`のsegmented切替。初回はonboarding、通常起動は`lifeLog`を開く |
 | `LifeLogWindow` | 月間activityと日別timelineの2ペイン。Timeline本体はevent/utterance/dictation/memoを一列の時刻順で表示し、column headerを持たない。日付選択時はsnapshotを再取得し、予定一覧とtimelineを同じdataから更新する。検索buttonは`Command-F`も受け、発話・音声入力・memoの検索結果だけをtimeline itemへ移動する。表示開始時だけ今日を読み込んで末尾へscrollし、その後のreloadでは閲覧位置を保つ。左columnはcalendarの下に発話と予定から描く時間帯を置く。右のtimelineは`PanelHeader`に選択日・項目数・予定/検索/書き出しbuttonを置き、行は`TimelineEntryRow`をminiと共有する |
-| `LifeLogCaptureControl` | Main、mini、menu barで共有するcapture状態と開始・停止操作。停止中は「記録を開始」のblue、記録開始意図がある間は「停止」のroseのcapsule buttonとして、symbol、文言、semantic colorを一か所で決める。停止中は状態の補足文を重ねない。録音と文字起こしの内部Boolの中間状態を文言へ直接投影せず、利用者向け状態を安定させる。Main/miniでは状態textの隣へ配置する |
+| `LifeLogCaptureControl` | Main、mini、menu barで共有するcapture状態と開始・停止操作。停止中は「記録を開始」のblue、記録開始意図がある間は「停止」のroseのcapsule buttonとして、symbol、文言、semantic colorを一か所で決める。停止中は状態の補足文を重ねない。録音と文字起こしの内部Boolの中間状態を文言へ直接投影せず、利用者向け状態を安定させる。Main/miniでは状態textの隣へ配置する。自動記録が有効なら、scheduleが始めた記録中は終了時刻、停止中は次の開始時刻を補足に出す |
+| `LifeLogScheduleSettingsView` | ライフログ設定の「自動記録」card。有効化、曜日capsule、開始・終了時刻を`AppEnvironment.updateLifeLogSchedule`へ渡し、次の時間帯を補足に示す |
 | `LifeLogTranscriptionProgressRow` | `LifeLogCoordinator.activeTranscriptionStartedAt`がある間だけMain/miniのcapture状態直上へ一行表示し、認識対象audio長、1秒ごとの処理経過時間、Shimmerで実際のSTT job実行中を示す。発話burstの確定待ちや録音状態は表現しない |
 | `LifeLogExportSheet` | 表示開始時のdate/dayをsnapshotとして保持し、cancel可能なbackground taskで人間向けMarkdownを一度だけ生成する。previewは折り返し可能な上限付きtextとし、完全版をcopy/fileへ再利用する。生成中と書込中はprogressを表示し、MainActorではclipboardとpanel操作だけを行う |
 | `HistoryBrowserView` | 音声入力履歴、検索、詳細、コピー、削除 |

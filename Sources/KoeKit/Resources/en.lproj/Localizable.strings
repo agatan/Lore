@@ -250,3 +250,23 @@
 "キーチェーンに保存します" = "Stored in Keychain";
 "このMacの使用量" = "Storage on This Mac";
 "履歴、ライフログ、保存音声、whisper.cpp modelの合計です" = "Total of history, Life Log, saved audio, and whisper.cpp models.";
+
+/* Life log schedule */
+"自動記録" = "Scheduled Recording";
+"時間帯の終わりに止まるのは自動で始めた記録だけです。途中で手動停止した場合は次の時間帯まで再開しません。" = "Only recordings started by the schedule stop when the time window ends. If you stop recording during a window, it resumes with the next window.";
+"決まった時間に記録する" = "Record on a schedule";
+"曜日" = "Days";
+"時間帯" = "Time window";
+"終了は翌日の時刻です" = "Ends the next day";
+"曜日を選んでください" = "Choose at least one day";
+"いまは時間帯の中です。%@に終わります" = "Inside the window now. Ends at %@";
+"次は%@から%@まで" = "Next: %1$@ – %2$@";
+"自動記録中・%@まで" = "Scheduled · until %@";
+"次の自動記録 %@" = "Next scheduled %@";
+"日" = "Su";
+"月" = "Mo";
+"火" = "Tu";
+"水" = "We";
+"木" = "Th";
+"金" = "Fr";
+"土" = "Sa";

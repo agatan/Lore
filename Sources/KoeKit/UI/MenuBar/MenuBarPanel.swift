@@ -72,6 +72,7 @@ struct MenuBarPanel: View {
         VStack(spacing: 10) {
             LifeLogCaptureControl(
                 lifeLog: env.lifeLog,
+                scheduleCaption: env.lifeLogScheduleCaption,
                 accessibilityIdentifier: "menu.life-log.capture-toggle"
             ) {
                 env.setLifeLogCaptureEnabled(!env.lifeLog.hasCaptureIntent)

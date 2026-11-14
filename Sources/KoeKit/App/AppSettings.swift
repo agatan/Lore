@@ -101,6 +101,7 @@ public final class AppSettings {
         public var lifeLogAudioStorageConfirmed: Bool = false
         public var lifeLogCalendarTitles: [String] = []
         public var lifeLogParticipatingEventsOnly: Bool = true
+        public var lifeLogSchedule: LifeLogSchedule = .default
 
         init() {}
 
@@ -147,6 +148,8 @@ public final class AppSettings {
             lifeLogAudioStorageConfirmed = try container.decodeIfPresent(Bool.self, forKey: .lifeLogAudioStorageConfirmed) ?? false
             lifeLogCalendarTitles = try container.decodeIfPresent([String].self, forKey: .lifeLogCalendarTitles) ?? []
             lifeLogParticipatingEventsOnly = try container.decodeIfPresent(Bool.self, forKey: .lifeLogParticipatingEventsOnly) ?? true
+            lifeLogSchedule = (try? container.decodeIfPresent(LifeLogSchedule.self, forKey: .lifeLogSchedule))
+                .flatMap { $0 } ?? .default
         }
     }
 
@@ -295,6 +298,7 @@ public final class AppSettings {
         set { lifeLogAudioRetentionPolicy = LifeLogAudioRetentionPolicy(storedDays: newValue) }
     }
     public var lifeLogAudioStorageConfirmed: Bool { get { storage.lifeLogAudioStorageConfirmed } set { storage.lifeLogAudioStorageConfirmed = newValue; persist() } }
+    public var lifeLogSchedule: LifeLogSchedule { get { storage.lifeLogSchedule } set { storage.lifeLogSchedule = newValue; persist() } }
     public var lifeLogCalendarTitles: [String] { get { storage.lifeLogCalendarTitles } set { storage.lifeLogCalendarTitles = newValue; persist() } }
     public var lifeLogParticipatingEventsOnly: Bool { get { storage.lifeLogParticipatingEventsOnly } set { storage.lifeLogParticipatingEventsOnly = newValue; persist() } }
     /// 「Koeの全データを削除」で設定も初期状態へ戻す。

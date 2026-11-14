@@ -31,6 +31,8 @@ struct LifeLogSettingsView: View {
                 }
             }
 
+            LifeLogScheduleSettingsView(env: env)
+
             SettingsCard(
                 title: "音声",
                 footnote: "音声はこのMacのアプリ用データフォルダだけに保存します。処理に失敗した音声は次回起動時に再処理します。"
