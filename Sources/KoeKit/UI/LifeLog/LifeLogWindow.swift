@@ -9,7 +9,9 @@ public struct LifeLogWindow: View {
     @State private var exportError: String?
     @State private var showsExportSheet = false
     @State private var showsSearchSheet = false
-    @SceneStorage("lifeLog.showsInspector") private var showsInspector = true
+    /// Main windowはAppKitのwindowにhostしたviewでSwiftUIのsceneを持たないため、
+    /// `SceneStorage`は値を保てず切り替えが効かない。表示状態は`AppStorage`に残す。
+    @AppStorage("lifeLog.showsInspector") private var showsInspector = true
     @State private var timelineIsAtBottom = true
     @State private var timelineFollowsLatest = true
     @State private var memoDraft = ""
@@ -130,7 +132,6 @@ public struct LifeLogWindow: View {
                     }
                     if timelineRows.isEmpty {
                         timelineEmptyState
-                            .frame(maxWidth: .infinity, minHeight: 320)
                     }
                     Color.clear.frame(height: 1).id("timeline-bottom")
                 }
@@ -208,18 +209,35 @@ public struct LifeLogWindow: View {
         .frame(maxWidth: .infinity)
     }
 
+    /// 空の日も、記録が並ぶはずの縦線の上に「ここから始まる」一行を置く。
+    /// 画面中央の大きなplaceholderにせず、記録が入った時と同じ位置・同じ文法で待つ。
     private var timelineEmptyState: some View {
-        ContentUnavailableView {
-            Label(
-                env.lifeLog.hasCaptureIntent ? "発話を待っています" : "この日の記録はありません",
-                systemImage: env.lifeLog.hasCaptureIntent ? "waveform" : "text.bubble"
-            )
-        } description: {
-            if !env.lifeLog.hasCaptureIntent, Calendar.current.isDateInToday(env.lifeLog.selectedDate) {
-                Text("記録を開始すると、話した内容がここに時刻順で並びます。")
+        let waiting = isToday && env.lifeLog.hasCaptureIntent
+        return TimelineRowFrame(
+            time: isToday ? Text("いま") : nil,
+            node: .symbol(waiting ? "waveform" : (isToday ? "plus" : "moon.zzz"), waiting ? KoeTheme.recording : KoeTheme.accent),
+            above: .none,
+            below: isToday ? .gap : .none,
+            topPadding: 4,
+            bottomPadding: 48,
+            firstLineCenter: 9.5
+        ) {
+            VStack(alignment: .leading, spacing: 5) {
+                Text(waiting ? "発話を待っています" : (isToday ? "まだ記録はありません" : "この日の記録はありません"))
+                    .font(.system(size: 15, weight: .semibold))
+                if isToday {
+                    Text(waiting
+                         ? "話し始めると、ここに時刻順で並びます。"
+                         : "下の録音ボタンで記録を始めると、話したことがここに時刻順で並びます。思いついたことは入力欄からメモにも残せます。")
+                        .font(.system(size: 13))
+                        .lineSpacing(4)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
             }
+            .padding(.leading, 6)
         }
-        .foregroundStyle(.secondary)
+        .accessibilityElement(children: .combine)
     }
 
     @ViewBuilder

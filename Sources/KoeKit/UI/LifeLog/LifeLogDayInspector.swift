@@ -9,15 +9,22 @@ struct LifeLogDayInspector: View {
     var date: Date
     var onJump: (Date) -> Void
 
+    private var isToday: Bool { Calendar.current.isDateInToday(date) }
+    private var mapLayout: LifeLogDayMapLayout { LifeLogDayMapLayout(day: day, date: date) }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 18) {
             summary
-            VStack(alignment: .leading, spacing: 10) {
-                Text("一日の流れ")
-                    .font(KoeTheme.sectionFont)
-                    .foregroundStyle(.secondary)
-                LifeLogDayMap(layout: LifeLogDayMapLayout(day: day, date: date), date: date, onJump: onJump)
-                    .frame(maxHeight: .infinity)
+            // 過去日で予定も記録もなければ、空の目盛りは何も伝えないので出さない。
+            // 今日は現在時刻の線が残りの時間を示すため、空でも出す。
+            if isToday || !mapLayout.blocks.isEmpty || !mapLayout.marks.isEmpty {
+                VStack(alignment: .leading, spacing: 10) {
+                    Text("一日の流れ")
+                        .font(KoeTheme.sectionFont)
+                        .foregroundStyle(.secondary)
+                    LifeLogDayMap(layout: mapLayout, date: date, onJump: onJump)
+                        .frame(maxHeight: .infinity)
+                }
             }
         }
         .padding(.horizontal, 18)
@@ -28,9 +35,26 @@ struct LifeLogDayInspector: View {
         .accessibilityIdentifier("life-log.day-insights")
     }
 
+    @ViewBuilder
     private var summary: some View {
         let value = LifeLogDaySummary(day: day)
-        return VStack(alignment: .leading, spacing: 12) {
+        if value.utteranceCount + value.memoCount + value.dictationCount == 0 {
+            // 0を並べても何も伝わらないため、記録がない日は一言だけにする。
+            VStack(alignment: .leading, spacing: 4) {
+                Text("話した時間")
+                    .font(KoeTheme.sectionFont)
+                    .foregroundStyle(.secondary)
+                Text(isToday ? "まだ記録はありません" : "記録はありません")
+                    .font(.system(size: 15, weight: .semibold))
+                    .foregroundStyle(.tertiary)
+            }
+        } else {
+            filledSummary(value)
+        }
+    }
+
+    private func filledSummary(_ value: LifeLogDaySummary) -> some View {
+        VStack(alignment: .leading, spacing: 12) {
             VStack(alignment: .leading, spacing: 2) {
                 Text("話した時間")
                     .font(KoeTheme.sectionFont)

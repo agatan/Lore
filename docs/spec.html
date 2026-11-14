@@ -82,7 +82,7 @@
 <section id="onboarding">
 <h2>2. 初回起動と権限</h2>
 <ul>
-<li>Onboardingでmicrophone、入力操作、任意のcalendar権限と保存範囲を説明します。</li>
+<li>初回はwindow全体を使うonboardingで、life log、音声入力、声のmemoの三つの機能、microphone・入力操作・任意のcalendar権限とそれぞれの許可状況、保存範囲を説明します。</li>
 <li>通常起動ではmenu bar常駐に加えてmain windowを開き、life logを選択した状態で表示します。</li>
 <li>前回processの記録開始意図は復元しません。Life log記録は起動後の明示的なUI、hotkey、Shortcuts操作か、利用者が有効にした自動記録の時間帯でだけ開始します（4章）。</li>
 <li>Microphone権限がなければ録音できず、accessibility権限がなければ対象appへ挿入できません。Option+文字keyのhotkeyは入力監視権限がなければ開始しません。Calendar権限は音声入力には不要です。</li>
@@ -216,7 +216,7 @@
 </article>
 <article class="card">
 <h3>Timeline</h3>
-<p>Main windowは全高の半透明sidebarを持つsplit viewで、sidebar上部の「ライフログ」「音声入力」で表示を切り替えます。Life log表示中は三列です。Sidebarはnavigationの下に月間activity calendarを置きます。中央は選択日のtimelineで、読みやすい幅の列をwindow中央に置き、先頭に大きな日付と曜日、今日なら「今日」と記録状態、終日の予定を表示します。右のinspector「この日」は話した時間、発話・メモ・音声入力の件数と、予定のblockと記録の印を時刻の縦軸へ並べた一日の流れを表示し、予定blockや一日の流れの位置を選ぶとtimelineのその時刻へ移動します。今日なら現在時刻の線を引きます。Inspectorはtoolbarのbuttonで隠せ、検索と書き出しのbuttonもwindow toolbarに置きます。Timeline paneは時刻の予定、発話、音声入力、text memoを一列の時刻順で表示し、column headerは置きません。時刻の右に縦の線を通し、各行は線上の印で種類を示します（発話は小さな点、メモと音声入力は記号、予定は輪）。予定の開始から終了までに入る区間は線を予定の色で塗り、予定の行は件名と長さ・calendar名を表示します。前の項目から1時間以上空いた所には空いた時間を示します。日付を選ぶとinspectorとtimelineを更新します。検索buttonまたはCommand-Fで横断検索を開き、発話、音声入力、memoは対象項目へ移動します。Mini windowも予定と記録を一列表示します。Main windowとmini windowの最下部にはtimelineの上に浮かぶ一本のcapsule barを置き、左端に記録の開始・停止buttonと記録状態、続いてmemo入力、音声memo、送信を並べます。Timelineはbarの下までscrollでき、最後の行も隠れません。Main windowの入力欄は今日を選択中だけ表示し、過去日のbarは記録操作と状態だけを持ちます。</p>
+<p>Main windowは全高の半透明sidebarを持つsplit viewで、sidebar上部の「ライフログ」「音声入力」で表示を切り替えます。Life log表示中は三列です。Sidebarはnavigationの下に月間activity calendarを置きます。中央は選択日のtimelineで、読みやすい幅の列をwindow中央に置き、先頭に大きな日付と曜日、今日なら「今日」と記録状態、終日の予定を表示します。右のinspector「この日」は話した時間、発話・メモ・音声入力の件数と、予定のblockと記録の印を時刻の縦軸へ並べた一日の流れを表示し、予定blockや一日の流れの位置を選ぶとtimelineのその時刻へ移動します。今日なら現在時刻の線を引きます。Inspectorはtoolbarのbuttonで隠せ、表示状態は次回も保ちます。記録がない日は件数の代わりに記録がないことだけを示し、過去日で予定も記録もなければ一日の流れを出しません。記録がない日のtimelineは、縦線の位置に記録の始め方（今日）または記録がないこと（過去日）を一行で示します。検索と書き出しのbuttonもwindow toolbarに置きます。Timeline paneは時刻の予定、発話、音声入力、text memoを一列の時刻順で表示し、column headerは置きません。時刻の右に縦の線を通し、各行は線上の印で種類を示します（発話は小さな点、メモと音声入力は記号、予定は輪）。予定の開始から終了までに入る区間は線を予定の色で塗り、予定の行は件名と長さ・calendar名を表示します。前の項目から1時間以上空いた所には空いた時間を示します。日付を選ぶとinspectorとtimelineを更新します。検索buttonまたはCommand-Fで横断検索を開き、発話、音声入力、memoは対象項目へ移動します。Mini windowも予定と記録を一列表示します。Main windowとmini windowの最下部にはtimelineの上に浮かぶ一本のcapsule barを置き、左端に記録の開始・停止buttonと記録状態、続いてmemo入力、音声memo、送信を並べます。Timelineはbarの下までscrollでき、最後の行も隠れません。Main windowの入力欄は今日を選択中だけ表示し、過去日のbarは記録操作と状態だけを持ちます。</p>
 <p>Koeのmemoは声や短い入力で素早く残す下書きです。本格的な清書や別のメモアプリ・タスク管理への転記は、MCPやCLIで読み出した外部AIが行います。Koe側は誤字直し程度の編集だけを提供します。</p>
 <p>Main windowとmini windowのmemoは、hover時の編集buttonまたは本文のdouble-clickでその場で編集できます。Returnで保存、Option-Returnで改行、Escで取り消します。空の本文は保存せず、memoの作成時刻は変わりません。削除はmain windowのhover時の削除buttonで行います。Main windowのtimelineは本文を読みやすい幅（約800 pt）に抑えます。</p>
 </article>

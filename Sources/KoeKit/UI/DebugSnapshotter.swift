@@ -33,6 +33,21 @@ enum DebugSnapshotter {
             env.updateLifeLogSchedule(LifeLogSchedule(isEnabled: true, startMinute: minute, endMinute: (minute + 9 * 60) % (24 * 60)))
             await settle(3)
             try await capture(KoeWindow.main, as: "main-life-log", into: directory)
+            if AppEnvironment.forcesOnboardingForScreenshot {
+                exit(0)
+            }
+            // Toolbarのbuttonが切り替える値を変え、inspectorが閉じることを撮って確かめる。
+            // SwiftUIはaccessibility clientがいないとtoolbarのAX要素を作らないため、buttonは押せない。
+            UserDefaults.standard.set(false, forKey: "lifeLog.showsInspector")
+            await settle(1)
+            try await capture(KoeWindow.main, as: "main-life-log-inspector-hidden", into: directory)
+            UserDefaults.standard.set(true, forKey: "lifeLog.showsInspector")
+            if let empty = Calendar.current.date(byAdding: .day, value: -3, to: Date()) {
+                await env.lifeLog.select(date: empty)
+                await settle(1)
+                try await capture(KoeWindow.main, as: "main-life-log-empty-day", into: directory)
+                await env.lifeLog.followCurrentDay()
+            }
             env.mainSection = .history
             await settle(1)
             try await capture(KoeWindow.main, as: "main-history", into: directory)
@@ -56,6 +71,7 @@ enum DebugSnapshotter {
             try writeMenuBarIcons(into: directory)
         } catch {
             KoeLog.ui.error("UI snapshotに失敗: \(error.localizedDescription, privacy: .public)")
+            FileHandle.standardError.write(Data("UI snapshotに失敗: \(error.localizedDescription)\n".utf8))
         }
         exit(0)
     }

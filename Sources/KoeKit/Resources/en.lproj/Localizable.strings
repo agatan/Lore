@@ -29,19 +29,9 @@
 
 /* Onboarding */
 "話して過ごす毎日を、あなたの資産に。" = "Turn your spoken days into something valuable.";
-"気づきを、流さない" = "Keep every insight";
-"会話で生まれた考えを、そのまま一日の記録へ。" = "Turn ideas from conversations directly into your daily record.";
-"振り返るほど、次がよくなる" = "Reflect today, improve tomorrow";
-"発話・メモ・予定から、一日の流れを短時間で把握。" = "Quickly understand your day from speech, notes, and events.";
-"気づけば、日記になっている" = "A journal, without the effort";
-"書き起こさなくても、その日の出来事が積み上がる。" = "Your day builds up without having to write it all out.";
-"思いついたら、その場で書ける" = "Write the moment inspiration strikes";
-"ホットキーを押して話せば、整えた文章をいま使っているアプリへ入力できます。" = "Press the hotkey and speak to enter polished text in the app you are using.";
 "はじめる準備" = "Get Ready";
 "マイク" = "Microphone";
 "入力操作" = "Input Control";
-"カレンダー（任意）" = "Calendar (Optional)";
-"通常の音声入力は音声を保存しません。ライフログ開始時だけ、復旧用音声をMac内へ保存する前に確認します。" = "Regular dictation does not save audio. When starting Life Log, Koe asks before saving recovery audio on your Mac.";
 "Koeを始める" = "Get Started with Koe";
 
 /* Dictation and HUD */
@@ -326,3 +316,20 @@
 "アプリに応じて自動" = "Automatic by App";
 "入力: %@" = "Input: %@";
 "ライフログを検索" = "Search Life Log";
+
+/* Onboarding and empty days */
+"Koeは、話したこと、声で残したメモ、音声入力した文章を、このMacの中に時刻順で残します。" = "Koe keeps what you say, your voice memos, and your dictated text in time order, right here on this Mac.";
+"会議や作業中に話したことを、予定と並べて一日の流れとして残します。" = "Keeps what you say in meetings and while working, side by side with your calendar.";
+"ホットキーを押して話すと、整えた文章をいま使っているアプリへ入力します。" = "Press the hotkey and speak to type polished text into the app you are using.";
+"声のメモ" = "Voice Memos";
+"思いついたことを声や短い文で残し、検索や書き出し、AIへの受け渡しに使えます。" = "Capture ideas by voice or a quick note, then search, export, or hand them to AI.";
+"話した声を文字にするために使います。" = "Used to turn your voice into text.";
+"ホットキーと、文章をアプリへ入力するために使います。" = "Used for the hotkey and to type text into apps.";
+"任意です。予定をライフログの横に並べます。" = "Optional. Shows your events next to the life log.";
+"許可済み" = "Allowed";
+"記録はこのMacの中だけに保存します。通常の音声入力は音声を残さず、ライフログの復旧用音声は開始時に確認してから保存します。" = "Everything stays on this Mac. Regular dictation keeps no audio, and Life Log asks before saving recovery audio.";
+"まだ記録はありません" = "Nothing recorded yet";
+"記録はありません" = "Nothing recorded";
+"話し始めると、ここに時刻順で並びます。" = "Start talking and it will appear here in time order.";
+"下の録音ボタンで記録を始めると、話したことがここに時刻順で並びます。思いついたことは入力欄からメモにも残せます。" = "Start recording with the button below and what you say appears here in time order. You can also jot ideas as memos in the field.";
+"処理時間の集計にも使われます。" = "Also used to summarize processing times.";
