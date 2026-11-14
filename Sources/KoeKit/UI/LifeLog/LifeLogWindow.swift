@@ -16,158 +16,170 @@ public struct LifeLogWindow: View {
     public init(env: AppEnvironment) { self.env = env }
 
     public var body: some View {
-        HStack(spacing: 10) {
-            left.frame(width: 288)
-            timeline.frame(minWidth: 520, maxWidth: .infinity)
+        timeline
+            .frame(minWidth: 560, minHeight: 600)
+            .toolbar { toolbarItems }
+            .task {
+                await env.lifeLog.followCurrentDay()
+                await env.lifeLog.loadActivity(containing: env.lifeLog.selectedDate)
+                if !AppEnvironment.usesScreenshotDemoData {
+                    await env.lifeLog.refreshCalendarIfNeeded(selectedCalendars: Set(env.settings.lifeLogCalendarTitles))
+                }
+            }
+            .sheet(isPresented: $showsExportSheet) {
+                LifeLogExportSheet(
+                    date: env.lifeLog.selectedDate,
+                    day: env.lifeLog.day,
+                    onExport: exportSelectedDay
+                )
+            }
+            .sheet(isPresented: $showsSearchSheet) {
+                LifeLogSearchSheet(env: env)
+            }
+            .alert("書き出せませんでした", isPresented: Binding(
+                get: { exportError != nil },
+                set: { if !$0 { exportError = nil } }
+            )) {
+                Button("閉じる") { exportError = nil }
+            } message: {
+                Text(exportError ?? "不明なエラー")
+            }
+    }
+
+    @ToolbarContentBuilder
+    private var toolbarItems: some ToolbarContent {
+        // 操作はcontentの右肩へ寄せ、systemにglassの1グループとしてまとめさせる。
+        ToolbarSpacer(.flexible)
+        ToolbarItemGroup(placement: .automatic) {
+            Button { showsCalendarEvents = true } label: { Label("この日の予定", systemImage: "calendar") }
+                .help("この日の予定")
+                .accessibilityIdentifier("life-log.calendar-events")
+                .popover(isPresented: $showsCalendarEvents, arrowEdge: .bottom) {
+                    LifeLogCalendarEventList(
+                        events: env.lifeLog.day.calendarEvents,
+                        onSelect: { event in
+                            showsCalendarEvents = false
+                            Task { await env.lifeLog.jumpToTime(event.startsAt) }
+                        }
+                    )
+                }
+            Button { showsSearchSheet = true } label: { Label("ライフログを検索", systemImage: "magnifyingglass") }
+                .help("ライフログを検索 (⌘F)")
+                .keyboardShortcut("f", modifiers: .command)
+                .accessibilityIdentifier("life-log.search")
+            Button { showsExportSheet = true } label: { Label("この日を書き出す", systemImage: "square.and.arrow.up") }
+                .help("この日を書き出す")
+                .accessibilityIdentifier("life-log.export-day")
         }
-        .padding(10)
-        .frame(minWidth: 840, minHeight: 680)
-        .task {
-            await env.lifeLog.followCurrentDay()
-            await env.lifeLog.loadActivity(containing: env.lifeLog.selectedDate)
-            if !AppEnvironment.usesScreenshotDemoData {
-                await env.lifeLog.refreshCalendarIfNeeded(selectedCalendars: Set(env.settings.lifeLogCalendarTitles))
+    }
+
+    private var isToday: Bool { Calendar.current.isDateInToday(env.lifeLog.selectedDate) }
+
+    /// Things 3のように、その日を大きな日付で始める。Scrollすると見出しごとtoolbarの下へ流れる。
+    private var header: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(env.lifeLog.selectedDate.formatted(.dateTime.month(.wide).day()))
+                .font(KoeTheme.titleFont)
+                .accessibilityAddTraits(.isHeader)
+            HStack(spacing: 8) {
+                headerSubtitle
+                    .font(.system(size: 13))
+                    .foregroundStyle(.secondary)
+                if isToday && env.lifeLog.isCapturing {
+                    HStack(spacing: 5) {
+                        Circle().fill(KoeTheme.recording).frame(width: 6, height: 6)
+                        Text("記録中")
+                    }
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(KoeTheme.recording)
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 2)
+                    .background(KoeTheme.recording.opacity(0.12), in: Capsule())
+                }
             }
         }
-        .sheet(isPresented: $showsExportSheet) {
-            LifeLogExportSheet(
-                date: env.lifeLog.selectedDate,
-                day: env.lifeLog.day,
-                onExport: exportSelectedDay
-            )
-        }
-        .sheet(isPresented: $showsSearchSheet) {
-            LifeLogSearchSheet(env: env)
-        }
-        .alert("書き出せませんでした", isPresented: Binding(
-            get: { exportError != nil },
-            set: { if !$0 { exportError = nil } }
-        )) {
-            Button("閉じる") { exportError = nil }
-        } message: {
-            Text(exportError ?? "不明なエラー")
-        }
+        .padding(.leading, Self.rowLeading)
+        .padding(.top, 8)
+        .padding(.bottom, 18)
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
-    private var left: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            MonthActivityCalendar(
-                selectedDate: Binding(get: { env.lifeLog.selectedDate }, set: { _ in }),
-                activity: env.lifeLog.monthActivity,
-                onSelect: { date in
-                    Task {
-                        await env.lifeLog.select(date: date)
-                        if !AppEnvironment.usesScreenshotDemoData {
-                            await env.lifeLog.refreshCalendar(selectedCalendars: Set(env.settings.lifeLogCalendarTitles))
-                        }
-                    }
-                },
-                onMonthChanged: { date in Task { await env.lifeLog.loadActivity(containing: date) } }
-            )
-            .padding(14)
-            Divider().opacity(0.6)
-            dayRhythm
-                .padding(16)
-                .frame(maxWidth: .infinity, alignment: .leading)
-            Spacer(minLength: 0)
-        }
-        .panelSurface()
+    private var headerSubtitle: Text {
+        let weekday = env.lifeLog.selectedDate.formatted(.dateTime.weekday(.wide))
+        let day = env.lifeLog.day
+        let count = day.utterances.count + day.dictations.count + day.memos.count
+        let lead = isToday ? Text("今日 · \(weekday)") : Text(verbatim: weekday)
+        return count == 0 ? lead : Text("\(lead) · \(Text("\(count)件"))")
     }
 
-    private var dayRhythm: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            sectionLabel("時間帯")
-            DayRhythmView(day: env.lifeLog.day)
-                .frame(height: 52)
-        }
-        .accessibilityIdentifier("life-log.day-insights")
-    }
-
-    private func sectionLabel(_ title: String) -> some View {
-        Text(LocalizedStringKey(title))
-            .font(KoeTheme.sectionFont)
-            .foregroundStyle(.secondary)
-    }
+    /// Timeline行の本文左端と見出しを揃えるための余白。
+    static let rowLeading: CGFloat = 16
 
     private var timeline: some View {
-        VStack(spacing: 0) {
-            PanelHeader(
-                title: env.lifeLog.selectedDate.formatted(.dateTime.month(.abbreviated).day().weekday(.wide)),
-                subtitle: timelineSubtitle
-            ) {
-                HStack(spacing: 14) {
-                    Button { showsCalendarEvents = true } label: { Image(systemName: "calendar") }
-                        .help("この日の予定")
-                        .accessibilityLabel("この日の予定")
-                        .accessibilityIdentifier("life-log.calendar-events")
-                        .popover(isPresented: $showsCalendarEvents, arrowEdge: .top) {
-                            LifeLogCalendarEventList(
-                                events: env.lifeLog.day.calendarEvents,
-                                onSelect: { event in
-                                    showsCalendarEvents = false
-                                    Task { await env.lifeLog.jumpToTime(event.startsAt) }
-                                }
-                            )
-                        }
-                    Button { showsSearchSheet = true } label: { Image(systemName: "magnifyingglass") }
-                        .help("ライフログを検索 (⌘F)")
-                        .accessibilityLabel("ライフログを検索")
-                        .keyboardShortcut("f", modifiers: .command)
-                        .accessibilityIdentifier("life-log.search")
-                    Button { showsExportSheet = true } label: { Image(systemName: "square.and.arrow.up") }
-                        .help("この日を書き出す")
-                        .accessibilityLabel("この日を書き出す")
-                        .accessibilityIdentifier("life-log.export-day")
-                }
-                .font(.system(size: 13))
-            }
-            Divider().opacity(0.6)
-            ScrollViewReader { proxy in
-                ScrollView {
-                    LazyVStack(alignment: .leading, spacing: 2) {
+        ScrollViewReader { proxy in
+            ScrollView {
+                VStack(alignment: .leading, spacing: 0) {
+                    header
+                    LazyVStack(alignment: .leading, spacing: 0) {
                         ForEach(timelineItems, id: \.id) { item in
                             timelineRow(item)
                         }
-                        Color.clear.frame(height: 1).id("timeline-bottom")
                     }
-                    // 広いwindowでも1行が長くなりすぎないよう、本文を読みやすい幅に抑える。
-                    .frame(maxWidth: Self.readableTimelineWidth, alignment: .leading)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(.vertical, 8)
-                }
-                .onChange(of: env.lifeLog.sourceNavigationRevision) { _, _ in
-                    guard let id = env.lifeLog.highlightedTimelineItemID else { return }
-                    timelineFollowsLatest = false
-                    withAnimation { proxy.scrollTo(id, anchor: .center) }
-                }
-                .onChange(of: timelineItems.last?.id) { _, _ in
-                    guard timelineFollowsLatest else { return }
-                    Task { @MainActor in
-                        await Task.yield()
-                        withAnimation(.easeOut(duration: 0.2)) {
-                            proxy.scrollTo("timeline-bottom", anchor: .bottom)
-                        }
+                    if timelineItems.isEmpty {
+                        timelineEmptyState
+                            .frame(maxWidth: .infinity, minHeight: 320)
                     }
+                    Color.clear.frame(height: 1).id("timeline-bottom")
                 }
-                .task {
-                    await Task.yield()
-                    proxy.scrollTo("timeline-bottom", anchor: .bottom)
-                }
-                .onScrollGeometryChange(for: Bool.self) { geometry in
-                    LifeLogTimelineScrollPolicy.isAtBottom(
-                        contentOffsetY: geometry.contentOffset.y,
-                        contentHeight: geometry.contentSize.height,
-                        containerHeight: geometry.containerSize.height
-                    )
-                } action: { _, isAtBottom in
-                    timelineIsAtBottom = isAtBottom
-                }
-                .onScrollPhaseChange { oldPhase, newPhase in
-                    guard oldPhase.isScrolling, newPhase == .idle else { return }
-                    timelineFollowsLatest = timelineIsAtBottom
-                }
-                .overlay { if timelineItems.isEmpty { timelineEmptyState } }
+                // 広いwindowでも1行が長くなりすぎないよう、本文を読みやすい幅に抑える。
+                .frame(maxWidth: Self.readableTimelineWidth, alignment: .leading)
+                .padding(.horizontal, 28)
+                .padding(.top, 12)
+                .padding(.bottom, 12)
+                .frame(maxWidth: .infinity, alignment: .leading)
             }
+            .scrollEdgeEffectHidden(true, for: .top)
+            .scrollEdgeEffectStyle(.soft, for: .bottom)
+            .safeAreaInset(edge: .bottom, spacing: 0) {
+                bottomBar
+            }
+            .onChange(of: env.lifeLog.sourceNavigationRevision) { _, _ in
+                guard let id = env.lifeLog.highlightedTimelineItemID else { return }
+                timelineFollowsLatest = false
+                withAnimation { proxy.scrollTo(id, anchor: .center) }
+            }
+            .onChange(of: timelineItems.last?.id) { _, _ in
+                guard timelineFollowsLatest else { return }
+                Task { @MainActor in
+                    await Task.yield()
+                    withAnimation(.easeOut(duration: 0.2)) {
+                        proxy.scrollTo("timeline-bottom", anchor: .bottom)
+                    }
+                }
+            }
+            .task {
+                await Task.yield()
+                proxy.scrollTo("timeline-bottom", anchor: .bottom)
+            }
+            .onScrollGeometryChange(for: Bool.self) { geometry in
+                LifeLogTimelineScrollPolicy.isAtBottom(
+                    contentOffsetY: geometry.contentOffset.y,
+                    contentHeight: geometry.contentSize.height,
+                    containerHeight: geometry.containerSize.height
+                )
+            } action: { _, isAtBottom in
+                timelineIsAtBottom = isAtBottom
+            }
+            .onScrollPhaseChange { oldPhase, newPhase in
+                guard oldPhase.isScrolling, newPhase == .idle else { return }
+                timelineFollowsLatest = timelineIsAtBottom
+            }
+        }
+    }
+
+    /// 最下部に浮かぶ通知とcomposer。Timelineと同じ読みやすい幅に揃える。
+    private var bottomBar: some View {
+        VStack(spacing: 8) {
             if let error = env.lifeLog.errorMessage {
                 NoticeBanner(
                     title: "ライフログを継続しています",
@@ -177,51 +189,20 @@ public struct LifeLogWindow: View {
                     action: nil,
                     onDismiss: env.lifeLog.dismissError
                 )
-                .padding(8)
                 .accessibilityIdentifier("life-log.notice")
             }
-            if let startedAt = env.lifeLog.liveActivityStartedAt {
-                Divider().opacity(0.6)
-                LifeLogTranscriptionProgressRow(
-                    startedAt: startedAt,
-                    audioDuration: env.lifeLog.liveActivityAudioDuration,
-                    isListening: env.lifeLog.isHearingSpeech,
-                    transcript: env.lifeLog.liveTranscript
-                )
-            }
-            Divider().opacity(0.6)
-            LifeLogCaptureControl(
-                lifeLog: env.lifeLog,
-                scheduleCaption: env.lifeLogScheduleCaption,
-                accessibilityIdentifier: "life-log.capture-toggle"
-            ) {
-                setCaptureEnabled(!env.lifeLog.hasCaptureIntent)
-            }
-            .padding(.horizontal, 16)
-            .padding(.vertical, 10)
-            if Calendar.current.isDateInToday(env.lifeLog.selectedDate) {
-                LifeLogMemoComposer(
-                    text: $memoDraft,
-                    accessibilityPrefix: "life-log",
-                    isVoiceMemoRecording: env.coordinator.isVoiceMemoRecording,
-                    isPreparingVoiceMemo: env.isPreparingVoiceMemo,
-                    canToggleVoiceMemo: env.canToggleVoiceMemo,
-                    voiceMemoShortcut: env.settings.voiceMemoHotkey.displayName,
-                    onToggleVoiceMemo: env.toggleVoiceMemo
-                ) { value in
-                    Task { await env.lifeLog.addMemo(value) }
-                }
-                .padding(.horizontal, 12)
-                .padding(.bottom, 12)
-            }
+            LifeLogComposerBar(
+                env: env,
+                memoDraft: $memoDraft,
+                accessibilityPrefix: "life-log",
+                acceptsMemo: isToday
+            )
         }
-        .panelSurface()
-    }
-
-    private var timelineSubtitle: String? {
-        let day = env.lifeLog.day
-        let count = day.utterances.count + day.dictations.count + day.memos.count
-        return count == 0 ? nil : "\(count)件"
+        .frame(maxWidth: Self.readableTimelineWidth)
+        .padding(.horizontal, 28)
+        .padding(.bottom, 16)
+        .padding(.top, 6)
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     private var timelineEmptyState: some View {
@@ -256,8 +237,6 @@ public struct LifeLogWindow: View {
             )
         case .event(let value):
             CalendarEventCard(event: value)
-                .padding(.horizontal, 12)
-                .padding(.vertical, 6)
                 .accessibilityIdentifier("life-log.timeline-event-\(value.id)")
         case .dictation(let value):
             TimelineEntryRow(date: value.startedAt, kind: .dictation, text: value.text)
@@ -329,23 +308,7 @@ public struct LifeLogWindow: View {
 
 }
 
-struct LiveWaveform: View {
-    var body: some View {
-        TimelineView(.animation(minimumInterval: 0.22)) { context in
-            let phase = context.date.timeIntervalSinceReferenceDate * 4
-            HStack(alignment: .center, spacing: 2) {
-                ForEach(0..<4, id: \.self) { index in
-                    Capsule()
-                        .fill(KoeTheme.voiceGradient)
-                        .frame(width: 2.5, height: 5 + abs(sin(phase + Double(index))) * 8)
-                }
-            }
-            .frame(width: 17, height: 14)
-        }
-    }
-}
-
-private struct DayRhythmView: View {
+struct DayRhythmView: View {
     var day: LifeLogDay
 
     var body: some View {

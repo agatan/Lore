@@ -47,31 +47,48 @@ struct LifeLogCaptureControl: View {
         }
     }
 
-    private var subtitle: LocalizedStringKey? {
+    private var status: LifeLogCaptureStatus { LifeLogCaptureStatus(lifeLog: lifeLog, scheduleCaption: scheduleCaption) }
+    private var subtitle: LocalizedStringKey? { status.subtitle }
+    private var buttonTitle: String { status.buttonTitle }
+    private var statusTint: Color { status.tint }
+    private var statusSymbol: String { status.symbol }
+    private var statusTitle: String { status.title }
+    private var actionLabel: String { status.actionLabel }
+}
+
+/// 記録状態の文言・symbol・色。Menu barとmain/miniのbarで同じ判断を使う。
+@MainActor
+struct LifeLogCaptureStatus {
+    var lifeLog: LifeLogCoordinator
+    var scheduleCaption: AppEnvironment.LifeLogScheduleCaption?
+
+    /// 停止中は見出しだけで状態が伝わるため、同じ意味の補足を重ねない。
+    /// 自動記録の時刻は停止中でも次の動きを示す情報なので出す。
+    var subtitle: LocalizedStringKey? {
         guard lifeLog.hasCaptureIntent else { return scheduleCaption?.text }
         // 再接続や一時停止は自動記録の時刻より優先して伝える。
         if lifeLog.isCapturing, let scheduleCaption { return scheduleCaption.text }
         return LocalizedStringKey(lifeLog.captureStatusText)
     }
 
-    private var buttonTitle: String {
+    var buttonTitle: String {
         lifeLog.hasCaptureIntent ? "停止" : "記録を開始"
     }
 
-    private var statusTint: Color {
+    var tint: Color {
         if lifeLog.isCapturing { return KoeTheme.recording }
         if lifeLog.isRecoveringCapture || lifeLog.hasCaptureIntent { return KoeTheme.warning }
         return .secondary
     }
 
-    private var statusSymbol: String {
+    var symbol: String {
         if lifeLog.isRecoveringCapture { return "arrow.trianglehead.2.clockwise.rotate.90" }
         if lifeLog.isCapturing { return "waveform" }
         if lifeLog.hasCaptureIntent { return "ellipsis" }
         return "waveform.slash"
     }
 
-    private var statusTitle: String {
+    var title: String {
         if lifeLog.isSuspendedForVoiceMemo { return "ライフログ一時停止中" }
         if lifeLog.isRecoveringCapture { return "ライフログ再接続中" }
         if lifeLog.isCapturing { return "ライフログ記録中" }
@@ -79,7 +96,7 @@ struct LifeLogCaptureControl: View {
         return "ライフログ停止中"
     }
 
-    private var actionLabel: String {
+    var actionLabel: String {
         lifeLog.hasCaptureIntent ? "ライフログ録音を停止" : "ライフログ録音を開始"
     }
 }

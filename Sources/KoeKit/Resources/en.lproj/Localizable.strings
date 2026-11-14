@@ -304,3 +304,7 @@
 "このMacの同期を解除しますか？" = "Turn off sync on this Mac?";
 "同期コードを知っている人は同期データを読めます。周りに人がいないことを確かめてください。" = "Anyone who knows the sync code can read your synced data. Make sure no one else can see your screen.";
 "このMacの同期コードと同期状態を消し、以後の変更を送受信しません。このMacのデータとフォルダ内のファイルは残ります。" = "Removes this Mac’s sync code and sync state and stops exchanging changes. This Mac’s data and the folder’s files are kept.";
+"記録中" = "Recording";
+"%lld件" = "%lld items";
+"今日 · %@" = "Today · %@";
+"いま" = "Now";

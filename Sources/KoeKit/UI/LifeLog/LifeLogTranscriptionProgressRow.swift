@@ -39,9 +39,8 @@ struct LifeLogTranscriptionProgressRow: View {
                 .foregroundStyle(.secondary)
             }
             .foregroundStyle(KoeTheme.accent)
-            .padding(.horizontal, 16)
+            .padding(.horizontal, 14)
             .padding(.vertical, 9)
-            .background(KoeTheme.accent.opacity(0.045))
         }
         .accessibilityElement(children: .combine)
         .accessibilityIdentifier("life-log.transcription-progress")

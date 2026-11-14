@@ -28,6 +28,19 @@ struct LifeLogMiniWindow: View {
                     }
                     .padding(.vertical, 6)
                 }
+                .scrollEdgeEffectStyle(.soft, for: .all)
+                .safeAreaInset(edge: .bottom, spacing: 0) {
+                    LifeLogComposerBar(
+                        env: env,
+                        memoDraft: $memoDraft,
+                        accessibilityPrefix: "life-log-mini",
+                        acceptsMemo: true,
+                        compact: true
+                    )
+                    .padding(.horizontal, 10)
+                    .padding(.bottom, 10)
+                    .padding(.top, 4)
+                }
                 .task {
                     await Task.yield()
                     proxy.scrollTo("bottom", anchor: .bottom)
@@ -62,40 +75,12 @@ struct LifeLogMiniWindow: View {
                 }
             }
 
-            if let startedAt = env.lifeLog.liveActivityStartedAt {
-                Divider().opacity(0.6)
-                LifeLogTranscriptionProgressRow(
-                    startedAt: startedAt,
-                    audioDuration: env.lifeLog.liveActivityAudioDuration,
-                    isListening: env.lifeLog.isHearingSpeech,
-                    transcript: env.lifeLog.liveTranscript
-                )
-            }
-            Divider().opacity(0.6)
-            LifeLogCaptureControl(
-                lifeLog: env.lifeLog,
-                scheduleCaption: env.lifeLogScheduleCaption,
-                accessibilityIdentifier: "life-log-mini.capture-toggle"
-            ) {
-                env.setLifeLogCaptureEnabled(!env.lifeLog.hasCaptureIntent)
-            }
-            .padding(.horizontal, 12)
-            .padding(.vertical, 8)
-            LifeLogMemoComposer(
-                text: $memoDraft,
-                accessibilityPrefix: "life-log-mini",
-                isVoiceMemoRecording: env.coordinator.isVoiceMemoRecording,
-                isPreparingVoiceMemo: env.isPreparingVoiceMemo,
-                canToggleVoiceMemo: env.canToggleVoiceMemo,
-                voiceMemoShortcut: env.settings.voiceMemoHotkey.displayName,
-                onToggleVoiceMemo: env.toggleVoiceMemo
-            ) { value in
-                Task { await env.lifeLog.addMemo(value) }
-            }
-            .padding(.horizontal, 10)
-            .padding(.bottom, 10)
         }
-        .frame(minWidth: 340, minHeight: 360)
+        // Title barを持たない小窓なので、traffic lightの高さだけ上を空ける。
+        .padding(.top, 28)
+        .background { VisualEffectBackground(material: .popover).ignoresSafeArea() }
+        .ignoresSafeArea(edges: .top)
+        .frame(minWidth: 360, minHeight: 360)
         .task {
             env.applyLifeLogMiniWindowLevel()
             await env.lifeLog.followCurrentDay()
@@ -122,9 +107,7 @@ struct LifeLogMiniWindow: View {
     }
 
     private func eventRow(_ event: CalendarEventSnapshot) -> some View {
-        CalendarEventCard(event: event)
-            .padding(.horizontal, 10)
-            .padding(.vertical, 4)
+        CalendarEventCard(event: event, compact: true)
             .id("e-\(event.id)")
     }
 

@@ -74,6 +74,7 @@ struct SettingsWindowView: View {
             detail.navigationTitle(LocalizedStringKey(env.settingsSection.title))
         }
         .frame(minWidth: 960, minHeight: 680)
+        .toolbarBackgroundVisibility(.hidden, for: .windowToolbar)
     }
 
     private func row(_ section: SettingsSection) -> some View {

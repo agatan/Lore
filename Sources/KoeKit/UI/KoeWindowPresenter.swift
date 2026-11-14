@@ -16,6 +16,7 @@ final class KoeWindowPresenter {
             id: KoeWindow.main,
             title: "Koe",
             size: NSSize(width: 1_680, height: 960),
+            chrome: .sidebar,
             root: AnyView(
                 MainWindowView(env: env)
                     .environment(\.locale, env.settings.applicationLanguage.resolvedLocale())
@@ -32,6 +33,7 @@ final class KoeWindowPresenter {
             id: KoeWindow.settings,
             title: "Koe 設定",
             size: NSSize(width: 980, height: 720),
+            chrome: .sidebar,
             root: AnyView(
                 SettingsWindowView(env: env)
                     .environment(\.locale, env.settings.applicationLanguage.resolvedLocale())
@@ -51,7 +53,7 @@ final class KoeWindowPresenter {
             id: KoeWindow.lifeLogMini,
             title: "ライフログ ミニ",
             size: NSSize(width: 460, height: 620),
-            hiddenTitleBar: true,
+            chrome: .panel,
             root: AnyView(
                 LifeLogMiniWindow(env: env)
                     .environment(\.locale, env.settings.applicationLanguage.resolvedLocale())
@@ -63,11 +65,20 @@ final class KoeWindowPresenter {
         env.applyLifeLogMiniWindowLevel()
     }
 
+    /// Windowの枠の作り。
+    enum Chrome {
+        case standard
+        /// 全高sidebarとunified toolbarを持つsplit view window。
+        case sidebar
+        /// Title barを持たず、content全体を半透明素材で描く小窓。
+        case panel
+    }
+
     private func show(
         id: String,
         title: String,
         size: NSSize,
-        hiddenTitleBar: Bool = false,
+        chrome: Chrome = .standard,
         root: AnyView
     ) {
         // LSUIElementのまま生成したAppKit windowは表示状態でもAX treeへ公開されない。
@@ -80,9 +91,11 @@ final class KoeWindowPresenter {
         }
 
         let controller = NSHostingController(rootView: root)
+        var styleMask: NSWindow.StyleMask = [.titled, .closable, .miniaturizable, .resizable]
+        if chrome != .standard { styleMask.insert(.fullSizeContentView) }
         let window = NSWindow(
             contentRect: NSRect(origin: .zero, size: size),
-            styleMask: [.titled, .closable, .miniaturizable, .resizable],
+            styleMask: styleMask,
             backing: .buffered,
             defer: false
         )
@@ -93,9 +106,18 @@ final class KoeWindowPresenter {
         window.identifier = NSUserInterfaceItemIdentifier(id)
         window.title = title
         window.isReleasedWhenClosed = false
-        if hiddenTitleBar {
+        switch chrome {
+        case .standard:
+            break
+        case .sidebar:
+            // Sidebarをtraffic lightまで伸ばし、toolbarをcontentの上に浮かべる(macOS 26の標準構成)。
+            window.toolbarStyle = .unified
+            window.titlebarSeparatorStyle = .none
+            window.titlebarAppearsTransparent = true
+        case .panel:
             window.titleVisibility = .hidden
             window.titlebarAppearsTransparent = true
+            window.isMovableByWindowBackground = true
         }
         window.center()
 

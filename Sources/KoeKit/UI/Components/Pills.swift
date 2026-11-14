@@ -133,31 +133,6 @@ struct PanelSurface: ViewModifier {
     }
 }
 
-/// 面の中の見出し行。見出しは小さく、操作は右へ寄せる。
-struct PanelHeader<Trailing: View>: View {
-    var title: String
-    var subtitle: String?
-    @ViewBuilder var trailing: () -> Trailing
-
-    var body: some View {
-        HStack(alignment: .firstTextBaseline, spacing: 8) {
-            Text(LocalizedStringKey(title))
-                .font(.system(size: 13, weight: .semibold))
-            if let subtitle {
-                Text(LocalizedStringKey(subtitle))
-                    .font(KoeTheme.captionFont)
-                    .foregroundStyle(.secondary)
-            }
-            Spacer(minLength: 8)
-            trailing()
-                .buttonStyle(.borderless)
-                .foregroundStyle(.secondary)
-        }
-        .padding(.horizontal, 16)
-        .frame(height: 44)
-    }
-}
-
 extension View {
     func panelSurface(cornerRadius: CGFloat = KoeTheme.panelCornerRadius) -> some View {
         modifier(PanelSurface(cornerRadius: cornerRadius))

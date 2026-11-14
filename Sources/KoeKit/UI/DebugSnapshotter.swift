@@ -14,7 +14,17 @@ enum DebugSnapshotter {
         return URL(fileURLWithPath: arguments[index + 1], isDirectory: true)
     }
 
+    /// `--koe-snapshot-appearance dark|light`で外観を固定して撮る。省略時はsystemの外観。
+    static var appearance: NSAppearance? {
+        let arguments = ProcessInfo.processInfo.arguments
+        guard let index = arguments.firstIndex(of: "--koe-snapshot-appearance"), arguments.indices.contains(index + 1) else {
+            return nil
+        }
+        return NSAppearance(named: arguments[index + 1] == "dark" ? .darkAqua : .aqua)
+    }
+
     static func run(env: AppEnvironment, presenter: KoeWindowPresenter, into directory: URL) async {
+        if let appearance { NSApp.appearance = appearance }
         do {
             try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
             // 自動記録の表示も確認できるよう、現在時刻を含まない時間帯で有効にする。

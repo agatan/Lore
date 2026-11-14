@@ -13,18 +13,15 @@ struct LifeLogMemoComposer: View {
     var onSend: (String) -> Void
 
     var body: some View {
-        HStack(alignment: .bottom, spacing: 6) {
+        HStack(alignment: .bottom, spacing: 4) {
+            // 入力欄は浮いたbar自体を枠として使い、二重の枠を描かない。
             TextField("メモを追加…", text: $text, axis: .vertical)
                 .textFieldStyle(.plain)
-                .font(.system(size: 12.5))
-                .lineLimit(1...4)
-                .padding(.horizontal, 12)
-                .padding(.vertical, 8)
-                .background(Color.primary.opacity(0.05), in: RoundedRectangle(cornerRadius: 9, style: .continuous))
-                .overlay {
-                    RoundedRectangle(cornerRadius: 9, style: .continuous)
-                        .strokeBorder(Color.primary.opacity(0.08), lineWidth: 0.5)
-                }
+                .font(.system(size: 13))
+                .lineLimit(1...5)
+                .padding(.horizontal, 4)
+                .padding(.vertical, 7)
+                .frame(maxWidth: .infinity)
                 .onSubmit(send)
                 .accessibilityIdentifier("\(accessibilityPrefix).memo-input")
             voiceMemoButton

@@ -43,9 +43,10 @@ struct HistoryBrowserView: View {
                     .listRowInsets(EdgeInsets(top: 6, leading: 12, bottom: 6, trailing: 12))
             }
         }
-        // .inset はペインの中では枠付きカードとして描かれてしまうため plain にする。
+        // Mailの一覧列と同じく、選択は角丸のhighlightで示し、行の枠は描かない。
         .listStyle(.sidebar)
         .scrollContentBackground(.hidden)
+        .scrollEdgeEffectStyle(.soft, for: .top)
         .overlay {
             if env.history.isEmpty {
                 ContentUnavailableView(
@@ -146,18 +147,28 @@ private struct HistoryDetailView: View {
                         .controlSize(.small)
                 }
             }
-            .padding(22)
-            .frame(maxWidth: 720, alignment: .leading)
+            .padding(.horizontal, 32)
+            .padding(.top, 20)
+            .padding(.bottom, 28)
+            .frame(maxWidth: 760, alignment: .leading)
+            .frame(maxWidth: .infinity, alignment: .leading)
         }
+        .scrollEdgeEffectStyle(.soft, for: .top)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
     private var header: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            HStack(spacing: 8) {
-                Text(record.startedAt.formatted(date: .abbreviated, time: .standard))
-                    .font(.system(size: 15, weight: .semibold))
-                StatusBadge(status: record.status)
+        VStack(alignment: .leading, spacing: 8) {
+            VStack(alignment: .leading, spacing: 4) {
+                Text(record.startedAt.formatted(date: .omitted, time: .shortened))
+                    .font(KoeTheme.titleFont)
+                    .accessibilityAddTraits(.isHeader)
+                HStack(spacing: 8) {
+                    Text(record.startedAt.formatted(.dateTime.year().month(.wide).day().weekday(.wide)))
+                        .font(.system(size: 13))
+                        .foregroundStyle(.secondary)
+                    StatusBadge(status: record.status)
+                }
             }
             HStack(spacing: 5) {
                 if let appName = record.appName {

@@ -26,6 +26,8 @@ public enum KoeTheme {
     public static let panelCornerRadius: CGFloat = 12
     public static let cardCornerRadius: CGFloat = 8
 
+    /// 日付など、画面の主題を示す大見出し。1画面に1つだけ置く。
+    public static let titleFont = Font.system(size: 28, weight: .bold, design: .rounded)
     /// 本文、補足、見出しの3段だけを使い、画面ごとに字の大きさを増やさない。
     public static let bodyFont = Font.system(size: 13)
     public static let captionFont = Font.system(size: 11)

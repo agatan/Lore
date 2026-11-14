@@ -64,8 +64,8 @@ struct TimelineEntryRow: View {
                 editor
             } else {
                 Text(text)
-                    .font(.system(size: compact ? 12.5 : 13))
-                    .lineSpacing(3)
+                    .font(.system(size: compact ? 12.5 : 13.5))
+                    .lineSpacing(compact ? 3 : 4)
                     .textSelection(.enabled)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .simultaneousGesture(TapGesture(count: 2).onEnded { beginEditing() }, including: onEdit == nil ? .none : .all)
@@ -73,11 +73,11 @@ struct TimelineEntryRow: View {
             }
         }
         .padding(.horizontal, compact ? 12 : 16)
-        .padding(.vertical, compact ? 7 : 8)
+        .padding(.vertical, compact ? 6 : 7)
         .background {
-            RoundedRectangle(cornerRadius: 8, style: .continuous)
-                .fill(isHighlighted ? KoeTheme.accent.opacity(0.14) : (isHovering && !isEditing ? Color.primary.opacity(0.04) : .clear))
-                .padding(.horizontal, compact ? 4 : 6)
+            RoundedRectangle(cornerRadius: compact ? 8 : 10, style: .continuous)
+                .fill(isHighlighted ? KoeTheme.accent.opacity(0.14) : (isHovering && !isEditing ? Color.primary.opacity(0.035) : .clear))
+                .padding(.horizontal, compact ? 4 : 2)
         }
         .onHover { isHovering = $0 }
         .animation(.easeOut(duration: 0.12), value: isHovering)

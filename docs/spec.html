@@ -216,7 +216,7 @@
 </article>
 <article class="card">
 <h3>Timeline</h3>
-<p>Life logは左に月間activity calendarと選択日の時間帯、右に選択日のtimelineを表示します。Timelineの見出しには選択日と項目数を置き、予定、検索、書き出しのbuttonを右端へまとめます。Timeline paneは予定、発話、音声入力、text memoを一列の時刻順で表示し、column headerは置きません。日付を選ぶと予定一覧とtimelineを更新します。検索buttonまたはCommand-Fで横断検索を開き、発話、音声入力、memoは対象項目へ移動します。Mini windowも予定と記録を一列表示します。今日の最下部とmini windowにはmemo入力、記録状態、開始・停止操作を置きます。</p>
+<p>Main windowは全高の半透明sidebarを持つsplit viewで、sidebar上部の「ライフログ」「音声入力」で表示を切り替えます。Life log表示中のsidebarはnavigationの下に月間activity calendarと選択日の時間帯を置き、右のcontentは大きな日付見出し、曜日・項目数、今日なら記録状態から始まるtimelineです。予定、検索、書き出しのbuttonはwindow toolbarへまとめます。Timeline paneは予定、発話、音声入力、text memoを一列の時刻順で表示し、column headerは置きません。日付を選ぶと予定一覧とtimelineを更新します。検索buttonまたはCommand-Fで横断検索を開き、発話、音声入力、memoは対象項目へ移動します。Mini windowも予定と記録を一列表示します。Main windowとmini windowの最下部にはtimelineの上に浮かぶ一本のcapsule barを置き、左端に記録の開始・停止buttonと記録状態、続いてmemo入力、音声memo、送信を並べます。Timelineはbarの下までscrollでき、最後の行も隠れません。Main windowの入力欄は今日を選択中だけ表示し、過去日のbarは記録操作と状態だけを持ちます。</p>
 <p>Koeのmemoは声や短い入力で素早く残す下書きです。本格的な清書や別のメモアプリ・タスク管理への転記は、MCPやCLIで読み出した外部AIが行います。Koe側は誤字直し程度の編集だけを提供します。</p>
 <p>Main windowとmini windowのmemoは、hover時の編集buttonまたは本文のdouble-clickでその場で編集できます。Returnで保存、Option-Returnで改行、Escで取り消します。空の本文は保存せず、memoの作成時刻は変わりません。削除はmain windowのhover時の削除buttonで行います。Main windowのtimelineは本文を読みやすい幅（約800 pt）に抑えます。</p>
 </article>
@@ -253,11 +253,11 @@
 </tr>
 <tr>
 <td>Main window</td>
-<td>通常起動時に前面のkey windowとして1680×960 ptで開き、calendar列とtimelineの2ペインを同時に表示する。Life logの今日を選択してtimelineの最新位置を表示。今日のtimeline最下部から手入力・音声memoを追加し、記録操作はtimeline内の状態表示に置く</td>
+<td>通常起動時に前面のkey windowとして1680×960 ptで開き、全高のsidebar（navigation、calendar、時間帯）とcontentのsplit viewを表示する。Life logの今日を選択してtimelineの最新位置を表示。最下部の浮いたbarから手入力・音声memoの追加と記録操作を行い、予定・検索・書き出しはwindow toolbarに置く。音声入力履歴は一覧と詳細で表示する</td>
 </tr>
 <tr>
 <td>Mini window</td>
-<td>Life log状態、今日のtimelineへの手入力・音声memo追加。一度開いたら明示的に閉じるまで、ほかのapp、desktop Space、full-screen Spaceより手前に表示し続ける。記録操作はwindow右肩ではなく状態表示に置く</td>
+<td>Life log状態、今日のtimelineへの手入力・音声memo追加。一度開いたら明示的に閉じるまで、ほかのapp、desktop Space、full-screen Spaceより手前に表示し続ける。記録操作は最下部の浮いたbarに置く。窓全体を半透明の素材で描く</td>
 </tr>
 <tr>
 <td>Settings: 共通</td>
@@ -471,7 +471,7 @@ koe range --from YYYY-MM-DD [--to YYYY-MM-DD] [--include calendar,speech,voice-i
 <li>通常起動時、main windowでlife logを開いた時、mini windowを開いた時は、今日のtimelineの最新項目が表示される。</li>
 <li>Timelineは予定・発話・音声入力・memoを時刻順に表示し、検索はCommand-Fでも開く。</li>
 <li>Mini windowはtitle barなしの一列timelineで予定と記録を時刻順に表示し、進行中の予定を上部へ固定する。明示的に閉じるまでSpace切替やfull-screen appの利用中も手前に残り、通常の文字入力ではtoggleされない。</li>
-<li>Main window、mini window、menu barの記録状態は実際のaudio writerの稼働状態から同期され、内部の文字起こし状態で文言をちらつかせない。Main/mini windowでは開始・停止をmemo入力欄の直上に配置する。</li>
+<li>Main window、mini window、menu barの記録状態は実際のaudio writerの稼働状態から同期され、内部の文字起こし状態で文言をちらつかせない。Main/mini windowでは開始・停止をmemo入力欄と同じ浮いたbarの左端に配置する。</li>
 <li>継続可能なmessageは<code>×</code>で閉じられ、dismissしても自動再接続や記録開始意図は変わらない。</li>
 <li>月間calendarは表示中の日をprimary colorの円で塗り、それ以外の今日をprimary colorの数字で示す。</li>
 <li>TODO・要約・token集計を持つ旧版DBを開くと、migration直前backupを残してそれらを削除し、発話、memo、検索は引き続き使える。</li>

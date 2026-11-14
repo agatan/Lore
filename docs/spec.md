@@ -119,13 +119,13 @@ cloud音声入力で送るのは今回の文字起こし、共通rule、mode指�
 
 ### 4.2 日別表示
 
-- main windowは「ライフログ」と「音声入力」を切り替え、ライフログを既定表示にします。
-- ライフログは左に月間activity calendarと選択日の時間帯、右に選択日のtimelineを表示します。Timelineの見出しには選択日と項目数を置き、予定、検索、書き出しのbuttonを右端へまとめます。
+- main windowは全高の半透明sidebarを持つsplit viewです。Sidebar上部の「ライフログ」「音声入力」で表示を切り替え、ライフログを既定表示にします。
+- ライフログ表示中のsidebarは、navigationの下に月間activity calendarと選択日の時間帯を置きます。右のcontentは選択日のtimelineで、先頭に大きな日付見出しと曜日・項目数、今日なら記録状態を表示します。予定、検索、書き出しのbuttonはwindow toolbarへまとめます。
 - 通常起動時とmain windowのライフログを開いた時は今日を表示し、dataの読込後にtimeline最下部の最新項目へ一度だけscrollします。mini windowも開いた時に今日を表示して最下部へ一度だけscrollします。その後に新しい認識結果や予定が届いても利用者の閲覧位置を奪いません。
-- timeline paneは予定、発話、音声入力、text memoを一列の時刻順で表示し、column headerは置きません。右上の予定buttonは選択日の予定を時刻と件名中心の素朴な一覧で表示します。日付を選ぶとその日の予定を読み直し、一覧とtimelineの両方へ反映します。予定一覧では塗りを使いません。
-- 右上の検索buttonまたは`Command-F`で横断検索を開きます。検索結果の発話、音声入力、memoを選ぶと対象日を開いてその項目へ移動します。
+- timeline paneは予定、発話、音声入力、text memoを一列の時刻順で表示し、column headerは置きません。toolbarの予定buttonは選択日の予定を時刻と件名中心の素朴な一覧で表示します。日付を選ぶとその日の予定を読み直し、一覧とtimelineの両方へ反映します。予定一覧では塗りを使いません。
+- toolbarの検索buttonまたは`Command-F`で横断検索を開きます。検索結果の発話、音声入力、memoを選ぶと対象日を開いてその項目へ移動します。
 - mini windowは予定、発話、音声入力、memoを一列の時刻順で表示し、今日進行中の予定をtimeline上部に固定します。OS標準のtitle barは表示せず、Space切替やfull-screen appの利用中も明示的に閉じるまで手前に残ります。Mini windowのtoggle hotkeyは、設定された修飾キーを含む押下と離上が対になった場合だけ切り替え、同じ文字keyだけの通常入力では開閉しません。
-- 今日のtimeline最下部とmini windowには同じchat形式の入力欄があり、送信したmemoを今日のtimelineへ即時追加します。記録状態と開始・停止操作はどちらも入力欄の直上に配置します。送信ボタンと音声入力ボタンは同じ直径の円形controlに揃えます。過去日の履歴へ現在のmemoを混入させないため、main windowの入力欄は今日を選択中だけ表示します。
+- Main windowとmini windowの最下部には、timelineの上に浮かぶ一本のcapsule barがあります。左端に記録の開始・停止buttonと記録状態、続いてchat形式のmemo入力欄、音声memo button、送信buttonを並べ、送信したmemoを今日のtimelineへ即時追加します。送信ボタンと音声入力ボタンは同じ直径の円形controlに揃えます。Timelineはbarの下までscrollでき、最後の行もbarに隠れません。過去日の履歴へ現在のmemoを混入させないため、main windowの入力欄は今日を選択中だけ表示し、過去日のbarは記録操作と状態だけを持ちます。
 - ボイスメモも手入力と同じmemoとして今日のtimelineへ追加します。
 - Koeのmemoは声や短い入力で素早く残す下書きです。本格的な清書や別のメモアプリ・タスク管理への転記は、MCPやCLIで読み出した外部AIが行います。Koe側は誤字直し程度の編集だけを提供します。
 - Main windowとmini windowのmemoは、hover時の編集buttonまたは本文のdouble-clickでその場で編集できます。Returnで保存、Option-Returnで改行、Escで取り消します。空の本文は保存せず、memoの作成時刻は変わりません。削除はmain windowのhover時の削除buttonで行います。
@@ -165,8 +165,8 @@ Koeのprimary colorはapp icon由来の爽やかなblueに固定し、利用者�
 | 場所 | 公開機能 |
 |---|---|
 | Menu bar | ライフログ/音声入力の用途別quick action。ライフログは記録切替、今日の画面、mini window、音声入力は録音、mode、直前結果、履歴を各tab内にまとめ、共通footerは設定と終了だけを置く。「今日を開く」「ミニウィンドウ」はsystem fontを直接描画するcompact buttonとする |
-| Main window | 通常起動時に前面のkey windowとして1680×960 ptで開き、calendar列とtimelineの2ペインを同時に表示する。ライフログの今日を選択してtimelineの最新位置を表示。onboarding、ライフログ、今日のtimeline最下部からの手入力・音声memo追加、音声入力履歴。記録操作はtoolbar右肩ではなくtimeline内の状態表示に置く |
-| Mini window | ライフログ状態、今日のtimelineへの手入力・音声memo追加。一度開いたら明示的に閉じるまで、ほかのapp、desktop Space、full-screen Spaceより手前に表示し続ける。記録操作はwindow右肩ではなく状態表示に置く |
+| Main window | 通常起動時に前面のkey windowとして1680×960 ptで開き、全高のsidebar（navigation、calendar、時間帯）とcontentのsplit viewを表示する。ライフログの今日を選択してtimelineの最新位置を表示。onboarding、ライフログ、最下部の浮いたbarからの手入力・音声memo追加と記録操作、音声入力履歴（一覧と詳細）。予定・検索・書き出しはwindow toolbarに置く |
+| Mini window | ライフログ状態、今日のtimelineへの手入力・音声memo追加。一度開いたら明示的に閉じるまで、ほかのapp、desktop Space、full-screen Spaceより手前に表示し続ける。記録操作は最下部の浮いたbarに置く。窓全体を半透明の素材で描く |
 | Settings: 共通 | 一般（表示言語を含む）、語彙、privacy（保存場所、このMacの使用量、削除）、同期、連携 |
 | Settings: 音声入力 | hotkey、聞き取りengine・whisper.cpp model、feedback、履歴、AI整形、mode |
 | Settings: ライフログ | 記録・mini window・ボイスメモhotkey、自動記録の曜日と時間帯、入力device、STT engine・認識言語・whisper.cpp model、audio保持、calendar再取得 |
@@ -277,7 +277,7 @@ koe range --from YYYY-MM-DD [--to YYYY-MM-DD] [--include calendar,speech,voice-i
 17. 通常起動時、main windowでライフログを開いた時、mini windowを開いた時は、今日のtimelineの最新項目が表示される。
 18. Timelineはheaderなしの一列で予定・発話・音声入力・memoを時刻順に表示する。日付選択時に予定一覧とtimelineが更新され、検索は`Command-F`でも開く。
 19. Mini windowはtitle barなしの一列timelineで予定と記録を時刻順に表示し、進行中の予定を上部へ固定する。明示的に閉じるまでSpace切替やfull-screen appの利用中も手前に残り、通常の文字入力ではtoggleされない。
-20. Main window、mini window、menu barの記録状態は実際のaudio writerの稼働状態から同期され、同じ色、symbol、文言を使う。Main/mini windowでは開始・停止をmemo入力欄の直上に配置する。
+20. Main window、mini window、menu barの記録状態は実際のaudio writerの稼働状態から同期され、同じ色、symbol、文言を使う。Main/mini windowでは開始・停止をmemo入力欄と同じ浮いたbarの左端に配置する。
 21. 継続可能なmessageは`×`で閉じられ、dismissしても自動再接続や記録開始意図は変わらない。
 22. 月間calendarは表示中の日をprimary colorの円で塗り、それ以外の今日をprimary colorの数字で示す。
 23. TODO・要約・token集計を持つ旧版DBを開くと、migration直前backupを残してそれらを削除し、発話、memo、検索は引き続き使える。

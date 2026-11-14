@@ -49,9 +49,9 @@ make ui-test
 
 ## 見た目の確認
 
-Debug buildの`KoeUITests.app`を`--koe-screenshot-demo --koe-snapshot <dir>`で起動すると、main（ライフログ・音声入力）、全設定section、mini windowを順に開き、各windowを`<dir>`へPNGで保存して終了します。自process内のwindowだけをScreenCaptureKitで撮るため、画面収録の許可は不要です。Release buildには含めません。
+Debug buildの`KoeUITests.app`を`--koe-screenshot-demo --koe-snapshot <dir>`で起動すると、main（ライフログ・音声入力）、全設定section、mini windowを順に開き、各windowを`<dir>`へPNGで保存して終了します。自process内のwindowだけをScreenCaptureKitで撮るため、画面収録の許可は不要です。`--koe-snapshot-appearance dark`（または`light`）を足すと外観を固定して撮ります。Release buildには含めません。
 
 ```sh
 make ui-test-app
-open -n -W build/KoeUITests.app --args --koe-screenshot-demo --koe-snapshot /tmp/koe-shots
+open -n -W build/KoeUITests.app --args --koe-screenshot-demo --koe-snapshot /tmp/koe-shots --koe-snapshot-appearance dark
 ```

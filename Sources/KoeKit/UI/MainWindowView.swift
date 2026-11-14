@@ -21,8 +21,8 @@ public enum MainSection: String, CaseIterable, Identifiable, Hashable, Sendable 
     }
 }
 
-/// メイン用途は同階層のtabとして切り替える。ライフログ内のCalendar sidebarと
-/// アプリnavigationを二重に並べないことで、常に3カラムの情報構造を保つ。
+/// Mail・Notesと同じく、全高のsidebarにnavigationとその表示の補助(calendar)を置き、
+/// 右のcontentを1つの主題に集中させる。Toolbarはcontent側の操作だけを持つ。
 public struct MainWindowView: View {
     var env: AppEnvironment
 
@@ -34,28 +34,18 @@ public struct MainWindowView: View {
                 OnboardingView(env: env)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
-                detail
-            }
-        }
-            .frame(minWidth: 1_200, minHeight: 680)
-            .toolbar {
-                if !showsOnboarding {
-                    ToolbarItem(placement: .principal) {
-                        Picker("表示", selection: Binding(get: { env.mainSection }, set: { env.mainSection = $0 })) {
-                            ForEach(MainSection.allCases) { section in
-                                Text(LocalizedStringKey(section.title))
-                                    .tag(section)
-                                    .accessibilityLabel(LocalizedStringKey(section.title))
-                                    .accessibilityIdentifier("main.section.\(section.rawValue)")
-                            }
-                        }
-                        .labelsHidden()
-                        .pickerStyle(.segmented)
-                        .fixedSize()
-                        .accessibilityIdentifier("main.section-picker")
-                    }
+                NavigationSplitView {
+                    MainSidebar(env: env)
+                        .navigationSplitViewColumnWidth(min: 252, ideal: 276, max: 340)
+                } detail: {
+                    detail
                 }
             }
+        }
+            .frame(minWidth: 1_080, minHeight: 680)
+            .toolbar(removing: .title)
+            // Toolbarの下に硬い罫線を引かず、scroll edge effectで内容との境界を作る。
+            .toolbarBackgroundVisibility(.hidden, for: .windowToolbar)
             .task {
                 env.mainSection = .lifeLog
                 await env.boot()
@@ -74,7 +64,7 @@ public struct MainWindowView: View {
                     env.cancelLifeLogAudioStorageConsent()
                 }
             } message: {
-                Text("文字起こしに失敗しても発話を回収できるよう、短い音声チャンクをこのMacだけに保存します。音声をGroqへ送ることはありません。既定では30日後に削除します。")
+                Text("文字起こしに失敗しても発話を回収できるよう、短い音声チャンクをこのMacだけに保存します。音声を外部へ送ることはありません。既定では文字起こしが終わった音声から削除します。")
             }
     }
 
@@ -91,5 +81,59 @@ public struct MainWindowView: View {
         case .lifeLog: LifeLogWindow(env: env)
         case .history: HistoryBrowserView(env: env)
         }
+    }
+}
+
+/// Main windowのsidebar。上から navigation、ライフログ表示中だけ月間calendarと時間帯。
+/// 面や枠は足さず、system sidebarの素材と見出しだけで区切る。
+private struct MainSidebar: View {
+    var env: AppEnvironment
+
+    var body: some View {
+        List(selection: Binding(get: { env.mainSection }, set: { if let value = $0 { env.mainSection = value } })) {
+            Section {
+                ForEach(MainSection.allCases) { section in
+                    // 行の選択に加えてAXPressで切り替えられるよう、行の中身をbuttonにする。
+                    Button { env.mainSection = section } label: {
+                        Label(LocalizedStringKey(section.title), systemImage: section.symbol)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .contentShape(.rect)
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel(LocalizedStringKey(section.title))
+                    .accessibilityIdentifier("main.section.\(section.rawValue)")
+                    .tag(section)
+                }
+            }
+            if env.mainSection == .lifeLog {
+                Section {
+                    MonthActivityCalendar(
+                        selectedDate: Binding(get: { env.lifeLog.selectedDate }, set: { _ in }),
+                        activity: env.lifeLog.monthActivity,
+                        onSelect: { date in
+                            Task {
+                                await env.lifeLog.select(date: date)
+                                if !AppEnvironment.usesScreenshotDemoData {
+                                    await env.lifeLog.refreshCalendar(selectedCalendars: Set(env.settings.lifeLogCalendarTitles))
+                                }
+                            }
+                        },
+                        onMonthChanged: { date in Task { await env.lifeLog.loadActivity(containing: date) } }
+                    )
+                    .padding(.top, 2)
+                    .padding(.bottom, 6)
+                    .selectionDisabled()
+                }
+                Section("時間帯") {
+                    DayRhythmView(day: env.lifeLog.day)
+                        .frame(height: 52)
+                        .padding(.vertical, 4)
+                        .selectionDisabled()
+                        .accessibilityIdentifier("life-log.day-insights")
+                }
+            }
+        }
+        .listStyle(.sidebar)
+        .accessibilityIdentifier("main.section-picker")
     }
 }
