@@ -21,7 +21,7 @@ struct WhisperModelSettingsView: View {
                 if let progress = env.whisperProgress {
                     ProgressView(value: progress).frame(width: 110)
                     Text("\(Int(progress * 100))%")
-                        .font(.system(size: 10.5, design: .rounded)).monospacedDigit()
+                        .font(.system(size: LoreTheme.TextSize.caption)).monospacedDigit()
                     Button("キャンセル") { env.cancelWhisperDownload() }
                 } else {
                     switch env.engines.whisperAvailability {
@@ -33,14 +33,14 @@ struct WhisperModelSettingsView: View {
                     case .needsDownload:
                         Button("取得") { env.installWhisperModel() }
                     case .unavailable(let reason):
-                        Text(reason).foregroundStyle(LoreTheme.recording)
+                        Text(reason).foregroundStyle(LoreTheme.danger)
                     }
                 }
             }
-            .font(.system(size: 10.5))
+            .font(.system(size: LoreTheme.TextSize.caption))
         }
         if let error = env.whisperError {
-            Text(error).font(.system(size: 11)).foregroundStyle(LoreTheme.recording)
+            Text(error).font(.system(size: LoreTheme.TextSize.caption)).foregroundStyle(LoreTheme.danger)
         }
     }
 }

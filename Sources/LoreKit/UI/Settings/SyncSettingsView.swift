@@ -117,17 +117,17 @@ struct SyncSettingsView: View {
 
     private func codeSheet(_ code: String) -> some View {
         VStack(alignment: .leading, spacing: 14) {
-            Text("同期コード").font(.system(size: 15, weight: .semibold))
+            Text("同期コード").font(.system(size: LoreTheme.TextSize.headline, weight: .semibold))
             Text("他のMacの「同期コードで参加」で入力してください。コードを知っている人は同期データを読めるため、他人には渡さないでください。")
                 .font(LoreTheme.captionFont)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
             Text(code)
-                .font(.system(size: 14, weight: .medium, design: .monospaced))
+                .font(.system(size: LoreTheme.TextSize.reading, weight: .medium, design: .monospaced))
                 .textSelection(.enabled)
                 .padding(12)
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .panelSurface(cornerRadius: 8)
+                .panelSurface(cornerRadius: LoreTheme.smallCornerRadius)
                 .accessibilityIdentifier("sync.code")
             HStack {
                 Button("コピー") {
@@ -145,13 +145,13 @@ struct SyncSettingsView: View {
 
     private var joinSheet: some View {
         VStack(alignment: .leading, spacing: 14) {
-            Text("同期コードで参加").font(.system(size: 15, weight: .semibold))
+            Text("同期コードで参加").font(.system(size: LoreTheme.TextSize.headline, weight: .semibold))
             Text("1台目のMacに表示された同期コードを入力し、1台目と同じフォルダを選んでください。このMacにあるデータも同期されます。")
                 .font(LoreTheme.captionFont)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
             TextField("XXXX-XXXX-…", text: $joinCode)
-                .font(.system(size: 13, design: .monospaced))
+                .font(.system(size: LoreTheme.TextSize.body, design: .monospaced))
                 .textFieldStyle(.roundedBorder)
                 .accessibilityIdentifier("sync.code-field")
             if let actionError { errorLabel(actionError) }
@@ -226,15 +226,15 @@ struct SyncSettingsView: View {
 
     private func explanation(_ text: String) -> some View {
         Text(LocalizedStringKey(text))
-            .font(.system(size: 11.5))
+            .font(.system(size: LoreTheme.TextSize.caption))
             .foregroundStyle(.secondary)
             .fixedSize(horizontal: false, vertical: true)
     }
 
     private func errorLabel(_ message: String) -> some View {
         Label(message, systemImage: "exclamationmark.triangle.fill")
-            .font(.system(size: 11))
-            .foregroundStyle(LoreTheme.recording)
+            .font(.system(size: LoreTheme.TextSize.caption))
+            .foregroundStyle(LoreTheme.danger)
             .fixedSize(horizontal: false, vertical: true)
             .accessibilityIdentifier("sync.error")
     }

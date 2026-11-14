@@ -20,7 +20,7 @@ struct LifeLogSearchSheet: View {
                 Image(systemName: "magnifyingglass").foregroundStyle(.secondary)
                 TextField("発話、音声入力、メモを検索", text: $query)
                     .textFieldStyle(.plain)
-                    .font(.system(size: 14))
+                    .font(.system(size: LoreTheme.TextSize.reading))
                     .focused($focusesSearch)
                     .onKeyPress(.downArrow) { moveSelection(1); return .handled }
                     .onKeyPress(.upArrow) { moveSelection(-1); return .handled }
@@ -38,7 +38,7 @@ struct LifeLogSearchSheet: View {
 
             if let errorMessage {
                 Label(errorMessage, systemImage: "exclamationmark.triangle")
-                    .font(.system(size: 11.5)).foregroundStyle(LoreTheme.recording)
+                    .font(.system(size: LoreTheme.TextSize.caption)).foregroundStyle(LoreTheme.danger)
                     .frame(maxWidth: .infinity, alignment: .leading).padding(16)
                 Spacer()
             } else if query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
@@ -68,7 +68,7 @@ struct LifeLogSearchSheet: View {
                     Label("移動", systemImage: "arrow.up.arrow.down")
                     Label("開く", systemImage: "return")
                 }
-                .font(.system(size: 10.5))
+                .font(.system(size: LoreTheme.TextSize.caption))
                 .foregroundStyle(.tertiary)
                 .padding(.horizontal, 16)
                 .padding(.vertical, 8)
@@ -116,35 +116,35 @@ struct LifeLogSearchSheet: View {
         Button { select(result) } label: {
             HStack(alignment: .top, spacing: 12) {
                 Image(systemName: symbol(for: result.kind))
-                    .font(.system(size: 10, weight: .semibold))
+                    .font(.system(size: LoreTheme.TextSize.micro, weight: .semibold))
                     .foregroundStyle(tint(for: result.kind))
                     .frame(width: 24, height: 24)
                     .background(tint(for: result.kind).opacity(0.14), in: Circle())
                 VStack(alignment: .leading, spacing: 4) {
                     HStack(spacing: 6) {
                         Text(LocalizedStringKey(result.kind.displayName))
-                            .font(.system(size: 11, weight: .semibold))
+                            .font(.system(size: LoreTheme.TextSize.caption, weight: .semibold))
                             .foregroundStyle(.secondary)
                         Text(result.occurredAt.formatted(.dateTime.month().day().weekday(.abbreviated).hour().minute()))
                             .font(LoreTheme.timeFont)
                             .foregroundStyle(.tertiary)
                     }
                     Text(highlighted(result.text))
-                        .font(.system(size: 13))
+                        .font(.system(size: LoreTheme.TextSize.body))
                         .lineSpacing(3)
                         .lineLimit(3)
                         .multilineTextAlignment(.leading)
                 }
                 Spacer(minLength: 0)
                 Image(systemName: "return")
-                    .font(.system(size: 10, weight: .semibold))
+                    .font(.system(size: LoreTheme.TextSize.micro, weight: .semibold))
                     .foregroundStyle(.tertiary)
                     .opacity(isSelected ? 1 : 0)
             }
             .padding(.horizontal, 10)
             .padding(.vertical, 8)
-            .background(isSelected ? LoreTheme.accent.opacity(0.12) : .clear, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
-            .contentShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+            .background(isSelected ? LoreTheme.accent.opacity(0.12) : .clear, in: RoundedRectangle(cornerRadius: LoreTheme.cardCornerRadius, style: .continuous))
+            .contentShape(RoundedRectangle(cornerRadius: LoreTheme.cardCornerRadius, style: .continuous))
         }
         .buttonStyle(.plain)
         .accessibilityIdentifier("life-log.search-result-\(result.id)")
@@ -158,7 +158,7 @@ struct LifeLogSearchSheet: View {
         while searchStart < value.endIndex,
               let range = value[searchStart...].range(of: needle, options: [.caseInsensitive, .widthInsensitive]) {
             value[range].foregroundColor = LoreTheme.accent
-            value[range].font = .system(size: 13, weight: .semibold)
+            value[range].font = .system(size: LoreTheme.TextSize.body, weight: .semibold)
             searchStart = range.upperBound
         }
         return value
@@ -173,8 +173,8 @@ struct LifeLogSearchSheet: View {
 
     private func emptyState(_ text: String, symbol: String) -> some View {
         VStack(spacing: 12) {
-            Image(systemName: symbol).font(.system(size: 30, weight: .light))
-            Text(text).font(.system(size: 12, weight: .medium))
+            Image(systemName: symbol).font(.system(size: LoreTheme.TextSize.metric, weight: .light))
+            Text(text).font(.system(size: LoreTheme.TextSize.callout, weight: .medium))
         }
         .foregroundStyle(.secondary.opacity(0.45))
         .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -192,7 +192,7 @@ struct LifeLogSearchSheet: View {
         switch kind {
         case .utterance: .secondary
         case .dictation: LoreTheme.accent
-        case .memo: LoreTheme.memo
+        case .memo: LoreTheme.accent
         }
     }
 }

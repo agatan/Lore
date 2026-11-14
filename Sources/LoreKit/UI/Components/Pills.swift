@@ -11,14 +11,14 @@ struct Pill: View {
         HStack(spacing: 3) {
             if let systemImage {
                 Image(systemName: systemImage)
-                    .font(.system(size: 9, weight: .semibold))
+                    .font(.system(size: LoreTheme.TextSize.micro, weight: .semibold))
             }
             if localized {
                 Text(LocalizedStringKey(text))
-                    .font(.system(size: 10.5, weight: .medium))
+                    .font(.system(size: LoreTheme.TextSize.caption, weight: .medium))
             } else {
                 Text(text)
-                    .font(.system(size: 10.5, weight: .medium))
+                    .font(.system(size: LoreTheme.TextSize.caption, weight: .medium))
             }
         }
         .foregroundStyle(tint)
@@ -38,7 +38,7 @@ struct StatusBadge: View {
         case .fallback: LoreTheme.warning
         case .clipboardOnly: LoreTheme.warning
         case .cancelled: .secondary
-        case .failed: LoreTheme.recording
+        case .failed: LoreTheme.danger
         case .interrupted: LoreTheme.warning
         }
     }
@@ -76,7 +76,7 @@ struct MenuRow<Label: View>: View {
                 // 出し入れせず強さだけ変えることで、行の大きさが動かない。
                 .glassEffect(
                     isHovering ? .regular.interactive() : .identity,
-                    in: RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    in: RoundedRectangle(cornerRadius: LoreTheme.smallCornerRadius, style: .continuous)
                 )
                 .contentShape(.rect)
         }
@@ -213,7 +213,7 @@ struct SettingsCard<Content: View>: View {
         VStack(alignment: .leading, spacing: 8) {
             if let title {
                 Text(LocalizedStringKey(title))
-                    .font(.system(size: 13, weight: .semibold))
+                    .font(.system(size: LoreTheme.TextSize.body, weight: .semibold))
                     .padding(.leading, 2)
             }
             VStack(alignment: .leading, spacing: 0) {
@@ -229,7 +229,7 @@ struct SettingsCard<Content: View>: View {
                 }
             }
             .frame(maxWidth: .infinity, maxHeight: fillsVertically ? .infinity : nil, alignment: .topLeading)
-            .panelSurface(cornerRadius: 10)
+            .panelSurface(cornerRadius: LoreTheme.cardCornerRadius)
             if let footnote {
                 Text(LocalizedStringKey(footnote))
                     .font(LoreTheme.captionFont)
@@ -256,12 +256,12 @@ struct NoticeBanner: View {
         HStack(alignment: .top, spacing: 10) {
             Image(systemName: symbol)
                 .foregroundStyle(tint)
-                .font(.system(size: 13))
+                .font(.system(size: LoreTheme.TextSize.body))
             VStack(alignment: .leading, spacing: 2) {
                 Text(LocalizedStringKey(title))
-                    .font(.system(size: 12, weight: .semibold))
+                    .font(.system(size: LoreTheme.TextSize.callout, weight: .semibold))
                 Text(LocalizedStringKey(message))
-                    .font(.system(size: 11))
+                    .font(.system(size: LoreTheme.TextSize.caption))
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
             }
@@ -269,12 +269,12 @@ struct NoticeBanner: View {
             if let actionTitle, let action {
                 Button(LocalizedStringKey(actionTitle), action: action)
                     .buttonStyle(.borderless)
-                    .font(.system(size: 11, weight: .medium))
+                    .font(.system(size: LoreTheme.TextSize.caption, weight: .medium))
             }
             if let onDismiss {
                 Button(action: onDismiss) {
                     Image(systemName: "xmark")
-                        .font(.system(size: 10, weight: .semibold))
+                        .font(.system(size: LoreTheme.TextSize.micro, weight: .semibold))
                         .foregroundStyle(.secondary)
                 }
                 .buttonStyle(.plain)

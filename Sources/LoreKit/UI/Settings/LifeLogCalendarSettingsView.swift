@@ -41,7 +41,7 @@ struct LifeLogCalendarSettingsView: View {
                 }
                 if let refreshedAt = env.lifeLog.lastCalendarRefreshAt {
                     Text("最終取得: \(refreshedAt.formatted(date: .omitted, time: .shortened))")
-                        .font(.system(size: 10.5, design: .rounded))
+                        .font(.system(size: LoreTheme.TextSize.caption))
                         .foregroundStyle(.secondary)
                         .frame(maxWidth: .infinity, alignment: .trailing)
                 }
@@ -56,13 +56,13 @@ struct LifeLogCalendarSettingsView: View {
     private var calendars: some View {
         if env.lifeLog.availableCalendars.isEmpty {
             Label("利用できるカレンダーがありません", systemImage: "calendar.badge.exclamationmark")
-                .font(.system(size: 11.5))
+                .font(.system(size: LoreTheme.TextSize.caption))
                 .foregroundStyle(.secondary)
                 .frame(maxWidth: .infinity, alignment: .leading)
         } else {
             HStack {
                 Text(selectionSummary)
-                    .font(.system(size: 11, weight: .medium, design: .rounded))
+                    .font(.system(size: LoreTheme.TextSize.caption, weight: .medium))
                     .foregroundStyle(.secondary)
                 Spacer()
                 Button("すべて") { selectAllCalendars() }
@@ -101,16 +101,16 @@ struct LifeLogCalendarSettingsView: View {
             HStack(spacing: 9) {
                 Image(systemName: isSelected ? "checkmark.circle.fill" : "circle")
                     .foregroundStyle(isSelected ? LoreTheme.accent : Color.secondary.opacity(0.45))
-                Text(title).font(.system(size: 11.5, weight: .medium)).lineLimit(1)
+                Text(title).font(.system(size: LoreTheme.TextSize.caption, weight: .medium)).lineLimit(1)
                 Spacer(minLength: 0)
             }
             .padding(.horizontal, 11)
             .frame(height: 36)
             .frame(maxWidth: .infinity)
             .contentShape(.rect)
-            .background(isSelected ? LoreTheme.accent.opacity(0.10) : Color.secondary.opacity(0.045), in: RoundedRectangle(cornerRadius: 10))
+            .background(isSelected ? LoreTheme.accent.opacity(0.10) : Color.secondary.opacity(0.045), in: RoundedRectangle(cornerRadius: LoreTheme.cardCornerRadius))
             .overlay {
-                RoundedRectangle(cornerRadius: 10)
+                RoundedRectangle(cornerRadius: LoreTheme.cardCornerRadius)
                     .stroke(isSelected ? LoreTheme.accent.opacity(0.28) : Color.secondary.opacity(0.08), lineWidth: 1)
             }
         }

@@ -45,7 +45,7 @@ struct MonthActivityCalendar: View {
     private var header: some View {
         HStack(spacing: 8) {
             Text(displayedMonth.formatted(.dateTime.year().month(.wide)))
-                .font(.system(size: 14, weight: .semibold))
+                .font(.system(size: LoreTheme.TextSize.reading, weight: .semibold))
             Spacer()
             Button { moveMonth(-1) } label: { Image(systemName: "chevron.left") }
                 .help("前の月")
@@ -55,20 +55,20 @@ struct MonthActivityCalendar: View {
                 onMonthChanged(displayedMonth)
                 onSelect(today)
             }
-            .font(.system(size: 11, weight: .medium))
+            .font(.system(size: LoreTheme.TextSize.caption, weight: .medium))
             Button { moveMonth(1) } label: { Image(systemName: "chevron.right") }
                 .help("次の月")
         }
         .buttonStyle(.borderless)
         .foregroundStyle(.secondary)
-        .font(.system(size: 11, weight: .semibold))
+        .font(.system(size: LoreTheme.TextSize.caption, weight: .semibold))
     }
 
     private var weekdayHeader: some View {
         HStack(spacing: 3) {
             ForEach(weekdaySymbols, id: \.self) { symbol in
                 Text(symbol)
-                    .font(.system(size: 10, weight: .medium))
+                    .font(.system(size: LoreTheme.TextSize.micro, weight: .medium))
                     .foregroundStyle(.tertiary)
                     .frame(maxWidth: .infinity)
             }
@@ -82,16 +82,16 @@ struct MonthActivityCalendar: View {
         return Button { onSelect(date) } label: {
             VStack(spacing: 3) {
                 Text(String(calendar.component(.day, from: date)))
-                    .font(.system(size: 12, weight: today || selected ? .semibold : .regular).monospacedDigit())
-                    .foregroundStyle(selected ? Color.white : (today ? LoreTheme.accent : Color.primary))
+                    .font(.system(size: LoreTheme.TextSize.callout, weight: today || selected ? .semibold : .regular).monospacedDigit())
+                    .foregroundStyle(selected ? (today ? Color.white : LoreTheme.onAccent) : (today ? LoreTheme.recording : Color.primary))
                     .frame(width: 26, height: 26)
                     .background {
                         if selected {
-                            Circle().fill(LoreTheme.accent)
+                            Circle().fill(today ? LoreTheme.recording : LoreTheme.accent)
                         }
                     }
                 HStack(spacing: 2) {
-                    densityDot(intensity: value.eventIntensity, color: LoreTheme.accentSecondary)
+                    densityDot(intensity: value.eventIntensity, color: LoreTheme.event)
                     densityDot(intensity: value.voiceIntensity, color: LoreTheme.accent)
                 }
                 .frame(height: 5)

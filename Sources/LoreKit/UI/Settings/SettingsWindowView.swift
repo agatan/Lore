@@ -75,7 +75,7 @@ struct SettingsWindowView: View {
         }
         .frame(minWidth: 960, minHeight: 680)
         .toolbarBackgroundVisibility(.hidden, for: .windowToolbar)
-        // Sidebarの記号と選択色もsystemの青ではなくLoreのvioletに揃える。
+        // Sidebarの記号と選択色もsystemの青ではなくLoreの墨色に揃える。
         .tint(LoreTheme.accent)
     }
 

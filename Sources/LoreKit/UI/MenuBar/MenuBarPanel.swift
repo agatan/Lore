@@ -33,7 +33,7 @@ struct MenuBarPanel: View {
                 .resizable()
                 .interpolation(.high)
                 .frame(width: 26, height: 26)
-            Text("Lore").font(.system(size: 15, weight: .bold, design: .rounded))
+            Text("Lore").font(.system(size: LoreTheme.TextSize.headline, weight: .bold, design: .rounded))
             Spacer(minLength: 0)
         }
         .padding(.horizontal, 4)
@@ -59,17 +59,17 @@ struct MenuBarPanel: View {
                 }
                 VStack(alignment: .leading, spacing: 2) {
                     Text(LocalizedStringKey(lifeLogStatus.title))
-                        .font(.system(size: 13, weight: .semibold))
+                        .font(.system(size: LoreTheme.TextSize.body, weight: .semibold))
                         .foregroundStyle(env.lifeLog.isCapturing ? AnyShapeStyle(LoreTheme.recording) : AnyShapeStyle(.primary))
                     if let caption = lifeLogStatus.subtitle {
                         Text(caption)
-                            .font(.system(size: 11))
+                            .font(.system(size: LoreTheme.TextSize.caption))
                             .foregroundStyle(.secondary)
                             .lineLimit(1)
                             .accessibilityIdentifier("menu.life-log.capture-toggle.schedule")
                     } else {
                         Text(todaySummary)
-                            .font(.system(size: 11))
+                            .font(.system(size: LoreTheme.TextSize.caption))
                             .foregroundStyle(.secondary)
                             .lineLimit(1)
                     }
@@ -101,11 +101,11 @@ struct MenuBarPanel: View {
                         .disabled(coordinator.isBusy && !coordinator.isRecording)
                     VStack(alignment: .leading, spacing: 4) {
                         Text(LocalizedStringKey(coordinator.isRecording ? "停止して文章にする" : "音声入力を開始"))
-                            .font(.system(size: 13, weight: .semibold))
+                            .font(.system(size: LoreTheme.TextSize.body, weight: .semibold))
                         HStack(spacing: 6) {
                             KeyCap(text: env.settings.hotkey.displayName)
                             Text("短押し / 長押し")
-                                .font(.system(size: 11))
+                                .font(.system(size: LoreTheme.TextSize.caption))
                                 .foregroundStyle(.secondary)
                         }
                     }
@@ -127,7 +127,7 @@ struct MenuBarPanel: View {
                     .fill(LoreTheme.accent)
                     .frame(width: 2.5)
                 Text(text)
-                    .font(.system(size: 12))
+                    .font(.system(size: LoreTheme.TextSize.callout))
                     .lineSpacing(2)
                     .lineLimit(3)
                     .frame(maxWidth: .infinity, alignment: .leading)
@@ -139,7 +139,7 @@ struct MenuBarPanel: View {
             .fixedSize(horizontal: false, vertical: true)
         } else {
             Text("話した文章は、カーソルのある場所へ入ります")
-                .font(.system(size: 11))
+                .font(.system(size: LoreTheme.TextSize.caption))
                 .foregroundStyle(.tertiary)
         }
     }
@@ -152,7 +152,7 @@ struct MenuBarPanel: View {
         } label: {
             Label(coordinator.previewMode?.name ?? "Default",
                   systemImage: coordinator.pinnedModeID == nil ? "wand.and.stars" : "pin.fill")
-                .font(.system(size: 11.5, weight: .medium))
+                .font(.system(size: LoreTheme.TextSize.caption, weight: .medium))
         }
         .menuStyle(.borderlessButton)
         .fixedSize()
@@ -185,7 +185,7 @@ struct MenuBarPanel: View {
             .buttonStyle(.borderless)
             .help("Loreを終了")
         }
-        .font(.system(size: 11.5))
+        .font(.system(size: LoreTheme.TextSize.caption))
         .foregroundStyle(.secondary)
         .padding(.horizontal, 6)
         .padding(.top, 2)
@@ -260,9 +260,9 @@ private struct MenuCard<Content: View, Footer: View>: View {
         .padding(.horizontal, 14)
         .padding(.top, 12)
         .padding(.bottom, 6)
-        .background(Color.primary.opacity(0.045), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .background(Color.primary.opacity(0.045), in: RoundedRectangle(cornerRadius: LoreTheme.panelCornerRadius, style: .continuous))
         .overlay {
-            RoundedRectangle(cornerRadius: 14, style: .continuous)
+            RoundedRectangle(cornerRadius: LoreTheme.panelCornerRadius, style: .continuous)
                 .strokeBorder(Color.primary.opacity(0.06), lineWidth: 1)
         }
     }
@@ -279,16 +279,16 @@ private struct MenuLinkButton: View {
         Button(action: action) {
             HStack(spacing: 6) {
                 Image(systemName: symbol)
-                    .font(.system(size: 11, weight: .semibold))
+                    .font(.system(size: LoreTheme.TextSize.caption, weight: .semibold))
                     .foregroundStyle(LoreTheme.accent)
                 Text(LocalizedStringKey(title))
-                    .font(.system(size: 12, weight: .medium))
+                    .font(.system(size: LoreTheme.TextSize.callout, weight: .medium))
                     .foregroundStyle(.primary)
             }
             .padding(.horizontal, 8)
             .padding(.vertical, 6)
-            .background(Color.primary.opacity(isHovering ? 0.07 : 0), in: RoundedRectangle(cornerRadius: 7, style: .continuous))
-            .contentShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
+            .background(Color.primary.opacity(isHovering ? 0.07 : 0), in: RoundedRectangle(cornerRadius: LoreTheme.smallCornerRadius, style: .continuous))
+            .contentShape(RoundedRectangle(cornerRadius: LoreTheme.smallCornerRadius, style: .continuous))
         }
         .buttonStyle(.plain)
         .onHover { isHovering = $0 }
@@ -297,7 +297,7 @@ private struct MenuLinkButton: View {
     }
 }
 
-/// 音声入力の主操作。ライフログの録音buttonと同じ直径と影で、待機中はblueのmic、録音中はroseの停止。
+/// 音声入力の主操作。ライフログの録音buttonと同じ直径と影で、待機中は墨色のmic、録音中はroseの停止。
 private struct DictationButton: View {
     var isRecording: Bool
     var action: () -> Void
@@ -309,8 +309,8 @@ private struct DictationButton: View {
                 Circle()
                     .fill(isRecording ? AnyShapeStyle(LoreTheme.recording) : AnyShapeStyle(LoreTheme.accent))
                 Image(systemName: isRecording ? "stop.fill" : "mic.fill")
-                    .font(.system(size: 14, weight: .semibold))
-                    .foregroundStyle(.white)
+                    .font(.system(size: LoreTheme.TextSize.reading, weight: .semibold))
+                    .foregroundStyle(isRecording ? Color.white : LoreTheme.onAccent)
                     .contentTransition(.symbolEffect(.replace))
             }
             .frame(width: 36, height: 36)
@@ -331,12 +331,12 @@ private struct KeyCap: View {
 
     var body: some View {
         Text(verbatim: text)
-            .font(.system(size: 10.5, weight: .semibold, design: .rounded))
+            .font(.system(size: LoreTheme.TextSize.caption, weight: .semibold))
             .padding(.horizontal, 6)
             .padding(.vertical, 2)
-            .background(Color.primary.opacity(0.06), in: RoundedRectangle(cornerRadius: 5, style: .continuous))
+            .background(Color.primary.opacity(0.06), in: RoundedRectangle(cornerRadius: LoreTheme.smallCornerRadius, style: .continuous))
             .overlay {
-                RoundedRectangle(cornerRadius: 5, style: .continuous)
+                RoundedRectangle(cornerRadius: LoreTheme.smallCornerRadius, style: .continuous)
                     .strokeBorder(Color.primary.opacity(0.14), lineWidth: 1)
             }
     }

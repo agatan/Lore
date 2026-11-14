@@ -37,10 +37,10 @@ struct OnboardingView: View {
                 .interpolation(.high)
                 .frame(width: 96, height: 96)
             Text("話して過ごす毎日を、あなたの資産に。")
-                .font(.system(size: 30, weight: .bold, design: .rounded))
+                .font(.system(size: LoreTheme.TextSize.display, weight: .bold, design: .rounded))
                 .multilineTextAlignment(.center)
             Text("Loreは、話したこと、声で残したメモ、音声入力した文章を、このMacの中に時刻順で残します。")
-                .font(.system(size: 14))
+                .font(.system(size: LoreTheme.TextSize.reading))
                 .lineSpacing(4)
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
@@ -52,7 +52,7 @@ struct OnboardingView: View {
         HStack(alignment: .top, spacing: 12) {
             FeatureCard(
                 symbol: "calendar.day.timeline.left",
-                tint: LoreTheme.accentSecondary,
+                tint: LoreTheme.recording,
                 title: "ライフログ",
                 detail: "会議や作業中に話したことを、予定と並べて一日の流れとして残します。"
             )
@@ -64,7 +64,7 @@ struct OnboardingView: View {
             )
             FeatureCard(
                 symbol: "pencil",
-                tint: LoreTheme.memo,
+                tint: LoreTheme.accent,
                 title: "声のメモ",
                 detail: "思いついたことを声や短い文で残し、検索や書き出し、AIへの受け渡しに使えます。"
             )
@@ -104,9 +104,9 @@ struct OnboardingView: View {
             ) { Task { await env.lifeLog.loadCalendars() } }
         }
         .padding(.bottom, 4)
-        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: LoreTheme.panelCornerRadius, style: .continuous))
         .overlay {
-            RoundedRectangle(cornerRadius: 18, style: .continuous)
+            RoundedRectangle(cornerRadius: LoreTheme.panelCornerRadius, style: .continuous)
                 .strokeBorder(Color.primary.opacity(0.07), lineWidth: 1)
         }
         .frame(maxWidth: 560)
@@ -118,7 +118,7 @@ struct OnboardingView: View {
                 env.settings.onboardingCompleted = true
             } label: {
                 Text("Loreを始める")
-                    .font(.system(size: 14, weight: .semibold))
+                    .font(.system(size: LoreTheme.TextSize.reading, weight: .semibold))
                     .frame(minWidth: 180)
                     .padding(.vertical, 3)
             }
@@ -127,7 +127,7 @@ struct OnboardingView: View {
             .tint(LoreTheme.accent)
             .keyboardShortcut(.defaultAction)
             Label("記録はこのMacの中だけに保存します。通常の音声入力は音声を残さず、ライフログの復旧用音声は開始時に確認してから保存します。", systemImage: "lock.fill")
-                .font(.system(size: 11))
+                .font(.system(size: LoreTheme.TextSize.caption))
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
                 .frame(maxWidth: 520)
@@ -144,23 +144,23 @@ private struct FeatureCard: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             Image(systemName: symbol)
-                .font(.system(size: 15, weight: .semibold))
+                .font(.system(size: LoreTheme.TextSize.headline, weight: .semibold))
                 .foregroundStyle(tint)
                 .frame(width: 34, height: 34)
-                .background(tint.opacity(0.14), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+                .background(tint.opacity(0.14), in: RoundedRectangle(cornerRadius: LoreTheme.cardCornerRadius, style: .continuous))
             Text(LocalizedStringKey(title))
-                .font(.system(size: 14, weight: .semibold))
+                .font(.system(size: LoreTheme.TextSize.reading, weight: .semibold))
             Text(LocalizedStringKey(detail))
-                .font(.system(size: 12))
+                .font(.system(size: LoreTheme.TextSize.callout))
                 .lineSpacing(3)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
         }
         .padding(16)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: LoreTheme.panelCornerRadius, style: .continuous))
         .overlay {
-            RoundedRectangle(cornerRadius: 18, style: .continuous)
+            RoundedRectangle(cornerRadius: LoreTheme.panelCornerRadius, style: .continuous)
                 .strokeBorder(Color.primary.opacity(0.07), lineWidth: 1)
         }
     }
@@ -176,21 +176,21 @@ private struct PermissionRow: View {
     var body: some View {
         HStack(spacing: 12) {
             Image(systemName: symbol)
-                .font(.system(size: 13, weight: .semibold))
-                .foregroundStyle(.white)
+                .font(.system(size: LoreTheme.TextSize.body, weight: .semibold))
+                .foregroundStyle(LoreTheme.onAccent)
                 .frame(width: 28, height: 28)
-                .background(LoreTheme.accent, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+                .background(LoreTheme.accent, in: RoundedRectangle(cornerRadius: LoreTheme.smallCornerRadius, style: .continuous))
             VStack(alignment: .leading, spacing: 2) {
                 Text(LocalizedStringKey(title))
-                    .font(.system(size: 13, weight: .semibold))
+                    .font(.system(size: LoreTheme.TextSize.body, weight: .semibold))
                 Text(LocalizedStringKey(detail))
-                    .font(.system(size: 11.5))
+                    .font(.system(size: LoreTheme.TextSize.caption))
                     .foregroundStyle(.secondary)
             }
             Spacer(minLength: 12)
             if granted {
                 Label("許可済み", systemImage: "checkmark.circle.fill")
-                    .font(.system(size: 12, weight: .medium))
+                    .font(.system(size: LoreTheme.TextSize.callout, weight: .medium))
                     .foregroundStyle(LoreTheme.success)
             } else {
                 Button("許可する", action: action)

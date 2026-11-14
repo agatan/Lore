@@ -37,7 +37,7 @@ struct AutomationSettingsView: View {
                 NoticeBanner(
                     title: "インストールできませんでした",
                     message: errorMessage,
-                    tint: LoreTheme.recording
+                    tint: LoreTheme.danger
                 )
             }
         }
@@ -53,15 +53,15 @@ struct AutomationSettingsView: View {
     ) -> some View {
         HStack(spacing: 12) {
             Image(systemName: symbol)
-                .font(.system(size: 16, weight: .medium))
+                .font(.system(size: LoreTheme.TextSize.headline, weight: .medium))
                 .foregroundStyle(LoreTheme.accent)
                 .frame(width: 30, height: 30)
-                .background(LoreTheme.accent.opacity(0.10), in: RoundedRectangle(cornerRadius: 9))
+                .background(LoreTheme.accent.opacity(0.10), in: RoundedRectangle(cornerRadius: LoreTheme.cardCornerRadius))
             VStack(alignment: .leading, spacing: 3) {
                 Text(title)
-                    .font(.system(size: 12.5, weight: .semibold))
+                    .font(.system(size: LoreTheme.TextSize.callout, weight: .semibold))
                 Text(path)
-                    .font(.system(size: 10.5, design: .monospaced))
+                    .font(.system(size: LoreTheme.TextSize.caption, design: .monospaced))
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
                     .truncationMode(.middle)
@@ -76,7 +76,7 @@ struct AutomationSettingsView: View {
         switch state {
         case .installed:
             Label("インストール済み", systemImage: "checkmark.circle.fill")
-                .font(.system(size: 11, weight: .medium))
+                .font(.system(size: LoreTheme.TextSize.caption, weight: .medium))
                 .foregroundStyle(LoreTheme.success)
         case .notInstalled:
             Button("インストール", action: action)
@@ -88,11 +88,11 @@ struct AutomationSettingsView: View {
                 .controlSize(.small)
         case .conflict(let message):
             Label(message, systemImage: "exclamationmark.triangle.fill")
-                .font(.system(size: 10.5))
+                .font(.system(size: LoreTheme.TextSize.caption))
                 .foregroundStyle(LoreTheme.warning)
         case .unavailable(let message):
             Label(message, systemImage: "xmark.circle")
-                .font(.system(size: 10.5))
+                .font(.system(size: LoreTheme.TextSize.caption))
                 .foregroundStyle(.secondary)
         }
     }

@@ -3,7 +3,7 @@ import SwiftUI
 
 /// メニューバーのアイコン。App iconと同じ「L.」を描き、状態は「.」の色だけで示す。
 ///
-/// - 録音中（音声入力またはライフログ）はrose、処理中はviolet、完了はmint、要確認はgold。ライフログの再接続中はgoldの輪。
+/// - 録音中（音声入力またはライフログ）はrose、処理中は「L」と同じ色の輪、完了はmint、要確認はgold。ライフログの再接続中はgoldの輪。
 /// - 入力level表示が有効な音声入力の録音中は、「.」が直近の声の大きさで膨らむ。
 /// - 状態がない時はtemplate画像にして、menu barの明暗と強調表示をsystemに任せる。
 struct MenuBarLabel: View {
@@ -33,16 +33,17 @@ struct MenuBarLabel: View {
 enum MenuBarStatusIcon {
     enum Badge: Equatable {
         case recording
+        /// 処理中。「L」と同じ色の輪で、声はもう受け取って仕上げていることを示す。
         case processing
         case done
         case attention
-        /// ライフログの再接続中。塗らない輪で「止まってはいないが記録できていない」を示す。
+        /// ライフログの再接続中。goldの輪で「止まってはいないが記録できていない」を示す。
         case reconnecting
 
         var color: NSColor {
             switch self {
             case .recording: NSColor(LoreTheme.recording)
-            case .processing: NSColor(LoreTheme.accent)
+            case .processing: .labelColor
             case .done: NSColor(LoreTheme.success)
             case .attention, .reconnecting: NSColor(LoreTheme.warning)
             }
@@ -113,7 +114,7 @@ enum MenuBarStatusIcon {
             NSBezierPath(ovalIn: rect).fill()
             return
         }
-        if badge == .reconnecting {
+        if badge == .reconnecting || badge == .processing {
             let ring = NSBezierPath(ovalIn: rect.insetBy(dx: 0.75, dy: 0.75))
             ring.lineWidth = 1.5
             badge.color.setStroke()

@@ -84,13 +84,13 @@ public struct LifeLogWindow: View {
     private var header: some View {
         VStack(alignment: .leading, spacing: 6) {
             (isToday ? Text("今日") : Text(verbatim: env.lifeLog.selectedDate.formatted(.dateTime.year())))
-                .font(.system(size: 13, weight: .semibold))
-                .foregroundStyle(isToday ? AnyShapeStyle(LoreTheme.accent) : AnyShapeStyle(.secondary))
+                .font(.system(size: LoreTheme.TextSize.body, weight: .semibold))
+                .foregroundStyle(isToday ? AnyShapeStyle(LoreTheme.recording) : AnyShapeStyle(.secondary))
             HStack(alignment: .firstTextBaseline, spacing: 10) {
                 Text(env.lifeLog.selectedDate.formatted(.dateTime.month(.wide).day()))
                     .font(LoreTheme.titleFont)
                 Text(env.lifeLog.selectedDate.formatted(.dateTime.weekday(.wide)))
-                    .font(.system(size: 20, weight: .medium, design: .rounded))
+                    .font(.system(size: LoreTheme.TextSize.title, weight: .medium, design: .rounded))
                     .foregroundStyle(.secondary)
             }
             .accessibilityElement(children: .combine)
@@ -101,7 +101,7 @@ public struct LifeLogWindow: View {
                         HeaderChip(text: "記録中", symbol: nil, tint: LoreTheme.recording, dot: true)
                     }
                     ForEach(allDayEvents) { event in
-                        HeaderChip(text: "\(event.title)", symbol: "calendar", tint: LoreTheme.accentSecondary, dot: false)
+                        HeaderChip(text: "\(event.title)", symbol: "calendar", tint: LoreTheme.event, dot: false)
                             .accessibilityIdentifier("life-log.timeline-event-\(event.id)")
                     }
                 }
@@ -224,12 +224,12 @@ public struct LifeLogWindow: View {
         ) {
             VStack(alignment: .leading, spacing: 5) {
                 Text(waiting ? "発話を待っています" : (isToday ? "まだ記録はありません" : "この日の記録はありません"))
-                    .font(.system(size: 15, weight: .semibold))
+                    .font(.system(size: LoreTheme.TextSize.headline, weight: .semibold))
                 if isToday {
                     Text(waiting
                          ? "話し始めると、ここに時刻順で並びます。"
                          : "下の録音ボタンで記録を始めると、話したことがここに時刻順で並びます。思いついたことは入力欄からメモにも残せます。")
-                        .font(.system(size: 13))
+                        .font(.system(size: LoreTheme.TextSize.body))
                         .lineSpacing(4)
                         .foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
@@ -364,10 +364,10 @@ private struct HeaderChip: View {
     var body: some View {
         HStack(spacing: 5) {
             if dot { Circle().fill(tint).frame(width: 6, height: 6) }
-            if let symbol { Image(systemName: symbol).font(.system(size: 9.5, weight: .semibold)) }
+            if let symbol { Image(systemName: symbol).font(.system(size: LoreTheme.TextSize.micro, weight: .semibold)) }
             Text(text).lineLimit(1)
         }
-        .font(.system(size: 11, weight: .semibold))
+        .font(.system(size: LoreTheme.TextSize.caption, weight: .semibold))
         .foregroundStyle(tint)
         .padding(.horizontal, 9)
         .padding(.vertical, 3)

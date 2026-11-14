@@ -17,7 +17,7 @@ struct LifeLogMemoComposer: View {
             // 入力欄は浮いたbar自体を枠として使い、二重の枠を描かない。
             TextField("メモを追加…", text: $text, axis: .vertical)
                 .textFieldStyle(.plain)
-                .font(.system(size: 13))
+                .font(.system(size: LoreTheme.TextSize.body))
                 .lineLimit(1...5)
                 .padding(.horizontal, 4)
                 .padding(.vertical, 7)
@@ -31,8 +31,8 @@ struct LifeLogMemoComposer: View {
                         .fill(trimmedText.isEmpty ? AnyShapeStyle(Color.secondary.opacity(0.12)) : AnyShapeStyle(LoreTheme.accent))
                         .frame(width: actionDiameter, height: actionDiameter)
                     Image(systemName: "arrow.up")
-                        .font(.system(size: 12, weight: .bold))
-                        .foregroundStyle(trimmedText.isEmpty ? Color.secondary.opacity(0.45) : .white)
+                        .font(.system(size: LoreTheme.TextSize.callout, weight: .bold))
+                        .foregroundStyle(trimmedText.isEmpty ? Color.secondary.opacity(0.45) : LoreTheme.onAccent)
                 }
                 .frame(width: 32, height: 32)
                 .contentShape(Circle())
@@ -68,7 +68,7 @@ struct LifeLogMemoComposer: View {
                         .tint(.secondary)
                 } else {
                     Image(systemName: isVoiceMemoRecording ? "stop.fill" : "mic.fill")
-                        .font(.system(size: 11.5, weight: .semibold))
+                        .font(.system(size: LoreTheme.TextSize.caption, weight: .semibold))
                         .foregroundStyle(isVoiceMemoRecording ? .white : .secondary)
                         .contentTransition(.symbolEffect(.replace))
                         .symbolEffect(.breathe, options: .repeating, isActive: isVoiceMemoRecording)

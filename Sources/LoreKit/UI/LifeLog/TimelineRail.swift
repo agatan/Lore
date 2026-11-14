@@ -60,7 +60,7 @@ struct TimelineRail: View {
         case .plain:
             Rectangle().fill(Color.primary.opacity(0.09)).frame(width: 1.5)
         case .event:
-            Rectangle().fill(LoreTheme.accentSecondary.opacity(0.55)).frame(width: 3)
+            Rectangle().fill(LoreTheme.event.opacity(0.55)).frame(width: 3)
         case .gap:
             DashedLine()
                 .stroke(Color.primary.opacity(0.16), style: StrokeStyle(lineWidth: 1.5, lineCap: .round, dash: [0.5, 4.5]))
@@ -77,14 +77,14 @@ struct TimelineRail: View {
             Circle().fill(isHighlighted ? AnyShapeStyle(LoreTheme.accent) : AnyShapeStyle(Color.primary.opacity(0.32)))
         case .event:
             Circle()
-                .strokeBorder(LoreTheme.accentSecondary, lineWidth: compact ? 2.5 : 3)
+                .strokeBorder(LoreTheme.event, lineWidth: compact ? 2.5 : 3)
                 .background(Circle().fill(.background))
         case .symbol(let name, let tint):
             ZStack {
                 Circle().fill(.background)
                 Circle().fill(tint.opacity(isHighlighted ? 0.32 : 0.16))
                 Image(systemName: name)
-                    .font(.system(size: compact ? 8 : 9, weight: .semibold))
+                    .font(.system(size: LoreTheme.TextSize.micro, weight: .semibold))
                     .foregroundStyle(tint)
             }
         }

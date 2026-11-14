@@ -57,9 +57,9 @@ struct LifeLogScheduleSettingsView: View {
             env.updateLifeLogSchedule(updated)
         } label: {
             Text(LocalizedStringKey(label))
-                .font(.system(size: 11.5, weight: selected ? .semibold : .regular))
+                .font(.system(size: LoreTheme.TextSize.caption, weight: selected ? .semibold : .regular))
                 .frame(width: 26, height: 22)
-                .foregroundStyle(selected ? Color.white : Color.primary)
+                .foregroundStyle(selected ? LoreTheme.onAccent : Color.primary)
                 .background {
                     Capsule().fill(selected ? LoreTheme.accent : Color.primary.opacity(0.06))
                 }

@@ -85,7 +85,7 @@ cloud音声入力で送るのは今回の文字起こし、共通rule、mode指�
 ### 3.5 ボイスメモ
 
 - 専用global hotkey、main windowとmini windowのmemo入力欄にある音声ボタンは、いずれも押すたびに録音開始・停止を切り替え、認識した生textを今日のライフログmemoとして保存します。文章整形、前面appへの挿入、通常の音声入力履歴への保存は行いません。
-- memo入力欄の音声ボタンは、開始準備中をprogress表示、録音中をLoreのblueと調和するrose色とpulse animationで示し、通常の音声入力など別の音声処理中は新規開始できません。
+- memo入力欄の音声ボタンは、開始準備中をprogress表示、録音中をapp iconの点と同じrose色とpulse animationで示し、通常の音声入力など別の音声処理中は新規開始できません。
 - ライフログ記録中に開始した場合は、現在の復旧用audio chunkを確定してライフログcaptureを一時停止します。ボイスメモの完了、cancel、失敗後は、利用者の記録開始意図が残っている場合だけライフログを自動再開します。
 - この排他境界により、一回のボイスメモはmemo一件だけを作り、通常の音声入力履歴やライフログutteranceへ同じ内容を追加しません。
 
@@ -158,7 +158,7 @@ Loreはライフログから要約、話題、TODOを生成しません。振り
 
 ## 5. 画面と設定
 
-Loreのprimary colorはapp icon由来の爽やかなblueに固定し、利用者がcolor themeを切り替える設定は持ちません。録音、成功、警告は同じbrand paletteに合わせたsemantic colorを全画面で共有します。
+Loreの配色はapp iconと同じ墨・白・roseの3色に固定し、利用者がcolor themeを切り替える設定は持ちません。操作と選択は墨色（dark modeでは白に近い色）、roseは録音中・今日・現在時刻など「いま」を示す所だけ、予定は色を持たない灰色で示します。成功、警告、失敗だけが別の色を持ち、全画面で同じ意味に使います。
 
 表示言語は「システム設定」「English」「日本語」「简体中文」から選べ、選択は再起動後も保持します。「システム設定」はmacOSの優先言語から最初の対応言語を使い、対応言語がない場合は英語へfallbackします。繁体字中国語を簡体字中国語へ暗黙に置き換えません。変更はmenu bar、各windowの内容、onboarding、settings、HUD、dialog、noticeへ直ちに反映します。ライフログの認識言語で「表示言語に合わせる」を明示的に選んだ場合だけSTT hintへ使い、通常の音声入力、ボイスメモ、mode、prompt、保存済みtext、検索、書き出し内容、CLI/MCPの機械向けinterfaceは変更しません。
 
@@ -173,7 +173,7 @@ Loreのprimary colorはapp icon由来の爽やかなblueに固定し、利用者
 
 Privacy設定には、履歴、ライフログ、保存audio、whisper.cpp modelを含むLore dataのこのMac上の合計使用量を表示します。
 
-Main window、mini window、menu barのライフログ状態表示は同じ記録操作を共有します。停止中の開始操作はviolet/cyanの録音記号と「録音を開始」、記録開始意図がある間の停止操作はroseの停止記号と「録音を停止」を表示します。再接続中やボイスメモによる一時停止中も、停止操作は同じroseの外観を保ちます。
+Main window、mini window、menu barのライフログ状態表示は同じ記録操作を共有します。停止中の開始操作は墨色の丸にroseの点を置いた録音記号と「録音を開始」、記録開始意図がある間の停止操作はroseの停止記号と「録音を停止」を表示します。再接続中やボイスメモによる一時停止中も、停止操作は同じroseの外観を保ちます。
 
 音声構成変更や処理失敗など、継続操作を妨げないmessageはdismiss可能なbannerとして表示し、右端の`×`で閉じられます。閉じる操作はmessageだけを消し、記録開始意図、自動再接続、保存済みdataには影響しません。
 

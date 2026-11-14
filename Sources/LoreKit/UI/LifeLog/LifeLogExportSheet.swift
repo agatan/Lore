@@ -40,10 +40,10 @@ struct LifeLogExportSheet: View {
             HStack(alignment: .top) {
                 VStack(alignment: .leading, spacing: 4) {
                     Text("この日を書き出す")
-                        .font(.system(size: 18, weight: .semibold, design: .rounded))
+                        .font(.system(size: LoreTheme.TextSize.title, weight: .semibold))
                         .accessibilityIdentifier("export.sheet")
                     Text(snapshot.date.formatted(.dateTime.year().month().day().weekday(.wide)))
-                        .font(.system(size: 11.5, design: .rounded))
+                        .font(.system(size: LoreTheme.TextSize.caption))
                         .foregroundStyle(.secondary)
                 }
                 Spacer()
@@ -55,7 +55,7 @@ struct LifeLogExportSheet: View {
 
             VStack(alignment: .leading, spacing: 9) {
                 Text("含めるもの")
-                    .font(.system(size: 11, weight: .semibold, design: .rounded))
+                    .font(.system(size: LoreTheme.TextSize.caption, weight: .semibold))
                     .foregroundStyle(.secondary)
                 LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 8), count: 2), spacing: 8) {
                     exportToggle("予定", id: "calendar", count: snapshot.day.calendarEvents.count, isOn: $options.includesCalendarEvents)
@@ -68,11 +68,11 @@ struct LifeLogExportSheet: View {
             VStack(alignment: .leading, spacing: 8) {
                 HStack {
                     Text("プレビュー")
-                        .font(.system(size: 11, weight: .semibold, design: .rounded))
+                        .font(.system(size: LoreTheme.TextSize.caption, weight: .semibold))
                         .foregroundStyle(.secondary)
                     Spacer()
                     Text("読みやすいMarkdown")
-                        .font(.system(size: 10, design: .rounded))
+                        .font(.system(size: LoreTheme.TextSize.micro))
                         .foregroundStyle(.tertiary)
                 }
                 ScrollView(.vertical) {
@@ -86,7 +86,7 @@ struct LifeLogExportSheet: View {
                         .accessibilityIdentifier("export.preparing")
                     } else {
                     Text(previewText)
-                        .font(.system(size: 11.5))
+                        .font(.system(size: LoreTheme.TextSize.caption))
                         .foregroundStyle(.secondary)
                         .textSelection(.enabled)
                         .frame(maxWidth: .infinity, alignment: .topLeading)
@@ -94,9 +94,9 @@ struct LifeLogExportSheet: View {
                         .accessibilityIdentifier("export.preview")
                     }
                 }
-                .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 14))
+                .background(.regularMaterial, in: RoundedRectangle(cornerRadius: LoreTheme.panelCornerRadius))
                 .overlay {
-                    RoundedRectangle(cornerRadius: 14)
+                    RoundedRectangle(cornerRadius: LoreTheme.panelCornerRadius)
                         .stroke(.white.opacity(0.10), lineWidth: 0.7)
                 }
             }
@@ -172,13 +172,13 @@ struct LifeLogExportSheet: View {
         } label: {
             HStack(spacing: 7) {
                 Image(systemName: isOn.wrappedValue ? "checkmark.square.fill" : "square")
-                    .font(.system(size: 15, weight: .medium))
+                    .font(.system(size: LoreTheme.TextSize.headline, weight: .medium))
                     .foregroundStyle(isOn.wrappedValue ? LoreTheme.accent : .secondary)
                 Text(title)
-                    .font(.system(size: 11.5, weight: .medium))
+                    .font(.system(size: LoreTheme.TextSize.caption, weight: .medium))
                 Spacer()
                 Text("\(count)")
-                    .font(.system(size: 10, weight: .medium, design: .rounded))
+                    .font(.system(size: LoreTheme.TextSize.micro, weight: .medium))
                     .foregroundStyle(.tertiary)
                     .monospacedDigit()
             }
@@ -187,9 +187,9 @@ struct LifeLogExportSheet: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 8))
+        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: LoreTheme.smallCornerRadius))
         .overlay {
-            RoundedRectangle(cornerRadius: 8)
+            RoundedRectangle(cornerRadius: LoreTheme.smallCornerRadius)
                 .stroke(isOn.wrappedValue ? LoreTheme.accent.opacity(0.45) : Color.secondary.opacity(0.18), lineWidth: 1)
         }
         .accessibilityLabel("\(title)を含める")

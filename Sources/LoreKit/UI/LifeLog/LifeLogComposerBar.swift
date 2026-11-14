@@ -22,7 +22,7 @@ struct LifeLogComposerBar: View {
                     isListening: env.lifeLog.isHearingSpeech,
                     transcript: env.lifeLog.liveTranscript
                 )
-                .glassEffect(.regular, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+                .glassEffect(.regular, in: RoundedRectangle(cornerRadius: LoreTheme.panelCornerRadius, style: .continuous))
                 .transition(.move(edge: .bottom).combined(with: .opacity))
             }
             bar
@@ -63,13 +63,13 @@ struct LifeLogComposerBar: View {
         .padding(.leading, 7)
         .padding(.trailing, acceptsMemo ? 6 : 16)
         .padding(.vertical, 6)
-        .glassEffect(.regular, in: RoundedRectangle(cornerRadius: 24, style: .continuous))
+        .glassEffect(.regular, in: RoundedRectangle(cornerRadius: LoreTheme.floatingCornerRadius, style: .continuous))
     }
 
     private var statusText: some View {
         VStack(alignment: .leading, spacing: 1) {
             Text(LocalizedStringKey(status.title))
-                .font(.system(size: 12, weight: .semibold))
+                .font(.system(size: LoreTheme.TextSize.callout, weight: .semibold))
                 .foregroundStyle(env.lifeLog.isCapturing ? AnyShapeStyle(LoreTheme.recording) : AnyShapeStyle(.primary))
                 .lineLimit(1)
             if let caption = status.subtitle {
@@ -85,7 +85,7 @@ struct LifeLogComposerBar: View {
     }
 }
 
-/// 記録の開始・停止button。停止中はblueの録音記号、記録意図がある間はroseの停止記号。
+/// 記録の開始・停止button。停止中はapp iconと同じ墨色の丸とroseの点、記録意図がある間はroseの停止記号。
 /// 実際に録音している間だけ外周がゆっくり脈打つ。
 struct LifeLogRecordButton: View {
     var lifeLog: LifeLogCoordinator
@@ -115,12 +115,13 @@ struct LifeLogRecordButton: View {
                     .frame(width: diameter, height: diameter)
                 if lifeLog.hasCaptureIntent {
                     RoundedRectangle(cornerRadius: 2.5, style: .continuous)
-                        .fill(.white)
+                        .fill(Color.white)
                         .frame(width: diameter * 0.32, height: diameter * 0.32)
                         .opacity(lifeLog.isCapturing ? 1 : 0.75)
                 } else {
+                    // 待機中はApp iconと同じ「墨の面にroseの点」で、押すと記録が始まることを示す。
                     Circle()
-                        .fill(.white)
+                        .fill(LoreTheme.recording)
                         .frame(width: diameter * 0.36, height: diameter * 0.36)
                 }
             }

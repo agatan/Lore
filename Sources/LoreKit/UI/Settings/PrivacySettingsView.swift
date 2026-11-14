@@ -11,7 +11,7 @@ struct PrivacySettingsView: View {
         LazyVStack(alignment: .leading, spacing: 20) {
             SettingsCard(title: "アクセシビリティ") {
                 Text("グローバルショートカットの検知と、仕上げた文章の貼り付けに使います。画面やウィンドウ内の文字は読み取りません。")
-                .font(.system(size: 11.5))
+                .font(.system(size: LoreTheme.TextSize.caption))
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
             }
@@ -20,7 +20,7 @@ struct PrivacySettingsView: View {
                 if let url = env.database?.fileURL {
                     HStack {
                         Text(url.path(percentEncoded: false))
-                            .font(.system(size: 10.5, design: .monospaced))
+                            .font(.system(size: LoreTheme.TextSize.caption, design: .monospaced))
                             .foregroundStyle(.secondary)
                             .lineLimit(2)
                             .truncationMode(.middle)
@@ -33,7 +33,7 @@ struct PrivacySettingsView: View {
                     }
                 } else {
                     Text("履歴の保存先はまだ作られていません")
-                        .font(.system(size: 11))
+                        .font(.system(size: LoreTheme.TextSize.caption))
                         .foregroundStyle(.tertiary)
                 }
                 SettingsRow(title: "このMacの使用量", caption: "履歴、ライフログ、保存音声、whisper.cpp modelの合計です") {
@@ -47,7 +47,7 @@ struct PrivacySettingsView: View {
             SettingsCard(title: "データの削除", footnote: "削除した内容は元に戻せません。ライフログの削除には、発話、メモ、予定の控え、保存音声が含まれます。") {
                 HStack(spacing: 12) {
                     Text("\(env.historyCount) 件の履歴が保存されています")
-                        .font(.system(size: 11.5))
+                        .font(.system(size: LoreTheme.TextSize.caption))
                         .foregroundStyle(.secondary)
                     Spacer()
                     Button("音声入力履歴…", role: .destructive) {
@@ -59,9 +59,9 @@ struct PrivacySettingsView: View {
                 HStack(spacing: 12) {
                     VStack(alignment: .leading, spacing: 3) {
                         Text("ライフログ")
-                            .font(.system(size: 11.5, weight: .medium))
+                            .font(.system(size: LoreTheme.TextSize.caption, weight: .medium))
                         Text("音声 \(ByteCountFormatter.string(fromByteCount: env.lifeLogAudioBytes, countStyle: .file))")
-                            .font(.system(size: 10.5))
+                            .font(.system(size: LoreTheme.TextSize.caption))
                             .foregroundStyle(.secondary)
                     }
                     Spacer()
@@ -73,7 +73,7 @@ struct PrivacySettingsView: View {
                 }
                 HStack(spacing: 12) {
                     Text("設定、語彙、モード、APIキーを含むすべて")
-                        .font(.system(size: 11.5))
+                        .font(.system(size: LoreTheme.TextSize.caption))
                         .foregroundStyle(.secondary)
                     Spacer()
                     Button("Loreを初期化…", role: .destructive) {
@@ -84,8 +84,8 @@ struct PrivacySettingsView: View {
                 }
                 if let error = env.dataOperationError {
                     Label(error, systemImage: "exclamationmark.triangle.fill")
-                        .font(.system(size: 11))
-                        .foregroundStyle(LoreTheme.recording)
+                        .font(.system(size: LoreTheme.TextSize.caption))
+                        .foregroundStyle(LoreTheme.danger)
                         .fixedSize(horizontal: false, vertical: true)
                 }
             }

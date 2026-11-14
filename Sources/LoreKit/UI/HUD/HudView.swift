@@ -52,7 +52,7 @@ struct HudView: View {
                 VStack(alignment: .leading, spacing: 6) {
                     if !transcript.isEmpty {
                         Text(transcript)
-                            .font(.system(size: 14))
+                            .font(.system(size: LoreTheme.TextSize.reading))
                             .foregroundStyle(.primary.opacity(isRecording ? 0.92 : 0.7))
                             .lineSpacing(3)
                             .lineLimit(3)
@@ -61,7 +61,7 @@ struct HudView: View {
                     }
                     if let detail = terminalDetail {
                         Text(detail)
-                            .font(.system(size: 11.5))
+                            .font(.system(size: LoreTheme.TextSize.caption))
                             .foregroundStyle(LoreTheme.warning)
                             .lineLimit(2)
                     }
@@ -99,15 +99,15 @@ struct HudView: View {
                         LinearGradient(colors: [.clear, .black, .black], startPoint: .leading, endPoint: .init(x: 0.35, y: 0.5))
                     }
                 Text(coordinator.recordingElapsed.clockText)
-                    .font(.system(size: 13, weight: .medium, design: .rounded))
+                    .font(.system(size: LoreTheme.TextSize.body, weight: .medium))
                     .monospacedDigit()
                     .foregroundStyle(.secondary)
                     .contentTransition(.numericText())
             } else {
                 Text(LocalizedStringKey(coordinator.activityLabel ?? LoreTheme.label(for: phase)))
-                    .font(.system(size: 13, weight: .semibold))
+                    .font(.system(size: LoreTheme.TextSize.body, weight: .semibold))
                     .foregroundStyle(isTerminal ? AnyShapeStyle(tint) : AnyShapeStyle(.primary))
-                    .shimmering(isProcessing)
+                    .breathing(isProcessing)
                     .lineLimit(1)
                     .contentTransition(.opacity)
             }
@@ -117,9 +117,9 @@ struct HudView: View {
             if let mode = coordinator.activeMode {
                 HStack(spacing: 4) {
                     Image(systemName: coordinator.pinnedModeID != nil ? "pin.fill" : "wand.and.stars")
-                        .font(.system(size: 8.5, weight: .semibold))
+                        .font(.system(size: LoreTheme.TextSize.micro, weight: .semibold))
                     Text(mode.name)
-                        .font(.system(size: 11, weight: .medium))
+                        .font(.system(size: LoreTheme.TextSize.caption, weight: .medium))
                         .lineLimit(1)
                 }
                 .foregroundStyle(.secondary)
@@ -131,11 +131,11 @@ struct HudView: View {
             if phase.isActive {
                 Button(action: onCancel) {
                     Text("esc")
-                        .font(.system(size: 10, weight: .semibold, design: .rounded))
+                        .font(.system(size: LoreTheme.TextSize.micro, weight: .semibold))
                         .foregroundStyle(isHovering ? .primary : .secondary)
                         .frame(minWidth: 26, minHeight: 18)
                         .background {
-                            RoundedRectangle(cornerRadius: 5, style: .continuous)
+                            RoundedRectangle(cornerRadius: LoreTheme.smallCornerRadius, style: .continuous)
                                 .strokeBorder(Color.primary.opacity(isHovering ? 0.35 : 0.18), lineWidth: 1)
                         }
                 }
@@ -182,7 +182,7 @@ private struct HudStatusOrb: View {
                     .onAppear { spin = true }
             case .idle, .finished:
                 Image(systemName: LoreTheme.symbol(for: phase))
-                    .font(.system(size: 17, weight: .semibold))
+                    .font(.system(size: LoreTheme.TextSize.title, weight: .semibold))
                     .foregroundStyle(tint)
                     .symbolEffect(.bounce, value: phase)
                     .transition(.scale.combined(with: .opacity))
@@ -192,35 +192,28 @@ private struct HudStatusOrb: View {
     }
 }
 
-private struct Shimmer: ViewModifier {
+/// 処理中の語をゆっくり明滅させ、待っている間も止まっていないことを示す。光の帯は流さない。
+struct Breathing: ViewModifier {
     var isActive: Bool
-    @State private var phase: CGFloat = -1
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var dimmed = false
 
     func body(content: Content) -> some View {
-        if isActive {
+        if isActive && !reduceMotion {
             content
-                .overlay {
-                    LinearGradient(
-                        colors: [.clear, .white.opacity(0.55), .clear],
-                        startPoint: .init(x: phase - 0.3, y: 0.5),
-                        endPoint: .init(x: phase + 0.3, y: 0.5)
-                    )
-                    .blendMode(.plusLighter)
-                    .mask(content)
-                    .allowsHitTesting(false)
-                }
+                .opacity(dimmed ? 0.45 : 1)
                 .onAppear {
-                    withAnimation(.linear(duration: 1.4).repeatForever(autoreverses: false)) { phase = 2 }
+                    withAnimation(.easeInOut(duration: 0.9).repeatForever(autoreverses: true)) { dimmed = true }
                 }
+                .onDisappear { dimmed = false }
         } else {
             content
         }
     }
 }
 
-private extension View {
-    /// 処理中の語に光を流し、待っている間も止まっていないことを示す。
-    func shimmering(_ isActive: Bool) -> some View { modifier(Shimmer(isActive: isActive)) }
+extension View {
+    func breathing(_ isActive: Bool) -> some View { modifier(Breathing(isActive: isActive)) }
 }
 
 #if DEBUG

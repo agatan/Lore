@@ -45,7 +45,7 @@ struct LifeLogDayInspector: View {
                     .font(LoreTheme.sectionFont)
                     .foregroundStyle(.secondary)
                 Text(isToday ? "まだ記録はありません" : "記録はありません")
-                    .font(.system(size: 15, weight: .semibold))
+                    .font(.system(size: LoreTheme.TextSize.headline, weight: .semibold))
                     .foregroundStyle(.tertiary)
             }
         } else {
@@ -60,12 +60,12 @@ struct LifeLogDayInspector: View {
                     .font(LoreTheme.sectionFont)
                     .foregroundStyle(.secondary)
                 Self.spokenText(value.spokenDuration)
-                    .font(.system(size: 30, weight: .bold, design: .rounded).monospacedDigit())
+                    .font(.system(size: LoreTheme.TextSize.metric, weight: .bold, design: .rounded).monospacedDigit())
                     .contentTransition(.numericText())
             }
             HStack(spacing: 0) {
                 count(value.utteranceCount, "発話", symbol: "waveform", tint: .secondary)
-                count(value.memoCount, "メモ", symbol: "pencil", tint: LoreTheme.memo)
+                count(value.memoCount, "メモ", symbol: "pencil", tint: LoreTheme.accent)
                 count(value.dictationCount, "音声入力", symbol: "keyboard", tint: LoreTheme.accent)
             }
         }
@@ -75,14 +75,14 @@ struct LifeLogDayInspector: View {
     private func count(_ value: Int, _ label: String, symbol: String, tint: Color) -> some View {
         VStack(alignment: .leading, spacing: 3) {
             Text(verbatim: "\(value)")
-                .font(.system(size: 17, weight: .semibold, design: .rounded).monospacedDigit())
+                .font(.system(size: LoreTheme.TextSize.title, weight: .semibold).monospacedDigit())
                 .foregroundStyle(value == 0 ? .tertiary : .primary)
             HStack(spacing: 4) {
                 Image(systemName: symbol)
-                    .font(.system(size: 9, weight: .semibold))
+                    .font(.system(size: LoreTheme.TextSize.micro, weight: .semibold))
                     .foregroundStyle(tint)
                 Text(LocalizedStringKey(label))
-                    .font(.system(size: 10.5))
+                    .font(.system(size: LoreTheme.TextSize.caption))
                     .foregroundStyle(.secondary)
             }
         }
@@ -155,7 +155,7 @@ struct LifeLogDayMap: View {
                     .offset(x: labelWidth + 6, y: lineY)
                 if hour % stride == 0 {
                     Text(verbatim: "\(hour)")
-                        .font(.system(size: 10).monospacedDigit())
+                        .font(.system(size: LoreTheme.TextSize.micro).monospacedDigit())
                         .foregroundStyle(.tertiary)
                         .frame(width: labelWidth, alignment: .trailing)
                         .offset(y: lineY - 6.5)
@@ -181,7 +181,7 @@ struct LifeLogDayMap: View {
                     context.fill(Path(roundedRect: rect, cornerRadius: 1.2), with: .color(LoreTheme.accent))
                 case .memo:
                     let rect = CGRect(x: x + 1, y: top - 3, width: 6, height: 6)
-                    context.fill(Path(ellipseIn: rect), with: .color(LoreTheme.memo))
+                    context.fill(Path(ellipseIn: rect), with: .color(LoreTheme.accent))
                 }
             }
         }
@@ -199,15 +199,15 @@ struct LifeLogDayMap: View {
         return Button { onJump(block.event.startsAt) } label: {
             HStack(spacing: 0) {
                 Rectangle()
-                    .fill(LoreTheme.accentSecondary)
+                    .fill(LoreTheme.event)
                     .frame(width: 3)
                 VStack(alignment: .leading, spacing: 1) {
                     Text(block.event.title)
-                        .font(.system(size: 11, weight: .semibold))
+                        .font(.system(size: LoreTheme.TextSize.caption, weight: .semibold))
                         .lineLimit(height >= 40 ? 2 : 1)
                     if height >= 30 {
                         Text(verbatim: "\(block.event.startsAt.formatted(date: .omitted, time: .shortened))–\(block.event.endsAt.formatted(date: .omitted, time: .shortened))")
-                            .font(.system(size: 10).monospacedDigit())
+                            .font(.system(size: LoreTheme.TextSize.micro).monospacedDigit())
                             .foregroundStyle(.secondary)
                             .lineLimit(1)
                     }
@@ -216,9 +216,9 @@ struct LifeLogDayMap: View {
                 .padding(.vertical, height >= 22 ? 3 : 0)
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: height >= 22 ? .topLeading : .leading)
             }
-            .background(LoreTheme.accentSecondary.opacity(isNow ? 0.26 : 0.15))
-            .clipShape(RoundedRectangle(cornerRadius: 5, style: .continuous))
-            .contentShape(RoundedRectangle(cornerRadius: 5, style: .continuous))
+            .background(LoreTheme.event.opacity(isNow ? 0.26 : 0.15))
+            .clipShape(RoundedRectangle(cornerRadius: LoreTheme.smallCornerRadius, style: .continuous))
+            .contentShape(RoundedRectangle(cornerRadius: LoreTheme.smallCornerRadius, style: .continuous))
         }
         .buttonStyle(.plain)
         .frame(width: columnWidth - (block.columnCount > 1 ? 2 : 0), height: height)
@@ -260,7 +260,7 @@ struct LifeLogDayMap: View {
                 .frame(width: size.width - labelWidth - 6, height: 1)
                 .offset(x: labelWidth + 6, y: lineY)
             Text(time.formatted(date: .omitted, time: .shortened))
-                .font(.system(size: 10, weight: .semibold).monospacedDigit())
+                .font(.system(size: LoreTheme.TextSize.micro, weight: .semibold).monospacedDigit())
                 .foregroundStyle(.primary)
                 .padding(.horizontal, 5)
                 .padding(.vertical, 1.5)

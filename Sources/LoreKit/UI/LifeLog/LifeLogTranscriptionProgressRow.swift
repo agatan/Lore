@@ -11,14 +11,14 @@ struct LifeLogTranscriptionProgressRow: View {
             let elapsed = max(0, Int(context.date.timeIntervalSince(startedAt)))
             HStack(alignment: .top, spacing: 9) {
                 Image(systemName: isListening ? "waveform" : "waveform.badge.magnifyingglass")
-                    .font(.system(size: 12, weight: .semibold))
+                    .font(.system(size: LoreTheme.TextSize.callout, weight: .semibold))
                     .symbolEffect(.variableColor.iterative, isActive: isListening)
                     .padding(.top, 2)
                 VStack(alignment: .leading, spacing: 3) {
-                    shimmerText
+                    statusLabel
                     if !transcript.isEmpty {
                         Text(transcript)
-                            .font(.system(size: 12.5))
+                            .font(.system(size: LoreTheme.TextSize.callout))
                             .foregroundStyle(.primary)
                             .lineLimit(2)
                             .contentTransition(.opacity)
@@ -34,8 +34,7 @@ struct LifeLogTranscriptionProgressRow: View {
                         Text(Self.elapsedText(elapsed))
                     }
                 }
-                .font(.system(size: 10.5, weight: .medium, design: .monospaced))
-                .monospacedDigit()
+                .font(.system(size: LoreTheme.TextSize.caption, weight: .medium).monospacedDigit())
                 .foregroundStyle(.secondary)
             }
             .foregroundStyle(LoreTheme.accent)
@@ -46,31 +45,12 @@ struct LifeLogTranscriptionProgressRow: View {
         .accessibilityIdentifier("life-log.transcription-progress")
     }
 
-    private var shimmerText: some View {
-        TimelineView(.animation(minimumInterval: 1.0 / 30.0)) { context in
-            GeometryReader { proxy in
-                let width = max(1, proxy.size.width)
-                let phase = context.date.timeIntervalSinceReferenceDate
-                    .truncatingRemainder(dividingBy: 1.6) / 1.6
-                Text(LocalizedStringKey(statusText))
-                    .font(.system(size: 11.5, weight: .semibold, design: .rounded))
-                    .foregroundStyle(LoreTheme.accent.opacity(0.38))
-                    .overlay {
-                        LinearGradient(
-                            colors: [.clear, .white.opacity(0.95), .clear],
-                            startPoint: .leading,
-                            endPoint: .trailing
-                        )
-                        .frame(width: width * 0.55)
-                        .offset(x: CGFloat(phase) * width * 1.55 - width * 0.65)
-                        .mask(alignment: .leading) {
-                            Text(LocalizedStringKey(statusText))
-                                .font(.system(size: 11.5, weight: .semibold, design: .rounded))
-                        }
-                    }
-            }
-        }
-        .frame(width: 88, height: 16)
+    private var statusLabel: some View {
+        Text(LocalizedStringKey(statusText))
+            .font(.system(size: LoreTheme.TextSize.caption, weight: .semibold))
+            .foregroundStyle(LoreTheme.accent)
+            .breathing(true)
+            .frame(width: 88, height: 16, alignment: .leading)
     }
 
     private var statusText: String { isListening ? "聞き取り中" : "文字起こし中" }

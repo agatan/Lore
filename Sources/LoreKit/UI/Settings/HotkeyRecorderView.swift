@@ -23,9 +23,9 @@ struct HotkeyRecorderView: View {
                 } label: {
                     HStack(spacing: 6) {
                         Image(systemName: isRecording ? "record.circle" : "keyboard")
-                            .font(.system(size: 11))
+                            .font(.system(size: LoreTheme.TextSize.caption))
                         Text(label)
-                            .font(.system(size: 12, weight: .medium, design: .rounded))
+                            .font(.system(size: LoreTheme.TextSize.callout, weight: .medium))
                     }
                     .frame(minWidth: 150)
                 }
@@ -35,7 +35,7 @@ struct HotkeyRecorderView: View {
                 if isRecording {
                     Button("やめる") { stop() }
                         .buttonStyle(.borderless)
-                        .font(.system(size: 11))
+                        .font(.system(size: LoreTheme.TextSize.caption))
                 } else {
                     Menu("よく使うキー") {
                         ForEach(ModifierKey.allCases) { key in
@@ -53,7 +53,7 @@ struct HotkeyRecorderView: View {
 
             if let rejection {
                 Text(rejection)
-                    .font(.system(size: 10.5))
+                    .font(.system(size: LoreTheme.TextSize.caption))
                     .foregroundStyle(LoreTheme.warning)
                     .multilineTextAlignment(.trailing)
                     .frame(maxWidth: 260)

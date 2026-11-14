@@ -19,7 +19,7 @@ struct ModesSettingsView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
             Text("アプリごとに仕上げ方を切り替えます。Defaultは、どのアプリにも当てはまらないときに使われます。")
-                .font(.system(size: 11.5))
+                .font(.system(size: LoreTheme.TextSize.caption))
                 .foregroundStyle(.secondary)
 
             HStack(alignment: .top, spacing: 20) {
@@ -44,9 +44,9 @@ struct ModesSettingsView: View {
                 HStack(spacing: 6) {
                     VStack(alignment: .leading, spacing: 1) {
                         Text("共通ルール")
-                            .font(.system(size: 12, weight: .medium))
+                            .font(.system(size: LoreTheme.TextSize.callout, weight: .medium))
                         Text("すべてのモードの前に入る")
-                            .font(.system(size: 10))
+                            .font(.system(size: LoreTheme.TextSize.micro))
                             .foregroundStyle(.secondary)
                     }
                     Spacer()
@@ -63,9 +63,9 @@ struct ModesSettingsView: View {
                     HStack(spacing: 6) {
                         VStack(alignment: .leading, spacing: 1) {
                             Text(mode.name)
-                                .font(.system(size: 12, weight: .medium))
+                                .font(.system(size: LoreTheme.TextSize.callout, weight: .medium))
                             Text(mode.isFallback ? "フォールバック" : "\(mode.bundleIDs.count) アプリ")
-                                .font(.system(size: 10))
+                                .font(.system(size: LoreTheme.TextSize.micro))
                                 .foregroundStyle(.secondary)
                         }
                         Spacer()
@@ -152,7 +152,7 @@ struct ModesSettingsView: View {
                 fillsVertically: true
             ) {
                 TextEditor(text: $sharedDraft)
-                    .font(.system(size: 12, design: .monospaced))
+                    .font(.system(size: LoreTheme.TextSize.callout, design: .monospaced))
                     // 理想の高さを本文の長さにすると、長い指示文でpane全体がwindowより高くなり、
                     // sidebarまで押し上げられる。理想は小さく取り、余った高さだけを使う。
                     .frame(minHeight: 160, idealHeight: 160, maxHeight: .infinity)
@@ -173,7 +173,7 @@ struct ModesSettingsView: View {
                 .disabled(!env.isSharedRulesEdited && sharedDraft == env.sharedRules)
                 Spacer()
                 Text(sharedHasChanges ? "未保存の変更があります" : "保存済み")
-                    .font(.system(size: 10.5))
+                    .font(.system(size: LoreTheme.TextSize.caption))
                     .foregroundStyle(sharedHasChanges ? LoreTheme.warning : Color.secondary.opacity(0.7))
                 Button("保存") {
                     Task { await env.saveSharedRules(sharedDraft) }
@@ -226,7 +226,7 @@ struct ModesSettingsView: View {
                     fillsVertically: true
                 ) {
                     TextEditor(text: bind(\.prompt))
-                        .font(.system(size: 12, design: .monospaced))
+                        .font(.system(size: LoreTheme.TextSize.callout, design: .monospaced))
                         .frame(minHeight: 140, idealHeight: 140, maxHeight: .infinity)
                         .scrollContentBackground(.hidden)
                         .padding(8)
@@ -246,7 +246,7 @@ struct ModesSettingsView: View {
                     }
                     Spacer()
                     Text(hasChanges ? "未保存の変更があります" : "保存済み")
-                        .font(.system(size: 10.5))
+                        .font(.system(size: LoreTheme.TextSize.caption))
                         .foregroundStyle(hasChanges ? LoreTheme.warning : Color.secondary.opacity(0.7))
                     Button("保存") {
                         Task { await save() }
@@ -272,19 +272,19 @@ struct ModesSettingsView: View {
         VStack(alignment: .leading, spacing: 8) {
             if mode.bundleIDs.isEmpty {
                 Text("未設定(既定のモードとして使われます)")
-                    .font(.system(size: 11))
+                    .font(.system(size: LoreTheme.TextSize.caption))
                     .foregroundStyle(.tertiary)
             } else {
                 FlowLayout(spacing: 6) {
                     ForEach(Array(mode.bundleIDs.enumerated()), id: \.offset) { index, bundleID in
                         HStack(spacing: 4) {
                             Text(bundleID)
-                                .font(.system(size: 10.5, design: .monospaced))
+                                .font(.system(size: LoreTheme.TextSize.caption, design: .monospaced))
                             Button {
                                 draft?.bundleIDs.remove(at: index)
                             } label: {
                                 Image(systemName: "xmark.circle.fill")
-                                    .font(.system(size: 9))
+                                    .font(.system(size: LoreTheme.TextSize.micro))
                             }
                             .buttonStyle(.plain)
                             .foregroundStyle(.secondary)
@@ -308,7 +308,7 @@ struct ModesSettingsView: View {
                             "\(env.coordinator.frontmostAppName ?? bundleID) を追加",
                             systemImage: "arrow.down.app"
                         )
-                        .font(.system(size: 11))
+                        .font(.system(size: LoreTheme.TextSize.caption))
                     }
                     .buttonStyle(.bordered)
                     .controlSize(.small)
@@ -317,7 +317,7 @@ struct ModesSettingsView: View {
                     chooseApplication()
                 } label: {
                     Label("アプリを選択…", systemImage: "folder")
-                        .font(.system(size: 11))
+                        .font(.system(size: LoreTheme.TextSize.caption))
                 }
                 .buttonStyle(.bordered)
                 .controlSize(.small)

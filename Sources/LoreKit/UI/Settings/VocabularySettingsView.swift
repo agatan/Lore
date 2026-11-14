@@ -31,14 +31,14 @@ struct VocabularySettingsView: View {
         ) {
             HStack {
                 Text("表記・読み・よくある誤認識を登録します")
-                    .font(.system(size: 11))
+                    .font(.system(size: LoreTheme.TextSize.caption))
                     .foregroundStyle(.secondary)
                 Spacer()
                 Button {
                     isAdding = true
                 } label: {
                     Label("追加", systemImage: "plus")
-                        .font(.system(size: 11))
+                        .font(.system(size: LoreTheme.TextSize.caption))
                 }
                 .buttonStyle(.bordered)
                 .controlSize(.small)
@@ -46,7 +46,7 @@ struct VocabularySettingsView: View {
 
             if env.vocabulary.isEmpty {
                 Text("まだ登録がありません")
-                    .font(.system(size: 11))
+                    .font(.system(size: LoreTheme.TextSize.caption))
                     .foregroundStyle(.tertiary)
                     .frame(maxWidth: .infinity, alignment: .center)
                     .padding(.vertical, 12)
@@ -91,10 +91,10 @@ private struct VocabularyRow: View {
             VStack(alignment: .leading, spacing: 2) {
                 HStack(spacing: 6) {
                     Text(entry.surface)
-                        .font(.system(size: 12, weight: .medium))
+                        .font(.system(size: LoreTheme.TextSize.callout, weight: .medium))
                     if let reading = entry.reading, !reading.isEmpty {
                         Text(reading)
-                            .font(.system(size: 10.5))
+                            .font(.system(size: LoreTheme.TextSize.caption))
                             .foregroundStyle(.secondary)
                     }
                     if entry.source == .suggested {
@@ -103,7 +103,7 @@ private struct VocabularyRow: View {
                 }
                 if !entry.misrecognitions.isEmpty {
                     Text("誤認識: " + entry.misrecognitions.joined(separator: " / "))
-                        .font(.system(size: 10))
+                        .font(.system(size: LoreTheme.TextSize.micro))
                         .foregroundStyle(.tertiary)
                         .lineLimit(1)
                 }
@@ -121,7 +121,7 @@ private struct VocabularyRow: View {
                     Image(systemName: "trash")
                 }
                 .buttonStyle(.borderless)
-                .foregroundStyle(LoreTheme.recording)
+                .foregroundStyle(LoreTheme.danger)
             }
         }
         .padding(.vertical, 6)
@@ -145,7 +145,7 @@ private struct VocabularyEditorSheet: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
             Text(entry.surface.isEmpty ? "語彙を追加" : "語彙を編集")
-                .font(.system(size: 14, weight: .semibold))
+                .font(.system(size: LoreTheme.TextSize.reading, weight: .semibold))
 
             Form {
                 TextField("正しい表記", text: $entry.surface)

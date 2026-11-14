@@ -29,7 +29,7 @@ func draw(size: Int) -> NSBitmapImageRep {
     let body = canvas.insetBy(dx: 100 * s, dy: 100 * s)
     let squircle = CGPath(roundedRect: body, cornerWidth: 185 * s, cornerHeight: 185 * s, transform: nil)
 
-    // 下地: わずかにvioletを含む墨色の無地。暗いDockでも縁が分かるよう、ごく薄い線だけ引く。
+    // 下地: わずかに青みを含む墨色の無地。暗いDockでも縁が分かるよう、ごく薄い線だけ引く。
     c.addPath(squircle)
     c.setFillColor(rgb(0.09, 0.09, 0.12))
     c.fillPath()

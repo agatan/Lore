@@ -27,7 +27,7 @@ struct LifeLogSettingsView: View {
                     .accessibilityIdentifier("life-log.voice-memo-hotkey")
                 }
                 if let error = env.hotkeyError {
-                    Text(error).font(.system(size: 11)).foregroundStyle(LoreTheme.recording)
+                    Text(error).font(.system(size: LoreTheme.TextSize.caption)).foregroundStyle(LoreTheme.danger)
                 }
             }
 
@@ -89,7 +89,7 @@ struct LifeLogSettingsView: View {
                 }
                 SettingsRow(title: "現在の音声") {
                     Text(ByteCountFormatter.string(fromByteCount: env.lifeLogAudioBytes, countStyle: .file))
-                        .font(.system(size: 11.5, design: .rounded))
+                        .font(.system(size: LoreTheme.TextSize.caption))
                         .foregroundStyle(.secondary)
                 }
             }

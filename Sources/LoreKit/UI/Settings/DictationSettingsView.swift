@@ -27,13 +27,13 @@ struct DictationSettingsView: View {
                         )
                         .frame(width: 190)
                         Text("\(settings.holdThresholdMs) ms")
-                            .font(.system(size: 11, design: .rounded))
+                            .font(.system(size: LoreTheme.TextSize.caption))
                             .monospacedDigit().foregroundStyle(.secondary)
                             .frame(width: 56, alignment: .trailing)
                     }
                 }
                 if let error = env.hotkeyError {
-                    Text(error).font(.system(size: 11)).foregroundStyle(LoreTheme.recording)
+                    Text(error).font(.system(size: LoreTheme.TextSize.caption)).foregroundStyle(LoreTheme.danger)
                 }
             }
 
@@ -89,7 +89,7 @@ struct DictationSettingsView: View {
                     .labelsHidden().pickerStyle(.segmented).fixedSize()
                 }
                 SettingsRow(title: "保存件数") {
-                    Text("\(env.historyCount)件").font(.system(size: 11)).foregroundStyle(.secondary)
+                    Text("\(env.historyCount)件").font(.system(size: LoreTheme.TextSize.caption)).foregroundStyle(.secondary)
                 }
             }
         }

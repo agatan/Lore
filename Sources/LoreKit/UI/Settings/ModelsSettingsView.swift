@@ -52,25 +52,25 @@ struct ModelsSettingsView: View {
     private var speechRecognitionCard: some View {
         SettingsCard(title: "聞き取り", footnote: "SpeechAnalyzerを選んだ音声入力とライフログで使います。whisper.cppは各設定で選べます。語彙は両方で共有します。") {
             HStack(alignment: .firstTextBaseline, spacing: 8) {
-                Text("Apple 音声認識 (SpeechAnalyzer)").font(.system(size: 13, weight: .medium))
+                Text("Apple 音声認識 (SpeechAnalyzer)").font(.system(size: LoreTheme.TextSize.body, weight: .medium))
                 Spacer()
                 availabilityLabel(env.engines.sttAvailability, canInstall: true)
             }
             if let error = env.speechAssetError {
-                Text(error).font(.system(size: 11)).foregroundStyle(LoreTheme.recording)
+                Text(error).font(.system(size: LoreTheme.TextSize.caption)).foregroundStyle(LoreTheme.danger)
             }
         }
     }
 
     private var providerPicker: some View {
         VStack(alignment: .leading, spacing: 10) {
-            Text("このMac内").font(.system(size: 10.5, weight: .semibold)).foregroundStyle(.secondary)
+            Text("このMac内").font(.system(size: LoreTheme.TextSize.caption, weight: .semibold)).foregroundStyle(.secondary)
             HStack(spacing: 8) {
                 providerButton(.onDevice, icon: "apple.logo")
                 providerButton(.ollama, icon: "shippingbox")
                 providerButton(.lmStudio, icon: "desktopcomputer")
             }
-            Text("クラウド").font(.system(size: 10.5, weight: .semibold)).foregroundStyle(.secondary).padding(.top, 4)
+            Text("クラウド").font(.system(size: LoreTheme.TextSize.caption, weight: .semibold)).foregroundStyle(.secondary).padding(.top, 4)
             HStack(spacing: 8) {
                 providerButton(.openAI, icon: "sparkles")
                 providerButton(.anthropic, icon: "text.bubble")
@@ -87,15 +87,15 @@ struct ModelsSettingsView: View {
             Task { await env.applyEngineChange(resetConnectionState: true) }
         } label: {
             VStack(spacing: 6) {
-                Image(systemName: icon).font(.system(size: 14, weight: .medium))
-                Text(option.displayName).font(.system(size: 10.5, weight: .medium)).lineLimit(1)
+                Image(systemName: icon).font(.system(size: LoreTheme.TextSize.reading, weight: .medium))
+                Text(option.displayName).font(.system(size: LoreTheme.TextSize.caption, weight: .medium)).lineLimit(1)
             }
             .frame(maxWidth: .infinity, minHeight: 48)
             .foregroundStyle(backend == option ? LoreTheme.accent : Color.primary)
             .overlay(alignment: .topTrailing) {
                 if backend == option {
                     Image(systemName: "checkmark.circle.fill")
-                        .font(.system(size: 10))
+                        .font(.system(size: LoreTheme.TextSize.micro))
                         .foregroundStyle(LoreTheme.accent)
                         .padding(7)
                 }
@@ -104,7 +104,7 @@ struct ModelsSettingsView: View {
                 backend == option
                     ? .regular.tint(LoreTheme.accent.opacity(0.24)).interactive()
                     : .regular.interactive(),
-                in: RoundedRectangle(cornerRadius: 12, style: .continuous)
+                in: RoundedRectangle(cornerRadius: LoreTheme.panelCornerRadius, style: .continuous)
             )
         }
         .buttonStyle(.plain)
@@ -112,7 +112,7 @@ struct ModelsSettingsView: View {
 
     private var engineStatus: some View {
         HStack(alignment: .firstTextBaseline, spacing: 8) {
-            Text(activeModelName).font(.system(size: 13, weight: .medium))
+            Text(activeModelName).font(.system(size: LoreTheme.TextSize.body, weight: .medium))
             Spacer()
             availabilityLabel(env.engines.llmAvailability, canInstall: false)
         }
@@ -150,8 +150,8 @@ struct ModelsSettingsView: View {
             .controlSize(.small)
             .disabled(env.isCheckingLlm || (backend.sendsTranscriptOffDevice && !env.hasLlmApiKey))
             if let status = env.llmStatus {
-                Text(status).font(.system(size: 10.5))
-                    .foregroundStyle(env.engines.llmAvailability.isReady ? LoreTheme.success : LoreTheme.recording)
+                Text(status).font(.system(size: LoreTheme.TextSize.caption))
+                    .foregroundStyle(env.engines.llmAvailability.isReady ? LoreTheme.success : LoreTheme.danger)
                     .lineLimit(2)
             }
         }
@@ -173,7 +173,7 @@ struct ModelsSettingsView: View {
                 HStack(spacing: 10) {
                     Slider(value: Binding(get: { Double(settings.formattingTimeoutMs) }, set: { settings.formattingTimeoutMs = Int($0) }), in: 2_000...20_000, step: 500).frame(width: 190)
                     Text(String(format: "%.1f 秒", Double(settings.formattingTimeoutMs) / 1_000))
-                        .font(.system(size: 11, design: .rounded)).monospacedDigit().foregroundStyle(.secondary)
+                        .font(.system(size: LoreTheme.TextSize.caption)).monospacedDigit().foregroundStyle(.secondary)
                 }
             }
         }
@@ -183,14 +183,14 @@ struct ModelsSettingsView: View {
     private func availabilityLabel(_ availability: EngineAvailability, canInstall: Bool) -> some View {
         switch availability {
         case .ready:
-            Label("使えます", systemImage: "checkmark.circle").font(.system(size: 10.5)).foregroundStyle(LoreTheme.success)
+            Label("使えます", systemImage: "checkmark.circle").font(.system(size: LoreTheme.TextSize.caption)).foregroundStyle(LoreTheme.success)
         case .needsDownload(let reason):
             HStack(spacing: 8) {
-                Text(reason).font(.system(size: 10.5)).foregroundStyle(LoreTheme.warning)
+                Text(reason).font(.system(size: LoreTheme.TextSize.caption)).foregroundStyle(LoreTheme.warning)
                 if canInstall { Button("取得") { Task { await env.installSpeechAssets() } }.controlSize(.small) }
             }
         case .unavailable(let reason):
-            Text(reason).font(.system(size: 10.5)).foregroundStyle(LoreTheme.recording).frame(maxWidth: 260)
+            Text(reason).font(.system(size: LoreTheme.TextSize.caption)).foregroundStyle(LoreTheme.danger).frame(maxWidth: 260)
         }
     }
 

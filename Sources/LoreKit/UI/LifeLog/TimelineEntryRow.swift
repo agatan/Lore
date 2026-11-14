@@ -14,7 +14,7 @@ struct TimelineEntryRow: View {
             switch self {
             case .utterance: .dot
             case .dictation: .symbol("keyboard", LoreTheme.accent)
-            case .memo: .symbol("pencil", LoreTheme.memo)
+            case .memo: .symbol("pencil", LoreTheme.accent)
             }
         }
 
@@ -46,7 +46,7 @@ struct TimelineEntryRow: View {
     @State private var isSaving = false
     @FocusState private var editorFocused: Bool
 
-    private var bodySize: CGFloat { compact ? 12.5 : 14 }
+    private var bodySize: CGFloat { compact ? LoreTheme.TextSize.callout : LoreTheme.TextSize.reading }
 
     var body: some View {
         TimelineRowFrame(
@@ -93,7 +93,7 @@ struct TimelineEntryRow: View {
                 if onEdit != nil {
                     Button(action: beginEditing) {
                         Image(systemName: "pencil")
-                            .font(.system(size: 11))
+                            .font(.system(size: LoreTheme.TextSize.caption))
                     }
                     .help("メモを編集")
                     .accessibilityLabel("メモを編集")
@@ -102,7 +102,7 @@ struct TimelineEntryRow: View {
                 if let onDelete {
                     Button(action: onDelete) {
                         Image(systemName: "trash")
-                            .font(.system(size: 11))
+                            .font(.system(size: LoreTheme.TextSize.caption))
                     }
                     .help("メモを削除")
                     .accessibilityLabel("メモを削除")
@@ -119,14 +119,14 @@ struct TimelineEntryRow: View {
         VStack(alignment: .leading, spacing: 6) {
             TextField("メモ", text: $draft, axis: .vertical)
                 .textFieldStyle(.plain)
-                .font(.system(size: compact ? 12.5 : 13))
+                .font(.system(size: compact ? LoreTheme.TextSize.callout : LoreTheme.TextSize.body))
                 .lineSpacing(3)
                 .lineLimit(1...12)
                 .focused($editorFocused)
                 .padding(.horizontal, 8)
                 .padding(.vertical, 6)
                 .background {
-                    RoundedRectangle(cornerRadius: 6, style: .continuous)
+                    RoundedRectangle(cornerRadius: LoreTheme.smallCornerRadius, style: .continuous)
                         .fill(Color.primary.opacity(0.04))
                         .strokeBorder(LoreTheme.accent.opacity(0.5), lineWidth: 1)
                 }

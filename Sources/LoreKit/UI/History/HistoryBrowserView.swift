@@ -101,7 +101,7 @@ private struct HistoryRow: View {
                 }
             }
             Text(record.resultText)
-                .font(.system(size: 12.5))
+                .font(.system(size: LoreTheme.TextSize.callout))
                 .lineLimit(2)
         }
         .padding(.vertical, 2)
@@ -135,7 +135,7 @@ private struct HistoryDetailView: View {
                                 .fill(LoreTheme.accent)
                                 .frame(width: 3)
                             Text(text)
-                                .font(.system(size: 17))
+                                .font(.system(size: LoreTheme.TextSize.title))
                                 .lineSpacing(6)
                                 .textSelection(.enabled)
                                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -143,7 +143,7 @@ private struct HistoryDetailView: View {
                         .fixedSize(horizontal: false, vertical: true)
                     } else {
                         Text("仕上げをせず、聞き取った文字をそのまま挿入しました")
-                            .font(.system(size: 12))
+                            .font(.system(size: LoreTheme.TextSize.callout))
                             .foregroundStyle(.tertiary)
                     }
                 }
@@ -151,14 +151,14 @@ private struct HistoryDetailView: View {
                 VStack(alignment: .leading, spacing: 10) {
                     sectionTitle("聞き取った文字", copying: record.rawTranscript)
                     Text(record.rawTranscript.isEmpty ? "—" : record.rawTranscript)
-                        .font(.system(size: 13))
+                        .font(.system(size: LoreTheme.TextSize.body))
                         .lineSpacing(4)
                         .foregroundStyle(.secondary)
                         .textSelection(.enabled)
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .padding(.horizontal, 14)
                         .padding(.vertical, 12)
-                        .background(Color.primary.opacity(0.04), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+                        .background(Color.primary.opacity(0.04), in: RoundedRectangle(cornerRadius: LoreTheme.cardCornerRadius, style: .continuous))
                 }
 
                 if let error = record.error {
@@ -170,8 +170,8 @@ private struct HistoryDetailView: View {
 
                 Button("この履歴を削除", role: .destructive, action: onDelete)
                     .buttonStyle(.borderless)
-                    .foregroundStyle(LoreTheme.recording)
-                    .font(.system(size: 12))
+                    .foregroundStyle(LoreTheme.danger)
+                    .font(.system(size: LoreTheme.TextSize.callout))
             }
             .padding(.horizontal, 40)
             .padding(.top, 24)
@@ -187,7 +187,7 @@ private struct HistoryDetailView: View {
         VStack(alignment: .leading, spacing: 10) {
             VStack(alignment: .leading, spacing: 4) {
                 Text(record.startedAt.formatted(.dateTime.year().month(.wide).day().weekday(.wide)))
-                    .font(.system(size: 13, weight: .semibold))
+                    .font(.system(size: LoreTheme.TextSize.body, weight: .semibold))
                     .foregroundStyle(.secondary)
                 HStack(alignment: .firstTextBaseline, spacing: 10) {
                     Text(record.startedAt.formatted(date: .omitted, time: .shortened))
@@ -221,7 +221,7 @@ private struct HistoryDetailView: View {
                     TextInserter.copyToClipboard(text)
                 } label: {
                     Label("コピー", systemImage: "doc.on.doc")
-                        .font(.system(size: 11))
+                        .font(.system(size: LoreTheme.TextSize.caption))
                 }
                 .buttonStyle(.borderless)
             }
@@ -232,14 +232,14 @@ private struct HistoryDetailView: View {
         DisclosureGroup {
             VStack(alignment: .leading, spacing: 10) {
                 Text("このときモデルに渡した指示文の全文です。あとから設定を変えても、この記録は当時の内容のまま残ります。")
-                    .font(.system(size: 11))
+                    .font(.system(size: LoreTheme.TextSize.caption))
                     .foregroundStyle(.tertiary)
                 Text(record.modeSnapshot.systemPrompt.isEmpty ? "—" : record.modeSnapshot.systemPrompt)
-                    .font(.system(size: 11, design: .monospaced))
+                    .font(.system(size: LoreTheme.TextSize.caption, design: .monospaced))
                     .textSelection(.enabled)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(12)
-                    .background(Color.primary.opacity(0.04), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+                    .background(Color.primary.opacity(0.04), in: RoundedRectangle(cornerRadius: LoreTheme.cardCornerRadius, style: .continuous))
             }
             .padding(.top, 8)
         } label: {
@@ -269,8 +269,8 @@ private struct LatencyBreakdown: View {
         let rest = max(0, total - stt - llm)
         return [
             Part(label: "聞き取り", ms: stt, tint: LoreTheme.accent),
-            Part(label: "仕上げ", ms: llm, tint: LoreTheme.accentSecondary),
-            Part(label: "挿入", ms: rest, tint: LoreTheme.success),
+            Part(label: "仕上げ", ms: llm, tint: LoreTheme.accent.opacity(0.55)),
+            Part(label: "挿入", ms: rest, tint: LoreTheme.accent.opacity(0.25)),
         ].filter { $0.ms > 0 }
     }
 
@@ -281,14 +281,14 @@ private struct LatencyBreakdown: View {
                 .foregroundStyle(.secondary)
             HStack(alignment: .firstTextBaseline, spacing: 8) {
                 Text(verbatim: record.insertLatencyMs.map(Self.seconds) ?? "—")
-                    .font(.system(size: 24, weight: .bold, design: .rounded).monospacedDigit())
+                    .font(.system(size: LoreTheme.TextSize.metric, weight: .bold, design: .rounded).monospacedDigit())
                 Text("話し終わってから挿入まで")
-                    .font(.system(size: 12))
+                    .font(.system(size: LoreTheme.TextSize.callout))
                     .foregroundStyle(.secondary)
                 Spacer(minLength: 12)
                 if let audio = record.audioDurationMs {
                     Text("話した長さ \(Self.seconds(audio))")
-                        .font(.system(size: 12).monospacedDigit())
+                        .font(.system(size: LoreTheme.TextSize.callout).monospacedDigit())
                         .foregroundStyle(.secondary)
                 }
             }
@@ -317,7 +317,7 @@ private struct LatencyBreakdown: View {
                             Text(verbatim: Self.seconds(part.ms))
                                 .monospacedDigit()
                         }
-                        .font(.system(size: 12))
+                        .font(.system(size: LoreTheme.TextSize.callout))
                     }
                 }
             }

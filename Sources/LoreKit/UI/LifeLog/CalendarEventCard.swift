@@ -9,7 +9,7 @@ struct CalendarEventCard: View {
     var isCurrent = false
     var compact = false
 
-    private var titleSize: CGFloat { compact ? 12.5 : 14 }
+    private var titleSize: CGFloat { compact ? LoreTheme.TextSize.callout : LoreTheme.TextSize.reading }
 
     var body: some View {
         TimelineRowFrame(
@@ -30,11 +30,11 @@ struct CalendarEventCard: View {
                         .fixedSize(horizontal: false, vertical: true)
                     if isCurrent {
                         Text("いま")
-                            .font(.system(size: 10, weight: .semibold))
-                            .foregroundStyle(LoreTheme.accentSecondary)
+                            .font(.system(size: LoreTheme.TextSize.micro, weight: .semibold))
+                            .foregroundStyle(LoreTheme.event)
                             .padding(.horizontal, 6)
                             .padding(.vertical, 1)
-                            .background(LoreTheme.accentSecondary.opacity(0.14), in: Capsule())
+                            .background(LoreTheme.event.opacity(0.14), in: Capsule())
                     }
                 }
                 detail
