@@ -123,7 +123,6 @@ public final class KoeDatabase: Sendable {
             try db.execute(sql: "DELETE FROM calendar_event_snapshots")
             try db.execute(sql: "DELETE FROM life_log_audio_chunks")
             try db.execute(sql: "DELETE FROM sessions")
-            try db.execute(sql: "DELETE FROM vocab_suggestions")
             try db.execute(sql: "DELETE FROM vocabulary")
             try db.execute(sql: "DELETE FROM modes")
             try db.execute(sql: "DELETE FROM meta")
@@ -484,6 +483,15 @@ public final class KoeDatabase: Sendable {
                 }
             }
         }
+        migrator.registerMigration("v11-remove-vocab-suggestions") { db in
+            // 履歴からの語彙候補を廃止した。登録済みの語彙はvocabularyに残る。
+            try db.execute(sql: "DROP TABLE vocab_suggestions")
+            try db.execute(
+                sql: "DELETE FROM meta WHERE key IN (?, ?)",
+                arguments: ["vocab_analysis_watermark", "vocab_analysis_last_run"]
+            )
+        }
+
         return migrator
     }
 }

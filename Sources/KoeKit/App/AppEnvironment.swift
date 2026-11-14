@@ -11,13 +11,6 @@ import Observation
 public final class AppEnvironment {
     public private(set) static weak var current: AppEnvironment?
 
-    public enum AnalysisState: Equatable, Sendable {
-        case idle
-        case running
-        case finished(String)
-        case failed(String)
-    }
-
     public let settings = AppSettings()
     public let engines = EngineRegistry()
     public let hotkeys = HotkeyMonitor()
@@ -33,7 +26,6 @@ public final class AppEnvironment {
     /// 全モードの前に置かれる共通ルール。編集できる(C-53)。
     public private(set) var sharedRules = BuiltinSharedRules.text
     public private(set) var vocabulary: [VocabularyEntry] = []
-    public private(set) var pendingSuggestions: [VocabularySuggestion] = []
     public private(set) var history: [SessionRecord] = []
     public private(set) var historyCount = 0
     public private(set) var latency: LatencyStats?
@@ -46,8 +38,6 @@ public final class AppEnvironment {
     public private(set) var loginItemState: LoginItem.State = .unknown
     public private(set) var hotkeyError: String?
     public private(set) var isPreparingVoiceMemo = false
-    public private(set) var analysisState: AnalysisState = .idle
-    public private(set) var lastAnalysisAt: Date?
 
     /// メインウィンドウで開いているセクション。メニューからの遷移でも使う。
     public var mainSection: MainSection = .lifeLog
@@ -78,14 +68,11 @@ public final class AppEnvironment {
     @ObservationIgnored private var bootTask: Task<Void, Never>?
     @ObservationIgnored private var whisperInstallTask: Task<Void, Never>?
     private var permissionWatcher: Task<Void, Never>?
-    private var analysisTask: Task<Void, Never>?
     @ObservationIgnored private var powerObservers: [any NSObjectProtocol] = []
     @ObservationIgnored private var clockObservers: [any NSObjectProtocol] = []
     @ObservationIgnored private var scheduleTask: Task<Void, Never>?
     /// 自動記録の判断状態。表示（自動記録中か）にも使うため観測対象にする。
     public private(set) var lifeLogScheduleState = LifeLogScheduleController()
-    static let analysisIntervalHours = 20.0
-    static let lastAnalysisRunKey = "vocab_analysis_last_run"
 
     public init() {
         Self.current = self
@@ -201,7 +188,6 @@ public final class AppEnvironment {
             await purgeExpiredHistory()
             await purgeExpiredLifeLogAudio()
             refreshStorageSizes()
-            lastAnalysisAt = try? await database.meta.date(forKey: Self.lastAnalysisRunKey)
             if !Self.isUITestBundle {
                 await sync.configure(database: database) { [weak self] in await self?.reloadAfterSync() }
             }
@@ -222,7 +208,6 @@ public final class AppEnvironment {
         // 記録開始は必ずこのプロセスでの明示操作から行う。
         // crash等で残った前回のruntime stateを起動意図として復元しない。
         settings.lifeLogCaptureEnabled = false
-        scheduleBackgroundAnalysis()
         // 前回の記録意図ではなく、利用者が決めた時間帯の中にいる場合だけ自動で開始する。
         if database != nil, !Self.isUITestBundle { applyLifeLogSchedule() }
     }
@@ -375,7 +360,6 @@ public final class AppEnvironment {
         lifeLogMiniWindowHotkeys.stop()
         voiceMemoHotkeys.stop()
         permissionWatcher?.cancel()
-        analysisTask?.cancel()
         scheduleTask?.cancel()
         settings.lifeLogCaptureEnabled = false
 
@@ -719,7 +703,6 @@ public final class AppEnvironment {
         guard let database else { return }
         do {
             vocabulary = try await database.vocabulary.all()
-            pendingSuggestions = try await database.vocabulary.suggestions(status: .pending)
         } catch {
             KoeLog.persistence.error("語彙の読み込みに失敗: \(error.localizedDescription, privacy: .public)")
         }
@@ -737,19 +720,6 @@ public final class AppEnvironment {
         guard await performDataOperation({ try await database.vocabulary.delete(id: id) }) else { return }
         await reloadVocabulary()
         lifeLog.vocabularyDidChange()
-    }
-
-    public func acceptSuggestion(id: String) async {
-        guard let database else { return }
-        guard await performDataOperation({ _ = try await database.vocabulary.accept(suggestionID: id) }) else { return }
-        await reloadVocabulary()
-        lifeLog.vocabularyDidChange()
-    }
-
-    public func rejectSuggestion(id: String) async {
-        guard let database else { return }
-        guard await performDataOperation({ try await database.vocabulary.reject(suggestionID: id) }) else { return }
-        await reloadVocabulary()
     }
 
     // MARK: 履歴
@@ -983,58 +953,6 @@ public final class AppEnvironment {
         }
         if record.status == .completed || record.status == .fallback || record.status == .clipboardOnly {
             Task { await lifeLog.reload() }
-        }
-    }
-
-    // MARK: 語彙自動提案
-
-    public func runAnalysis(force: Bool) async {
-        guard let database else { return }
-        let llm = engines.analysisLlm
-        guard analysisState != .running else { return }
-        analysisState = .running
-        let job = VocabularySuggestionJob(
-            history: database.history,
-            vocabulary: database.vocabulary,
-            meta: database.meta,
-            llm: llm
-        )
-        do {
-            let result = try await job.run(force: force)
-            analysisState = .finished(Self.message(for: result))
-            let now = Date()
-            try? await database.meta.setDate(now, forKey: Self.lastAnalysisRunKey)
-            lastAnalysisAt = now
-            await reloadVocabulary()
-        } catch {
-            analysisState = .failed(error.localizedDescription)
-            KoeLog.analysis.error("語彙分析に失敗: \(error.localizedDescription, privacy: .public)")
-        }
-    }
-
-    /// 分析結果の一行報告。部分的な失敗を「成功」に丸めない。
-    static func message(for result: VocabularySuggestionJob.Result) -> String {
-        if let reason = result.skippedReason { return reason }
-        var message = "\(result.inspectedSessions) 件を分析し、\(result.created) 件の候補を追加しました"
-        if result.isPartial {
-            message += "(\(result.batches) 回のうち \(result.failedBatches) 回が失敗したため、"
-                + "残りは次回もう一度分析します)"
-        }
-        return message
-    }
-
-    /// アイドル時にバックグラウンドで回す(FR-6.4)。起動直後は避ける。
-    private func scheduleBackgroundAnalysis() {
-        analysisTask?.cancel()
-        guard settings.vocabularyAnalysisEnabled else { return }
-        if let lastAnalysisAt,
-           Date().timeIntervalSince(lastAnalysisAt) < Self.analysisIntervalHours * 3_600 {
-            return
-        }
-        analysisTask = Task { [weak self] in
-            try? await Task.sleep(for: .seconds(90))
-            guard let self, !Task.isCancelled, !coordinator.isBusy else { return }
-            await runAnalysis(force: false)
         }
     }
 

@@ -5,22 +5,9 @@ import NaturalLanguage
 public struct FormattingPrompt: Sendable, Equatable {
     public var system: String
     public var user: String
-    /// 期待する出力の上限(文字数)。`nil` = 入力と同程度(整形)。
-    ///
-    /// 出力の規模を知っているのは呼び出し側だけなので、ここで明示する。
-    /// エンジンはこれをトークン予算に翻訳する。整形は入力と同じ長さが返るが、
-    /// 履歴分析は数十文字の JSON しか返らない。同じ見積もりを当てると、
-    /// 分析側で応答用に確保した枠が入力を押し出して**コンテキスト超過で失敗する**。
-    public var expectedOutputCharacters: Int?
-
-    public init(
-        system: String,
-        user: String,
-        expectedOutputCharacters: Int? = nil
-    ) {
+    public init(system: String, user: String) {
         self.system = system
         self.user = user
-        self.expectedOutputCharacters = expectedOutputCharacters
     }
 }
 

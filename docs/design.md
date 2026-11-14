@@ -29,7 +29,7 @@ KoeMCP ──┘
 | `Engines/` | `SttEngine`, `SpeechAnalyzerStt`, `WhisperCppStt`, `LlmEngine`, `EngineRegistry` | 音声認識、local model管理、LLMの共通境界とprovider実装 |
 | `Persistence/` | `KoeDatabase`, `HistoryStore`, `LifeLogStore`, `ModeStore`, `VocabularyStore` | GRDB schema、migration、query、backup |
 | `System/` | `AudioCapture`, `ContinuousAudioCapture`, `TextInserter`, `HotkeyMonitor`, `CalendarProvider`, `SecretStore` | AVFoundation、Accessibility、EventKit、Keychain等のmacOS境界 |
-| `Analysis/` | `VocabularySuggestionJob`, `AdaptiveSpeechSegmenter`, `LifeLogTextExporter` | 履歴分析、発話burst境界、外部向けテキスト生成 |
+| `Analysis/` | `AdaptiveSpeechSegmenter`, `LifeLogTextExporter` | 発話burst境界、外部向けテキスト生成 |
 | `Automation/` | `KoeAutomationService` | CLIとMCPが共有する日一覧・期間取得・日別export・検索・memo追加ユースケース |
 | `Sync/` | `SyncCode`, `SyncFileFormat`, `SyncEngine`, `SyncCoordinator` | 暗号化した変更fileによるMac間同期 |
 | `UI/` | `KoeApp`, `KoeWindowPresenter`, `MainWindowView`, `LifeLogWindow`, `HistoryBrowserView`, settings views, HUD | app lifecycle、window所有、SwiftUI表示・操作 |
@@ -136,7 +136,7 @@ Main/mini timelineはそれぞれ、scroll geometryから末尾が見えてい�
 
 `FormattingPrompt`はsystem、user、期待出力長だけを持つtext変換の要求です。`GroqLlm`を含む全providerは温度0とprovider既定の推論量で文章変換し、推論を出すmodelの`<think>`部分はadapter境界で除去します。
 
-過去履歴から語彙候補を作る`analysisLlm`は常にオンデバイスです。API keyは`SecretStore`を通してKeychainへ保存します。旧版のライフログ用keyは読み出さず、全削除の対象としてだけ列挙します。
+API keyは`SecretStore`を通してKeychainへ保存します。旧版のライフログ用keyは読み出さず、全削除の対象としてだけ列挙します。
 
 ## 7. 永続化
 
@@ -147,11 +147,11 @@ DBは`~/Library/Application Support/Koe/koe.sqlite`です。`DatabaseQueue`を�
 | `HistoryStore` | `sessions`, `sessions_fts` |
 | `ModeStore` | `modes` |
 | `SharedRulesStore` | `meta` |
-| `VocabularyStore` | `vocabulary`, `vocab_suggestions` |
+| `VocabularyStore` | `vocabulary` |
 | `LifeLogStore` | `life_log_audio_chunks`, `calendar_event_snapshots`, `life_log_utterances`, `life_log_memos`と各FTS |
 | `SyncStore` | `sync_control`, `sync_outbox`, `sync_versions`, `sync_cursors` |
 
-名前付きmigrationは`v1`から`v10`です。`v9-remove-todo-summary-usage`はTODO、日次要約、token集計、会話区切りのtableとFTSを削除し、`life_log_utterances`を`conversation_id`なしで作り直してFTSを再構築します。削除前の内容はmigration直前backupに残ります。`v10-sync`は同期用tableとtriggerを追加し、`life_log_utterances.audio_chunk_id`をNULL許容へ作り直します（7.1）。履歴、発話、memoの日本語部分一致にはFTS5 trigramを使います。Codable値と配列はJSON、日時はISO 8601文字列で保存します。
+名前付きmigrationは`v1`から`v11`です。`v9-remove-todo-summary-usage`はTODO、日次要約、token集計、会話区切りのtableとFTSを削除し、`life_log_utterances`を`conversation_id`なしで作り直してFTSを再構築します。削除前の内容はmigration直前backupに残ります。`v10-sync`は同期用tableとtriggerを追加し、`life_log_utterances.audio_chunk_id`をNULL許容へ作り直します（7.1）。`v11-remove-vocab-suggestions`は履歴からの語彙候補を廃止したため`vocab_suggestions`を削除します。候補から登録済みの語彙（`source = suggested`）は`vocabulary`に残します。履歴、発話、memoの日本語部分一致にはFTS5 trigramを使います。Codable値と配列はJSON、日時はISO 8601文字列で保存します。
 
 既存DBを開くと、未適用migrationの直前に`Backups/pre-migration-*.sqlite`を作ります。migrationがなくても1日1回`Backups/daily-*.sqlite`を作り、両種を合わせて更新日時が新しい7ファイルを保持します。backupはGRDBのonline backupで整合した単一SQLiteへ固定します。全データ削除はDB内利用者データ、保存audio、whisper.cpp modelと途中download、旧WhisperKit model、backupを削除します。
 
@@ -163,7 +163,7 @@ DBは`~/Library/Application Support/Koe/koe.sqlite`です。`DatabaseQueue`を�
 - **書き出し**: `SyncEngine.export`はoutboxを読み、行が残っていれば現在の列値をupsert、無ければtombstoneにしたbatchを作ります。`<folder>/Koe Sync/devices/<device-id>/<10桁seq>.koesync`へ一時fileを書いてrenameし、その後のtransactionで、書き出し時と`changed_at`が同じoutbox行だけを消して`sync_versions`へ版を記録します。seqはDBの次番号と既存file最大値+1の大きい方で、file書込後のcrashでも番号を再利用しません。
 - **取り込み**: 自分以外のdevice directoryを`sync_cursors`の次seqから連番で読みます。復号・検証・適用とcursor更新を1 transactionで行い、失敗したfileで止めて同じdeviceの後続を待たせます。iCloud Driveの`.icloud` placeholderはdownloadを要求して次回へ回します。
 - **競合**: 版は`(changed_at, device_id)`の辞書順で比較し、新しい方だけを適用します（後勝ち）。未書き出しのoutbox行も自分の版として比較に含めます。Tombstoneも`sync_versions`に`deleted=1`で残し、古いupsertで復活させません。
-- **列の範囲**: 発話は`id`、時刻、`text`だけを送り、他のMacでは`audio_chunk_id`と`calendar_event_id`をNULLで保存します。このため`v10-sync`は`life_log_utterances.audio_chunk_id`をNULL許容へ作り直し、FTSを再構築します。履歴は`sessions`の全列、語彙は`vocabulary`の全列、memoは全列です。Audio、calendar snapshot、mode、語彙候補、設定、API keyは対象外です。
+- **列の範囲**: 発話は`id`、時刻、`text`だけを送り、他のMacでは`audio_chunk_id`と`calendar_event_id`をNULLで保存します。このため`v10-sync`は`life_log_utterances.audio_chunk_id`をNULL許容へ作り直し、FTSを再構築します。履歴は`sessions`の全列、語彙は`vocabulary`の全列、memoは全列です。Audio、calendar snapshot、mode、設定、API keyは対象外です。
 - **file形式**: `KOESYNC` magic、format version 1 byte、header JSON長(UInt32 big endian)、header JSON（`device`, `seq`）、AES-GCM combined box（nonce 12 byte + 暗号文 + tag 16 byte）。Magicからheader JSONまでをassociated dataとして認証します。平文はLZFSE圧縮したbatch JSONです。`Koe Sync/keycheck.koesync`は既知の平文を同じ鍵で封じたfileで、参加時に同期コードを検証します。
 - **鍵と状態**: 256-bit鍵は`SecretStore`の`sync.key`（non-synchronizable generic password）に同期コード文字列として保存します。同期コードは鍵32 byteとSHA-256先頭2 byteをRFC 4648 base32にして4文字ずつ区切ったものです。Device ID、folder bookmark、次seq、最終同期時刻、最後のerrorは`sync_control`の1行に置き、全data削除と同期解除で消します。
 - **実行契機**: `SyncCoordinator`(`@MainActor`)はoutboxの変更をGRDBの`DatabaseRegionObservation`で受けて5秒debounceで書き出し、起動時、app activation、120秒timer、「今すぐ同期」で書き出しと取り込みを行います。取り込みで行が変わった場合は履歴、語彙、life logを再読込します。

@@ -159,15 +159,9 @@
 "共通ルール" = "Common Rules";
 "標準の内容に戻す" = "Restore Default Content";
 "辞書" = "Dictionary";
-"履歴から自動で提案する" = "Suggest Automatically from History";
-"いま分析する" = "Analyze Now";
-"保留中の候補はありません" = "No Pending Suggestions";
 "まだ登録がありません" = "No Entries Yet";
 "表記・読み・よくある誤認識を登録します" = "Add the spelling, reading, and common misrecognitions";
 "提案由来" = "Suggested";
-"却下" = "Reject";
-"承認" = "Accept";
-"根拠を見る" = "View Evidence";
 "語彙を追加" = "Add Vocabulary";
 "語彙を編集" = "Edit Vocabulary";
 "正しい表記" = "Correct Spelling";

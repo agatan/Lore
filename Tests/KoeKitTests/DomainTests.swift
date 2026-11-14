@@ -372,46 +372,6 @@ struct SessionDraftTests {
     }
 }
 
-// MARK: - 語彙提案
-
-@Suite("語彙提案の解析")
-struct VocabularySuggestionJobTests {
-    @Test("前置き付きの出力から JSON 配列を取り出す")
-    func extractsJSON() {
-        let output = """
-        以下が候補です。
-        ```json
-        [{"surface":"レセコン","kind":"repeated_correction","reading":"れせこん","misrecognitions":["レセ困"]}]
-        ```
-        """
-        let candidates = VocabularySuggestionJob.parse(output)
-        #expect(candidates.count == 1)
-        #expect(candidates.first?.surface == "レセコン")
-        #expect(candidates.first?.kind == .repeatedCorrection)
-        #expect(candidates.first?.misrecognitions == ["レセ困"])
-    }
-
-    @Test("JSON でなければ候補なし")
-    func parsesGarbageAsEmpty() {
-        #expect(VocabularySuggestionJob.parse("候補はありません").isEmpty)
-        #expect(VocabularySuggestionJob.parse("[壊れた").isEmpty)
-    }
-
-    @Test("上限を超える候補は切り捨てる")
-    func limitsCandidates() {
-        let items = (0..<20).map { "{\"surface\":\"語\($0)\"}" }.joined(separator: ",")
-        #expect(VocabularySuggestionJob.parse("[\(items)]").count == VocabularySuggestionJob.maxCandidates)
-    }
-
-    @Test("抜粋は前後の文脈を含む")
-    func excerptIncludesContext() {
-        let text = "今日はレセコンの締め処理について話しました。明日も続きをやります。"
-        let excerpt = VocabularySuggestionJob.excerpt(around: "レセコン", in: text, radius: 6)
-        #expect(excerpt?.contains("レセコン") == true)
-        #expect(excerpt?.hasSuffix("…") == true)
-    }
-}
-
 // MARK: - ヘルパ
 
 private extension Result {

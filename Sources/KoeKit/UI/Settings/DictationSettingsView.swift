@@ -75,7 +75,7 @@ struct DictationSettingsView: View {
                 }
             }
 
-            SettingsCard(title: "音声入力履歴", footnote: "語彙の自動提案と処理時間の集計にも使われます。") {
+            SettingsCard(title: "音声入力履歴", footnote: "処理時間の集計にも使われます。") {
                 SettingsRow(title: "保持期間") {
                     Picker("", selection: Binding(
                         get: { settings.historyRetentionDays },

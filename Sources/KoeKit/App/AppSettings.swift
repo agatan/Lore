@@ -73,7 +73,6 @@ public final class AppSettings {
         /// 0 = 無期限。
         public var historyRetentionDays: Int = 0
         public var formattingTimeoutMs: Int = 6_000
-        public var vocabularyAnalysisEnabled: Bool = true
         public var showLevelMeterInMenuBar: Bool = true
         public var applicationLanguage: ApplicationLanguage = .system
         /// 初回案内を完了するまで、権限と保存範囲を説明する。
@@ -118,7 +117,6 @@ public final class AppSettings {
             hudEnabled = try container.decodeIfPresent(Bool.self, forKey: .hudEnabled) ?? fallback.hudEnabled
             historyRetentionDays = try container.decodeIfPresent(Int.self, forKey: .historyRetentionDays) ?? fallback.historyRetentionDays
             formattingTimeoutMs = try container.decodeIfPresent(Int.self, forKey: .formattingTimeoutMs) ?? fallback.formattingTimeoutMs
-            vocabularyAnalysisEnabled = try container.decodeIfPresent(Bool.self, forKey: .vocabularyAnalysisEnabled) ?? fallback.vocabularyAnalysisEnabled
             showLevelMeterInMenuBar = try container.decodeIfPresent(Bool.self, forKey: .showLevelMeterInMenuBar) ?? fallback.showLevelMeterInMenuBar
             applicationLanguage = (try? container.decodeIfPresent(ApplicationLanguage.self, forKey: .applicationLanguage))
                 .flatMap { $0 } ?? fallback.applicationLanguage
@@ -229,11 +227,6 @@ public final class AppSettings {
     public var formattingTimeoutMs: Int {
         get { storage.formattingTimeoutMs }
         set { storage.formattingTimeoutMs = max(1_000, min(60_000, newValue)); persist() }
-    }
-
-    public var vocabularyAnalysisEnabled: Bool {
-        get { storage.vocabularyAnalysisEnabled }
-        set { storage.vocabularyAnalysisEnabled = newValue; persist() }
     }
 
     public var showLevelMeterInMenuBar: Bool {

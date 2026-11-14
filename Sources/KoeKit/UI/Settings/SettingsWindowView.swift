@@ -79,7 +79,6 @@ struct SettingsWindowView: View {
 
     private func row(_ section: SettingsSection) -> some View {
         Label(LocalizedStringKey(section.title), systemImage: section.symbol)
-            .badge(section == .vocabulary ? env.pendingSuggestions.count : 0)
             .tag(section)
             .accessibilityIdentifier("settings.section.\(section.rawValue)")
     }

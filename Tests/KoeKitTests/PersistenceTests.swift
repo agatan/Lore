@@ -251,50 +251,6 @@ import Testing
     #expect(try await database.modes.mode(id: "builtin.ai-agent") == nil)
 }
 
-@Test func suggestionsDeduplicateKnownSurfaces() async throws {
-    let database = try await KoeDatabase.inMemory()
-    try await database.vocabulary.save(VocabularyEntry(id: "known", surface: "Koe"))
-    let rejected = makeSuggestion(id: "rejected", surface: "レセコン")
-    #expect(try await database.vocabulary.insertSuggestions([rejected]) == 1)
-    try await database.vocabulary.reject(suggestionID: rejected.id)
-
-    let pending = makeSuggestion(id: "pending", surface: "Swift")
-    #expect(try await database.vocabulary.insertSuggestions([pending]) == 1)
-    let candidates = [
-        makeSuggestion(id: "duplicate-vocabulary", surface: "Koe"),
-        makeSuggestion(id: "duplicate-rejected", surface: "レセコン"),
-        makeSuggestion(id: "duplicate-pending", surface: "Swift"),
-        makeSuggestion(id: "new", surface: "GRDB"),
-        makeSuggestion(id: "new-duplicate", surface: "GRDB"),
-    ]
-
-    #expect(try await database.vocabulary.insertSuggestions(candidates) == 1)
-    #expect(try await database.vocabulary.knownSurfaces() == ["Koe", "レセコン"])
-}
-
-@Test func acceptingSuggestionPromotesVocabulary() async throws {
-    let database = try await KoeDatabase.inMemory()
-    let suggestion = VocabularySuggestion(
-        id: "accept",
-        surface: "ヘンリー",
-        evidence: .init(
-            kind: .repeatedCorrection,
-            count: 4,
-            misrecognitions: ["変理"],
-            reading: "へんりー"
-        )
-    )
-    #expect(try await database.vocabulary.insertSuggestions([suggestion]) == 1)
-
-    let promoted = try #require(await database.vocabulary.accept(suggestionID: suggestion.id))
-    #expect(promoted.surface == "ヘンリー")
-    #expect(promoted.reading == "へんりー")
-    #expect(promoted.misrecognitions == ["変理"])
-    #expect(promoted.source == .suggested)
-    #expect(try await database.vocabulary.suggestions(status: .accepted).map(\.id) == [suggestion.id])
-    #expect(try await database.vocabulary.all().map(\.surface) == ["ヘンリー"])
-}
-
 @Test func purgeHonorsRetentionAndForeverSetting() async throws {
     let database = try await KoeDatabase.inMemory()
     try await database.history.save(makeSession(
@@ -410,14 +366,6 @@ private func makeSession(
         audioDurationMs: audioDurationMs,
         sttLatencyMs: sttLatencyMs,
         insertLatencyMs: insertLatencyMs
-    )
-}
-
-private func makeSuggestion(id: String, surface: String) -> VocabularySuggestion {
-    VocabularySuggestion(
-        id: id,
-        surface: surface,
-        evidence: .init(kind: .frequentTerm, count: 3)
     )
 }
 
@@ -547,5 +495,80 @@ struct VocabularyPromptToneTests {
         let mode = try! #require(prompt.range(of: "チャットに投稿するメッセージとして整形"))
         let table = try! #require(prompt.range(of: "# 語彙表"))
         #expect(mode.lowerBound < table.lowerBound)
+    }
+}
+
+@Suite("語彙候補の廃止migration")
+struct RemoveVocabularySuggestionsMigrationTests {
+    private func legacyDatabase(at root: URL) throws -> URL {
+        let databaseURL = root.appendingPathComponent("koe.sqlite")
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        let legacy = try DatabaseQueue(path: databaseURL.path)
+        try KoeDatabase.migrator.migrate(legacy, upTo: "v10-sync")
+        try legacy.write { db in
+            try db.execute(sql: """
+                INSERT INTO vocabulary (id, surface, reading, misrecognitions, source, enabled, created_at)
+                  VALUES ('promoted', 'レセコン', NULL, '["れせこん"]', 'suggested', 1, '2026-08-29T09:00:00.000Z'),
+                         ('manual', 'Koe', NULL, '[]', 'manual', 1, '2026-08-29T09:01:00.000Z');
+                INSERT INTO vocab_suggestions (id, surface, evidence, status, created_at)
+                  VALUES ('pending', 'GRDB', '{"kind":"frequentTerm","count":3,"examples":[],"misrecognitions":[]}', 'pending', '2026-08-29T09:00:00.000Z');
+                INSERT INTO meta (key, value) VALUES
+                  ('vocab_analysis_watermark', '2026-08-29T09:00:00.000Z'),
+                  ('vocab_analysis_last_run', '2026-08-29T09:00:00.000Z'),
+                  ('unrelated', 'keep');
+                """)
+        }
+        return databaseURL
+    }
+
+    @Test("候補tableと分析の記録だけを消し、候補から登録した語彙は残す")
+    func dropsSuggestionsAndKeepsVocabulary() async throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent("koe-v11-test-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: root) }
+        let databaseURL = try legacyDatabase(at: root)
+
+        let database = try await KoeDatabase.open(fileURL: databaseURL, backupDirectory: root.appendingPathComponent("Backups"))
+
+        let entries = try await database.vocabulary.all()
+        #expect(Set(entries.map(\.id)) == ["promoted", "manual"])
+        #expect(entries.first { $0.id == "promoted" }?.source == .suggested)
+        #expect(try await database.meta.string(forKey: "vocab_analysis_watermark") == nil)
+        #expect(try await database.meta.string(forKey: "vocab_analysis_last_run") == nil)
+        #expect(try await database.meta.string(forKey: "unrelated") == "keep")
+        let queue = try DatabaseQueue(path: databaseURL.path)
+        #expect(try await queue.read { try $0.tableExists("vocab_suggestions") } == false)
+    }
+
+    @Test("消す前の候補はmigration直前のbackupから読める")
+    func backupKeepsDroppedSuggestions() async throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent("koe-v11-backup-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: root) }
+        let databaseURL = try legacyDatabase(at: root)
+        let backupDirectory = root.appendingPathComponent("Backups")
+
+        _ = try await KoeDatabase.open(fileURL: databaseURL, backupDirectory: backupDirectory)
+
+        let backups = try FileManager.default.contentsOfDirectory(at: backupDirectory, includingPropertiesForKeys: nil)
+        let backup = try #require(backups.first { $0.lastPathComponent.hasPrefix("pre-migration-") })
+        let queue = try DatabaseQueue(path: backup.path)
+        #expect(try await queue.read { try String.fetchAll($0, sql: "SELECT surface FROM vocab_suggestions") } == ["GRDB"])
+    }
+
+    @Test("候補tableが既にないDBではmigrationが失敗し、元のDBを変えない")
+    func failsWithoutSuggestionsTable() async throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent("koe-v11-fail-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: root) }
+        let databaseURL = try legacyDatabase(at: root)
+        do {
+            let legacy = try DatabaseQueue(path: databaseURL.path)
+            try await legacy.write { try $0.execute(sql: "DROP TABLE vocab_suggestions") }
+        }
+
+        await #expect(throws: (any Error).self) {
+            _ = try await KoeDatabase.open(fileURL: databaseURL, backupDirectory: root.appendingPathComponent("Backups"))
+        }
+        let queue = try DatabaseQueue(path: databaseURL.path)
+        #expect(try await queue.read { try String.fetchAll($0, sql: "SELECT key FROM meta ORDER BY key") }
+            == ["unrelated", "vocab_analysis_last_run", "vocab_analysis_watermark"])
     }
 }

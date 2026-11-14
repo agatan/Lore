@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// 語彙の管理と、履歴分析からの提案の承認(FR-6)。
+/// 語彙の管理(FR-6)。
 struct VocabularySettingsView: View {
     var env: AppEnvironment
     @State private var editing: VocabularyEntry?
@@ -8,7 +8,6 @@ struct VocabularySettingsView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 20) {
-            suggestionsCard
             entriesCard
         }
         .sheet(isPresented: $isAdding) {
@@ -19,65 +18,6 @@ struct VocabularySettingsView: View {
         .sheet(item: $editing) { entry in
             VocabularyEditorSheet(entry: entry) { updated in
                 Task { await env.save(entry: updated) }
-            }
-        }
-    }
-
-    // MARK: 提案
-
-    private var suggestionsCard: some View {
-        SettingsCard(
-            title: "提案 (\(env.pendingSuggestions.count))",
-            footnote: "これまでの履歴から見つけた候補です。承認したものだけが辞書に入ります。却下した語は二度と出てきません。"
-        ) {
-            HStack(spacing: 10) {
-                Toggle("履歴から自動で提案する", isOn: Binding(
-                    get: { env.settings.vocabularyAnalysisEnabled },
-                    set: { env.settings.vocabularyAnalysisEnabled = $0 }
-                ))
-                Spacer()
-                if case .running = env.analysisState {
-                    ProgressView().controlSize(.small)
-                }
-                Button("いま分析する") {
-                    Task { await env.runAnalysis(force: true) }
-                }
-                .buttonStyle(.bordered)
-                .controlSize(.small)
-                .disabled(env.analysisState == .running)
-            }
-
-            switch env.analysisState {
-            case .finished(let message):
-                Text(message)
-                    .font(.system(size: 11))
-                    .foregroundStyle(.secondary)
-            case .failed(let message):
-                Text(message)
-                    .font(.system(size: 11))
-                    .foregroundStyle(KoeTheme.recording)
-            case .idle, .running:
-                if let lastAnalysisAt = env.lastAnalysisAt {
-                    Text("最後の分析: \(lastAnalysisAt.formatted(date: .abbreviated, time: .shortened))")
-                        .font(.system(size: 11))
-                        .foregroundStyle(.tertiary)
-                }
-            }
-
-            if env.pendingSuggestions.isEmpty {
-                Text("保留中の候補はありません")
-                    .font(.system(size: 11))
-                    .foregroundStyle(.tertiary)
-            } else {
-                VStack(spacing: 8) {
-                    ForEach(env.pendingSuggestions) { suggestion in
-                        SuggestionRow(
-                            suggestion: suggestion,
-                            onAccept: { Task { await env.acceptSuggestion(id: suggestion.id) } },
-                            onReject: { Task { await env.rejectSuggestion(id: suggestion.id) } }
-                        )
-                    }
-                }
             }
         }
     }
@@ -186,62 +126,6 @@ private struct VocabularyRow: View {
         }
         .padding(.vertical, 6)
         .onHover { isHovering = $0 }
-    }
-}
-
-private struct SuggestionRow: View {
-    var suggestion: VocabularySuggestion
-    var onAccept: () -> Void
-    var onReject: () -> Void
-
-    @State private var showEvidence = false
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            HStack(spacing: 8) {
-                Text(suggestion.surface)
-                    .font(.system(size: 12.5, weight: .semibold))
-                Pill(text: suggestion.evidence.kind.displayName, tint: KoeTheme.accent, localized: true)
-                Text("\(suggestion.evidence.count) 回")
-                    .font(.system(size: 10.5))
-                    .foregroundStyle(.secondary)
-                Spacer()
-                Button("却下", action: onReject)
-                    .buttonStyle(.bordered)
-                    .controlSize(.small)
-                Button("承認", action: onAccept)
-                    .buttonStyle(.borderedProminent)
-                    .controlSize(.small)
-            }
-
-            if !suggestion.evidence.misrecognitions.isEmpty {
-                Text("誤認識候補: " + suggestion.evidence.misrecognitions.joined(separator: " / "))
-                    .font(.system(size: 10.5))
-                    .foregroundStyle(.secondary)
-            }
-
-            if !suggestion.evidence.examples.isEmpty {
-                DisclosureGroup(isExpanded: $showEvidence) {
-                    VStack(alignment: .leading, spacing: 4) {
-                        ForEach(Array(suggestion.evidence.examples.enumerated()), id: \.offset) { _, example in
-                            Text(example.excerpt)
-                                .font(.system(size: 10.5))
-                                .foregroundStyle(.secondary)
-                                .lineLimit(2)
-                        }
-                    }
-                    .padding(.top, 4)
-                } label: {
-                    Text("根拠を見る")
-                        .font(.system(size: 10.5))
-                }
-            }
-        }
-        .padding(10)
-        .background {
-            RoundedRectangle(cornerRadius: KoeTheme.cardCornerRadius, style: .continuous)
-                .fill(KoeTheme.accent.opacity(0.07))
-        }
     }
 }
 

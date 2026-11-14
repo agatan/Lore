@@ -55,7 +55,6 @@
 - modeは名前、対象bundle ID pattern、文章化の指示、言語、任意のmodel指定を持ち、作成、編集、削除、並べ替えができます。
 - 共通ruleは全modeへ適用されます。
 - 語彙は表記、任意の読み、誤認識pattern、有効/無効を持ち、STT hintと文章処理の指示へ反映します。
-- 履歴からの語彙候補はMac内で分析し、根拠を確認して承認したものだけ登録します。
 
 ### 3.3 文章処理
 
@@ -193,14 +192,13 @@ Main window、mini window、menu barのライフログ状態表示は同じ記�
 - 既存DBは未適用migrationの直前にbackupします。通常起動でも同日重複なしで1日1回backupします。
 - backupに失敗した場合はmigrationを開始しません。
 - 「全データを削除」は履歴、mode、語彙、ライフログ、保存audio、download済みwhisper.cpp model、途中のdownload file、旧WhisperKit model、DB backupを削除します。設定とKeychainは画面で示す個別範囲に従います。
-- 履歴から語彙候補へ複製済みの短い根拠は履歴とは別dataであり、履歴だけの削除では残る場合があります。
 - TODO、日次要約、話題、cloud AIのtoken集計を保存していた旧版DBは、更新時のmigration直前backupを作ってからそれらのtableを削除します。発話、memo、予定、音声入力履歴は変更しません。旧版でライフログ用に登録したAPI keyは読み出さず、「全データを削除」でKeychainから消します。
 
 ### 6.1 Mac間の同期
 
 - 設定の「同期」から、複数のMacで同じ文字dataを使えます。既定は無効です。
 - 同期するのは、ライフログの発話text、memo（追加・編集・削除）、音声入力履歴（生text、整形結果、status、mode snapshot、対象app名・bundle ID、provider/model、error、時間）、語彙です。
-- 録音audio、API key、設定、予定の控え（各Macが自分のcalendarから読む）、whisper.cpp model、DB backup、語彙候補、modeは同期しません。他のMacから届いた発話は保存audioを持たず、予定との関連付けも持ちません。
+- 録音audio、API key、設定、予定の控え（各Macが自分のcalendarから読む）、whisper.cpp model、DB backup、modeは同期しません。他のMacから届いた発話は保存audioを持たず、予定との関連付けも持ちません。
 - Koeは利用者が選んだfolder（iCloud Drive、Dropbox、Syncthingなど）の中の`Koe Sync/`へ、暗号化した変更fileだけを書きます。Koe自身はnetwork通信をせず、fileの運搬はfolderの提供元に任せます。
 - 暗号化はMac内でAES-GCM（256-bit鍵）を使って行います。鍵は最初のMacで生成して「同期コード」として表示し、ほかのMacではそのコードを入力して参加します。鍵は各MacのKeychainだけに保存し、folderの提供元は中身を読めません。同期コードは参加済みのMacの設定から確認操作のあと再表示できます。参加済みのMacをすべて失い同期コードも控えていない場合、folderの内容は誰も読めません。
 - 違う同期コードはfolder内の確認fileで検出し、参加を拒否します。読めない、改ざんされた、途中までしか届いていない、新しい形式の変更fileは取り込まず、理由を設定画面とlogに出して次回の同期で再試行します。そのfileより後の同じMacの変更も、順序を保つため取り込みを待ちます。

@@ -161,7 +161,7 @@ KoeMCP ──┘</pre>
 <code>Analysis/</code>
 </td>
 <td>
-<code>VocabularySuggestionJob</code>, <code>AdaptiveSpeechSegmenter</code>, <code>LifeLogTextExporter</code>
+<code>AdaptiveSpeechSegmenter</code>, <code>LifeLogTextExporter</code>
 </td>
 <td>履歴分析、発話burst境界、export</td>
 </tr>
@@ -333,7 +333,7 @@ KoeMCP ──┘</pre>
 </tbody>
 </table>
 <p><code>FormattingPrompt</code>はsystem、user、期待出力長だけを持つtext変換の要求です。<code>GroqLlm</code>を含む全providerは温度0とprovider既定の推論量で文章変換し、推論を出すmodelの<code>&lt;think&gt;</code>部分はadapter境界で除去します。</p>
-<p>STT選択は音声入力とlife logで別設定にし、whisper.cpp modelだけを共有します。LLMのprovider/modelは音声入力の整形だけに使い、語彙候補の<code>analysisLlm</code>は常にオンデバイスです。API keyはKeychainへ保存し、旧版のlife log用keyは読み出さず全削除の対象としてだけ列挙します。</p>
+<p>STT選択は音声入力とlife logで別設定にし、whisper.cpp modelだけを共有します。LLMのprovider/modelは音声入力の整形だけに使います。API keyはKeychainへ保存し、旧版のlife log用keyは読み出さず全削除の対象としてだけ列挙します。</p>
 </section>
 <section id="persistence">
 <h2>7. Persistence</h2>
@@ -366,7 +366,7 @@ KoeMCP ──┘</pre>
 <code>VocabularyStore</code>
 </td>
 <td>
-<code>vocabulary</code>, <code>vocab_suggestions</code>
+<code>vocabulary</code>
 </td>
 </tr>
 <tr>
@@ -385,7 +385,7 @@ KoeMCP ──┘</pre>
 </tr>
 </tbody>
 </table>
-<p>Named migrationは<code>v1</code>から<code>v10</code>です。<code>v9-remove-todo-summary-usage</code>はTODO、日次要約、token集計、会話区切りのtableとFTSを削除し、<code>life_log_utterances</code>を<code>conversation_id</code>なしで作り直してFTSを再構築します。削除前の内容はmigration直前backupに残ります。<code>v10-sync</code>は同期用tableとtriggerを追加し、<code>life_log_utterances.audio_chunk_id</code>をNULL許容へ作り直します（<a href="#sync">7.1</a>）。</p>
+<p>Named migrationは<code>v1</code>から<code>v11</code>です。<code>v9-remove-todo-summary-usage</code>はTODO、日次要約、token集計、会話区切りのtableとFTSを削除し、<code>life_log_utterances</code>を<code>conversation_id</code>なしで作り直してFTSを再構築します。削除前の内容はmigration直前backupに残ります。<code>v10-sync</code>は同期用tableとtriggerを追加し、<code>life_log_utterances.audio_chunk_id</code>をNULL許容へ作り直します（<a href="#sync">7.1</a>）。<code>v11-remove-vocab-suggestions</code>は履歴からの語彙候補を廃止したため<code>vocab_suggestions</code>を削除し、候補から登録済みの語彙は<code>vocabulary</code>に残します。</p>
 <p>DBは<code>Application Support/Koe/koe.sqlite</code>、whisper.cpp modelと途中downloadは<code>Application Support/Koe/Models/WhisperCpp/</code>です。既存DBはmigration前と1日1回backupし、最新7fileを保持します。全data削除はbackup、新旧model、途中fileも削除します。</p>
 </section>
 <section id="sync">
@@ -396,7 +396,7 @@ KoeMCP ──┘</pre>
 <li><strong>書き出し</strong>: <code>SyncEngine.export</code>はoutboxを読み、行が残っていれば現在の列値をupsert、無ければtombstoneにしたbatchを作ります。<code>&lt;folder&gt;/Koe Sync/devices/&lt;device-id&gt;/&lt;10桁seq&gt;.koesync</code>へ一時fileを書いてrenameし、その後のtransactionで、書き出し時と<code>changed_at</code>が同じoutbox行だけを消して<code>sync_versions</code>へ版を記録します。seqはDBの次番号と既存file最大値+1の大きい方で、file書込後のcrashでも番号を再利用しません。</li>
 <li><strong>取り込み</strong>: 自分以外のdevice directoryを<code>sync_cursors</code>の次seqから連番で読みます。復号・検証・適用とcursor更新を1 transactionで行い、失敗したfileで止めて同じdeviceの後続を待たせます。iCloud Driveの<code>.icloud</code> placeholderはdownloadを要求して次回へ回します。</li>
 <li><strong>競合</strong>: 版は<code>(changed_at, device_id)</code>の辞書順で比較し、新しい方だけを適用します（後勝ち）。未書き出しのoutbox行も自分の版として比較に含めます。Tombstoneも<code>sync_versions</code>に<code>deleted=1</code>で残し、古いupsertで復活させません。</li>
-<li><strong>列の範囲</strong>: 発話は<code>id</code>、時刻、<code>text</code>だけを送り、他のMacでは<code>audio_chunk_id</code>と<code>calendar_event_id</code>をNULLで保存します。このため<code>v10-sync</code>は<code>life_log_utterances.audio_chunk_id</code>をNULL許容へ作り直し、FTSを再構築します。履歴は<code>sessions</code>の全列、語彙は<code>vocabulary</code>の全列、memoは全列です。Audio、calendar snapshot、mode、語彙候補、設定、API keyは対象外です。</li>
+<li><strong>列の範囲</strong>: 発話は<code>id</code>、時刻、<code>text</code>だけを送り、他のMacでは<code>audio_chunk_id</code>と<code>calendar_event_id</code>をNULLで保存します。このため<code>v10-sync</code>は<code>life_log_utterances.audio_chunk_id</code>をNULL許容へ作り直し、FTSを再構築します。履歴は<code>sessions</code>の全列、語彙は<code>vocabulary</code>の全列、memoは全列です。Audio、calendar snapshot、mode、設定、API keyは対象外です。</li>
 <li><strong>file形式</strong>: <code>KOESYNC</code> magic、format version 1 byte、header JSON長(UInt32 big endian)、header JSON（<code>device</code>, <code>seq</code>）、AES-GCM combined box（nonce 12 byte + 暗号文 + tag 16 byte）。Magicからheader JSONまでをassociated dataとして認証します。平文はLZFSE圧縮したbatch JSONです。<code>Koe Sync/keycheck.koesync</code>は既知の平文を同じ鍵で封じたfileで、参加時に同期コードを検証します。</li>
 <li><strong>鍵と状態</strong>: 256-bit鍵は<code>SecretStore</code>の<code>sync.key</code>（non-synchronizable generic password）に同期コード文字列として保存します。同期コードは鍵32 byteとSHA-256先頭2 byteをRFC 4648 base32にして4文字ずつ区切ったものです。Device ID、folder bookmark、次seq、最終同期時刻、最後のerrorは<code>sync_control</code>の1行に置き、全data削除と同期解除で消します。</li>
 <li><strong>実行契機</strong>: <code>SyncCoordinator</code>(<code>@MainActor</code>)はoutboxの変更をGRDBの<code>DatabaseRegionObservation</code>で受けて5秒debounceで書き出し、起動時、app activation、120秒timer、「今すぐ同期」で書き出しと取り込みを行います。取り込みで行が変わった場合は履歴、語彙、life logを再読込します。</li>

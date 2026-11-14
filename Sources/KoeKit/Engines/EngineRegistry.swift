@@ -110,7 +110,6 @@ public final class EngineRegistry {
     /// 履歴を読む語彙分析は、外部送信の選択とは独立して常にオンデバイスで行う。
     /// `llm` を使うとクラウド選択時に過去の履歴まで送信され、UI の「文章処理だけ」という
     /// 説明とプライバシー境界が崩れる。
-    var analysisLlm: any LlmEngine { onDeviceLlm }
     public func apply(backend: FormattingBackend, model: String) {
         self.backend = backend
         switch backend {

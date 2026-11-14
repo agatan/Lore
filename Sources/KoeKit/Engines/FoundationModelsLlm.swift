@@ -63,7 +63,7 @@ public final class FoundationModelsLlm: LlmEngine {
     /// 差し引かないと「入力 2,000 字 + 応答枠 4,000」のように窓を超え、
     /// モデルが入力を読む前に失敗する。
     static func responseTokenBudget(for prompt: FormattingPrompt) -> Int {
-        let expected = prompt.expectedOutputCharacters ?? prompt.user.count * 2
+        let expected = prompt.user.count * 2
         let consumed = prompt.system.count + prompt.user.count
         return max(128, min(expected, contextWindowTokens - consumed))
     }

@@ -11,6 +11,5 @@ public enum KoeLog {
     public static let engine = Logger(subsystem: subsystem, category: "engine")
     public static let hotkey = Logger(subsystem: subsystem, category: "hotkey")
     public static let persistence = Logger(subsystem: subsystem, category: "persistence")
-    public static let analysis = Logger(subsystem: subsystem, category: "analysis")
     public static let ui = Logger(subsystem: subsystem, category: "ui")
 }
