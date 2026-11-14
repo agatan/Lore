@@ -252,6 +252,13 @@ public struct LifeLogStore: Sendable {
             try Row.fetchOne(db, sql: "SELECT * FROM life_log_memos WHERE id=?", arguments: [id]).map(decodeMemo)
         }
     }
+    /// 本文だけを書き換える。作成時刻はtimeline上の位置なので変えない。
+    public func updateMemo(id: String, text: String) async throws {
+        try await queue.write { db in
+            try db.execute(sql: "UPDATE life_log_memos SET text=? WHERE id=?", arguments: [text, id])
+            guard db.changesCount > 0 else { throw LifeLogStoreError.memoNotFound }
+        }
+    }
     public func deleteMemo(id: String) async throws {
         try await queue.write { db in
             try db.execute(sql: "DELETE FROM life_log_memos WHERE id=?", arguments: [id])
@@ -286,4 +293,14 @@ public struct LifeLogStore: Sendable {
         UNION ALL SELECT 'memo', id, text, created_at FROM life_log_memos WHERE text LIKE ? ESCAPE '\\'
         ORDER BY occurred_at DESC LIMIT ?
         """
+}
+
+public enum LifeLogStoreError: LocalizedError, Sendable {
+    case memoNotFound
+
+    public var errorDescription: String? {
+        switch self {
+        case .memoNotFound: "編集するメモが見つかりません。すでに削除された可能性があります"
+        }
+    }
 }

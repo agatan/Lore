@@ -4,6 +4,7 @@ import UniformTypeIdentifiers
 
 public struct LifeLogWindow: View {
     var env: AppEnvironment
+    static let readableTimelineWidth: CGFloat = 800
     @State private var exportError: String?
     @State private var showsExportSheet = false
     @State private var showsSearchSheet = false
@@ -129,6 +130,9 @@ public struct LifeLogWindow: View {
                         }
                         Color.clear.frame(height: 1).id("timeline-bottom")
                     }
+                    // 広いwindowでも1行が長くなりすぎないよう、本文を読みやすい幅に抑える。
+                    .frame(maxWidth: Self.readableTimelineWidth, alignment: .leading)
+                    .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(.vertical, 8)
                 }
                 .onChange(of: env.lifeLog.sourceNavigationRevision) { _, _ in
@@ -262,6 +266,8 @@ public struct LifeLogWindow: View {
                 kind: .memo,
                 text: value.text,
                 isHighlighted: env.lifeLog.highlightedTimelineItemID == "m-\(value.id)",
+                accessibilityPrefix: "life-log.memo-\(value.id)",
+                onEdit: { text in await env.lifeLog.updateMemo(id: value.id, text: text) },
                 onDelete: { Task { await env.lifeLog.deleteMemo(id: value.id) } }
             )
         }

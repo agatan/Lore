@@ -119,6 +119,8 @@ cloud音声入力で送るのは今回の文字起こし、共通rule、mode指�
 - mini windowは予定、発話、音声入力、memoを一列の時刻順で表示し、今日進行中の予定をtimeline上部に固定します。OS標準のtitle barは表示せず、Space切替やfull-screen appの利用中も明示的に閉じるまで手前に残ります。Mini windowのtoggle hotkeyは、設定された修飾キーを含む押下と離上が対になった場合だけ切り替え、同じ文字keyだけの通常入力では開閉しません。
 - 今日のtimeline最下部とmini windowには同じchat形式の入力欄があり、送信したmemoを今日のtimelineへ即時追加します。記録状態と開始・停止操作はどちらも入力欄の直上に配置します。送信ボタンと音声入力ボタンは同じ直径の円形controlに揃えます。過去日の履歴へ現在のmemoを混入させないため、main windowの入力欄は今日を選択中だけ表示します。
 - ボイスメモも手入力と同じmemoとして今日のtimelineへ追加します。
+- Main windowとmini windowのmemoは、hover時の編集buttonまたは本文のdouble-clickでその場で編集できます。Returnで保存、Option-Returnで改行、Escで取り消します。空の本文は保存せず、memoの作成時刻は変わりません。削除はmain windowのhover時の削除buttonで行います。
+- Main windowのtimelineは本文を読みやすい幅（約800 pt）に抑え、window幅を広げても行を伸ばしすぎません。
 - ライフログの記録意図が続いている間、状態文言は実装内部の文字起こし開始・終了に追従して切り替えず、記録、開始準備、一時停止、再接続の利用者向け状態を安定して表示します。
 - 発話と予定の関連は前後2分のずれを許容します。
 - 日付をまたぐ記録は実時刻の日へ分配され、表示が今日を追従中なら新しい日へ切り替わります。
@@ -201,18 +203,28 @@ Koeは下記のApp Intent ActionをShortcutsへ公開します。各ActionはKoe
 ```text
 koe export day [--date YYYY-MM-DD] [--include calendar,speech,voice-input,memos] [--clipboard|--output PATH]
 koe search "検索語" [--limit N]
+koe days [--from YYYY-MM-DD] [--to YYYY-MM-DD]
+koe range --from YYYY-MM-DD [--to YYYY-MM-DD] [--include calendar,speech,voice-input,memos]
+koe memo add "本文" [--at ISO8601]
 ```
 
-`--clipboard`と`--output`は同時指定できません。`--output .`は既定filenameを現在directoryへ書きます。検索結果はtab区切りです。
+`--clipboard`と`--output`は同時指定できません。`--output .`は既定filenameを現在directoryへ書きます。検索結果はtab区切りです。`days`と`range`はMCPの`life_log_days`、`life_log_range`と同じJSONを出し、`memo add`は作成したmemoのidを出します。
 
 ## 9. MCP
 
 `koe-mcp`は1行1JSONのstdio JSON-RPC serverです。MCP protocol versionは`2025-03-26`、server versionは`1.0.0`です。notificationには応答しません。tool errorはJSON-RPC成功response内の`isError: true`とtextで返します。
 
-| Tool | Arguments |
-|---|---|
-| `life_log_export` | `date?: YYYY-MM-DD`, `include?: [calendar,speech,voice-input,memos]` |
-| `life_log_search` | `query: string`, `limit?: integer` |
+| Tool | Arguments | 結果 |
+|---|---|---|
+| `life_log_days` | `from?: YYYY-MM-DD`, `to?: YYYY-MM-DD`。省略時は今日までの30日間。最大366日 | 記録がある日だけの配列。`day`、`utterances`、`dictations`、`memos`、`events`の件数と、timelineに残る発話の秒数`spokenSeconds` |
+| `life_log_range` | `from: YYYY-MM-DD`, `to?: YYYY-MM-DD`（両端を含む。省略時は`from`の1日だけ。最大31日）, `include?: [calendar,speech,voice-input,memos]`（省略時はすべて） | 時刻順の項目配列。各項目は`id`、`kind`（`event`、`utterance`、`dictation`、`memo`）、`day`、`start`、任意の`end`、`text`。予定は`title`、`calendar`、`allDay`も持つ |
+| `life_log_export` | `date?: YYYY-MM-DD`, `include?: [calendar,speech,voice-input,memos]` | 人間向けMarkdown |
+| `life_log_search` | `query: string`, `limit?: integer` | `day`、`kind`、本文のtab区切り行 |
+| `memo_add` | `text: string`, `at?: ISO8601`（省略時は現在時刻） | 作成したmemoの`id` |
+
+- 時刻はISO8601のlocal時差付き文字列です。予定はライフログ設定の参加中filterに従い、成功した音声入力と重なるライフログ発話は画面・書き出しと同じく除きます。
+- `memo_add`は前後の空白を除き、空の本文をerrorにします。保存後に起動中のKoeへ通知し、timelineを再読込させます。
+- MCPから変更できるのはmemoの追加だけです。serverはMac内のDBを読むだけで、外部へ通信しません。
 
 ## 10. 障害時の外部挙動
 

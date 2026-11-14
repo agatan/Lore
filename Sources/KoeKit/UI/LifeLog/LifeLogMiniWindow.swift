@@ -138,7 +138,14 @@ struct LifeLogMiniWindow: View {
     }
 
     private func memoRow(_ memo: LifeLogMemo) -> some View {
-        TimelineEntryRow(date: memo.createdAt, kind: .memo, text: memo.text, compact: true)
+        TimelineEntryRow(
+            date: memo.createdAt,
+            kind: .memo,
+            text: memo.text,
+            compact: true,
+            accessibilityPrefix: "life-log-mini.memo-\(memo.id)",
+            onEdit: { text in await env.lifeLog.updateMemo(id: memo.id, text: text) }
+        )
             .id("m-\(memo.id)")
     }
 }

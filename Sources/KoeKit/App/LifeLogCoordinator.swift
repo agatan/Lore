@@ -749,6 +749,22 @@ public final class LifeLogCoordinator {
         } catch { fail(error) }
     }
 
+    /// 空の本文は削除と区別するため保存しない。呼び出し側はfalseなら編集を続ける。
+    @discardableResult
+    public func updateMemo(id: String, text: String) async -> Bool {
+        guard let database else { return false }
+        let value = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !value.isEmpty else { return false }
+        do {
+            try await database.lifeLog.updateMemo(id: id, text: value)
+            await reload()
+            return true
+        } catch {
+            fail(error)
+            return false
+        }
+    }
+
     public func deleteMemo(id: String) async {
         guard let database else { return }
         do { try await database.lifeLog.deleteMemo(id: id); await reload() }

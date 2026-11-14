@@ -57,8 +57,24 @@ struct KoeMCP {
     private static func call(_ name: String, arguments: [String: Any], service: KoeAutomationService) async throws -> String {
         switch name {
         case "life_log_export":
-            let date = try (arguments["date"] as? String).map(parseDay) ?? Date()
-            return try await service.exportDay(date, options: exportOptions(arguments["include"] as? [String]))
+            let date = try optionalDay("date", in: arguments) ?? Date()
+            return try await service.exportDay(date, options: exportOptions(arguments["include"]))
+        case "life_log_days":
+            let from = try optionalDay("from", in: arguments)
+            let to = try optionalDay("to", in: arguments)
+            return try LifeLogJSON.encode(try await service.days(from: from, to: to))
+        case "life_log_range":
+            let from = try parseDay(requiredString("from", in: arguments), argument: "from")
+            let to = try optionalDay("to", in: arguments)
+            let options = try exportOptions(arguments["include"])
+            return try LifeLogJSON.encode(try await service.range(from: from, to: to, options: options))
+        case "memo_add":
+            guard let text = arguments["text"] as? String else { throw MCPError.missingArgument("text") }
+            let at = try (arguments["at"] as? String).map { value in
+                guard let date = LifeLogEntry.parseTimestamp(value) else { throw MCPError.invalidArgument("at") }
+                return date
+            } ?? Date()
+            return try await service.addMemo(text, at: at).id
         case "life_log_search":
             let query = try requiredString("query", in: arguments)
             let results = try await service.search(query, limit: arguments["limit"] as? Int ?? 100)
@@ -73,14 +89,24 @@ struct KoeMCP {
         return value
     }
 
-    private static func parseDay(_ value: String) throws -> Date {
-        guard let date = LifeLogDateKey.date(from: value) else { throw MCPError.invalidArgument("date") }
+    private static func parseDay(_ value: String, argument: String) throws -> Date {
+        guard let date = LifeLogDateKey.date(from: value) else { throw MCPError.invalidArgument(argument) }
         return date
     }
 
-    private static func exportOptions(_ values: [String]?) -> LifeLogTextExporter.Options {
-        guard let values else { return .init() }
+    private static func optionalDay(_ name: String, in arguments: [String: Any]) throws -> Date? {
+        guard let value = arguments[name] else { return nil }
+        guard let text = value as? String else { throw MCPError.invalidArgument(name) }
+        return try parseDay(text, argument: name)
+    }
+
+    /// 省略時は全項目。未知の種類はAIの綴り違いを黙って無視しないようerrorにする。
+    private static func exportOptions(_ value: Any?) throws -> LifeLogTextExporter.Options {
+        guard let value else { return .init() }
+        guard let values = value as? [String] else { throw MCPError.invalidArgument("include") }
+        let allowed: Set<String> = ["calendar", "speech", "voice-input", "memos"]
         let names = Set(values)
+        guard names.isSubset(of: allowed) else { throw MCPError.invalidArgument("include") }
         return .init(
             includesCalendarEvents: names.contains("calendar"),
             includesUtterances: names.contains("speech"),
@@ -89,12 +115,44 @@ struct KoeMCP {
         )
     }
 
+    private static let includeSchema: [String: Any] = [
+        "type": "array",
+        "description": "含める種類。calendar=予定、speech=ライフログの発話、voice-input=音声入力の結果、memos=手入力とボイスメモ。省略時はすべて",
+        "items": ["type": "string", "enum": ["calendar", "speech", "voice-input", "memos"]],
+    ]
+
     private static var tools: [[String: Any]] { [
-        tool("life_log_export", "指定日の予定・発話・音声入力・メモを選択して読みやすいMarkdownにする", properties: [
-            "date": stringSchema("YYYY-MM-DD。省略時は今日"),
-            "include": ["type": "array", "items": ["type": "string", "enum": ["calendar", "speech", "voice-input", "memos"]]],
-        ]),
-        tool("life_log_search", "日本語部分一致で発話・音声入力・メモを横断検索する", properties: ["query": stringSchema("検索語"), "limit": ["type": "integer", "minimum": 1]], required: ["query"]),
+        tool("life_log_days",
+             "記録がある日の目次を返す。期間を決める前にまず使う。結果はJSON配列で、各要素はday(YYYY-MM-DD)、utterances(ライフログ発話数)、dictations(音声入力数)、memos、events(予定数)、spokenSeconds(発話の合計秒)。記録が何もない日は含まない",
+             properties: [
+                "from": stringSchema("開始日YYYY-MM-DD。省略時はtoの29日前"),
+                "to": stringSchema("終了日YYYY-MM-DD(含む)。省略時は今日。期間は最大366日"),
+             ]),
+        tool("life_log_range",
+             "期間内の予定・発話・音声入力・メモを時刻順の構造化JSON配列で返す。各要素はid、kind(event|utterance|dictation|memo)、day、start、end(任意)、text。eventはtitle、calendar、allDayも持つ。時刻はローカル時差付きISO8601。週や月の振り返り、要約、TODO抽出の材料に使う",
+             properties: [
+                "from": stringSchema("開始日YYYY-MM-DD"),
+                "to": stringSchema("終了日YYYY-MM-DD(含む)。省略時はfromの1日だけ。期間は最大31日"),
+                "include": includeSchema,
+             ],
+             required: ["from"]),
+        tool("life_log_export",
+             "1日分の予定・発話・音声入力・メモを人が読むMarkdownで返す。人へそのまま見せる用途向け。機械的に処理するならlife_log_rangeを使う",
+             properties: [
+                "date": stringSchema("YYYY-MM-DD。省略時は今日"),
+                "include": includeSchema,
+             ]),
+        tool("life_log_search",
+             "発話・音声入力・メモを日本語部分一致で横断検索し、新しい順に「日付<TAB>種類<TAB>本文」の行で返す。前後の文脈はlife_log_rangeでその日を読む",
+             properties: ["query": stringSchema("検索語"), "limit": ["type": "integer", "minimum": 1, "description": "最大件数。省略時は100"]],
+             required: ["query"]),
+        tool("memo_add",
+             "ライフログにメモを1件追加し、作成したメモのidを返す。利用者に頼まれた振り返りや決定事項を残すときだけ使う。起動中のKoeのタイムラインにすぐ表示される",
+             properties: [
+                "text": stringSchema("メモ本文。前後の空白は除き、空ならエラー"),
+                "at": stringSchema("メモの時刻(ISO8601、例: 2026-08-29T18:00:00+09:00)。省略時は現在時刻"),
+             ],
+             required: ["text"]),
     ] }
 
     private static func stringSchema(_ description: String) -> [String: Any] { ["type": "string", "description": description] }

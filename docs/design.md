@@ -30,7 +30,7 @@ KoeMCP ──┘
 | `Persistence/` | `KoeDatabase`, `HistoryStore`, `LifeLogStore`, `ModeStore`, `VocabularyStore` | GRDB schema、migration、query、backup |
 | `System/` | `AudioCapture`, `ContinuousAudioCapture`, `TextInserter`, `HotkeyMonitor`, `CalendarProvider`, `SecretStore` | AVFoundation、Accessibility、EventKit、Keychain等のmacOS境界 |
 | `Analysis/` | `VocabularySuggestionJob`, `AdaptiveSpeechSegmenter`, `LifeLogTextExporter` | 履歴分析、発話burst境界、外部向けテキスト生成 |
-| `Automation/` | `KoeAutomationService` | CLIとMCPが共有する日別export・検索ユースケース |
+| `Automation/` | `KoeAutomationService` | CLIとMCPが共有する日一覧・期間取得・日別export・検索・memo追加ユースケース |
 | `UI/` | `KoeApp`, `KoeWindowPresenter`, `MainWindowView`, `LifeLogWindow`, `HistoryBrowserView`, settings views, HUD | app lifecycle、window所有、SwiftUI表示・操作 |
 
 ## 3. プロセス構成と起動
@@ -159,7 +159,7 @@ DBは`~/Library/Application Support/Koe/koe.sqlite`です。`DatabaseQueue`を�
 - `dictationSttBackend`と`lifeLogSttBackend`は用途ごとのengine選択です。whisper.cpp modelは両用途で共有し、保存keyは共有化前の`lifeLogWhisperModel`を維持します。`LifeLogTranscriptionLanguage`はライフログ設定だけに置き、音声入力はmodeの言語設定を使います。認識言語の既定値`applicationLanguage`は`ApplicationLanguage`を`ja`、`en`、`zh-Hans`の固定hintへ解決し、明示的な`auto`も選べます。Runtimeの`captureRequested`は設定として永続化しません。GGML model本体と途中downloadは`Application Support/Koe/Models/WhisperCpp/`へ置き、全データ削除に含めます。
 - `AppEnvironment`の設定から解決した`Locale`を全SwiftUI表示へ注入します。localization resourceの開発言語と欠損keyのfallbackは英語です。表示言語はUI shellだけのvariation pointで、ライフログ設定が明示する`applicationLanguage`解決以外はSTT locale、mode、prompt、保存data、export、CLI/MCP contractへ伝播させません。
 - API keyはUserDefaultsやDBには入れずKeychainへ保存します。
-- `AppEnvironment`は`DistributedNotificationCenter`の`dataChanged`を受けるとライフログを再読込します。現在のCLI/MCPは読み取りだけで、この通知を送りません。
+- `AppEnvironment`は`DistributedNotificationCenter`の`dataChanged`を受けるとライフログを再読込します。CLI/MCPの`memo add`/`memo_add`だけがmemo保存後にこの通知を送ります。
 
 ## 9. UIとwindow対応
 
@@ -176,6 +176,7 @@ DBは`~/Library/Application Support/Koe/koe.sqlite`です。`DatabaseQueue`を�
 | `HistoryBrowserView` | 音声入力履歴、検索、詳細、コピー、削除 |
 | `LifeLogMiniWindow` | title barを隠し、予定、utterance、dictation、memoを一列の時刻順で表示する。`CurrentCalendarEventStrip`をtimeline上部へ固定し、表示時は今日を読み込んで末尾へscrollする。Mainと同じ`LifeLogCaptureControl`を`LifeLogMemoComposer`の直上に置く。`AppEnvironment`がwindow levelを常に`.floating`、collection behaviorを`.canJoinAllSpaces`と`.fullScreenAuxiliary`に固定し、利用者がclose操作またはtoggle hotkeyを使うまで非表示にしない。`HotkeyMonitor`は成立したkey-downを保持し、対応するkey-upだけでreleaseを通知するため、修飾キーなしの同じ文字入力はtoggleしない |
 | `LifeLogMemoComposer` | main/mini windowで共有するchat形式のmemo入力。空白を除外し、送信済みtextをclearして`LifeLogCoordinator.addMemo`へ渡す。送信と音声は同じ直径の円形controlにし、音声ボタンは`AppEnvironment.toggleVoiceMemo`と同じactionを受け、準備中、録音中、別処理中の状態だけを描画する |
+| `TimelineEntryRow` | main/miniで共有する1行。Memoだけはhoverの編集buttonかdouble-clickでinline編集し、空文字を除いて`LifeLogCoordinator.updateMemo`へ渡す。作成時刻は変えない。Main timelineは本文幅を約800 ptに抑える |
 | `LifeLogCalendarSettingsView` | calendar選択、参加filter、選択日の予定を明示的に再取得する操作と進行状態 |
 | `SettingsWindowView` | 一般（表示言語を含む）、語彙、privacy、連携、音声入力、AI整形、mode、ライフログ、calendar。Privacyは保存場所の下にKoe dataの合計使用量を一行で示す。各設定行は操作列を共通幅で確保し、Pickerなど可変幅controlの右端を揃える |
 | `WhisperModelSettingsView` | 音声入力とライフログで共有するcurated local modelを列挙し、選択、download進捗・cancel・再試行・削除・使用中状態を表示する。両方の設定画面で同じviewを使う |
@@ -186,7 +187,7 @@ DBは`~/Library/Application Support/Koe/koe.sqlite`です。`DatabaseQueue`を�
 
 LifeLogTextExporterは90秒未満の連続発話を別種の表示項目で区切ってまとめます。LifeLogExportSheetはプレビューもbackgroundで4,000文字に制限します。timelineの予定rowは淡い塗りと左端の色帯で発話と区別します。
 
-`KoeAutomationService`がCLIとMCPで共有され、日別exportと横断検索を提供します。App Intentsは`AppEnvironment.boot()`の完了後にcapture開始・終了だけを実行します。開始Actionはマイクを扱うためforeground mode、終了Actionはbackground modeです。Shortcutsからの実行にはmacOSが検証できるbundle署名が必要なため、buildは有効な`Apple Development` identityを自己署名より優先します。公開コマンドとtool schemaは外部仕様に列挙します。
+`KoeAutomationService`がCLIとMCPで共有され、記録がある日の一覧、期間の構造化項目、日別export、横断検索、memo追加を提供します。期間取得は画面と同じ`LifeLogStore.day`を日ごとに読み、音声入力優先の発話projectionと参加中予定filterをそのまま使います。書き込みはmemo追加だけです。App Intentsは`AppEnvironment.boot()`の完了後にcapture開始・終了だけを実行します。開始Actionはマイクを扱うためforeground mode、終了Actionはbackground modeです。Shortcutsからの実行にはmacOSが検証できるbundle署名が必要なため、buildは有効な`Apple Development` identityを自己署名より優先します。公開コマンドとtool schemaは外部仕様に列挙します。
 
 ## 11. 並行実行とエラー表示
 

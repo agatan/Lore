@@ -74,9 +74,16 @@ Koeの「設定 > 連携」からCLIとAgent Skillをインストールできま
 ```sh
 koe export day --date 2026-08-29 --include speech,memos
 koe search "レセコン"
+koe days --from 2026-08-01
+koe range --from 2026-08-25 --to 2026-08-29 --include speech,memos
+koe memo add "週次レビューで決めたこと: ..."
 ```
 
-`/Applications/Koe.app/Contents/Helpers/koe-mcp` は標準入出力のMCPサーバーです。`life_log_export`と`life_log_search`を公開します。振り返り、要約、TODOの整理はMCPクライアント側のAIに任せます。MCPクライアントにはこの実行ファイルの絶対パスをcommandとして登録してください。
+`/Applications/Koe.app/Contents/Helpers/koe-mcp` は標準入出力のMCPサーバーです。記録がある日の一覧（`life_log_days`）、期間の項目をJSONで取る`life_log_range`、日別Markdownの`life_log_export`、横断検索の`life_log_search`、メモを追加する`memo_add`を公開します。振り返り、要約、TODOの整理はMCPクライアント側のAIに任せ、結果を残したいときは`memo_add`でライフログへ書き戻せます。MCPから変更できるのはメモの追加だけで、サーバーはMac内のDBを読むだけです。
+
+```sh
+claude mcp add koe -- /Applications/Koe.app/Contents/Helpers/koe-mcp
+```
 
 開発中にCLIとMCPだけを組み立てる場合は`make tools`を使います。
 
