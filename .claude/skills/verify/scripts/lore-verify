@@ -1,0 +1,38 @@
+#!/bin/zsh
+# Verification driver for LoreUITests.app. Usage: see .claude/skills/verify/SKILL.md.
+set -euo pipefail
+REPO="$(cd "$(dirname "$0")/../../../.." && pwd)"
+cd "$REPO"
+export LORE_VERIFY_STATE="$REPO/build/verify"
+APP="$REPO/build/LoreUITests.app"
+DRIVER="$REPO/.build/verify/lore-ax"
+SRC="$REPO/.claude/skills/verify/scripts/LoreAX.swift"
+mkdir -p "$LORE_VERIFY_STATE"
+
+compile_driver() {
+  if [[ ! -x "$DRIVER" || "$SRC" -nt "$DRIVER" ]]; then
+    mkdir -p "${DRIVER:h}"
+    xcrun swiftc -O -o "$DRIVER" "$SRC" 2>&1 | grep -v '^$' || true
+    [[ -x "$DRIVER" ]] || { echo "failed to compile $SRC" >&2; exit 1; }
+  fi
+}
+
+cmd="${1:-help}"
+case "$cmd" in
+  build)
+    make ui-test-app
+    compile_driver
+    ;;
+  launch|doctor)
+    compile_driver
+    shift
+    exec "$DRIVER" "$cmd" "$APP" "$@"
+    ;;
+  help|-h|--help)
+    sed -n '/^## Drive/,/^## Evidence/p' "$REPO/.claude/skills/verify/SKILL.md"
+    ;;
+  *)
+    compile_driver
+    exec "$DRIVER" "$@"
+    ;;
+esac
