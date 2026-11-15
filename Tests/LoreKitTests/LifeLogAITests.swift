@@ -402,7 +402,7 @@ struct LifeLogAITests {
         #expect(withNotes.contains("Ollama"))
     }
 
-    @Test("The CLI and MCP read notes marked as generated, with their staleness")
+    @Test("The automation service reads notes marked as generated, with their staleness")
     func automationReadsNotes() async throws {
         let harness = Harness(try await Fixture.make())
         try await harness.service.generate(kind: .eventNotes, scope: harness.scope)

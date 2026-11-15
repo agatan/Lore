@@ -30,7 +30,6 @@
 <a href="#screens-and-settings">Screens and settings</a>
 <a href="#storage-backup-and-deletion">Storage, backup, and deletion</a>
 <a href="#macos-shortcuts-app-intents">macOS Shortcuts / App Intents</a>
-<a href="#cli">CLI</a>
 <a href="#mcp">MCP</a>
 <a href="#behavior-on-failure">Behavior on failure</a>
 <a href="#acceptance-criteria">Acceptance criteria</a>
@@ -79,7 +78,7 @@
 <li>If the Lore folder already exists, Lore does not merge. It leaves the Koe folder in place and shows its location in the menu bar panel.</li>
 <li>If the folder cannot be moved, Lore does not open the database and shows the reason. The Koe data stays where it was.</li>
 <li>macOS permissions and the login item belong to the bundle ID, so the user grants them again for Lore.</li>
-<li>The CLI is now <code>lore</code> and the MCP server is <code>lore-mcp</code>. AI clients must be registered again. If the CLI or MCP server starts before the app, it performs the same folder and settings migration.</li>
+<li>The MCP server is now <code>lore-mcp</code>. AI clients must be registered again. If the MCP server starts before the app, it performs the same folder and settings migration.</li>
 </ul>
 </li>
 <li>Lore does not restore the recording intent of the previous process. Life Log recording starts only from an explicit action in the UI, a hotkey, or Shortcuts, inside a scheduled recording window that the user enabled, or when a pause that the user started in an earlier process ends (section 4.1).</li>
@@ -217,7 +216,7 @@
 <li>The mini window shows events, utterances, dictations, and memos in one column in time order and pins the event in progress today above the timeline. It has no standard title bar and no all-day events. It stays in front, across Spaces and over full-screen apps, until the user closes it. Its toggle hotkey (default ⌃⌥M) acts only on a matching press and release that include the configured modifiers. Typing the same letter key alone does not open or close it.</li>
 <li>At the bottom of the main and mini windows, one capsule bar floats above the timeline. From the left it has the record button, the recording state, a chat-style memo field, the voice memo button, and the send button. A sent memo appears in today's timeline immediately. The send and voice buttons are circles of the same diameter. The timeline scrolls under the bar, and the bar does not hide the last row. To keep current memos out of past days, the main window shows the memo field only while today is selected. On a past day, the bar has only the record button and the state.</li>
 <li>A voice memo is added to today's timeline as the same kind of memo as typed input.</li>
-<li>A Lore memo is a rough draft captured quickly by voice or short typing. Careful rewriting, and copying into another notes or task app, is the job of an external AI that reads the records through MCP or the CLI. Lore itself offers only light editing for fixing typos.</li>
+<li>A Lore memo is a rough draft captured quickly by voice or short typing. Careful rewriting, and copying into another notes or task app, is the job of an external AI that reads the records through MCP. Lore itself offers only light editing for fixing typos.</li>
 <li>A memo in the main or mini window can be edited in place with the edit button that appears on hover or with a double-click on the text. Return saves, Option-Return inserts a line break, and Esc cancels. An empty text is not saved, and the memo's creation time does not change. Deleting uses the delete button that appears on hover in the main window.</li>
 <li>The main window timeline column is at most 720 pt wide, including the time column and the rail, so rows do not stretch on a wide window.</li>
 <li>While the recording intent continues, the status text does not follow internal transcription starts and stops. It shows stable user-facing states: recording, starting, paused, reconnecting, and stopped.</li>
@@ -237,7 +236,7 @@
 <li>In the monthly activity calendar, the day shown in the timeline is a filled circle: ink, or rose when that day is today. Today, when not selected, has a rose number. Each day has two density dots, one for events and one for speech. The header has previous month, next month, and "Today" buttons.</li>
 </ul>
 <h3>4.4 Life Log AI</h3>
-<p>Life Log AI generates a small set of notes from the Life Log at fixed moments. It is off by default. Until the user turns it on and picks a provider, no Life Log text is sent anywhere. The CLI and MCP still give an external AI client read access (sections 8 and 9).</p>
+<p>Life Log AI generates a small set of notes from the Life Log at fixed moments. It is off by default. Until the user turns it on and picks a provider, no Life Log text is sent anywhere. MCP still gives an external AI client read access (section 8).</p>
 <p><strong>Setting and consent.</strong></p>
 <ul>
 <li>Settings &gt; Life Log AI has the on/off switch, the provider, the model, a statement of what is sent to whom, the excluded calendars, the event notes trigger (automatic or manual), the "notes are ready" notification switch, and the number of requests Lore made today.</li>
@@ -270,14 +269,14 @@
 <li>An export is human-readable Markdown with the date as the heading. It lists events, utterances, dictations, and memos as readable chronological bullets. It contains no machine-oriented uppercase tags or raw metadata.</li>
 <li>In an export, consecutive utterances less than 90 seconds apart, with no other item between them, are merged into one paragraph with a time range.</li>
 <li>The export sheet treats the data at the time it opened as a snapshot and builds the preview off the UI thread. While it prepares, it shows progress and does not block selection changes, closing the sheet, or other voice processing. The preview shows the first 4,000 characters. The export contains everything.</li>
-<li>The UI exports to the clipboard or a file. The CLI exports to standard output, the clipboard, or a file.</li>
+<li>The UI exports to the clipboard or a file. MCP returns the same Markdown as text.</li>
 </ul>
 </section>
 <section id="screens-and-settings">
 <h2>5. Screens and settings</h2>
 <p>Lore's colors are fixed to the three colors of the app icon: ink, white, and rose. There is no color theme setting. Primary actions are ink (near white in dark mode). Wide surfaces such as the sidebar selection and switches are a gray lighter than ink. Rose marks only "now": recording, today, and the current time. Events are a colorless gray. Only success, warning, and failure have other colors, with the same meaning on every screen. In the sidebars of the main window and Settings, each symbol sits on a rounded tile in a calm color for its feature: indigo for the Life Log, blue for dictation, gray for general, and teal for sync and integrations.</p>
-<p>The display language is "System Settings", English, 日本語, or 简体中文, and the choice persists across launches. "System Settings" uses the first supported language among the macOS preferred languages and falls back to English when none is supported. Traditional Chinese is not silently replaced with Simplified Chinese. A change applies immediately to the menu bar, window contents, onboarding, Settings, the HUD, dialogs, and notices. The display language reaches speech recognition only when the Life Log recognition language is explicitly "Match Display Language". It does not change dictation, voice memos, modes, prompts, stored text, search, export content, or the machine-facing CLI and MCP interfaces.</p>
-<p>The color theme is "System Settings", Light, or Dark, and the choice persists across launches. "System Settings" follows the macOS appearance and changes with it. A change applies immediately to the menu bar menu, window contents, onboarding, Settings, the HUD, and dialogs. The color theme changes only appearance and never changes stored data or the CLI and MCP output.</p>
+<p>The display language is "System Settings", English, 日本語, or 简体中文, and the choice persists across launches. "System Settings" uses the first supported language among the macOS preferred languages and falls back to English when none is supported. Traditional Chinese is not silently replaced with Simplified Chinese. A change applies immediately to the menu bar, window contents, onboarding, Settings, the HUD, dialogs, and notices. The display language reaches speech recognition only when the Life Log recognition language is explicitly "Match Display Language". It does not change dictation, voice memos, modes, prompts, stored text, search, export content, or the machine-facing MCP interface.</p>
+<p>The color theme is "System Settings", Light, or Dark, and the choice persists across launches. "System Settings" follows the macOS appearance and changes with it. A change applies immediately to the menu bar menu, window contents, onboarding, Settings, the HUD, and dialogs. The color theme changes only appearance and never changes stored data or the MCP output.</p>
 <table>
 <thead>
 <tr><th>Place</th><th>Features</th></tr>
@@ -289,13 +288,12 @@
 <tr><td>Settings: General, Privacy</td><td>General has the display language, the color theme, launch at login, and permissions. Privacy has the data folder, the storage used on this Mac, and deletion</td></tr>
 <tr><td>Settings: Life Log, Calendar, Life Log AI</td><td>Life Log has the recording, mini window, and voice memo hotkeys, scheduled recording days and time window, input device, speech recognition engine, recognition language, whisper.cpp model, and audio retention. Calendar has calendar selection, the participation filter, "Refresh Events", and the "Never Record" calendars. Life Log AI is described in section 4.4</td></tr>
 <tr><td>Settings: Dictation, AI Formatting, Modes, Vocabulary</td><td>Dictation has the hotkey and hold duration, speech recognition engine and whisper.cpp model, display and sounds, and history retention. AI Formatting has the backend, model, API key, connection check, and wait time. Modes has the common rules and modes. Vocabulary has the entries</td></tr>
-<tr><td>Settings: Sync, Integrations</td><td>Sync is described in section 6.1. Integrations has the MCP server path with a copyable registration command for Claude Code, the CLI installer, and the Agent Skill installer</td></tr>
+<tr><td>Settings: Sync, Integrations</td><td>Sync is described in section 6.1. Integrations has the MCP server path with a copyable registration command for Claude Code</td></tr>
 </tbody>
 </table>
 <p>The Privacy settings show the total storage that Lore data uses on this Mac, including history, Life Log, stored audio, and whisper.cpp models.</p>
 <p>The Life Log state in the main window, the mini window, and the menu bar panel share one record button. While stopped, the button is an ink circle with a rose dot. While a recording intent exists, it is a rose stop symbol, and it keeps the rose look while reconnecting, paused, or held for an event. The button has no visible text. Its tooltip and accessibility label are "Start Life Log Recording" and "Stop Life Log Recording". The text beside it is the state: "Life Log Stopped", "Starting Life Log", "Life Log Recording", "Reconnecting Life Log", or "Life Log Paused". While paused, the line under it shows the resume time, as in "Resumes at 10:30". While held for an event, it shows the event end, as in "Not recording during this event · until 11:00". Next to the record button, a pause button opens the pause durations while recording, and becomes "Resume" while paused. It is hidden while stopped and while capture is held for an event.</p>
 <p>A message that does not prevent continued operation, such as an audio configuration change or a processing failure, appears as a dismissible banner with <code>×</code> at its right edge. Dismissing removes only the message. It does not affect the recording intent, automatic reconnection, or stored data.</p>
-<p>The CLI installer links <code>~/.local/bin/lore</code> to the CLI inside Lore.app, so it changes neither the shell settings nor <code>PATH</code>. The Agent Skill is placed in <code>~/.agents/skills/lore</code> and linked from <code>~/.claude/skills/lore</code>. Neither installer overwrites a file that Lore does not manage.</p>
 </section>
 <section id="storage-backup-and-deletion">
 <h2>6. Storage, backup, and deletion</h2>
@@ -361,28 +359,12 @@
 <tr><td>Resume Life Log</td><td>Ends a pause and resumes recording. Does nothing if the Life Log is not paused</td></tr>
 </tbody>
 </table>
-<p>Day export is available from the CLI and MCP, not from Shortcuts.</p>
-</section>
-<section id="cli">
-<h2>8. CLI</h2>
-<p>The build product is named <code>lore-cli</code>. The installed and linked name is <code>lore</code>. On success the CLI writes to standard output. On failure it writes <code>lore: ...</code> to stderr and exits with status 1. <code>lore help</code>, <code>--help</code>, and <code>-h</code> print the usage.</p>
-<pre><code>lore export day [--date YYYY-MM-DD] [--include calendar,speech,voice-input,memos,ai-notes] [--clipboard|--output PATH]
-lore search &quot;query&quot; [--limit N]
-lore days [--from YYYY-MM-DD] [--to YYYY-MM-DD]
-lore range --from YYYY-MM-DD [--to YYYY-MM-DD] [--include calendar,speech,voice-input,memos]
-lore notes [--from YYYY-MM-DD] [--to YYYY-MM-DD]</code></pre>
-<ul>
-<li><code>--clipboard</code> and <code>--output</code> cannot be combined. <code>--output .</code> writes the default file name, <code>Lore-LifeLog-YYYY-MM-DD.md</code>, into the current directory.</li>
-<li>An unknown <code>--include</code> value is an error. Without <code>--include</code>, <code>export day</code> includes calendar, speech, voice-input, and memos. <code>ai-notes</code> is included only when named.</li>
-<li><code>notes</code> prints the same JSON as the MCP tool <code>life_log_ai_notes</code>.</li>
-<li>Search results are tab-separated lines, newest first. The default limit is 100.</li>
-<li><code>days</code> and <code>range</code> print the same JSON as the MCP tools <code>life_log_days</code> and <code>life_log_range</code>.</li>
-<li>The CLI never changes the user's records. Like the app, opening the database applies pending migrations with their backup, takes the daily backup, and performs the one-time Koe data migration.</li>
-</ul>
+<p>Day export is available from MCP, not from Shortcuts.</p>
 </section>
 <section id="mcp">
-<h2>9. MCP</h2>
+<h2>8. MCP</h2>
 <p><code>lore-mcp</code> is a stdio JSON-RPC server that reads and writes one JSON object per line. The MCP protocol version is <code>2025-03-26</code> and the server version is <code>1.0.0</code>. It does not answer notifications. Protocol errors are JSON-RPC errors (<code>-32600</code> invalid request, <code>-32601</code> method not found, <code>-32602</code> invalid parameters). A failure inside a tool call is returned as a successful JSON-RPC response with <code>isError: true</code> and a text.</p>
+<p>The <code>initialize</code> result carries <code>instructions</code> for the AI client. They say that the server is read-only and local; that the client should list the days with records first and then read a range; that summaries, to-do extraction, and rewriting memos into another app are the client's job; and that AI notes are AI output, not the user's words, so the client checks them against their sources when it matters, and that they never cover what other meeting participants said because Lore records only this Mac's microphone.</p>
 <table>
 <thead>
 <tr><th>Tool</th><th>Arguments</th><th>Result</th></tr>
@@ -397,21 +379,21 @@ lore notes [--from YYYY-MM-DD] [--to YYYY-MM-DD]</code></pre>
 </table>
 <ul>
 <li>Times are ISO 8601 strings with the local UTC offset. Events follow the participation filter of the Life Log settings. Life Log utterances that overlap a successful dictation are excluded, as on screen and in exports.</li>
-<li>MCP never changes the user's records and offers no write-back to Lore. Rewriting utterances or memos and copying them into another app is the job of the AI on the MCP client side. The server reads the database on the Mac and makes no network connection. Opening the database has the same maintenance effects as the CLI (section 8).</li>
+<li>MCP never changes the user's records and offers no write-back to Lore. Rewriting utterances or memos and copying them into another app is the job of the AI on the MCP client side. The server reads the database on the Mac and makes no network connection. Like the app, opening the database applies pending migrations with their backup, takes the daily backup, and performs the one-time Koe data migration.</li>
 </ul>
 </section>
 <section id="behavior-on-failure">
-<h2>10. Behavior on failure</h2>
+<h2>9. Behavior on failure</h2>
 <ul>
 <li>If speech recognition cannot produce a final result, the dictation becomes <code>failed</code> and Lore shows the reason. When SpeechAnalyzer reaches a state that needs a process restart, Lore shows the reason and relaunches itself. If that happens within the first 5 minutes after launch, Lore only shows the message, so it cannot loop. For a whisper.cpp model that is not downloaded, is corrupt, or does not fit on disk, the settings page shows how to recover.</li>
 <li>A formatting failure falls back to the raw transcript. An insertion failure leaves the result on the clipboard.</li>
-<li>A failure of database initialization, saving, search, or backup is never treated as success. Lore reports the reason on screen, through the CLI or MCP, or in the log.</li>
+<li>A failure of database initialization, saving, search, or backup is never treated as success. Lore reports the reason on screen, through MCP, or in the log.</li>
 <li>An interrupted Life Log capture reconnects automatically only while recording is enabled, and stored chunks are not lost.</li>
 <li>If the Shortcuts stop action times out, its error says that the stored audio will be reprocessed at the next launch.</li>
 </ul>
 </section>
 <section id="acceptance-criteria">
-<h2>11. Acceptance criteria</h2>
+<h2>10. Acceptance criteria</h2>
 <ol>
 <li>With the on-device configuration, neither transcripts nor instructions leave the Mac.</li>
 <li>A cloud configuration is used only after the user explicitly selects it, and Settings shows what is sent.</li>
@@ -420,7 +402,7 @@ lore notes [--from YYYY-MM-DD] [--to YYYY-MM-DD]</code></pre>
 <li>The history shows the mode, instructions, engines, result, and status that applied at the time.</li>
 <li>Pending Life Log chunks are reprocessed after a restart.</li>
 <li>A pre-migration backup and a daily backup are created, and at most 7 backup files are kept in total.</li>
-<li>The public interfaces of the CLI, MCP, and Shortcuts match this document.</li>
+<li>The public interfaces of MCP and Shortcuts match this document.</li>
 <li>The dot of the menu bar "L." icon is rose only while audio is actually being recorded, shows a gold ring while the Life Log reconnects, and has no color while stopped.</li>
 <li>A dictation that succeeds during Life Log recording appears exactly once in the timeline, search, and export. For the span of a canceled or failed dictation, the Life Log utterances are not lost.</li>
 <li>With Life Log AI off, no Life Log text is sent to any provider. With it on, only the fields listed in section 4.4 are sent, only to the chosen provider, only after the confirmation for a cloud provider, and never for excluded events or calendars. A localhost provider sends nothing beyond localhost.</li>

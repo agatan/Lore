@@ -3,7 +3,7 @@ import Testing
 
 @testable import LoreKit
 
-@Suite("CLI/MCP共通のライフログ取得")
+@Suite("MCPが使うライフログ取得")
 @MainActor
 struct AutomationServiceTests {
     private let calendar: Calendar = {

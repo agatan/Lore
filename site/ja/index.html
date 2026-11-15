@@ -172,27 +172,18 @@
           <h2 id="ai-title">要約や整理は、<br>お使いのAIで。</h2>
           <p class="section-lead">ライフログAIをオンにすると、会議が終わったときにはもうノートができています。決定事項、やること、未解決の問いを、それぞれ元の発言につないで残します。既定ではオフで、Mac上でもクラウドでも、選んだプロバイダで動きます。それ以外の振り返りは、普段使っているAIにライフログを渡せます。</p>
           <ul class="points">
-            <li><b>CLI</b><span><code>lore</code>コマンドで、1日の記録をMarkdownで書き出したり、検索したり、期間を指定してJSONで取得したりできます。</span></li>
             <li><b>MCP</b><span>AIクライアントに<code>lore-mcp</code>を登録すると、日付や期間を指定して記録を読み込めます。</span></li>
             <li><b>読み取り専用、Mac上で動作</b><span>標準入出力でAIクライアントとつながり、データを変更しません。Lore側から外部へ通信することもありません。</span></li>
           </ul>
         </div>
         <div>
-<pre class="code" tabindex="0" aria-label="CLIコマンドとMCPの設定例"><code><span class="c"># 今日の記録をMarkdownでコピー</span>
-<span class="p">$ </span>lore export day --clipboard
-
-<span class="c"># 過去の会話を検索</span>
-<span class="p">$ </span>lore search "リリース計画" --limit 20
-
-<span class="c"># 1週間分の発話とメモをJSONで取得</span>
-<span class="p">$ </span>lore range --from 2026-11-09 --to 2026-11-13 --include speech,memos
-
-<span class="c"># MCPクライアントに登録</span>
+<pre class="code" tabindex="0" aria-label="MCPの設定例"><code><span class="c"># MCPクライアントに登録</span>
 <span class="p">$ </span>claude mcp add lore -- /Applications/Lore.app/Contents/Helpers/lore-mcp
 
 <span class="c"># MCPのツール
 #   life_log_days    life_log_range
-#   life_log_export  life_log_search</span></code></pre>
+#   life_log_export  life_log_ai_notes
+#   life_log_search</span></code></pre>
         </div>
       </div>
     </div>

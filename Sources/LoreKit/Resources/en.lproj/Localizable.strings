@@ -19,7 +19,6 @@
 "削除" = "Delete";
 "編集済み" = "Edited";
 "完了" = "Done";
-"更新" = "Update";
 "表示" = "Show";
 "コピー" = "Copy";
 "コピーしました" = "Copied";
@@ -143,10 +142,6 @@
 "ライフログを削除" = "Delete Life Log";
 "すべて削除して初期化" = "Delete Everything and Reset";
 "元に戻せません。" = "This cannot be undone.";
-"コマンドライン" = "Command Line";
-"インストール" = "Install";
-"インストール済み" = "Installed";
-"インストールできませんでした" = "Could Not Install";
 
 /* Permissions and errors */
 "許可する" = "Allow";
@@ -313,8 +308,6 @@
 "MCPに対応したAIクライアントに、このパスを標準入出力のサーバーとして登録します。記録を読むだけで、書き換えや外部への通信はしません。" = "Register this path as a standard input/output server in any AI client that supports MCP. It only reads your records; it never changes them or connects to the internet.";
 "パスをコピー" = "Copy Path";
 "Claude Code用のコマンドをコピー" = "Copy Command for Claude Code";
-"シェルの設定やPATHは変更しません。Lore.appの中のCLIへのリンクを作るだけです。" = "Your shell settings and PATH aren’t changed. This only creates a link to the CLI inside Lore.app.";
-"Loreの記録の読み方をAIエージェントに教えるSkillです。共通のSkillフォルダに置き、Claudeからも参照できるようにします。" = "A skill that teaches AI agents how to read your Lore records. It’s placed in the shared skills folder so Claude can use it too.";
 "ホットキー" = "Hotkey";
 "短く押すと録音の開始と停止、長押しすると押している間だけ録音します。" = "Press briefly to start and stop recording, or press and hold to record only while the key is held.";
 "長押しとみなす時間" = "Hold Duration";
@@ -465,15 +458,6 @@
 "この入力フォーマットを変換できません" = "This input format can’t be converted";
 "選択した入力デバイスが見つかりません" = "The selected input device can’t be found";
 "入力デバイスを選択できません (%lld)" = "Can’t select the input device (%lld)";
-"Lore.appにCLIが同梱されていません" = "The CLI isn’t included in Lore.app";
-"Lore.appにAgent Skillが同梱されていません" = "The Agent Skill isn’t included in Lore.app";
-"同名のファイルがすでにあります" = "A file with the same name already exists";
-"同名のSkillがすでにあります" = "A skill with the same name already exists";
-"Claudeに同名のSkillがあります" = "Claude already has a skill with the same name";
-"Lore.appにCLIが同梱されていません。アプリを入れ直してください。" = "The CLI isn’t included in Lore.app. Reinstall the app.";
-"Lore.appにAgent Skillが同梱されていません。アプリを入れ直してください。" = "The Agent Skill isn’t included in Lore.app. Reinstall the app.";
-"%@ はLoreが管理していないため、上書きしません。" = "%@ isn’t managed by Lore, so it won’t be overwritten.";
-"Agent Skillの更新と復元に失敗しました。更新: %@ / 復元: %@" = "Couldn’t update or restore the Agent Skill. Update: %1$@ / Restore: %2$@";
 "ライフログはすでに記録中です" = "Life Log is already recording";
 "音声入力の構成が変わりました" = "The audio input configuration changed";
 "ライフログ音声を保存用フォーマットへ変換できません" = "Can’t convert Life Log audio to the storage format";

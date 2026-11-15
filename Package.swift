@@ -13,7 +13,6 @@ let package = Package(
     platforms: [.macOS("26.0")],
     products: [
         .executable(name: "Lore", targets: ["Lore"]),
-        .executable(name: "lore-cli", targets: ["LoreCLI"]),
         .executable(name: "lore-mcp", targets: ["LoreMCP"]),
         .library(name: "LoreKit", targets: ["LoreKit"]),
     ],
@@ -39,14 +38,6 @@ let package = Package(
                 "-Xfrontend", "-const-gather-protocols-file",
                 "-Xfrontend", appIntentsProtocols,
             ])],
-            linkerSettings: [.unsafeFlags([
-                "-Xlinker", "-rpath",
-                "-Xlinker", "@executable_path/../Frameworks",
-            ])]
-        ),
-        .executableTarget(
-            name: "LoreCLI",
-            dependencies: ["LoreKit"],
             linkerSettings: [.unsafeFlags([
                 "-Xlinker", "-rpath",
                 "-Xlinker", "@executable_path/../Frameworks",
