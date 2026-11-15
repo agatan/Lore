@@ -106,6 +106,23 @@ struct AutomationServiceTests {
         #expect(!json.contains("\\/"))
     }
 
+    @Test("Each occurrence of a repeating event appears once, and an event crossing midnight appears once")
+    func rangeKeepsEveryOccurrenceOnce() async throws {
+        let service = try await makeService()
+        try await service.database.lifeLog.save(calendarEvents: [
+            CalendarEventSnapshot(id: "weekly", title: "1:1", startsAt: at(3, 10), endsAt: at(3, 11),
+                                  calendarTitle: "Work", participationStatus: .accepted),
+            CalendarEventSnapshot(id: "weekly", title: "1:1", startsAt: at(10, 10), endsAt: at(10, 11),
+                                  calendarTitle: "Work", participationStatus: .accepted),
+            CalendarEventSnapshot(id: "overnight", title: "Release", startsAt: at(5, 23), endsAt: at(6, 1),
+                                  calendarTitle: "Work", participationStatus: .accepted),
+        ])
+
+        let entries = try await service.range(from: at(3, 0), to: at(16, 0), calendar: calendar)
+        #expect(entries.map(\.id) == ["weekly", "overnight", "weekly"])
+        #expect(entries.map(\.day) == ["2026-08-03", "2026-08-05", "2026-08-10"])
+    }
+
     @Test("期間取得は種類を選べ、空選択・逆順・31日超をerrorにする")
     func rangeFiltersAndValidates() async throws {
         let service = try await makeService()
