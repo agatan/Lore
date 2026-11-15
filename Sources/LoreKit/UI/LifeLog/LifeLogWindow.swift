@@ -23,16 +23,8 @@ public struct LifeLogWindow: View {
             .frame(minWidth: 560, minHeight: 600)
             .toolbar { toolbarItems }
             .inspector(isPresented: $showsInspector) {
-                LifeLogDayInspector(
-                    day: env.lifeLog.day,
-                    date: env.lifeLog.selectedDate,
-                    schedule: env.settings.lifeLogSchedule,
-                    participatingOnly: env.settings.lifeLogParticipatingEventsOnly,
-                    digest: env.lifeLog.day.dailyDigest == nil ? nil : AnyView(GeneratedNoteView(env: env, subject: .day(selectedDayKey), style: .compact)),
-                    onJump: { date in Task { await env.lifeLog.jumpToTime(date) } },
-                    onShowEvent: { occurrence in env.lifeLog.jumpToTimelineItem(occurrence.timelineItemID) }
-                )
-                .inspectorColumnWidth(min: 260, ideal: 300, max: 380)
+                inspector
+                    .inspectorColumnWidth(min: 260, ideal: 300, max: 380)
             }
             .task {
                 await env.lifeLog.followCurrentDay()
@@ -64,6 +56,24 @@ public struct LifeLogWindow: View {
             } message: {
                 Text(exportError ?? "不明なエラー")
             }
+    }
+
+    @ViewBuilder
+    private var inspector: some View {
+        if let selection = env.lifeLog.eventInspector.selection {
+            EventDetailsInspector(selection: selection, onClose: env.lifeLog.clearEventSelection)
+                .id("\(selection.event.id)@\(selection.event.startsAt.timeIntervalSinceReferenceDate)")
+        } else {
+            LifeLogDayInspector(
+                day: env.lifeLog.day,
+                date: env.lifeLog.selectedDate,
+                schedule: env.settings.lifeLogSchedule,
+                participatingOnly: env.settings.lifeLogParticipatingEventsOnly,
+                digest: env.lifeLog.day.dailyDigest == nil ? nil : AnyView(GeneratedNoteView(env: env, subject: .day(selectedDayKey), style: .compact)),
+                onJump: { date in Task { await env.lifeLog.jumpToTime(date) } },
+                onShowEvent: { occurrence in env.lifeLog.jumpToTimelineItem(occurrence.timelineItemID) }
+            )
+        }
     }
 
     @ToolbarContentBuilder
@@ -293,7 +303,9 @@ public struct LifeLogWindow: View {
                         isExcluded: env.lifeLogAI.excludedEventIDs.contains(value.id),
                         isCalendarExcluded: env.settings.lifeLogAI.excludedCalendars.contains(value.calendarTitle),
                         setExcluded: { excluded in Task { await env.lifeLogAI.setExcluded(excluded, eventID: value.id) } }
-                    )
+                    ),
+                    onSelect: value.isAllDay ? nil : { env.lifeLog.selectEvent(value) },
+                    isSelected: env.lifeLog.eventInspector.selection.map { $0.event.id == value.id && $0.event.startsAt == value.startsAt } ?? false
                 )
                 .accessibilityElement(children: .contain)
                 .accessibilityIdentifier("life-log.timeline-event-\(value.id)")

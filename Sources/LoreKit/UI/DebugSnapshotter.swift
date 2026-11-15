@@ -43,6 +43,10 @@ enum DebugSnapshotter {
                 try await captureMiniStaysOnToday(env: env, presenter: presenter, into: directory)
                 exit(0)
             }
+            if ProcessInfo.processInfo.arguments.contains("--lore-snapshot-event-details") {
+                try await captureEventDetails(env: env, into: directory)
+                exit(0)
+            }
             try await capture(LoreWindow.main, as: "main-life-log", into: directory)
             if AppEnvironment.forcesOnboardingForScreenshot {
                 try await captureOnboarding(env: env, into: directory)
@@ -149,6 +153,25 @@ enum DebugSnapshotter {
             try await captureHosted(MorningDigestSheet(env: env, digest: yesterday).background(.background).environment(\.locale, locale),
                                     as: "digest-morning", into: directory)
         }
+    }
+
+    /// The inspector for a selected event: loaded with guests and a room, loaded with a Zoom link, and unavailable.
+    private static func captureEventDetails(env: AppEnvironment, into directory: URL) async throws {
+        guard let first = env.lifeLog.day.calendarEvents.first(where: { $0.id == "demo-event-1" }),
+              let second = env.lifeLog.day.calendarEvents.first(where: { $0.id == "demo-event-2" }) else {
+            throw CocoaError(.fileWriteUnknown, userInfo: [NSLocalizedDescriptionKey: "demo eventがありません"])
+        }
+        env.lifeLog.jumpToTimelineItem(EventOccurrence(first).timelineItemID)
+        env.lifeLog.selectEvent(first)
+        await settle(1.5)
+        try await capture(LoreWindow.main, as: "event-details", into: directory)
+        env.lifeLog.selectEvent(second)
+        await settle(1)
+        try await capture(LoreWindow.main, as: "event-details-zoom", into: directory)
+        env.lifeLog.clearEventSelection()
+        env.lifeLog.eventInspector.select(first) { _ in nil }
+        await settle(1)
+        try await capture(LoreWindow.main, as: "event-details-unavailable", into: directory)
     }
 
     /// The main window opens last week through "Last time" while the mini window stays on today.

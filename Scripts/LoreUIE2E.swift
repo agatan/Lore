@@ -221,6 +221,20 @@ private enum LoreUIE2E {
         _ = try ui.waitFor(identifier: "life-log.day-map")
         try ui.press(identifier: "life-log.calendar-event-demo-event-1")
         _ = try ui.waitFor(identifier: "life-log.timeline-event-demo-event-1")
+        try ui.press(identifier: "life-log.event-select-demo-event-1")
+        _ = try ui.waitFor(identifier: "life-log.event-details.join")
+        _ = try ui.waitFor(identifier: "life-log.event-details.guests")
+        _ = try ui.waitFor(identifier: "life-log.event-details.rooms")
+        try ui.press(identifier: "life-log.event-details.description-toggle")
+        _ = try ui.waitForString(identifier: "life-log.event-details.description") { $0.contains("電話で参加") }
+        try ui.press(identifier: "life-log.event-select-demo-event-2")
+        _ = try ui.waitForString(identifier: "life-log.event-details.title") { $0.contains("デザインレビュー") }
+        guard !ui.exists(identifier: "life-log.event-details.description-toggle"),
+              !ui.exists(identifier: "life-log.event-details.rooms") else {
+            throw UIE2EError.assertion("別の予定を選んだ後も前の予定の詳細が残っています")
+        }
+        try ui.press(identifier: "life-log.event-details.close")
+        _ = try ui.waitFor(identifier: "life-log.day-map")
         try ui.press(identifier: "life-log.search")
         try ui.setValue("オンボーディング", identifier: "life-log.search-input")
         try ui.press(identifier: "life-log.search-result-memo-demo-memo-1")

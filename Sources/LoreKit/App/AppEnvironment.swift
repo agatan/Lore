@@ -326,7 +326,8 @@ public final class AppEnvironment {
                 database = try await LoreDatabase.inMemory()
                 if !Self.usesEmptyUITestData {
                     try await ScreenshotDemoData.seed(database: database)
-                    lifeLog.useEventDetails(DemoCalendarEventDetails(copy: .current))
+                    let slow = ProcessInfo.processInfo.arguments.contains("--lore-demo-slow-details")
+                    lifeLog.useEventDetails(DemoCalendarEventDetails(copy: .current, delay: slow ? .milliseconds(900) : .zero))
                 }
             } else {
                 database = try await openDefaultDatabase()
