@@ -104,8 +104,6 @@ nav.links a:hover, .lang a:hover { color: var(--ink); }
 .btn-ink { background: var(--ink); color: var(--on-ink); }
 .btn-line { border-color: var(--line); color: var(--ink); background: transparent; }
 .btn-line:hover { background: var(--surface); }
-.btn[aria-disabled="true"] { cursor: default; }
-.btn .rec { width: 9px; height: 9px; border-radius: 50%; background: var(--rose); flex: none; }
 header.top .btn { height: 36px; padding: 0 16px; font-size: 14px; flex: none; }
 
 /* Hero */

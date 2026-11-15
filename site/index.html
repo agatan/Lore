@@ -31,6 +31,7 @@
   <div class="wrap">
     <a class="brand" href="index.html"><img src="assets/icon.png" alt="" width="28" height="28">Lore</a>
     <nav class="links" aria-label="Sections">
+      <a href="#scenes">Moments</a>
       <a href="#life-log">Life Log</a>
       <a href="#dictation">Dictation</a>
       <a href="#ai">Your AI</a>
@@ -43,7 +44,7 @@
         <li><a href="zh-Hans/index.html" hreflang="zh-Hans" lang="zh-Hans">简体中文</a></li>
       </ul>
     </nav>
-    <a class="btn btn-ink" href="#download">Coming soon</a>
+    <a class="btn btn-ink" href="https://github.com/agatan/Lore"><svg class="gh" viewBox="0 0 16 16" width="16" height="16" fill="currentColor" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38v-1.33c-2.23.48-2.7-1.07-2.7-1.07-.36-.92-.89-1.17-.89-1.17-.73-.5.06-.49.06-.49.8.06 1.23.83 1.23.83.72 1.23 1.88.87 2.34.67.07-.52.28-.87.51-1.07-1.78-.2-3.65-.89-3.65-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82a7.6 7.6 0 0 1 4 0c1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48v2.2c0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8z"/></svg>GitHub</a>
   </div>
 </header>
 
@@ -54,10 +55,10 @@
       <h1 id="hero-title">Your day, in<br>your own words<span class="dot">.</span></h1>
       <p class="lead">Lore keeps what you say as a searchable Timeline next to your calendar, and types clean text into any app with one hotkey. Speech recognition runs on your Mac. Your audio never leaves it.</p>
       <div class="cta">
-        <span class="btn btn-ink" role="link" aria-disabled="true"><span class="rec" aria-hidden="true"></span>Coming soon</span>
+        <a class="btn btn-ink" href="https://github.com/agatan/Lore"><svg class="gh" viewBox="0 0 16 16" width="16" height="16" fill="currentColor" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38v-1.33c-2.23.48-2.7-1.07-2.7-1.07-.36-.92-.89-1.17-.89-1.17-.73-.5.06-.49.06-.49.8.06 1.23.83 1.23.83.72 1.23 1.88.87 2.34.67.07-.52.28-.87.51-1.07-1.78-.2-3.65-.89-3.65-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82a7.6 7.6 0 0 1 4 0c1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48v2.2c0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8z"/></svg>View on GitHub</a>
         <a class="btn btn-line" href="#life-log">See how it works</a>
       </div>
-      <p class="req">macOS 26 or later · Apple Silicon</p>
+      <p class="req">Open source, MIT License · macOS 26 or later · Apple Silicon</p>
     </div>
     <figure class="stage">
       <div class="screen">
@@ -65,6 +66,28 @@
       </div>
       <figcaption>Start the Life Log, and every utterance lands on the Timeline, time-stamped, moments after you finish speaking.</figcaption>
     </figure>
+  </section>
+
+  <section class="feature" id="scenes" aria-labelledby="scenes-title">
+    <div class="wrap">
+      <p class="kicker">Moments</p>
+      <h2 id="scenes-title">What the record is for.</h2>
+      <p class="section-lead">Lore records quietly while you work. It pays off at a few moments in the day.</p>
+      <div class="grid-3">
+        <div class="card">
+          <h3>After a meeting</h3>
+          <p>Turn on Life Log AI, and when the event ends its notes are already under it: decisions, action items and open questions, each linked to what was said.</p>
+        </div>
+        <div class="card">
+          <h3>At the end of the day</h3>
+          <p>Read the day back: speech, memos and dictations on one Timeline next to your calendar. Export it as Markdown in one click.</p>
+        </div>
+        <div class="card">
+          <h3>"What did I say about that?"</h3>
+          <p>Press ⌘F and search every day at once. Pick a result to jump to that moment on the Timeline.</p>
+        </div>
+      </div>
+    </div>
   </section>
 
   <section class="feature" id="life-log" aria-labelledby="life-log-title">
@@ -77,6 +100,7 @@
           <ul class="points">
             <li><b>Start it yourself, or on a schedule.</b><span>Pick days and hours, like weekdays 9 to 6, and Lore records only then.</span></li>
             <li><b>Speech in, silence out.</b><span>Background noise and silence are skipped. Only actual speech is transcribed, on your Mac.</span></li>
+            <li><b>Your voice, not the call.</b><span>The Life Log listens through your Mac's microphone, not the call's audio. In an online meeting it keeps what you say. With headphones on, the other side is not recorded.</span></li>
             <li><b>Your day at a glance.</b><span>Time spoken, counts and events line up on one axis. Click any point to jump there.</span></li>
           </ul>
         </div>
@@ -236,9 +260,10 @@
     <div class="wrap">
       <img class="logo" src="assets/icon.png" alt="Lore app icon" width="88" height="88" loading="lazy">
       <h2 id="download-title">Keep what you say<span class="dot">.</span></h2>
-      <p class="section-lead">Lore is coming soon to the Mac.</p>
+      <p class="section-lead">Lore is open source under the MIT License. There is no signed download yet. Build it from source today, or follow the releases on GitHub to get the first one.</p>
       <div class="cta">
-        <span class="btn btn-ink" role="link" aria-disabled="true"><span class="rec" aria-hidden="true"></span>Coming soon</span>
+        <a class="btn btn-ink" href="https://github.com/agatan/Lore"><svg class="gh" viewBox="0 0 16 16" width="16" height="16" fill="currentColor" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38v-1.33c-2.23.48-2.7-1.07-2.7-1.07-.36-.92-.89-1.17-.89-1.17-.73-.5.06-.49.06-.49.8.06 1.23.83 1.23.83.72 1.23 1.88.87 2.34.67.07-.52.28-.87.51-1.07-1.78-.2-3.65-.89-3.65-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82a7.6 7.6 0 0 1 4 0c1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48v2.2c0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8z"/></svg>View on GitHub</a>
+        <a class="btn btn-line" href="https://github.com/agatan/Lore/releases">Follow releases</a>
       </div>
       <p class="req">macOS 26 or later · Apple Silicon</p>
     </div>
@@ -247,7 +272,7 @@
 
 <footer>
   <div class="wrap">
-    <span>© 2026 Lore</span>
+    <span>© 2026 Lore · <a href="https://github.com/agatan/Lore/blob/main/LICENSE">MIT License</a> · <a href="https://github.com/agatan/Lore">Source on GitHub</a></span>
     <span>Speech recognition and default formatting run entirely on your Mac.</span>
   </div>
 </footer>
