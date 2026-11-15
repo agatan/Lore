@@ -123,6 +123,11 @@ public struct LifeLogStore: Sendable {
         }
     }
 
+    private static let attendingOnlyClause: String = {
+        let shown = CalendarParticipationStatus.allCases.filter(\.isShownWhenAttendingOnly).map { "'\($0.rawValue)'" }
+        return " AND participation_status IN (\(shown.joined(separator: ", ")))"
+    }()
+
     public func day(_ dateValue: Date, calendar: Calendar = .current, participatingOnly: Bool = false) async throws -> LifeLogDay {
         let interval = calendar.dateInterval(of: .day, for: dateValue)!
         return try await queue.read { db in
@@ -137,7 +142,7 @@ public struct LifeLogStore: Sendable {
                 """, arguments: args).map(decodeDictation)
             let utterances = LifeLogSpeechProjection.visibleUtterances(storedUtterances, preferring: dictations)
             let memos = try Row.fetchAll(db, sql: "SELECT * FROM life_log_memos WHERE created_at >= ? AND created_at < ? ORDER BY created_at", arguments: args).map(decodeMemo)
-            let participationClause = participatingOnly ? " AND participation_status IN ('none', 'accepted')" : ""
+            let participationClause = participatingOnly ? Self.attendingOnlyClause : ""
             let events = try Row.fetchAll(db, sql: "SELECT * FROM calendar_event_snapshots WHERE ends_at > ? AND starts_at < ?\(participationClause) ORDER BY starts_at", arguments: args).map(decodeEvent)
             let notes = try Row.fetchAll(db, sql: "SELECT * FROM generated_notes WHERE scope_day = ? ORDER BY range_start", arguments: [LifeLogDateKey.string(for: dateValue, calendar: calendar)])
                 .map { try decodeGeneratedNote($0, db: db) }
@@ -204,7 +209,7 @@ public struct LifeLogStore: Sendable {
             }
             let events = try Row.fetchAll(
                 db,
-                sql: "SELECT starts_at FROM calendar_event_snapshots WHERE ends_at > ? AND starts_at < ?" + (participatingOnly ? " AND participation_status IN ('none', 'accepted')" : ""),
+                sql: "SELECT starts_at FROM calendar_event_snapshots WHERE ends_at > ? AND starts_at < ?" + (participatingOnly ? Self.attendingOnlyClause : ""),
                 arguments: arguments
             )
             for row in events {

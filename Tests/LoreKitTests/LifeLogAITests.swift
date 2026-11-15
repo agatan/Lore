@@ -319,6 +319,19 @@ struct LifeLogAITests {
         #expect(harness.fixture.spy.prompts.count == 1)
     }
 
+    @Test("An unanswered invitation never starts notes on its own while the filter is on")
+    func triggerSkipsPendingInvitation() async throws {
+        let harness = Harness(try await Fixture.make())
+        var pending = harness.fixture.event
+        pending.participationStatus = .pending
+        try await harness.fixture.database.lifeLog.save(calendarEvents: [pending])
+        await harness.service.evaluateEventNotes()
+        #expect(harness.fixture.spy.prompts.isEmpty)
+        harness.participatingOnly = false
+        await harness.service.evaluateEventNotes()
+        #expect(harness.fixture.spy.prompts.count == 1)
+    }
+
     @Test("Pending transcription before the event end makes the trigger wait")
     func triggerWaitsForTranscription() async throws {
         let harness = Harness(try await Fixture.make())

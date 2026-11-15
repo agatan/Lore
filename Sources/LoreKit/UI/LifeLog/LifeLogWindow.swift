@@ -305,7 +305,8 @@ public struct LifeLogWindow: View {
                         setExcluded: { excluded in Task { await env.lifeLogAI.setExcluded(excluded, eventID: value.id) } }
                     ),
                     onSelect: value.isAllDay ? nil : { env.lifeLog.selectEvent(value) },
-                    isSelected: env.lifeLog.eventInspector.selection.map { $0.event.id == value.id && $0.event.startsAt == value.startsAt } ?? false
+                    isSelected: env.lifeLog.eventInspector.selection.map { $0.event.id == value.id && $0.event.startsAt == value.startsAt } ?? false,
+                    opening: CalendarEventCard.Opening { await env.lifeLog.eventDetails(for: value) }
                 )
                 .accessibilityElement(children: .contain)
                 .accessibilityIdentifier("life-log.timeline-event-\(value.id)")

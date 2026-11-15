@@ -341,7 +341,10 @@ struct LifeLogTests {
         })
 
         let day = try await database.lifeLog.day(start, participatingOnly: true)
-        #expect(day.calendarEvents.map(\.participationStatus) == [.none, .accepted])
+        let month = try await database.lifeLog.activity(start: start, end: start.addingTimeInterval(86_400), participatingOnly: true)
+        #expect(month.values.reduce(0) { $0 + $1.calendarEventCount } == 3)
+        #expect(statuses.filter(\.isShownWhenAttendingOnly) == [.none, .accepted, .pending])
+        #expect(day.calendarEvents.map(\.participationStatus) == [.none, .accepted, .pending])
     }
 
     @Test("人向けMarkdown exportは予定・発話・メモを時系列で区別する")

@@ -38,6 +38,16 @@ struct CalendarEventCard: View {
         var setExcluded: (Bool) -> Void
     }
 
+    /// "Open in Calendar" and "Open in Google Calendar". Only the main window passes it.
+    var opening: Opening?
+
+    struct Opening {
+        var details: () async -> CalendarEventDetails?
+    }
+
+    @State private var googleCalendarURL: URL?
+    @Environment(\.openURL) private var openURL
+
     private var titleSize: CGFloat { compact ? LoreTheme.TextSize.callout : LoreTheme.TextSize.reading }
 
     var body: some View {
@@ -62,6 +72,10 @@ struct CalendarEventCard: View {
                         .accessibilityIdentifier("life-log.event-select-\(event.id)")
                     if isCurrent {
                         tag("いま", color: LoreTheme.event)
+                    }
+                    if event.participationStatus == .pending {
+                        tag("未回答", color: LoreTheme.warning)
+                            .accessibilityIdentifier("life-log.event-no-response-\(event.id)")
                     }
                     if recording?.exclusions.excludes(event) == true {
                         tag("記録しない", color: LoreTheme.recording)
@@ -99,8 +113,12 @@ struct CalendarEventCard: View {
         .contentShape(.rect)
         .onTapGesture { onSelect?() }
         .contextMenu {
+            openingMenu
             recordingMenu
             aiMenu
+        }
+        .task(id: opening == nil ? nil : event) {
+            googleCalendarURL = await opening?.details()?.googleCalendarURL
         }
     }
 
@@ -152,6 +170,21 @@ struct CalendarEventCard: View {
             .padding(.horizontal, 6)
             .padding(.vertical, 1)
             .background(color.opacity(0.14), in: Capsule())
+    }
+
+    @ViewBuilder
+    private var openingMenu: some View {
+        if opening != nil {
+            if let url = CalendarEventLink.calendarApp(eventID: event.id) {
+                Button("カレンダーで開く") { openURL(url) }
+                    .accessibilityIdentifier("life-log.event.open-calendar")
+            }
+            if let googleCalendarURL {
+                Button("Googleカレンダーで開く") { openURL(googleCalendarURL) }
+                    .accessibilityIdentifier("life-log.event.open-google-calendar")
+            }
+            Divider()
+        }
     }
 
     /// 終わっていない、時刻のある予定だけ。カレンダー単位の指定は設定で外す。

@@ -15,6 +15,8 @@ enum ScreenshotDemoData {
             CalendarEventSnapshot(id: "demo-event-1", title: copy.events[0], startsAt: time(9, 30), endsAt: time(10), calendarTitle: copy.calendar, participationStatus: .accepted),
             CalendarEventSnapshot(id: "demo-event-2", title: copy.events[1], startsAt: time(13), endsAt: time(14), calendarTitle: copy.calendar, participationStatus: .accepted),
             CalendarEventSnapshot(id: "demo-event-3", title: copy.events[2], startsAt: time(16), endsAt: time(16, 45), calendarTitle: copy.calendar, participationStatus: .accepted),
+            // Unanswered: the default participation filter keeps it visible with the "No Response" tag.
+            CalendarEventSnapshot(id: "demo-event-invite", title: copy.events[3], startsAt: time(11, 30), endsAt: time(12), calendarTitle: copy.calendar, participationStatus: .pending),
         ]
         try await database.lifeLog.save(calendarEvents: events)
 
@@ -205,18 +207,33 @@ struct DemoCalendarEventDetails: CalendarEventDetailsReading {
         let me = person("Aoi Mori", .accepted, .required, isMe: true)
         let mika = person("Mika Sato", .accepted, .chair)
         let room = CalendarAttendee(name: room, email: "room-4a@resource.example.com", status: .accepted, role: .nonParticipant, kind: .room)
-        func details(_ index: Int, location: String? = nil, attendees: [CalendarAttendee]) -> CalendarEventDetails {
-            CalendarEventDetails(eventID: eventID, startsAt: startsAt, externalIdentifier: "\(eventID)@google.com",
-                                 notes: descriptions[index], location: location, organizer: attendees[0], attendees: attendees)
+        /// A Google-shaped identifier gets "Open in Google Calendar"; the others offer only "Open in Calendar".
+        func details(_ index: Int?, externalIdentifier: String? = nil, location: String? = nil,
+                     attendees: [CalendarAttendee]) -> CalendarEventDetails {
+            let externalIdentifier = externalIdentifier ?? "\(eventID)@google.com"
+            return CalendarEventDetails(
+                eventID: eventID, startsAt: startsAt, externalIdentifier: externalIdentifier,
+                notes: index.map { descriptions[$0] }, location: location, organizer: attendees[0], attendees: attendees,
+                googleCalendarURL: CalendarEventLink.googleCalendar(externalIdentifier: externalIdentifier, calendarEmail: me.email,
+                                                                    occurrenceStart: nil, isAllDay: false)
+            )
         }
         switch eventID {
         case "demo-event-1":
-            return details(0, attendees: [mika, me, person("Ren Kato", .tentative, .optional), room])
+            return details(0, externalIdentifier: "demo0standup0abc@google.com",
+                           attendees: [mika, me, person("Ren Kato", .tentative, .optional), room])
         case "demo-event-2":
-            return details(1, location: "https://example.zoom.us/j/81234567890?pwd=demo",
+            return details(1, externalIdentifier: "040000008200E00074C5B7101A82E0080000000000000000000000000000000000",
+                           location: "https://example.zoom.us/j/81234567890?pwd=demo",
                            attendees: [me, person("Sora Ito", .pending, .required), person("Mika Sato", .declined, .required)])
         case "demo-event-3":
             return details(2, attendees: [person("Ren Kato", .accepted, .chair), me, person("Mika Sato", .accepted, .required), person("Sora Ito", .pending, .required)])
+        case "demo-event-invite":
+            var unanswered = me
+            unanswered.status = .pending
+            return details(nil, externalIdentifier: "demo0pricing0abc@google.com",
+                           location: "https://meet.google.com/xyz-abcd-efg",
+                           attendees: [person("Sora Ito", .accepted, .chair), unanswered])
         case "demo-event-weekly":
             return details(3, attendees: [mika, me])
         case ScreenshotDemoData.meetingSoonID:
@@ -280,7 +297,7 @@ struct DemoCopy {
 
     static let japanese = DemoCopy(
         language: .japanese,
-        events: ["プロダクト朝会", "デザインレビュー", "次のリリース計画"],
+        events: ["プロダクト朝会", "デザインレビュー", "次のリリース計画", "価格改定の相談"],
         calendar: "仕事",
         utterances: [
             "検索とエクスポートが揃ったので、今日は初回体験の流れを確認します。",
@@ -331,7 +348,7 @@ struct DemoCopy {
 
     static let english = DemoCopy(
         language: .english,
-        events: ["Product Standup", "Design Review", "Next Release Planning"],
+        events: ["Product Standup", "Design Review", "Next Release Planning", "Pricing Sync"],
         calendar: "Work",
         utterances: [
             "Search and export are in, so today I'm walking through the first-run experience.",
@@ -382,7 +399,7 @@ struct DemoCopy {
 
     static let chinese = DemoCopy(
         language: .simplifiedChinese,
-        events: ["产品晨会", "设计评审", "下个版本规划"],
+        events: ["产品晨会", "设计评审", "下个版本规划", "定价沟通会"],
         calendar: "工作",
         utterances: [
             "搜索和导出都做好了，今天来过一遍首次使用的流程。",

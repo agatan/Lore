@@ -62,8 +62,21 @@ public actor CalendarProvider: CalendarEventDetailsReading {
             notes: event.notes, location: event.location, url: event.url,
             organizer: event.organizer.map(attendee),
             attendees: (event.attendees ?? []).map(attendee),
-            isCanceled: event.status == .canceled
+            isCanceled: event.status == .canceled,
+            googleCalendarURL: CalendarEventLink.googleCalendar(
+                externalIdentifier: event.calendarItemExternalIdentifier,
+                calendarEmail: calendarEmail(of: event.calendar),
+                occurrenceStart: event.hasRecurrenceRules || event.isDetached ? event.occurrenceDate : nil,
+                isAllDay: event.isAllDay
+            )
         )
+    }
+
+    /// A Google account syncs over CalDAV. Its primary calendar is titled with the account email,
+    /// and the account (source) title may be the email too. Anything else is not an address.
+    private static func calendarEmail(of calendar: EKCalendar) -> String? {
+        guard calendar.source?.sourceType == .calDAV else { return nil }
+        return [calendar.title, calendar.source?.title].compactMap(\.self).first(where: CalendarEventLink.isEmailAddress)
     }
 
     private static func attendee(_ participant: EKParticipant) -> CalendarAttendee {

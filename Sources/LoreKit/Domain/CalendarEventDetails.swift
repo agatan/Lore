@@ -14,19 +14,22 @@ public struct CalendarEventDetails: Sendable, Hashable, Codable {
     public let attendees: [CalendarAttendee]
     public let isCanceled: Bool
     public let conferenceLink: ConferenceLink?
+    /// From `CalendarEventLink.googleCalendar`; nil unless the event has the Google Calendar shape.
+    public let googleCalendarURL: URL?
 
     public init(eventID: String, startsAt: Date, externalIdentifier: String? = nil, notes: String? = nil,
                 location: String? = nil, url: URL? = nil, organizer: CalendarAttendee? = nil,
-                attendees: [CalendarAttendee] = [], isCanceled: Bool = false) {
+                attendees: [CalendarAttendee] = [], isCanceled: Bool = false, googleCalendarURL: URL? = nil) {
         self.eventID = eventID; self.startsAt = startsAt; self.externalIdentifier = externalIdentifier
         self.notes = notes; self.location = location; self.url = url
         self.organizer = organizer; self.attendees = attendees; self.isCanceled = isCanceled
+        self.googleCalendarURL = googleCalendarURL
         conferenceLink = ConferenceLink.first(url: url, location: location, notes: notes)
     }
 
     /// The join link is derived, so it is rebuilt from the decoded fields instead of being encoded.
     private enum CodingKeys: String, CodingKey {
-        case eventID, startsAt, externalIdentifier, notes, location, url, organizer, attendees, isCanceled
+        case eventID, startsAt, externalIdentifier, notes, location, url, organizer, attendees, isCanceled, googleCalendarURL
     }
 
     public init(from decoder: any Decoder) throws {
@@ -36,7 +39,8 @@ public struct CalendarEventDetails: Sendable, Hashable, Codable {
             externalIdentifier: try c.decodeIfPresent(String.self, forKey: .externalIdentifier),
             notes: try c.decodeIfPresent(String.self, forKey: .notes), location: try c.decodeIfPresent(String.self, forKey: .location),
             url: try c.decodeIfPresent(URL.self, forKey: .url), organizer: try c.decodeIfPresent(CalendarAttendee.self, forKey: .organizer),
-            attendees: try c.decode([CalendarAttendee].self, forKey: .attendees), isCanceled: try c.decode(Bool.self, forKey: .isCanceled)
+            attendees: try c.decode([CalendarAttendee].self, forKey: .attendees), isCanceled: try c.decode(Bool.self, forKey: .isCanceled),
+            googleCalendarURL: try c.decodeIfPresent(URL.self, forKey: .googleCalendarURL)
         )
     }
 
@@ -51,6 +55,7 @@ public struct CalendarEventDetails: Sendable, Hashable, Codable {
         try c.encodeIfPresent(organizer, forKey: .organizer)
         try c.encode(attendees, forKey: .attendees)
         try c.encode(isCanceled, forKey: .isCanceled)
+        try c.encodeIfPresent(googleCalendarURL, forKey: .googleCalendarURL)
     }
 }
 
