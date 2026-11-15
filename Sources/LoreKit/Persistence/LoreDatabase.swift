@@ -593,6 +593,12 @@ public final class LoreDatabase: Sendable {
                 ])
             }
             try db.execute(sql: """
+                INSERT INTO calendar_event_snapshots_new (id, start_day, external_identifier, title, starts_at, ends_at,
+                  calendar_title, is_all_day, participation_status)
+                SELECT n.event_id, n.scope_day, s.external_identifier, s.title, n.range_start, n.range_end,
+                  s.calendar_title, s.is_all_day, s.participation_status
+                FROM generated_notes n JOIN calendar_event_snapshots s ON s.id = n.event_id
+                WHERE NOT EXISTS (SELECT 1 FROM calendar_event_snapshots_new x WHERE x.id = n.event_id AND x.start_day = n.scope_day);
                 DROP TABLE calendar_event_snapshots;
                 ALTER TABLE calendar_event_snapshots_new RENAME TO calendar_event_snapshots;
                 """)

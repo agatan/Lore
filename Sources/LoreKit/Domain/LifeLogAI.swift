@@ -67,6 +67,8 @@ public struct EventOccurrence: Hashable, Codable, Sendable {
     public init(_ event: CalendarEventSnapshot, calendar: Calendar = .current) {
         self.init(eventID: event.id, day: LifeLogDateKey.string(for: event.startsAt, calendar: calendar))
     }
+
+    public var timelineItemID: String { "e-\(eventID)@\(day)" }
 }
 
 public enum GeneratedNoteKind: String, Codable, Sendable {

@@ -168,12 +168,12 @@ public struct LifeLogDay: Sendable {
     public var calendarEvents: [CalendarEventSnapshot]
     /// AI notes whose scope is this day.
     public var generatedNotes: [GeneratedNote]
-    /// The latest earlier occurrence with recorded speech, keyed by the event identifier.
-    public var previousOccurrences: [String: PreviousEventOccurrence]
+    /// The latest earlier occurrence with recorded speech, keyed by the occurrence it precedes.
+    public var previousOccurrences: [EventOccurrence: PreviousEventOccurrence]
 
     public init(utterances: [LifeLogUtterance] = [], dictations: [LifeLogDictation] = [], memos: [LifeLogMemo] = [],
                 calendarEvents: [CalendarEventSnapshot] = [], generatedNotes: [GeneratedNote] = [],
-                previousOccurrences: [String: PreviousEventOccurrence] = [:]) {
+                previousOccurrences: [EventOccurrence: PreviousEventOccurrence] = [:]) {
         self.utterances = utterances
         self.dictations = dictations
         self.memos = memos
@@ -190,7 +190,7 @@ public struct LifeLogDay: Sendable {
         aiExcludedEventIDs: Set<String>
     ) -> EventLastTime? {
         guard !event.isAllDay, !recordingExclusions.excludes(event),
-              let previous = previousOccurrences[event.id] else { return nil }
+              let previous = previousOccurrences[EventOccurrence(event)] else { return nil }
         guard let notes = previous.notes, !aiSettings.excludes(event, excludedEventIDs: aiExcludedEventIDs) else {
             return EventLastTime(previous: previous, followUps: [])
         }
@@ -201,6 +201,10 @@ public struct LifeLogDay: Sendable {
     public func eventNotes(for event: CalendarEventSnapshot, calendar: Calendar = .current) -> GeneratedNote? {
         let scope = GeneratedNoteScope.event(EventOccurrence(event, calendar: calendar))
         return generatedNotes.first { $0.kind == .eventNotes && $0.scope == scope }
+    }
+
+    public func event(of note: GeneratedNote, calendar: Calendar = .current) -> CalendarEventSnapshot? {
+        calendarEvents.first { .event(EventOccurrence($0, calendar: calendar)) == note.scope }
     }
 }
 
