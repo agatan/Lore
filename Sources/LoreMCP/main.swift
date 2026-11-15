@@ -6,7 +6,7 @@ import LoreKit
 struct LoreMCP {
     static func main() async {
         do {
-            let service = try await LoreAutomationService.openDefault()
+            let service = try await LoreAutomationService.openDefault(eventDetails: CalendarProvider())
             while let line = readLine() {
                 guard !line.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { continue }
                 let response = await handle(line, service: service)
@@ -59,7 +59,7 @@ struct LoreMCP {
         switch name {
         case "life_log_export":
             let date = try optionalDay("date", in: arguments) ?? Date()
-            return try await service.exportDay(date, options: exportOptions(arguments["include"], allowsAINotes: true))
+            return try await service.exportDay(date, options: exportOptions(arguments["include"], isExport: true))
         case "life_log_days":
             let from = try optionalDay("from", in: arguments)
             let to = try optionalDay("to", in: arguments)
@@ -99,19 +99,14 @@ struct LoreMCP {
     }
 
     /// 省略時は全項目。未知の種類はAIの綴り違いを黙って無視しないようerrorにする。
-    private static func exportOptions(_ value: Any?, allowsAINotes: Bool = false) throws -> LifeLogTextExporter.Options {
+    private static func exportOptions(_ value: Any?, isExport: Bool = false) throws -> LifeLogTextExporter.Options {
         guard let value else { return .init() }
         guard let values = value as? [String] else { throw MCPError.invalidArgument("include") }
-        let allowed: Set<String> = Set(["calendar", "speech", "voice-input", "memos"] + (allowsAINotes ? ["ai-notes"] : []))
         let names = Set(values)
-        guard names.isSubset(of: allowed) else { throw MCPError.invalidArgument("include") }
-        return .init(
-            includesCalendarEvents: names.contains("calendar"),
-            includesUtterances: names.contains("speech"),
-            includesDictations: names.contains("voice-input"),
-            includesMemos: names.contains("memos"),
-            includesAINotes: names.contains("ai-notes")
-        )
+        guard LifeLogTextExporter.Options.unknownIncludeNames(in: names, isExport: isExport).isEmpty else {
+            throw MCPError.invalidArgument("include")
+        }
+        return .init(includeNames: names)
     }
 
     private static let instructions = """
@@ -129,8 +124,8 @@ struct LoreMCP {
 
     private static let exportIncludeSchema: [String: Any] = [
         "type": "array",
-        "description": "含める種類。calendar=予定、speech=ライフログの発話、voice-input=音声入力の結果、memos=手入力とボイスメモ、ai-notes=LoreのAIが生成した予定のノート。省略時はai-notes以外のすべて",
-        "items": ["type": "string", "enum": ["calendar", "speech", "voice-input", "memos", "ai-notes"]],
+        "description": "含める種類。calendar=予定、speech=ライフログの発話、voice-input=音声入力の結果、memos=手入力とボイスメモ、ai-notes=LoreのAIが生成した予定のノート、event-details=各予定の説明と参加者(メールアドレスを含む。calendarと一緒に指定する)。省略時はai-notesとevent-details以外のすべて",
+        "items": ["type": "string", "enum": ["calendar", "speech", "voice-input", "memos", "ai-notes", "event-details"]],
     ]
 
     private static var tools: [[String: Any]] { [
@@ -141,7 +136,7 @@ struct LoreMCP {
                 "to": stringSchema("終了日YYYY-MM-DD(含む)。省略時は今日。期間は最大366日"),
              ]),
         tool("life_log_range",
-             "期間内の予定・発話・音声入力・メモを時刻順の構造化JSON配列で返す。各要素はid、kind(event|utterance|dictation|memo)、day、start、end(任意)、text。eventはtitle、calendar、allDayも持つ。時刻はローカル時差付きISO8601。週や月の振り返り、要約、TODO抽出、雑なメモ(kind=memo、include=[memos])を読んで別のメモアプリやタスク管理へ清書・転記する材料に使う。Loreは読み取り専用で、転記先への書き込みは呼び出し側が行う",
+             "期間内の予定・発話・音声入力・メモを時刻順の構造化JSON配列で返す。各要素はid、kind(event|utterance|dictation|memo)、day、start、end(任意)、text。eventはtitle、calendar、allDayに加え、分かる場合だけexternalIdentifier(カレンダーサーバーが予定に付ける識別子。GoogleカレンダーやDriveのコネクタの予定と突き合わせる)、conferenceURL(Meet/Zoom/Teams/Webexの参加リンク)、description、organizer(name、email)、attendees(name、email、response=accepted|declined|tentative|pending|unknown、role=required|optional|chair|nonParticipant|unknown)を持つ。分からない項目は省略される。繰り返し予定の回はstartで区別する。時刻はローカル時差付きISO8601。週や月の振り返り、要約、TODO抽出、雑なメモ(kind=memo、include=[memos])を読んで別のメモアプリやタスク管理へ清書・転記する材料に使う。Loreは読み取り専用で、転記先への書き込みは呼び出し側が行う",
              properties: [
                 "from": stringSchema("開始日YYYY-MM-DD"),
                 "to": stringSchema("終了日YYYY-MM-DD(含む)。省略時はfromの1日だけ。期間は最大31日"),

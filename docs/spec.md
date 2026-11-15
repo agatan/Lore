@@ -325,11 +325,23 @@ The `initialize` result carries `instructions` for the AI client. They say that 
 | Tool | Arguments | Result |
 |---|---|---|
 | `life_log_days` | `from?: YYYY-MM-DD`, `to?: YYYY-MM-DD`. `to` defaults to today and `from` defaults to 29 days before `to`. At most 366 days | An array with only the days that have records. Each has `day`, the counts `utterances`, `dictations`, `memos`, and `events`, and `spokenSeconds`, the seconds of utterances that remain in the timeline |
-| `life_log_range` | `from: YYYY-MM-DD`, `to?: YYYY-MM-DD` (inclusive, defaults to the single day `from`, at most 31 days), `include?: [calendar,speech,voice-input,memos]` (defaults to all) | An array of entries in time order. Each has `id`, `kind` (`event`, `utterance`, `dictation`, `memo`), `day`, `start`, optional `end`, and `text`. Events also have `title`, `calendar`, and `allDay` |
-| `life_log_export` | `date?: YYYY-MM-DD`, `include?: [calendar,speech,voice-input,memos,ai-notes]` (defaults to all except `ai-notes`) | Human-readable Markdown |
+| `life_log_range` | `from: YYYY-MM-DD`, `to?: YYYY-MM-DD` (inclusive, defaults to the single day `from`, at most 31 days), `include?: [calendar,speech,voice-input,memos]` (defaults to all) | An array of entries in time order. Each has `id`, `kind` (`event`, `utterance`, `dictation`, `memo`), `day`, `start`, optional `end`, and `text`. Events also have `title`, `calendar`, and `allDay`, and the optional event fields below |
+| `life_log_export` | `date?: YYYY-MM-DD`, `include?: [calendar,speech,voice-input,memos,ai-notes,event-details]` (defaults to all except `ai-notes` and `event-details`) | Human-readable Markdown |
 | `life_log_ai_notes` | `from?: YYYY-MM-DD`, `to?: YYYY-MM-DD`. `to` defaults to today and `from` to `to`. At most 31 days | An array of AI-generated notes in time order. Each has `id`, `generated: true`, `kind` (`event_notes` or `daily_digest`), `day`, `eventId` (absent for a daily digest), `start`, `end`, `provider`, `model`, `createdAt`, `stale` (an array of `event_changed` and `sources_deleted`), `omittedSources` (the number of records left out to fit the provider's input limit), `sourceUtteranceIds`, `sourceMemoIds`, and `sections` (each with `kind`: `summary` (daily digest only), `decisions`, `action_items`, or `open_questions`, and `items` with `text`, optional `owner`, and `sources`) |
 | `life_log_search` | `query: string`, `limit?: integer` (minimum 1, default 100) | Tab-separated lines of `day`, `kind` (`utterance`, `dictation`, `memo`, or `generated` for AI-generated text), and text, newest first |
 
+- **Event details.** Each `event` entry of `life_log_range` has these optional fields:
+
+  | Field | Value |
+  |---|---|
+  | `externalIdentifier` | The identifier that the calendar server gives the event (the saved snapshot value, or the calendar's when the snapshot has none), for matching the event in an external calendar or Drive connector. Use `start` to tell the occurrences of a repeating event apart |
+  | `conferenceURL` | The Google Meet, Zoom, Microsoft Teams, or Webex join link (section 4.3) |
+  | `description` | The event description |
+  | `organizer` | An object with optional `name` and `email` |
+  | `attendees` | An array of objects with optional `name` and `email`, plus `response` (`accepted`, `declined`, `tentative`, `pending`, `unknown`) and `role` (`required`, `optional`, `chair`, `nonParticipant`, `unknown`) |
+
+  A field that is unknown is left out of the entry. It is never an empty string, an empty array, or `null`. Except for `externalIdentifier`, the fields are read from the calendar when the request runs and are not stored. An event that is no longer in the calendar, or a request from a process that does not have full calendar access, returns the snapshot fields only. The MCP server never asks for calendar access.
+- `event-details` (`life_log_export` only) adds the description and the attendees of each event to the Markdown, as indented lines under the event. It needs `calendar` in the same list, otherwise it is an error, because it adds to the events of the export. Events without a description or attendees get no lines. Without `event-details` the Markdown is exactly the same as before.
 - Times are ISO 8601 strings with the local UTC offset. Events follow the participation filter of the Life Log settings. Life Log utterances that overlap a successful dictation are excluded, as on screen and in exports.
 - MCP never changes the user's records and offers no write-back to Lore. Rewriting utterances or memos and copying them into another app is the job of the AI on the MCP client side. The server reads the database on the Mac and makes no network connection. Like the app, opening the database applies pending migrations with their backup, takes the daily backup, and performs the one-time Koe data migration.
 

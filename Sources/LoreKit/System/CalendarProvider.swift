@@ -6,7 +6,12 @@ public protocol CalendarEventDetailsReading: Sendable {
     func details(eventID: String, startsAt: Date) async -> CalendarEventDetails?
 }
 
-public actor CalendarProvider: CalendarEventDetailsReading {
+/// Reads the details of every event in a range, in one call. The MCP server uses it to describe a day or period.
+public protocol CalendarEventDetailsRangeReading: Sendable {
+    func details(start: Date, end: Date, selectedCalendars: Set<String>) async -> [CalendarEventDetails]
+}
+
+public actor CalendarProvider: CalendarEventDetailsReading, CalendarEventDetailsRangeReading {
     private let store = EKEventStore()
     public init() {}
 
