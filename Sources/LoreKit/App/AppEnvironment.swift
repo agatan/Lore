@@ -102,7 +102,7 @@ public final class AppEnvironment {
         )
         if Self.forcesOnboardingForScreenshot {
             settings.onboardingCompleted = false
-            settings.lifeLogAudioStorageConfirmed = false
+            if Self.usesScreenshotDemoData { settings.lifeLogAudioStorageConfirmed = false }
         }
         wireHotkeys()
         wirePowerNotifications()
