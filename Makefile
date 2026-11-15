@@ -53,9 +53,6 @@ app: build tools
 	@cp THIRD_PARTY_NOTICES "$(CONTENTS)/Resources/THIRD_PARTY_NOTICES.txt"
 	@printf 'APPL????' > "$(CONTENTS)/PkgInfo"
 	@if [ -f Resources/AppIcon.icns ]; then cp Resources/AppIcon.icns "$(CONTENTS)/Resources/"; fi
-	@# System controls (sidebar selection, menus, switches) read the app accent from the asset catalog.
-	@xcrun actool --compile "$(CONTENTS)/Resources" --platform macosx --minimum-deployment-target 26.0 \
-		--output-format human-readable-text --errors --warnings Resources/Assets.xcassets >/dev/null
 	@for b in $(BUILD_DIR)/*.bundle; do \
 		[ -e "$$b" ] && cp -R "$$b" "$(CONTENTS)/Resources/" || true; \
 	done

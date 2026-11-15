@@ -7,12 +7,11 @@ public enum LoreTheme {
     //
     // App iconと同じ3色で組む。墨（操作と選択）、白（面）、点のrose（いま記録している声）。
     // 他の色は状態の意味を持つときだけ使い、飾りには使わない。
+    // Sidebarの選択、pop-up、switchなどsystemのcontrolはmacOSのアクセントカラーのままにする。
+    // 灰色で上書きすると、使えるcontrolが無効に見える。
 
     /// 操作、選択、強調に使う墨色。ライトでは墨、ダークでは白に近い色へ反転する。
     public static let accent = adaptive(light: NSColor(red: 0.09, green: 0.09, blue: 0.12, alpha: 1), dark: NSColor(white: 0.94, alpha: 1))
-    /// Sidebarの選択やswitchなどsystemのcontrolの色。墨で広い面を塗ると白黒の差が強すぎて
-    /// 読みにくいため、墨より明るい灰色にする。`Resources/Assets.xcassets`の`AccentColor`と同じ値。
-    public static let control = adaptive(light: NSColor(red: 0.45, green: 0.46, blue: 0.50, alpha: 1), dark: NSColor(red: 0.40, green: 0.41, blue: 0.45, alpha: 1))
     /// 墨色で塗った面に載せる文字と記号の色。
     public static let onAccent = adaptive(light: .white, dark: NSColor(red: 0.09, green: 0.09, blue: 0.12, alpha: 1))
     /// App iconの点。録音中、今日、現在時刻など「いま」を示す所だけに使う。
