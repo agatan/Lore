@@ -180,30 +180,20 @@ public struct GeneratedNote: Identifiable, Sendable, Hashable {
         sections.first { $0.kind == kind }?.items ?? []
     }
 
-    /// What the snapshot table holds for the note's event. It keeps one row per event identifier, so a
-    /// repeating event's row may describe another day's occurrence, which says nothing about this note.
-    public enum EventSnapshotState: Sendable {
-        case occurrence(CalendarEventSnapshot)
-        case otherOccurrence
-        case missing
-    }
-
+    /// `occurrence` is the snapshot of the note's event on its scope day, or nil when the event left that day.
     public static func staleReasons(
         rangeStart: Date,
         rangeEnd: Date,
-        event: EventSnapshotState,
+        occurrence: CalendarEventSnapshot?,
         missingSourceCount: Int
     ) -> Set<GeneratedNoteStaleReason> {
         var reasons: Set<GeneratedNoteStaleReason> = []
-        switch event {
-        case .occurrence(let current):
+        if let current = occurrence {
             if abs(current.startsAt.timeIntervalSince(rangeStart)) >= 1 || abs(current.endsAt.timeIntervalSince(rangeEnd)) >= 1 {
                 reasons.insert(.eventChanged)
             }
-        case .missing:
+        } else {
             reasons.insert(.eventChanged)
-        case .otherOccurrence:
-            break
         }
         if missingSourceCount > 0 { reasons.insert(.sourcesDeleted) }
         return reasons
