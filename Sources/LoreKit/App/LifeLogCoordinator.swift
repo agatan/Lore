@@ -22,11 +22,13 @@ public final class LifeLogCoordinator {
     public private(set) var activeTranscriptionAudioDuration: TimeInterval?
     public private(set) var isRecoveringCapture = false
     public private(set) var isSuspendedForVoiceMemo = false
+    /// 記録意図を保ったままマイクを止めている理由。一時停止、または記録しない予定の進行中。
+    public private(set) var hold: LifeLogCaptureHold?
     public private(set) var isRefreshingCalendar = false
     public private(set) var lastCalendarRefreshAt: Date?
     private var lastCalendarRefreshDay: String?
 
-    private let capture = ContinuousAudioCapture()
+    private let capture: ContinuousAudioCapture
     private let calendarProvider = CalendarProvider()
     private var database: LoreDatabase?
     private var engines: EngineRegistry?
@@ -62,7 +64,9 @@ public final class LifeLogCoordinator {
     nonisolated static let livePreviewRefreshInterval: TimeInterval = 1.5
     nonisolated static let livePreviewWindowDuration: TimeInterval = 5
 
-    public init() {
+    /// `audioRoot`はUI test bundleが利用者の音声folderへ書かないために渡す。
+    public init(audioRoot: URL? = nil) {
+        capture = audioRoot.map { ContinuousAudioCapture(root: $0) } ?? ContinuousAudioCapture()
         capture.onCommitted = { [weak self] chunk in await self?.commitLiveChunk(chunk) }
         capture.onFinished = { [weak self] in await self?.captureWriterFinished() }
         capture.onFailure = { [weak self] error in self?.handleCaptureFailure(error) }
@@ -89,7 +93,7 @@ public final class LifeLogCoordinator {
     public func selectInputDevice(uid: String?) {
         guard capture.inputDeviceUID != uid else { return }
         capture.inputDeviceUID = uid
-        guard captureRequested else { return }
+        guard captureRequested, hold == nil else { return }
         isRecoveringCapture = true
         captureRetryTask?.cancel()
         captureRetryTask = nil
@@ -105,9 +109,9 @@ public final class LifeLogCoordinator {
         captureRequested = enabled
         if enabled {
             if !wasRequested { captureRetryAttempt = 0 }
-            guard !isCapturing, liveTranscriptionTask == nil else { return }
-            Task { await startLiveCapture() }
             scheduleDayRollover()
+            guard hold == nil, !isCapturing, liveTranscriptionTask == nil else { return }
+            Task { await startLiveCapture() }
         } else {
             restartForTranscriptionConfiguration = false
             captureRetryTask?.cancel()
@@ -143,6 +147,7 @@ public final class LifeLogCoordinator {
 
     public var captureStatusText: String {
         if isSuspendedForVoiceMemo { return "ボイスメモ中は一時停止" }
+        if isHeld { return "一時停止中" }
         if isRecoveringCapture { return "再接続中" }
         if isCapturing { return "記録中" }
         if captureRequested { return "開始準備中" }
@@ -151,6 +156,36 @@ public final class LifeLogCoordinator {
     }
 
     public var hasCaptureIntent: Bool { captureRequested }
+
+    /// 記録意図はあるが、一時停止または予定のために録音していない。
+    public var isHeld: Bool { captureRequested && hold != nil }
+
+    /// 記録意図があり、どの中断(スリープ、ボイスメモ、hold)にも掛かっていない。
+    private var mayRunCapture: Bool {
+        captureRequested && !isSuspendedForSleep && !isSuspendedForVoiceMemo && hold == nil
+    }
+
+    /// 一時停止と「記録しない予定」の境界。スリープやボイスメモの中断と同じく記録意図は保ち、
+    /// 現在のchunkを確定してマイクを止める。解除すると同じ意図で再開する。
+    public func setHold(_ newHold: LifeLogCaptureHold?) {
+        let wasHeld = hold != nil
+        hold = newHold
+        guard wasHeld != (newHold != nil) else { return }
+        if newHold != nil {
+            captureRetryTask?.cancel()
+            captureRetryTask = nil
+            isRecoveringCapture = false
+            restartForTranscriptionConfiguration = false
+            if capture.isRunning { capture.stop() }
+        } else if mayRunCapture {
+            captureRetryAttempt = 0
+            if liveTranscriptionTask == nil {
+                Task { await startLiveCapture() }
+            } else {
+                scheduleCaptureRetry(unless: EngineError.failed(String(lore: "前の音声ストリームを終了しています")))
+            }
+        }
+    }
 
     public var liveActivityStartedAt: Date? {
         if isHearingSpeech { return liveSpeechStartedAt }
@@ -215,7 +250,7 @@ public final class LifeLogCoordinator {
     public func systemDidWake() {
         guard isSuspendedForSleep else { return }
         isSuspendedForSleep = false
-        guard captureRequested else {
+        guard mayRunCapture else {
             isRecoveringCapture = false
             return
         }
@@ -249,14 +284,13 @@ public final class LifeLogCoordinator {
     public func resumeAfterVoiceMemo() {
         guard isSuspendedForVoiceMemo else { return }
         isSuspendedForVoiceMemo = false
-        guard captureRequested, !isSuspendedForSleep else { return }
+        guard mayRunCapture else { return }
         captureRetryAttempt = 0
         scheduleCaptureRetry(unless: EngineError.failed(String(lore: "ボイスメモが終了しました")))
     }
 
     private func startLiveCapture() async {
-        guard captureRequested, !isSuspendedForSleep, !isSuspendedForVoiceMemo,
-              !isStartingCapture, let engines else { return }
+        guard mayRunCapture, !isStartingCapture, let engines else { return }
         isStartingCapture = true
         defer { isStartingCapture = false }
         do {
@@ -269,7 +303,7 @@ public final class LifeLogCoordinator {
             )
             let stt = engines.lifeLogStt
             let format = try await stt.prepare(hints: hints) ?? AudioFormats.canonical
-            guard captureRequested, !isSuspendedForSleep, !isSuspendedForVoiceMemo else { return }
+            guard mayRunCapture else { return }
             let startedAt = Date()
             let stream = try capture.start(format: format)
             liveSessionStartedAt = startedAt
@@ -324,8 +358,7 @@ public final class LifeLogCoordinator {
     }
 
     private func scheduleCaptureRetry(unless error: Error) {
-        guard captureRequested, !isSuspendedForSleep, !isSuspendedForVoiceMemo,
-              Self.shouldRetryCapture(after: error) else { return }
+        guard mayRunCapture, Self.shouldRetryCapture(after: error) else { return }
         captureRetryTask?.cancel()
         isRecoveringCapture = true
         captureRetryAttempt += 1
@@ -725,10 +758,10 @@ public final class LifeLogCoordinator {
         captureFinished = false
         await reload()
         liveTranscriptionTask = nil
-        if restartForTranscriptionConfiguration, captureRequested, !isSuspendedForSleep, !isSuspendedForVoiceMemo {
+        if restartForTranscriptionConfiguration, mayRunCapture {
             restartForTranscriptionConfiguration = false
             await startLiveCapture()
-        } else if captureRequested, isRecoveringCapture, !isSuspendedForSleep, !isSuspendedForVoiceMemo {
+        } else if isRecoveringCapture, mayRunCapture {
             scheduleCaptureRetry(unless: EngineError.failed(String(lore: "音声streamの終了後に再接続します")))
         }
     }
@@ -799,6 +832,19 @@ public final class LifeLogCoordinator {
             await reload()
             await loadActivity(containing: selectedDate)
         } catch { fail(error) }
+    }
+
+    /// 「記録しない」予定の判断に使う、現在の前後の予定。表示するcalendarの選択に関係なく全calendarから読む。
+    /// アクセスを尋ねないため、呼び出し側が許可済みの時だけ呼ぶ。失敗時は表示してnilを返す。
+    public func eventsAroundNow(_ now: Date) async -> [CalendarEventSnapshot]? {
+        do {
+            return try await calendarProvider.events(
+                start: now.addingTimeInterval(-12 * 3600), end: now.addingTimeInterval(24 * 3600), selectedCalendars: []
+            )
+        } catch {
+            fail(error)
+            return nil
+        }
     }
 
     /// Windowの再表示ごとにEventKitとDBを読み直さず、同じ日の新しいsnapshotを再利用する。

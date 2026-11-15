@@ -183,4 +183,170 @@ struct LifeLogScheduleEnvironmentTests {
         #expect(!env.lifeLogCaptureState.ownsCapture)
         #expect(env.lifeLog.errorMessage == String(lore: "自動記録を始められませんでした。録音の保存に同意するため、一度手動でライフログを開始してください"))
     }
+
+    /// 録音保存に同意済みで、自動記録が無効な状態にして`body`を実行し、設定を戻す。
+    @MainActor
+    private func withManualRecording(_ body: (AppEnvironment) throws -> Void) rethrows {
+        let env = AppEnvironment()
+        let previousSchedule = env.settings.lifeLogSchedule
+        let previousConsent = env.settings.lifeLogAudioStorageConfirmed
+        let previousPause = env.settings.lifeLogPause
+        defer {
+            env.setLifeLogCaptureEnabled(false)
+            env.settings.lifeLogSchedule = previousSchedule
+            env.settings.lifeLogAudioStorageConfirmed = previousConsent
+            env.settings.lifeLogPause = previousPause
+        }
+        env.settings.lifeLogSchedule = LifeLogSchedule(isEnabled: false)
+        env.settings.lifeLogAudioStorageConfirmed = true
+        env.setLifeLogCaptureEnabled(true)
+        try body(env)
+    }
+
+    @MainActor
+    @Test("一時停止は記録意図を保ってholdし、再開時刻を保存する。早めの再開で元に戻る")
+    func pauseHoldsAndResumeClears() throws {
+        try withManualRecording { env in
+            let now = Date()
+            try env.pauseLifeLog(.fifteenMinutes, now: now)
+            let resumesAt = now.addingTimeInterval(15 * 60)
+            #expect(env.lifeLog.hasCaptureIntent)
+            #expect(env.lifeLog.hold == .paused(resumesAt: resumesAt))
+            #expect(env.settings.lifeLogPause == LifeLogPause(resumesAt: resumesAt, scheduleOwnedCapture: false))
+            #expect(env.lifeLogScheduleCaption == .resumesAt(AppEnvironment.scheduleTimeText(resumesAt, now: now)))
+
+            env.resumeLifeLog()
+            #expect(env.lifeLog.hasCaptureIntent)
+            #expect(env.lifeLog.hold == nil)
+            #expect(env.settings.lifeLogPause == nil)
+        }
+    }
+
+    @MainActor
+    @Test("再開時刻を過ぎた評価でholdを外し、記録意図を保つ")
+    func expiredPauseResumesOnEvaluation() throws {
+        try withManualRecording { env in
+            let now = Date()
+            try env.pauseLifeLog(.fifteenMinutes, now: now)
+            env.applyLifeLogSchedule(now: now.addingTimeInterval(15 * 60))
+            #expect(env.lifeLog.hasCaptureIntent)
+            #expect(env.lifeLog.hold == nil)
+            #expect(env.settings.lifeLogPause == nil)
+        }
+    }
+
+    @MainActor
+    @Test("一時停止中に止めると一時停止が終わり、後の評価でも再開しない")
+    func stopDuringPauseDoesNotResume() throws {
+        try withManualRecording { env in
+            let now = Date()
+            try env.pauseLifeLog(.fifteenMinutes, now: now)
+            env.setLifeLogCaptureEnabled(false)
+            #expect(!env.lifeLog.hasCaptureIntent)
+            #expect(env.lifeLog.hold == nil)
+            #expect(env.settings.lifeLogPause == nil)
+            env.applyLifeLogSchedule(now: now.addingTimeInterval(16 * 60))
+            #expect(!env.lifeLog.hasCaptureIntent)
+        }
+    }
+
+    /// 前のprocessが`pause`を保存して終了した後の起動を再現する。
+    @MainActor
+    private func withRelaunch(storing pause: LifeLogPause, _ body: (AppEnvironment) -> Void) {
+        let env = AppEnvironment()
+        let previousSchedule = env.settings.lifeLogSchedule
+        let previousConsent = env.settings.lifeLogAudioStorageConfirmed
+        let previousPause = env.settings.lifeLogPause
+        defer {
+            env.setLifeLogCaptureEnabled(false)
+            env.settings.lifeLogSchedule = previousSchedule
+            env.settings.lifeLogAudioStorageConfirmed = previousConsent
+            env.settings.lifeLogPause = previousPause
+        }
+        env.settings.lifeLogSchedule = LifeLogSchedule(isEnabled: false)
+        env.settings.lifeLogAudioStorageConfirmed = true
+        env.settings.lifeLogPause = pause
+        env.restoreLifeLogPause()
+        body(env)
+    }
+
+    @MainActor
+    @Test("一時停止中に終了して再開時刻の前に起動すると、一時停止のまま再開時刻を待つ")
+    func relaunchBeforeResumeTimeStaysPaused() {
+        let now = Date()
+        let pause = LifeLogPause(resumesAt: now.addingTimeInterval(600), scheduleOwnedCapture: false)
+        withRelaunch(storing: pause) { env in
+            env.applyLifeLogSchedule(now: now)
+            #expect(env.lifeLog.hasCaptureIntent)
+            #expect(env.lifeLog.hold == .paused(resumesAt: pause.resumesAt))
+            #expect(env.settings.lifeLogPause == pause)
+
+            env.applyLifeLogSchedule(now: pause.resumesAt)
+            #expect(env.lifeLog.hasCaptureIntent)
+            #expect(env.lifeLog.hold == nil)
+            #expect(env.settings.lifeLogPause == nil)
+        }
+    }
+
+    @MainActor
+    @Test("再開時刻を過ぎてから起動すると、すぐ記録に戻る")
+    func relaunchAfterResumeTimeRecords() {
+        let now = Date()
+        withRelaunch(storing: LifeLogPause(resumesAt: now.addingTimeInterval(-60), scheduleOwnedCapture: false)) { env in
+            env.applyLifeLogSchedule(now: now)
+            #expect(env.lifeLog.hasCaptureIntent)
+            #expect(env.lifeLog.hold == nil)
+            #expect(env.settings.lifeLogPause == nil)
+        }
+    }
+
+    @MainActor
+    @Test("自動記録の一時停止は、時間帯が終わってから起動すると再開しない")
+    func relaunchAfterWindowEndStops() {
+        let now = Date()
+        withRelaunch(storing: LifeLogPause(resumesAt: now.addingTimeInterval(-60), scheduleOwnedCapture: true)) { env in
+            env.applyLifeLogSchedule(now: now)
+            #expect(!env.lifeLog.hasCaptureIntent)
+            #expect(env.lifeLog.hold == nil)
+            #expect(env.settings.lifeLogPause == nil)
+        }
+    }
+
+    @MainActor
+    @Test("終了処理は一時停止を消さない")
+    func terminationKeepsPause() async throws {
+        let env = AppEnvironment()
+        let previousConsent = env.settings.lifeLogAudioStorageConfirmed
+        let previousPause = env.settings.lifeLogPause
+        let previousSchedule = env.settings.lifeLogSchedule
+        defer {
+            env.settings.lifeLogSchedule = previousSchedule
+            env.settings.lifeLogAudioStorageConfirmed = previousConsent
+            env.settings.lifeLogPause = previousPause
+        }
+        env.settings.lifeLogSchedule = LifeLogSchedule(isEnabled: false)
+        env.settings.lifeLogAudioStorageConfirmed = true
+        env.setLifeLogCaptureEnabled(true)
+        let now = Date()
+        try env.pauseLifeLog(.oneHour, now: now)
+
+        await env.prepareForTermination()
+
+        #expect(env.settings.lifeLogPause == LifeLogPause(resumesAt: now.addingTimeInterval(3600), scheduleOwnedCapture: false))
+    }
+
+    @MainActor
+    @Test("記録していない時と、進行中の予定がない時の一時停止は理由を返す")
+    func pauseErrors() throws {
+        let stopped = AppEnvironment()
+        #expect(throws: AppEnvironment.LifeLogPauseError.notRecording) {
+            try stopped.pauseLifeLog(.thirtyMinutes)
+        }
+        try withManualRecording { env in
+            #expect(throws: AppEnvironment.LifeLogPauseError.noCurrentEvent) {
+                try env.pauseLifeLog(.untilEventEnds)
+            }
+            #expect(env.lifeLog.hold == nil)
+        }
+    }
 }

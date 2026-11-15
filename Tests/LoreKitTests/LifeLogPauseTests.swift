@@ -269,3 +269,70 @@ struct LifeLogRecordingExclusionsTests {
         #expect(decoded.excludes(skipped))
     }
 }
+
+@Suite("ライフログのhold")
+@MainActor
+struct LifeLogCoordinatorHoldTests {
+    @Test("holdの間は記録意図を保ったまま一時停止と表示し、録音を始めない")
+    func holdKeepsIntentWithoutCapturing() {
+        let coordinator = LifeLogCoordinator()
+        coordinator.setHold(.paused(resumesAt: Date().addingTimeInterval(900)))
+        coordinator.setCaptureEnabled(true)
+        #expect(coordinator.hasCaptureIntent)
+        #expect(coordinator.isHeld)
+        #expect(!coordinator.isCapturing)
+        #expect(coordinator.captureStatusText == "一時停止中")
+
+        let eventEnd = Date().addingTimeInterval(600)
+        coordinator.setHold(.event(title: "1on1", endsAt: eventEnd))
+        #expect(coordinator.hold == .event(title: "1on1", endsAt: eventEnd))
+        #expect(coordinator.isHeld)
+
+        coordinator.setCaptureEnabled(false)
+        #expect(!coordinator.isHeld)
+        #expect(coordinator.captureStatusText == "停止中")
+    }
+
+    @Test("記録意図がなければ、holdがあっても停止中のまま")
+    func holdWithoutIntentStaysStopped() {
+        let coordinator = LifeLogCoordinator()
+        coordinator.setHold(.event(title: "1on1", endsAt: Date().addingTimeInterval(600)))
+        #expect(!coordinator.hasCaptureIntent)
+        #expect(!coordinator.isHeld)
+        #expect(coordinator.captureStatusText == "停止中")
+    }
+}
+
+@Suite("ライフログの一時停止の保存")
+struct LifeLogPauseSettingsTests {
+    @MainActor
+    @Test("一時停止と記録しない予定は設定に保存され、keyがない保存済み設定は既定値で読める")
+    func persistsAndDecodesMissingKeys() throws {
+        let suite = "lore.tests.pause.\(UUID().uuidString)"
+        let defaults = try #require(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+
+        defaults.set(Data(#"{"holdThresholdMs":400}"#.utf8), forKey: AppSettings.defaultsKey)
+        let legacy = AppSettings(defaults: defaults)
+        #expect(legacy.holdThresholdMs == 400)
+        #expect(legacy.lifeLogPause == nil)
+        #expect(legacy.lifeLogRecordingExclusions.isEmpty)
+
+        let pause = LifeLogPause(resumesAt: Date(timeIntervalSince1970: 1_800_000_000), scheduleOwnedCapture: true)
+        var exclusions = LifeLogRecordingExclusions(calendarTitles: ["Private"])
+        exclusions.setSkipped(true, event: CalendarEventSnapshot(
+            id: "weekly", title: "1on1",
+            startsAt: Date(timeIntervalSince1970: 1_800_000_000), endsAt: Date(timeIntervalSince1970: 1_800_003_600),
+            calendarTitle: "Work"
+        ))
+        legacy.lifeLogPause = pause
+        legacy.lifeLogRecordingExclusions = exclusions
+
+        let reloaded = AppSettings(defaults: defaults)
+        #expect(reloaded.lifeLogPause == pause)
+        #expect(reloaded.lifeLogRecordingExclusions == exclusions)
+
+        reloaded.lifeLogPause = nil
+        #expect(AppSettings(defaults: defaults).lifeLogPause == nil)
+    }
+}

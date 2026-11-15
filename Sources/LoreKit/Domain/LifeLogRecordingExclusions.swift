@@ -52,6 +52,11 @@ public struct LifeLogRecordingExclusions: Codable, Sendable, Equatable {
             .min()
     }
 
+    /// この一回の予定に「記録しない」の印があるか。カレンダー単位の指定は含めない。
+    public func isSkipped(_ event: CalendarEventSnapshot) -> Bool {
+        events.contains { $0.matches(event) }
+    }
+
     public mutating func setSkipped(_ skipped: Bool, event: CalendarEventSnapshot) {
         events.removeAll { $0.matches(event) }
         if skipped {

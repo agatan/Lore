@@ -10,13 +10,13 @@ struct LifeLogCaptureStatus {
     /// 自動記録の時刻は停止中でも次の動きを示す情報なので出す。
     var subtitle: LocalizedStringKey? {
         guard lifeLog.hasCaptureIntent else { return scheduleCaption?.text }
-        // 再接続や一時停止は自動記録の時刻より優先して伝える。
-        if lifeLog.isCapturing, let scheduleCaption { return scheduleCaption.text }
+        // 再接続やボイスメモの中断は自動記録の時刻より優先して伝える。holdの間は再開の時刻を伝える。
+        if lifeLog.isCapturing || lifeLog.isHeld, let scheduleCaption { return scheduleCaption.text }
         return LocalizedStringKey(lifeLog.captureStatusText)
     }
 
     var title: String {
-        if lifeLog.isSuspendedForVoiceMemo { return "ライフログ一時停止中" }
+        if lifeLog.isSuspendedForVoiceMemo || lifeLog.isHeld { return "ライフログ一時停止中" }
         if lifeLog.isRecoveringCapture { return "ライフログ再接続中" }
         if lifeLog.isCapturing { return "ライフログ記録中" }
         if lifeLog.hasCaptureIntent { return "ライフログ開始中" }
@@ -33,6 +33,8 @@ extension AppEnvironment.LifeLogScheduleCaption {
         switch self {
         case .recordingUntil(let time): "自動記録中・\(time)まで"
         case .nextStart(let time): "次の自動記録 \(time)"
+        case .resumesAt(let time): "\(time)に再開"
+        case .heldForEvent(let time): "この予定中は記録しません・\(time)まで"
         }
     }
 }
