@@ -76,8 +76,8 @@ public struct MainWindowView: View {
     }
 
     private var showsOnboarding: Bool {
-        if AppEnvironment.usesScreenshotDemoData {
-            return AppEnvironment.forcesOnboardingForScreenshot
+        if AppEnvironment.usesScreenshotDemoData, !AppEnvironment.forcesOnboardingForScreenshot {
+            return false
         }
         return !env.settings.onboardingCompleted
     }

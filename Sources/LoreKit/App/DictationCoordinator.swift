@@ -94,6 +94,9 @@ public final class DictationCoordinator {
     }
     /// 自動判定の結果(録音前のプレビュー表示用)。
     public private(set) var previewMode: Mode?
+    /// Lore自身の画面が文章の受け取り先になっている間だけ置く(初回案内の「試す」)。
+    /// 録音開始時にLoreが前面なら、前面appへの貼り付けの代わりに確定したrecordをここへ渡す。
+    public var inAppReceiver: (@MainActor (SessionRecord) -> Void)?
 
     public var isRecording: Bool {
         if case .recording = phase { return true }
@@ -116,6 +119,7 @@ public final class DictationCoordinator {
     private var lingerTask: Task<Void, Never>?
     private var unloadTask: Task<Void, Never>?
     private var targetApp: NSRunningApplication?
+    private var sessionReceiver: (@MainActor (SessionRecord) -> Void)?
     private var stopRequestedAt: ContinuousClock.Instant?
     private var recordingStartedAt: ContinuousClock.Instant?
     private var watchdogTask: Task<Void, Never>?
@@ -197,8 +201,9 @@ public final class DictationCoordinator {
         // 前回のデバイス名を残さない。次の録音で実際に束ねたものだけを出す。
         inputDeviceName = nil
 
-        let target = frontmost.target
-        targetApp = frontmost.current
+        sessionReceiver = NSApp.isActive ? inAppReceiver : nil
+        let target = sessionReceiver == nil ? frontmost.target : .unknown
+        targetApp = sessionReceiver == nil ? frontmost.current : nil
 
         let modes = deps.modes()
         let mode = ModeResolver.resolve(bundleID: target.bundleID, modes: modes, overrideID: pinnedModeID)
@@ -273,6 +278,7 @@ public final class DictationCoordinator {
         inputDeviceName = nil
         draft = nil
         targetApp = nil
+        sessionReceiver = nil
         activeMode = nil
         captureDestination = .voiceMemo
         activityLabel = "ボイスメモ"
@@ -571,6 +577,15 @@ public final class DictationCoordinator {
 
         phase = .inserting
         let text = record.resultText
+        if let sessionReceiver {
+            record = draft.markInserted(insertLatencyMs: elapsedMs(since: stopAt)) ?? record
+            self.draft = draft
+            persist(record)
+            sessionReceiver(record)
+            sounds.play(.complete)
+            finish(phase: draft.phase, detail: statusDetail)
+            return
+        }
         do {
             try await TextInserter.insert(text, into: targetApp)
             record = draft.markInserted(insertLatencyMs: elapsedMs(since: stopAt)) ?? record

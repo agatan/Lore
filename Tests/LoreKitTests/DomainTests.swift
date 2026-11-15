@@ -3,6 +3,17 @@ import Testing
 
 @testable import LoreKit
 
+@Suite("初回案内で音声入力を試せない理由")
+struct OnboardingDictationBlockerTests {
+    @Test("足りない権限ごとに、マイク、アクセシビリティの順で一つずつ挙げる")
+    func namesEachMissingPermission() {
+        #expect(OnboardingDictationBlocker.missing(microphone: true, accessibility: true).isEmpty)
+        #expect(OnboardingDictationBlocker.missing(microphone: false, accessibility: true) == [.microphone])
+        #expect(OnboardingDictationBlocker.missing(microphone: true, accessibility: false) == [.accessibility])
+        #expect(OnboardingDictationBlocker.missing(microphone: false, accessibility: false) == [.microphone, .accessibility])
+    }
+}
+
 // MARK: - ホットキー
 
 @Suite("音声captureの出力先")
