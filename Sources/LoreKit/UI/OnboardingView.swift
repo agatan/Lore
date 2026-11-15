@@ -134,7 +134,6 @@ struct OnboardingView: View {
             }
             .buttonStyle(.glassProminent)
             .controlSize(.extraLarge)
-            .tint(LoreTheme.accent)
             .keyboardShortcut(.defaultAction)
             .accessibilityIdentifier("onboarding.next")
             Label("記録はこのMacの中だけに保存します。通常の音声入力は音声を残さず、ライフログの復旧用音声は開始時に確認してから保存します。", systemImage: "lock.fill")
@@ -173,7 +172,6 @@ struct OnboardingView: View {
                 }
                 .buttonStyle(.glassProminent)
                 .controlSize(.extraLarge)
-                .tint(LoreTheme.accent)
                 .keyboardShortcut(.defaultAction)
                 .accessibilityIdentifier("onboarding.start-life-log")
                 Button("あとで") {
@@ -321,7 +319,6 @@ private struct OnboardingDictationTrial: View {
             }
             .buttonStyle(.glassProminent)
             .controlSize(.extraLarge)
-            .tint(LoreTheme.accent)
             .keyboardShortcut(.defaultAction)
             .accessibilityIdentifier("onboarding.try.next")
         }

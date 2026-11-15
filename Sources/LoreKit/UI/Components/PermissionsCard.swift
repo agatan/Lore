@@ -70,8 +70,7 @@ struct PermissionStatusRow: View {
                         .labelStyle(.titleAndIcon)
                 } else {
                     Button("許可する", action: request)
-                        .buttonStyle(.borderedProminent)
-                        .tint(LoreTheme.accent)
+                        .buttonStyle(.bordered)
                         .controlSize(.small)
                 }
             }

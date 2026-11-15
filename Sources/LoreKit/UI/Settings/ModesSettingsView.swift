@@ -180,7 +180,6 @@ struct ModesSettingsView: View {
                     Task { await env.saveSharedRules(sharedDraft) }
                 }
                 .buttonStyle(.borderedProminent)
-                .tint(LoreTheme.accent)
                 .disabled(!sharedHasChanges)
                 .keyboardShortcut("s", modifiers: .command)
             }
@@ -254,7 +253,6 @@ struct ModesSettingsView: View {
                         Task { await save() }
                     }
                     .buttonStyle(.borderedProminent)
-                    .tint(LoreTheme.accent)
                     .disabled(!hasChanges)
                     .keyboardShortcut("s", modifiers: .command)
                 }
