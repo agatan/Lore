@@ -286,6 +286,7 @@ private enum LoreUIE2E {
         ui = AXDriver(pid: app.processIdentifier)
         _ = try ui.waitFor(identifier: "calendar.settings.root")
         _ = try ui.waitFor(identifier: "calendar.refresh")
+        try ui.waitFor(text: "記録しないカレンダー")
 
         app = try await launch(appURL, arguments: ["--lore-screenshot-demo", "--lore-ui-test-settings-life-log"])
         ui = AXDriver(pid: app.processIdentifier)
