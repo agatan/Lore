@@ -354,6 +354,7 @@ LoreMCP ──┘</code></pre>
 <li><code>LegacyKoeMigrationTests</code> covers the folder, settings, and Keychain migration.</li>
 </ul>
 <p><code>make ui-test</code> launches the signed <code>LoreUITests.app</code>, which has a bundle ID different from production, as a separate process and verifies the main user journeys from <code>Scripts/LoreUIE2E.swift</code>. The UI test bundle always uses its own UserDefaults and an in-memory database and starts neither global hotkeys nor permission monitoring. It writes Life Log audio to a temporary directory instead of <code>Application Support/Lore/LifeLog/</code>, so a UI run can start and pause capture without touching the user's audio. The E2E runner terminates only the dedicated bundle ID and refuses to run when given the production bundle ID. See <a href="testing.md">testing.md</a> for how to run the tests and for the E2E contract.</p>
+<p>GitHub Actions (<code>.github/workflows/ci.yml</code>) runs on every pull request and every push to <code>main</code> on a <code>macos-26</code> runner. It runs <code>swift build</code>, <code>swift test</code>, and <code>make app</code>, and checks that <code>python3 Scripts/render-docs.py</code> leaves the generated HTML unchanged. <code>make ui-test</code> is not part of CI, because it needs the Accessibility permission and a logged-in desktop session.</p>
 </section>
 </main>
 <footer>Generated from <a href="design.md">design.md</a>.</footer>
