@@ -648,3 +648,11 @@
 "このカレンダーはAIに送らない設定です" = "This calendar is not sent to AI";
 "前回" = "Last time";
 "前回の記録を開く" = "Open the last occurrence";
+"会議の負荷" = "Meeting Load";
+"会議時間" = "Meeting time";
+"連続する会議" = "Back-to-back";
+"最長の空き時間" = "Longest free block";
+"重なる予定" = "Overlapping";
+"なし" = "None";
+"%lld回" = "%lld";
+"%lld件の会議" = "%lld meetings";

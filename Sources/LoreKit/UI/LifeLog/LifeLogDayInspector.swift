@@ -7,15 +7,25 @@ import SwiftUI
 struct LifeLogDayInspector: View {
     var day: LifeLogDay
     var date: Date
+    var schedule: LifeLogSchedule = .default
+    var participatingOnly: Bool = true
     var onJump: (Date) -> Void
     var onShowEvent: (EventOccurrence) -> Void = { _ in }
 
     private var isToday: Bool { Calendar.current.isDateInToday(date) }
     private var mapLayout: LifeLogDayMapLayout { LifeLogDayMapLayout(day: day, date: date) }
+    private var meetingLoad: MeetingLoad? {
+        MeetingLoad.calculate(
+            events: day.calendarEvents, on: date,
+            workingWindow: MeetingLoad.workingWindow(on: date, schedule: schedule),
+            participatingOnly: participatingOnly
+        )
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 18) {
             summary
+            if let meetingLoad { MeetingLoadSection(load: meetingLoad) }
             if !day.generatedNotes.isEmpty { aiNotes }
             // 過去日で予定も記録もなければ、空の目盛りは何も伝えないので出さない。
             // 今日は現在時刻の線が残りの時間を示すため、空でも出す。
@@ -304,5 +314,58 @@ struct LifeLogDayMap: View {
         }
         .allowsHitTesting(false)
         .accessibilityHidden(true)
+    }
+}
+
+/// 選択日の会議の量。数字を並べるだけにし、判断は`MeetingLoad`に任せる。
+struct MeetingLoadSection: View {
+    var load: MeetingLoad
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("会議の負荷")
+                .font(LoreTheme.sectionFont)
+                .foregroundStyle(.secondary)
+            row("会議時間", id: "total") {
+                HStack(spacing: 6) {
+                    CalendarEventCard.durationText(load.totalDuration)
+                    Text("\(load.meetingCount)件の会議").foregroundStyle(.secondary)
+                }
+            }
+            row("連続する会議", id: "back-to-back", dimmed: load.backToBackTransitions == 0) {
+                Text("\(load.backToBackTransitions)回")
+            }
+            row("最長の空き時間", id: "free-block", dimmed: load.longestFreeBlock == nil) {
+                if let block = load.longestFreeBlock {
+                    VStack(alignment: .trailing, spacing: 1) {
+                        CalendarEventCard.durationText(block.duration)
+                        Text(verbatim: "\(block.start.loreFormatted(date: .omitted, time: .shortened))–\(block.end.loreFormatted(date: .omitted, time: .shortened))")
+                            .font(.system(size: LoreTheme.TextSize.caption).monospacedDigit())
+                            .foregroundStyle(.secondary)
+                    }
+                } else {
+                    Text("なし")
+                }
+            }
+            row("重なる予定", id: "overlap", dimmed: load.overlappingMeetingCount == 0) {
+                Text("\(load.overlappingMeetingCount)件")
+            }
+        }
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("life-log.meeting-load")
+    }
+
+    private func row<Value: View>(_ title: String, id: String, dimmed: Bool = false, @ViewBuilder value: () -> Value) -> some View {
+        HStack(alignment: .firstTextBaseline) {
+            Text(LocalizedStringKey(title))
+                .foregroundStyle(.secondary)
+            Spacer(minLength: 8)
+            value()
+                .fontWeight(.semibold)
+                .foregroundStyle(dimmed ? .tertiary : .primary)
+        }
+        .font(.system(size: LoreTheme.TextSize.body).monospacedDigit())
+        .accessibilityElement(children: .combine)
+        .accessibilityIdentifier("life-log.meeting-load.\(id)")
     }
 }
