@@ -272,7 +272,7 @@ public struct LifeLogWindow: View {
                     below: row.below,
                     isCurrent: isToday && value.contains(Date()),
                     recording: env.eventRecording(value),
-                    lastTime: env.eventLastTime(value),
+                    lastTime: env.eventLastTime(value, in: env.lifeLog.day),
                     ai: CalendarEventCard.AI(
                         notes: AnyView(EventNotesView(env: env, event: value)),
                         isExcluded: env.lifeLogAI.excludedEventIDs.contains(value.id),
