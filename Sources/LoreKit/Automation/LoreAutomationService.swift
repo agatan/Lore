@@ -33,7 +33,11 @@ public final class LoreAutomationService {
         return LoreAutomationService(database: database, settings: AppSettings(defaults: defaults), eventDetails: eventDetails)
     }
 
-    public func exportDay(_ date: Date, options: LifeLogTextExporter.Options, calendar: Calendar = .current) async throws -> String {
+    public func exportDay(
+        _ date: Date,
+        options: LifeLogTextExporter.Options,
+        calendar: Calendar = .current
+    ) async throws -> EventDetailsOutcome<String> {
         guard !options.includesEventDetails || options.includesCalendarEvents else {
             throw AutomationError.eventDetailsNeedCalendar
         }
@@ -43,8 +47,10 @@ public final class LoreAutomationService {
             calendar: calendar,
             participatingOnly: settings.lifeLogParticipatingEventsOnly
         )
-        let details = options.includesEventDetails ? await details(of: day.calendarEvents) : []
-        return LifeLogTextExporter.render(date: date, day: day, options: options, eventDetails: details, calendar: calendar)
+        var outcome = EventDetailsOutcome(value: "")
+        let details = options.includesEventDetails ? try await outcome.details(of: day.calendarEvents, from: eventDetails) : []
+        outcome.value = LifeLogTextExporter.render(date: date, day: day, options: options, eventDetails: details, calendar: calendar)
+        return outcome
     }
 
     public func search(_ query: String, limit: Int = 100) async throws -> [LifeLogSearchResult] {
@@ -80,7 +86,7 @@ public final class LoreAutomationService {
         to: Date? = nil,
         options: LifeLogTextExporter.Options = .init(),
         calendar: Calendar = .current
-    ) async throws -> [LifeLogEntry] {
+    ) async throws -> EventDetailsOutcome<[LifeLogEntry]> {
         guard options.hasSelection else { throw AutomationError.emptyExportSelection }
         let start = calendar.startOfDay(for: from)
         let dates = try Self.days(
@@ -90,6 +96,7 @@ public final class LoreAutomationService {
             calendar: calendar
         )
         var entries: [(date: Date, entry: LifeLogEntry)] = []
+        var outcome = EventDetailsOutcome<[LifeLogEntry]>(value: [])
         var seenOccurrences = Set<EventOccurrence>()
         for date in dates {
             let day = try await database.lifeLog.day(
@@ -97,14 +104,15 @@ public final class LoreAutomationService {
                 calendar: calendar,
                 participatingOnly: settings.lifeLogParticipatingEventsOnly
             )
-            let details = options.includesCalendarEvents ? await details(of: day.calendarEvents) : []
+            let details = options.includesCalendarEvents ? try await outcome.details(of: day.calendarEvents, from: eventDetails) : []
             // 日をまたぐ予定は各日のsnapshotに現れるため、期間内では1件にする。繰り返し予定は回ごとに残す。
             entries += LifeLogEntry.entries(of: day, options: options, eventDetails: details, calendar: calendar).filter {
                 $0.entry.kind != .event
                     || seenOccurrences.insert(EventOccurrence(eventID: $0.entry.id, day: $0.entry.day)).inserted
             }
         }
-        return entries.sorted { ($0.date, $0.entry.id) < ($1.date, $1.entry.id) }.map(\.entry)
+        outcome.value = entries.sorted { ($0.date, $0.entry.id) < ($1.date, $1.entry.id) }.map(\.entry)
+        return outcome
     }
 
     /// AI-generated notes whose day falls in the range, marked as generated, oldest first.
@@ -122,16 +130,6 @@ public final class LoreAutomationService {
             fromDay: LifeLogDateKey.string(for: first, calendar: calendar),
             throughDay: LifeLogDateKey.string(for: last, calendar: calendar)
         ).map(GeneratedNoteEntry.init)
-    }
-
-    /// Reads the events from the calendar now, once for the span of `events`. Nothing is stored.
-    private func details(of events: [CalendarEventSnapshot]) async -> [CalendarEventDetails] {
-        guard let eventDetails, let start = events.map(\.startsAt).min(), let end = events.map(\.endsAt).max() else { return [] }
-        return await eventDetails.details(
-            start: start,
-            end: max(end, start.addingTimeInterval(1)),
-            selectedCalendars: Set(settings.lifeLogCalendarTitles)
-        )
     }
 
     private static func days(from start: Date, through end: Date, limit: Int, calendar: Calendar) throws -> [Date] {
@@ -314,6 +312,29 @@ extension LifeLogEntry {
             Attendee(name: $0.name?.nonBlank, email: $0.email?.nonBlank, response: $0.status.rawValue, role: $0.role.rawValue)
         }
         self.attendees = attendees.isEmpty ? nil : attendees
+    }
+}
+
+/// A result whose events may lack details, with the reason when the details of the request could not be read.
+public struct EventDetailsOutcome<Value: Sendable>: Sendable {
+    public var value: Value
+    /// The first failure of the request. Nil when details were read, or when no reader or no event was involved.
+    public var unavailable: EventDetailsUnavailable?
+
+    /// Reads the events from the calendar now, once for the span of `events`. Nothing is stored.
+    /// After a failure the rest of the request is not asked again; other errors are thrown.
+    mutating func details(
+        of events: [CalendarEventSnapshot],
+        from reader: (any CalendarEventDetailsRangeReading)?
+    ) async throws -> [CalendarEventDetails] {
+        guard let reader, unavailable == nil,
+              let start = events.map(\.startsAt).min(), let end = events.map(\.endsAt).max() else { return [] }
+        do {
+            return try await reader.details(start: start, end: max(end, start.addingTimeInterval(1)))
+        } catch let reason as EventDetailsUnavailable {
+            unavailable = reason
+            return []
+        }
     }
 }
 

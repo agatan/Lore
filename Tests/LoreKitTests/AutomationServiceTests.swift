@@ -90,7 +90,7 @@ struct AutomationServiceTests {
         let service = try await makeService()
         try await seed(service.database)
 
-        let entries = try await service.range(from: at(25, 0), to: at(28, 0), calendar: calendar)
+        let entries = try await service.range(from: at(25, 0), to: at(28, 0), calendar: calendar).value
         #expect(entries.map(\.id) == ["dictation", "spoken", "offsite", "memo"])
         #expect(entries.map(\.kind) == [.dictation, .utterance, .event, .memo])
         let event = entries[2]
@@ -118,7 +118,7 @@ struct AutomationServiceTests {
                                   calendarTitle: "Work", participationStatus: .accepted),
         ])
 
-        let entries = try await service.range(from: at(3, 0), to: at(16, 0), calendar: calendar)
+        let entries = try await service.range(from: at(3, 0), to: at(16, 0), calendar: calendar).value
         #expect(entries.map(\.id) == ["weekly", "overnight", "weekly"])
         #expect(entries.map(\.day) == ["2026-08-03", "2026-08-05", "2026-08-10"])
     }
@@ -132,9 +132,9 @@ struct AutomationServiceTests {
             from: at(25, 0), to: at(28, 0),
             options: .init(includesCalendarEvents: false, includesUtterances: false, includesDictations: false, includesMemos: true),
             calendar: calendar
-        )
+        ).value
         #expect(memos.map(\.id) == ["memo"])
-        let single = try await service.range(from: at(26, 0), calendar: calendar)
+        let single = try await service.range(from: at(26, 0), calendar: calendar).value
         #expect(single.isEmpty)
 
         await #expect(throws: AutomationError.self) {

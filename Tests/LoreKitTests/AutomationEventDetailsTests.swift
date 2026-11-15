@@ -3,15 +3,20 @@ import Testing
 
 @testable import LoreKit
 
-/// Returns the details it was given that start inside the asked range, and remembers what it was asked.
+/// Returns the details it was given that start inside the asked range, or throws `failure`, and counts the asks.
 private actor FakeEventDetails: CalendarEventDetailsRangeReading {
     private let known: [CalendarEventDetails]
-    private(set) var selectedCalendars: [Set<String>] = []
+    private let failure: EventDetailsUnavailable?
+    private(set) var asks = 0
 
-    init(_ known: [CalendarEventDetails] = []) { self.known = known }
+    init(_ known: [CalendarEventDetails] = [], failure: EventDetailsUnavailable? = nil) {
+        self.known = known
+        self.failure = failure
+    }
 
-    func details(start: Date, end: Date, selectedCalendars: Set<String>) -> [CalendarEventDetails] {
-        self.selectedCalendars.append(selectedCalendars)
+    func details(start: Date, end: Date) throws -> [CalendarEventDetails] {
+        asks += 1
+        if let failure { throw failure }
         return known.filter { start <= $0.startsAt && $0.startsAt < end }
     }
 }
@@ -38,7 +43,7 @@ struct AutomationEventDetailsTests {
     /// details are all blank. 8/28 and 9/3: two occurrences of one weekly event that share an identifier.
     private func makeFixture(
         details: Bool = true,
-        settings: AppSettings? = nil
+        failure: EventDetailsUnavailable? = nil
     ) async throws -> (service: LoreAutomationService, reader: FakeEventDetails) {
         let defaults = UserDefaults(suiteName: "lore-event-details-\(UUID().uuidString)")!
         let mika = attendee("Mika Sato", "mika@example.com", .accepted, .chair)
@@ -55,10 +60,10 @@ struct AutomationEventDetailsTests {
             CalendarEventDetails(eventID: "weekly", startsAt: at(28, 9).addingTimeInterval(7 * 86_400), externalIdentifier: "weekly@example.com",
                                  notes: "Week 2", attendees: [mika]),
         ]
-        let reader = FakeEventDetails(details ? all : [])
+        let reader = FakeEventDetails(details ? all : [], failure: failure)
         let service = LoreAutomationService(
             database: try await LoreDatabase.inMemory(),
-            settings: settings ?? AppSettings(defaults: defaults),
+            settings: AppSettings(defaults: defaults),
             eventDetails: reader
         )
         try await service.database.lifeLog.save(calendarEvents: [
@@ -85,7 +90,7 @@ struct AutomationEventDetailsTests {
     }
 
     private func events(_ service: LoreAutomationService, day: Int) async throws -> [String: LifeLogEntry] {
-        let entries = try await service.range(from: at(day, 0), calendar: calendar).filter { $0.kind == .event }
+        let entries = try await service.range(from: at(day, 0), calendar: calendar).value.filter { $0.kind == .event }
         return Dictionary(entries.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
     }
 
@@ -128,7 +133,7 @@ struct AutomationEventDetailsTests {
     func occurrencesAreMatchedByStart() async throws {
         let (service, _) = try await makeFixture()
         let first = try #require(try await events(service, day: 28)["weekly"])
-        let nextWeek = try await service.range(from: at(28, 0).addingTimeInterval(7 * 86_400), calendar: calendar).first { $0.kind == .event }
+        let nextWeek = try await service.range(from: at(28, 0).addingTimeInterval(7 * 86_400), calendar: calendar).value.first { $0.kind == .event }
 
         #expect(first.description == "Week 1")
         #expect(first.conferenceURL == "https://meet.google.com/abc-defg-hij")
@@ -136,19 +141,60 @@ struct AutomationEventDetailsTests {
         #expect(nextWeek?.conferenceURL == nil)
     }
 
-    @Test("Without details the range keeps its snapshot fields and asks the calendars selected in Settings")
-    func snapshotFieldsAndSelectedCalendars() async throws {
-        let defaults = UserDefaults(suiteName: "lore-event-details-\(UUID().uuidString)")!
-        let settings = AppSettings(defaults: defaults)
-        settings.lifeLogCalendarTitles = ["Work"]
-        let (service, reader) = try await makeFixture(details: false, settings: settings)
+    @Test("An event the calendar no longer has keeps its snapshot fields, and the range has no reason")
+    func snapshotFieldsWithoutDetails() async throws {
+        let (service, reader) = try await makeFixture(details: false)
 
-        let review = try #require(try await events(service, day: 27)["review"])
+        let range = try await service.range(from: at(27, 0), calendar: calendar)
+        let review = try #require(range.value.first { $0.id == "review" })
 
         #expect(review.title == "Launch review")
         #expect(review.externalIdentifier == "review@example.com")
         #expect(review.description == nil && review.attendees == nil && review.organizer == nil && review.conferenceURL == nil)
-        #expect(await reader.selectedCalendars == [["Work"]])
+        #expect(range.unavailable == nil)
+        #expect(await reader.asks == 1)
+    }
+
+    @Test("When details cannot be read, the range keeps the snapshot fields, says why, and stops asking")
+    func unavailableDetailsAreReported() async throws {
+        let (service, reader) = try await makeFixture(failure: .loreNotRunning)
+
+        let range = try await service.range(from: at(27, 0), to: at(28, 0), calendar: calendar)
+        let review = try #require(range.value.first { $0.id == "review" })
+
+        #expect(range.unavailable == .loreNotRunning)
+        #expect(review.externalIdentifier == "review@example.com" && review.description == nil && review.attendees == nil)
+        #expect(range.value.filter { $0.kind == .event }.map(\.id) == ["review", "lunch", "blank", "weekly"])
+        #expect(await reader.asks == 1)
+        #expect(EventDetailsUnavailable.loreNotRunning.localizedDescription.contains("Loreが起動していない"))
+    }
+
+    @Test("An export with event-details says why they are missing, and its text is the export without them")
+    func exportReportsUnavailableDetails() async throws {
+        let (failing, _) = try await makeFixture(failure: .noCalendarAccess)
+        let (plain, _) = try await makeFixture(details: false)
+
+        let export = try await failing.exportDay(at(27, 0), options: .init(includesEventDetails: true), calendar: calendar)
+
+        #expect(export.unavailable == .noCalendarAccess)
+        #expect(export.value == (try await plain.exportDay(at(27, 0), options: .init(), calendar: calendar)).value)
+    }
+
+    @Test("A service without a reader reads no details and gives no reason")
+    func noReaderNoReason() async throws {
+        let service = LoreAutomationService(
+            database: try await LoreDatabase.inMemory(),
+            settings: AppSettings(defaults: UserDefaults(suiteName: "lore-event-details-\(UUID().uuidString)")!)
+        )
+        try await service.database.lifeLog.save(calendarEvents: [
+            CalendarEventSnapshot(id: "review", title: "Launch review", startsAt: at(27, 10), endsAt: at(27, 11),
+                                  calendarTitle: "Work", participationStatus: .accepted),
+        ])
+
+        let range = try await service.range(from: at(27, 0), calendar: calendar)
+
+        #expect(range.value.map(\.id) == ["review"])
+        #expect(range.unavailable == nil)
     }
 
     @Test("The range does not read the calendar for a selection without events")
@@ -157,8 +203,9 @@ struct AutomationEventDetailsTests {
 
         let memos = try await service.range(from: at(27, 0), options: .init(includesCalendarEvents: false), calendar: calendar)
 
-        #expect(memos.allSatisfy { $0.kind != .event })
-        #expect(await reader.selectedCalendars.isEmpty)
+        #expect(memos.value.allSatisfy { $0.kind != .event })
+        #expect(memos.unavailable == nil)
+        #expect(await reader.asks == 0)
     }
 
     @Test("The day export is byte-identical without event-details, even when details exist")
@@ -166,20 +213,20 @@ struct AutomationEventDetailsTests {
         let (withDetails, reader) = try await makeFixture()
         let (withoutDetails, _) = try await makeFixture(details: false)
 
-        let plain = try await withoutDetails.exportDay(at(27, 0), options: .init(), calendar: calendar)
-        let exported = try await withDetails.exportDay(at(27, 0), options: .init(), calendar: calendar)
+        let plain = try await withoutDetails.exportDay(at(27, 0), options: .init(), calendar: calendar).value
+        let exported = try await withDetails.exportDay(at(27, 0), options: .init(), calendar: calendar).value
 
         #expect(exported == plain)
         #expect(exported.contains("- **10:00–11:00 予定** Launch review（Work）\n"))
         #expect(!exported.contains("参加者") && !exported.contains("説明"))
-        #expect(await reader.selectedCalendars.isEmpty)
+        #expect(await reader.asks == 0)
     }
 
     @Test("event-details adds the description and attendees under each event and nothing for an event without them")
     func exportWithEventDetails() async throws {
         let (service, _) = try await makeFixture()
 
-        let exported = try await service.exportDay(at(27, 0), options: .init(includesEventDetails: true), calendar: calendar)
+        let exported = try await service.exportDay(at(27, 0), options: .init(includesEventDetails: true), calendar: calendar).value
 
         #expect(exported == """
         # 2026年8月27日のライフログ
@@ -232,10 +279,10 @@ struct AutomationEventDetailsTests {
     @Test("Print the fixture output when asked", .enabled(if: ProcessInfo.processInfo.environment["LORE_PRINT_AUTOMATION_FIXTURE"] != nil))
     func printFixtureOutput() async throws {
         let (service, _) = try await makeFixture()
-        let entries = try await service.range(from: at(27, 0), calendar: calendar).filter { $0.kind == .event }
+        let entries = try await service.range(from: at(27, 0), calendar: calendar).value.filter { $0.kind == .event }
         print("--- life_log_range from=2026-08-27 (event entries) ---")
         print(try LifeLogJSON.encode(entries))
         print("--- life_log_export date=2026-08-27 include=[calendar,event-details] ---")
-        print(try await service.exportDay(at(27, 0), options: .init(includeNames: ["calendar", "event-details"]), calendar: calendar))
+        print(try await service.exportDay(at(27, 0), options: .init(includeNames: ["calendar", "event-details"]), calendar: calendar).value)
     }
 }

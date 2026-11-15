@@ -12,4 +12,5 @@ public enum LoreLog {
     public static let hotkey = Logger(subsystem: subsystem, category: "hotkey")
     public static let persistence = Logger(subsystem: subsystem, category: "persistence")
     public static let ui = Logger(subsystem: subsystem, category: "ui")
+    public static let automation = Logger(subsystem: subsystem, category: "automation")
 }
