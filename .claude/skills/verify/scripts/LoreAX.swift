@@ -301,7 +301,12 @@ func main() async {
             log("absent id=\(id) ok")
         case "press":
             let id = try arg(0, "identifier")
-            let target = try element(id: id, timeout: timeout, in: try recordedApp())
+            let scope = rest.count > 2 && rest[1] == "--in" ? rest[2] : nil
+            let target = try waitFor("id=\(id)\(scope.map { " in window \($0)" } ?? "")", timeout: timeout, in: try recordedApp()) { element in
+                guard identifier(element) == id else { return false }
+                guard let scope, let window: AXUIElement = attribute(kAXWindowAttribute as String, of: element) else { return scope == nil }
+                return identifier(window) == scope || title(window) == scope
+            }
             // AXPress on a static text "succeeds" without doing anything, so require the action to exist.
             guard actions(of: target).contains(kAXPressAction as String) else {
                 throw fail("press id=\(id): element has no AXPress (actions: \(actions(of: target))); for list/sidebar rows use `select`")
