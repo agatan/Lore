@@ -258,7 +258,8 @@ public struct LifeLogWindow: View {
                     event: value,
                     above: row.above,
                     below: row.below,
-                    isCurrent: isToday && value.contains(Date())
+                    isCurrent: isToday && value.contains(Date()),
+                    recording: env.eventRecording(value)
                 )
                 .accessibilityIdentifier("life-log.timeline-event-\(value.id)")
             case .dictation(let value):

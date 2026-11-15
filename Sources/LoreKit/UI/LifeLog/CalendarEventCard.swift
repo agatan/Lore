@@ -8,6 +8,13 @@ struct CalendarEventCard: View {
     var below: LifeLogTimelineLayout.Segment = .none
     var isCurrent = false
     var compact = false
+    /// 「記録しない」の表示と操作。渡さないrowは印もmenuも出さない。
+    var recording: Recording?
+
+    struct Recording {
+        var exclusions: LifeLogRecordingExclusions
+        var setSkipped: (Bool) -> Void
+    }
 
     private var titleSize: CGFloat { compact ? LoreTheme.TextSize.callout : LoreTheme.TextSize.reading }
 
@@ -29,12 +36,11 @@ struct CalendarEventCard: View {
                         .font(.system(size: titleSize, weight: .semibold))
                         .fixedSize(horizontal: false, vertical: true)
                     if isCurrent {
-                        Text("いま")
-                            .font(.system(size: LoreTheme.TextSize.micro, weight: .semibold))
-                            .foregroundStyle(LoreTheme.event)
-                            .padding(.horizontal, 6)
-                            .padding(.vertical, 1)
-                            .background(LoreTheme.event.opacity(0.14), in: Capsule())
+                        tag("いま", color: LoreTheme.event)
+                    }
+                    if recording?.exclusions.excludes(event) == true {
+                        tag("記録しない", color: LoreTheme.recording)
+                            .accessibilityIdentifier("life-log.event-not-recorded-\(event.id)")
                     }
                 }
                 detail
@@ -46,6 +52,31 @@ struct CalendarEventCard: View {
         }
         .padding(.trailing, compact ? 12 : 8)
         .fixedSize(horizontal: false, vertical: true)
+        .contentShape(.rect)
+        .contextMenu { recordingMenu }
+    }
+
+    private func tag(_ title: LocalizedStringKey, color: Color) -> some View {
+        Text(title)
+            .font(.system(size: LoreTheme.TextSize.micro, weight: .semibold))
+            .foregroundStyle(color)
+            .padding(.horizontal, 6)
+            .padding(.vertical, 1)
+            .background(color.opacity(0.14), in: Capsule())
+    }
+
+    /// 終わっていない、時刻のある予定だけ。カレンダー単位の指定は設定で外す。
+    @ViewBuilder
+    private var recordingMenu: some View {
+        if let recording, !event.isAllDay, event.endsAt > Date() {
+            if recording.exclusions.isSkipped(event) {
+                Button("この予定を記録する") { recording.setSkipped(false) }
+                    .accessibilityIdentifier("life-log.event.record")
+            } else if !recording.exclusions.excludes(event) {
+                Button("この予定を記録しない") { recording.setSkipped(true) }
+                    .accessibilityIdentifier("life-log.event.do-not-record")
+            }
+        }
     }
 
     private var detail: Text {
@@ -67,20 +98,23 @@ struct CalendarEventCard: View {
 struct CurrentCalendarEventStrip: View {
     var events: [CalendarEventSnapshot]
     var selectedDate: Date
+    var recording: (CalendarEventSnapshot) -> CalendarEventCard.Recording?
 
     var body: some View {
         TimelineView(.periodic(from: .now, by: 30)) { context in
-            if Calendar.current.isDateInToday(selectedDate), let event = currentEvent(at: context.date) {
-                CalendarEventCard(event: event, isCurrent: true, compact: true)
+            if Calendar.current.isDateInToday(selectedDate), let event = events.timedEventInProgress(at: context.date) {
+                CalendarEventCard(event: event, isCurrent: true, compact: true, recording: recording(event))
                     .padding(.bottom, 6)
             }
         }
     }
+}
 
-    private func currentEvent(at date: Date) -> CalendarEventSnapshot? {
-        events
-            .filter { !$0.isAllDay && $0.contains(date) }
-            .sorted { $0.startsAt < $1.startsAt }
-            .first
+extension AppEnvironment {
+    /// Timelineの予定rowへ渡す「記録しない」の表示と操作。
+    func eventRecording(_ event: CalendarEventSnapshot) -> CalendarEventCard.Recording {
+        CalendarEventCard.Recording(exclusions: settings.lifeLogRecordingExclusions) { [weak self] skipped in
+            self?.setLifeLogEventSkipped(skipped, event: event)
+        }
     }
 }

@@ -46,6 +46,12 @@ struct LifeLogCalendarSettingsView: View {
                         .frame(maxWidth: .infinity, alignment: .trailing)
                 }
             }
+            SettingsCard(
+                title: "記録しないカレンダー",
+                footnote: "選んだカレンダーの予定が進行している間は、ライフログの録音を止め、予定が終わると再開します。終日の予定では止めません。"
+            ) {
+                neverRecordCalendars
+            }
         }
         .accessibilityIdentifier("calendar.settings.root")
         .toggleStyle(.switch)
@@ -93,6 +99,46 @@ struct LifeLogCalendarSettingsView: View {
         }
     }
 
+    @ViewBuilder
+    private var neverRecordCalendars: some View {
+        if !env.isCalendarGranted {
+            SettingsRow(title: "カレンダーへのアクセスが許可されていません", caption: "許可すると、選んだカレンダーの予定の間は録音を止められます") {
+                Button("許可する") { Task { await env.requestCalendar() } }
+                    .accessibilityIdentifier("calendar.never-record.request-access")
+            }
+        } else if env.lifeLog.availableCalendars.isEmpty {
+            Label("カレンダーがありません", systemImage: "calendar.badge.exclamationmark")
+                .font(.system(size: LoreTheme.TextSize.caption))
+                .foregroundStyle(.secondary)
+                .frame(maxWidth: .infinity, alignment: .leading)
+        } else {
+            Grid(horizontalSpacing: 8, verticalSpacing: 8) {
+                ForEach(Array(stride(from: 0, to: env.lifeLog.availableCalendars.count, by: 2)), id: \.self) { index in
+                    GridRow {
+                        neverRecordButton(env.lifeLog.availableCalendars[index])
+                        if index + 1 < env.lifeLog.availableCalendars.count {
+                            neverRecordButton(env.lifeLog.availableCalendars[index + 1])
+                        } else {
+                            Color.clear.frame(height: 36)
+                        }
+                    }
+                }
+            }
+            .frame(maxWidth: .infinity)
+        }
+    }
+
+    private func neverRecordButton(_ title: String) -> some View {
+        let isSelected = settings.lifeLogRecordingExclusions.calendarTitles.contains(title)
+        return CalendarToggleButton(
+            title: title, isSelected: isSelected, symbol: "mic.slash.circle.fill", tint: LoreTheme.recording
+        ) {
+            env.setLifeLogCalendarNeverRecord(!isSelected, title: title)
+        }
+        .accessibilityValue(isSelected ? Text("オン") : Text("オフ"))
+        .accessibilityIdentifier("calendar.never-record.\(title)")
+    }
+
     private var selectedCalendars: Set<String> {
         settings.lifeLogCalendarTitles.isEmpty
             ? Set(env.lifeLog.availableCalendars)
@@ -105,24 +151,11 @@ struct LifeLogCalendarSettingsView: View {
 
     private func calendarButton(_ title: String) -> some View {
         let isSelected = selectedCalendars.contains(title)
-        return Button { toggleCalendar(title) } label: {
-            HStack(spacing: 9) {
-                Image(systemName: isSelected ? "checkmark.circle.fill" : "circle")
-                    .foregroundStyle(isSelected ? LoreTheme.accent : Color.secondary.opacity(0.45))
-                Text(title).font(.system(size: LoreTheme.TextSize.caption, weight: .medium)).lineLimit(1)
-                Spacer(minLength: 0)
-            }
-            .padding(.horizontal, 11)
-            .frame(height: 36)
-            .frame(maxWidth: .infinity)
-            .contentShape(.rect)
-            .background(isSelected ? LoreTheme.accent.opacity(0.10) : Color.secondary.opacity(0.045), in: RoundedRectangle(cornerRadius: LoreTheme.cardCornerRadius))
-            .overlay {
-                RoundedRectangle(cornerRadius: LoreTheme.cardCornerRadius)
-                    .stroke(isSelected ? LoreTheme.accent.opacity(0.28) : Color.secondary.opacity(0.08), lineWidth: 1)
-            }
+        return CalendarToggleButton(
+            title: title, isSelected: isSelected, symbol: "checkmark.circle.fill", tint: LoreTheme.accent
+        ) {
+            toggleCalendar(title)
         }
-        .buttonStyle(.plain)
         .disabled(isSelected && selectedCalendars.count == 1)
     }
 
@@ -141,5 +174,35 @@ struct LifeLogCalendarSettingsView: View {
     private func selectAllCalendars() {
         settings.lifeLogCalendarTitles = []
         Task { await env.lifeLog.refreshCalendar(selectedCalendars: Set(env.lifeLog.availableCalendars)) }
+    }
+}
+
+/// カレンダー1件のon/off。表示の選択と「記録しない」の指定で同じ形を使う。
+private struct CalendarToggleButton: View {
+    var title: String
+    var isSelected: Bool
+    var symbol: String
+    var tint: Color
+    var action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 9) {
+                Image(systemName: isSelected ? symbol : "circle")
+                    .foregroundStyle(isSelected ? tint : Color.secondary.opacity(0.45))
+                Text(title).font(.system(size: LoreTheme.TextSize.caption, weight: .medium)).lineLimit(1)
+                Spacer(minLength: 0)
+            }
+            .padding(.horizontal, 11)
+            .frame(height: 36)
+            .frame(maxWidth: .infinity)
+            .contentShape(.rect)
+            .background(isSelected ? tint.opacity(0.10) : Color.secondary.opacity(0.045), in: RoundedRectangle(cornerRadius: LoreTheme.cardCornerRadius))
+            .overlay {
+                RoundedRectangle(cornerRadius: LoreTheme.cardCornerRadius)
+                    .stroke(isSelected ? tint.opacity(0.28) : Color.secondary.opacity(0.08), lineWidth: 1)
+            }
+        }
+        .buttonStyle(.plain)
     }
 }
