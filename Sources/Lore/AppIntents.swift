@@ -23,6 +23,55 @@ struct StopLifeLogIntent: AppIntent {
     }
 }
 
+struct PauseLifeLogIntent: AppIntent {
+    static let title: LocalizedStringResource = "ライフログを一時停止"
+    static let description = IntentDescription("Loreのライフログ記録を一時停止します。選んだ時間が過ぎると自動で再開します。")
+    static let supportedModes: IntentModes = .background
+
+    @Parameter(title: "長さ", default: .thirtyMinutes)
+    var length: LifeLogPauseLengthOption
+
+    func perform() async throws -> some IntentResult {
+        try await LifeLogIntentAction.pause(length.domainValue)
+        return .result()
+    }
+}
+
+struct ResumeLifeLogIntent: AppIntent {
+    static let title: LocalizedStringResource = "ライフログを再開"
+    static let description = IntentDescription("一時停止したLoreのライフログ記録を再開します。一時停止していなければ何もしません。")
+    static let supportedModes: IntentModes = .foreground(.immediate)
+
+    func perform() async throws -> some IntentResult {
+        try await LifeLogIntentAction.resume()
+        return .result()
+    }
+}
+
+enum LifeLogPauseLengthOption: String, AppEnum {
+    case fifteenMinutes
+    case thirtyMinutes
+    case oneHour
+    case untilEventEnds
+
+    static let typeDisplayRepresentation: TypeDisplayRepresentation = "一時停止の長さ"
+    static let caseDisplayRepresentations: [LifeLogPauseLengthOption: DisplayRepresentation] = [
+        .fifteenMinutes: "15分",
+        .thirtyMinutes: "30分",
+        .oneHour: "1時間",
+        .untilEventEnds: "いまの予定が終わるまで",
+    ]
+
+    var domainValue: LifeLogPauseLength {
+        switch self {
+        case .fifteenMinutes: .fifteenMinutes
+        case .thirtyMinutes: .thirtyMinutes
+        case .oneHour: .oneHour
+        case .untilEventEnds: .untilEventEnds
+        }
+    }
+}
+
 enum LifeLogIntentAction {
     @MainActor
     static func startCapture() async throws {
@@ -41,6 +90,16 @@ enum LifeLogIntentAction {
         guard await environment.lifeLog.stopAndWait() else {
             throw LifeLogIntentError.finalizationTimedOut
         }
+    }
+
+    @MainActor
+    static func pause(_ length: LifeLogPauseLength) async throws {
+        try await readyEnvironment().pauseLifeLog(length)
+    }
+
+    @MainActor
+    static func resume() async throws {
+        try await readyEnvironment().resumeLifeLog()
     }
 
     @MainActor

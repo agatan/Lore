@@ -68,7 +68,7 @@ The other default hotkeys are ⌃⌥L to start and stop Life Log recording, ⌃�
 
 In Settings > Life Log > Scheduled Recording, choose days and a time window (for example weekdays 9:00 to 19:00) and Lore records the Life Log only during that window. This suits an always-on Mac, such as a Mac mini, that should record only at fixed hours. At the end of the window only a recording that started automatically stops. A recording that you started yourself continues. If you stop recording inside a window, it does not resume until the next window.
 
-Lore exposes "Start Life Log" and "Stop Life Log" to the macOS Shortcuts app. The stop action waits for the final transcription and saving to finish.
+Lore exposes "Start Life Log", "Stop Life Log", "Pause Life Log", and "Resume Life Log" to the macOS Shortcuts app. The stop action waits for the final transcription and saving to finish. The pause action takes a duration, and recording resumes by itself when it ends.
 
 A day can be exported from the Life Log screen, the CLI, and MCP. You select events, speech, dictation, and memos individually, and the result is chronological Markdown.
 
