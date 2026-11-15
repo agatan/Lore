@@ -33,6 +33,10 @@ enum DebugSnapshotter {
             let minute = (Calendar.current.component(.hour, from: Date()) + 2) % 24 * 60
             env.updateLifeLogSchedule(LifeLogSchedule(isEnabled: true, startMinute: minute, endMinute: (minute + 9 * 60) % (24 * 60)))
             await settle(3)
+            if ProcessInfo.processInfo.arguments.contains("--lore-snapshot-mini-today") {
+                try await captureMiniStaysOnToday(env: env, presenter: presenter, into: directory)
+                exit(0)
+            }
             try await capture(LoreWindow.main, as: "main-life-log", into: directory)
             if AppEnvironment.forcesOnboardingForScreenshot {
                 try await captureOnboarding(env: env, into: directory)
@@ -108,6 +112,22 @@ enum DebugSnapshotter {
             await settle(1)
             try await capture(LoreWindow.main, as: name, into: directory)
         }
+    }
+
+    /// The main window opens last week through "Last time" while the mini window stays on today.
+    /// Needs `--lore-demo-recurring-now`.
+    private static func captureMiniStaysOnToday(env: AppEnvironment, presenter: LoreWindowPresenter, into directory: URL) async throws {
+        presenter.toggleLifeLogMini()
+        await settle(1.5)
+        try await capture(LoreWindow.lifeLogMini, as: "mini-before-jump", into: directory)
+        guard let event = env.lifeLog.today.calendarEvents.first(where: { $0.id == "demo-event-weekly" }),
+              let lastTime = env.eventLastTime(event, in: env.lifeLog.today) else {
+            throw CocoaError(.fileWriteUnknown, userInfo: [NSLocalizedDescriptionKey: "--lore-demo-recurring-now の予定がありません"])
+        }
+        lastTime.open()
+        await settle(1.5)
+        try await capture(LoreWindow.main, as: "main-after-jump", into: directory)
+        try await capture(LoreWindow.lifeLogMini, as: "mini-after-jump", into: directory)
     }
 
     /// HUDの各段階を、壁紙を模した背景の上に置いて撮る。Glassは同じwindow内の背景を透かす。

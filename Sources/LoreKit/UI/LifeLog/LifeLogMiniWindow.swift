@@ -9,10 +9,9 @@ struct LifeLogMiniWindow: View {
     var body: some View {
         VStack(spacing: 0) {
             CurrentCalendarEventStrip(
-                events: env.lifeLog.day.calendarEvents,
-                selectedDate: env.lifeLog.selectedDate,
+                events: env.lifeLog.today.calendarEvents,
                 recording: env.eventRecording,
-                lastTime: env.eventLastTime
+                lastTime: { env.eventLastTime($0, in: env.lifeLog.today) }
             )
 
             ScrollViewReader { proxy in
@@ -83,11 +82,11 @@ struct LifeLogMiniWindow: View {
         .frame(minWidth: 360, minHeight: 360)
         .task {
             env.applyLifeLogMiniWindowLevel()
-            await env.lifeLog.followCurrentDay()
+            await env.lifeLog.reload()
         }
     }
 
-    private var items: [LifeLogTimelineLayout.Row] { LifeLogTimelineLayout.rows(for: env.lifeLog.day) }
+    private var items: [LifeLogTimelineLayout.Row] { LifeLogTimelineLayout.rows(for: env.lifeLog.today) }
 
     @ViewBuilder
     private func rowView(_ row: LifeLogTimelineLayout.Row) -> some View {

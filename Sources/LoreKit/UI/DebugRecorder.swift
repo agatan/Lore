@@ -189,7 +189,7 @@ enum DebugRecorder {
         window.makeKeyAndOrderFront(nil)
         await env.lifeLog.followCurrentDay()
         guard let event = env.lifeLog.day.calendarEvents.first(where: { $0.id == "demo-event-weekly" }),
-              let lastTime = env.eventLastTime(event) else {
+              let lastTime = env.eventLastTime(event, in: env.lifeLog.day) else {
             throw CocoaError(.fileWriteUnknown, userInfo: [NSLocalizedDescriptionKey: "--lore-demo-recurring-now の予定がありません"])
         }
         env.lifeLog.jumpToTimelineItem("e-\(event.id)")
