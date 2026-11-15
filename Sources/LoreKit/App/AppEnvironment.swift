@@ -100,6 +100,21 @@ public final class AppEnvironment {
         wireHotkeys()
         wirePowerNotifications()
         followApplicationLanguage()
+        followColorTheme()
+    }
+
+    /// Window、panel、menuと`LoreTheme`の可変色を、選んだ配色でまとめて解決させる。
+    private func followColorTheme() {
+        let theme = withObservationTracking {
+            settings.colorTheme
+        } onChange: { [weak self] in
+            Task { @MainActor [weak self] in self?.followColorTheme() }
+        }
+        NSApplication.shared.appearance = switch theme {
+        case .system: nil
+        case .light: NSAppearance(named: .aqua)
+        case .dark: NSAppearance(named: .darkAqua)
+        }
     }
 
     /// coordinatorやengineが組み立てる文言も、Viewと同じ表示言語で作らせる。
