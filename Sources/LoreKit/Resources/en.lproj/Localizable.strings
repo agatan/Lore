@@ -647,6 +647,7 @@
 "ライフログAIの処理に失敗しました" = "Life Log AI failed";
 "このカレンダーはAIに送らない設定です" = "This calendar is not sent to AI";
 "前回" = "Last time";
+"前回のメモを開く" = "Open this memo";
 "前回の記録を開く" = "Open the last occurrence";
 "会議の負荷" = "Meeting Load";
 "会議時間" = "Meeting time";

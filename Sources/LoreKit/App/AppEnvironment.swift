@@ -190,6 +190,12 @@ public final class AppEnvironment {
         await lifeLog.showUtterance(id: previous.firstUtteranceID, day: previous.occurrence.day)
     }
 
+    public func showLifeLogMemo(_ memo: LifeLogMemo) async {
+        mainSection = .lifeLog
+        onShowMainWindow?()
+        await lifeLog.showMemo(id: memo.id, createdAt: memo.createdAt)
+    }
+
     private func eventNotesSaved(_ note: GeneratedNote, event: CalendarEventSnapshot, automatic: Bool) async {
         if LifeLogDateKey.string(for: lifeLog.selectedDate) == note.scope.day { await lifeLog.reload() }
         guard automatic, settings.lifeLogAI.notifiesWhenEventNotesReady, Self.generatesAutomatically,

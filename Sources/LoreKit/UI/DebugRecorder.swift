@@ -34,6 +34,10 @@ enum DebugRecorder {
                 try await recordLastTime(env: env, to: directory.appending(path: "last-time\(suffix).mp4"))
                 exit(0)
             }
+            if ProcessInfo.processInfo.arguments.contains("--lore-record-last-time-memo") {
+                try await recordLastTime(env: env, opensMemo: true, to: directory.appending(path: "last-time-memo\(suffix).mp4"))
+                exit(0)
+            }
             try await recordDictation(env: env, to: directory.appending(path: "dictation\(suffix).mp4"))
             try await recordLifeLog(env: env, to: directory.appending(path: "life-log\(suffix).mp4"))
         } catch {
@@ -180,8 +184,9 @@ enum DebugRecorder {
         }
     }
 
-    /// A weekly 1:1 in progress shows last week's follow-ups, and its date opens that day. Needs `--lore-demo-recurring-now`.
-    private static func recordLastTime(env: AppEnvironment, to url: URL) async throws {
+    /// A weekly 1:1 in progress shows last week's follow-ups and memos. Its date, or with `opensMemo` its newest memo,
+    /// opens that day. Needs `--lore-demo-recurring-now`.
+    private static func recordLastTime(env: AppEnvironment, opensMemo: Bool = false, to url: URL) async throws {
         guard let window = NSApp.windows.first(where: { $0.identifier?.rawValue == LoreWindow.main }) else {
             throw CocoaError(.fileWriteUnknown, userInfo: [NSLocalizedDescriptionKey: "main windowが表示されていません"])
         }
@@ -196,7 +201,11 @@ enum DebugRecorder {
         await settle(1.5)
         try await record(window: window, to: url) {
             await settle(2.5)
-            lastTime.open()
+            if opensMemo, let memo = lastTime.value.memos.last {
+                lastTime.openMemo(memo)
+            } else {
+                lastTime.open()
+            }
             await settle(3)
         }
     }

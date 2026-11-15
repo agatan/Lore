@@ -191,11 +191,13 @@ public struct LifeLogDay: Sendable {
     ) -> EventLastTime? {
         guard !event.isAllDay, !recordingExclusions.excludes(event),
               let previous = previousOccurrences[EventOccurrence(event)] else { return nil }
+        // Memos are the user's own words and are sent nowhere, so an AI exclusion does not hide them.
+        let memos = Array(previous.memos.suffix(EventLastTime.maximumMemos))
         guard let notes = previous.notes, !aiSettings.excludes(event, excludedEventIDs: aiExcludedEventIDs) else {
-            return EventLastTime(previous: previous, followUps: [])
+            return EventLastTime(previous: previous, followUps: [], memos: memos)
         }
         let followUps = notes.items(.actionItems) + notes.items(.openQuestions)
-        return EventLastTime(previous: previous, followUps: Array(followUps.prefix(EventLastTime.maximumFollowUps)))
+        return EventLastTime(previous: previous, followUps: Array(followUps.prefix(EventLastTime.maximumFollowUps)), memos: memos)
     }
 
     public func eventNotes(for event: CalendarEventSnapshot, calendar: Calendar = .current) -> GeneratedNote? {
@@ -213,20 +215,26 @@ public struct PreviousEventOccurrence: Sendable, Hashable {
     public var occurrence: EventOccurrence
     public var firstUtteranceID: String
     public var notes: GeneratedNote?
+    /// Memos created within the occurrence's start and end, oldest first.
+    public var memos: [LifeLogMemo]
 
-    public init(occurrence: EventOccurrence, firstUtteranceID: String, notes: GeneratedNote? = nil) {
+    public init(occurrence: EventOccurrence, firstUtteranceID: String, notes: GeneratedNote? = nil, memos: [LifeLogMemo] = []) {
         self.occurrence = occurrence
         self.firstUtteranceID = firstUtteranceID
         self.notes = notes
+        self.memos = memos
     }
 }
 
 public struct EventLastTime: Sendable, Hashable {
     public static let maximumFollowUps = 3
+    public static let maximumMemos = 3
 
     public var previous: PreviousEventOccurrence
     /// Action items, then open questions, of the earlier occurrence's notes.
     public var followUps: [GeneratedNoteItem]
+    /// The newest memos of the earlier occurrence, oldest first.
+    public var memos: [LifeLogMemo]
 }
 
 /// 月間カレンダーに描画する日ごとの密度。数値そのものはUIへ表示せず、

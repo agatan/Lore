@@ -167,7 +167,22 @@ public struct LifeLogStore: Sendable {
         let notes = try Row.fetchOne(db, sql: "SELECT * FROM generated_notes WHERE kind = ? AND scope_key = ?",
                                      arguments: [GeneratedNoteKind.eventNotes.rawValue, GeneratedNoteScope.event(occurrence).key])
             .map { try decodeGeneratedNote($0, db: db) }
-        return PreviousEventOccurrence(occurrence: occurrence, firstUtteranceID: firstID, notes: notes)
+        let memos = try previousMemos(of: event, containing: latestStart, db: db)
+        return PreviousEventOccurrence(occurrence: occurrence, firstUtteranceID: firstID, notes: notes, memos: memos)
+    }
+
+    /// The newest memos created within the start and end of the occurrence that holds `spokenAt`, the same
+    /// range rule as the sources of its AI notes. The occurrence's range is its stored snapshot.
+    private func previousMemos(of event: CalendarEventSnapshot, containing spokenAt: Date, db: Database) throws -> [LifeLogMemo] {
+        guard let range = try Row.fetchOne(db, sql: """
+            SELECT starts_at, ends_at FROM calendar_event_snapshots
+            WHERE id = ? AND starts_at <= ? AND ends_at > ? ORDER BY starts_at DESC LIMIT 1
+            """, arguments: [event.id, date(spokenAt), date(spokenAt)]) else { return [] }
+        return try Row.fetchAll(db, sql: """
+            SELECT * FROM (
+              SELECT * FROM life_log_memos WHERE created_at >= ? AND created_at < ? ORDER BY created_at DESC LIMIT ?
+            ) ORDER BY created_at
+            """, arguments: [range["starts_at"], range["ends_at"], EventLastTime.maximumMemos]).map(decodeMemo)
     }
 
     public func activity(start: Date, end: Date, calendar: Calendar = .current, participatingOnly: Bool = false) async throws -> [String: LifeLogDayActivity] {

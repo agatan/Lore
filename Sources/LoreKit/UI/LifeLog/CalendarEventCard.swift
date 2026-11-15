@@ -21,6 +21,7 @@ struct CalendarEventCard: View {
     struct LastTime {
         var value: EventLastTime
         var open: () -> Void
+        var openMemo: (LifeLogMemo) -> Void
     }
     /// The AI notes and the "do not send to AI" toggle. Only the main window passes it.
     var ai: AI?
@@ -101,6 +102,21 @@ struct CalendarEventCard: View {
                     .foregroundStyle(.secondary)
                     .lineLimit(compact ? 1 : 2)
                     .accessibilityIdentifier("\(prefix).item-\(index)")
+            }
+            ForEach(Array(lastTime.value.memos.enumerated()), id: \.element.id) { index, memo in
+                Button { lastTime.openMemo(memo) } label: {
+                    Label {
+                        Text(verbatim: memo.text)
+                            .lineLimit(compact ? 1 : 2)
+                            .multilineTextAlignment(.leading)
+                    } icon: {
+                        Image(systemName: "note.text")
+                    }
+                }
+                .buttonStyle(.plain)
+                .foregroundStyle(.secondary)
+                .help("前回のメモを開く")
+                .accessibilityIdentifier("\(prefix).memo-\(index)")
             }
         }
         .font(LoreTheme.captionFont)
@@ -189,8 +205,10 @@ extension AppEnvironment {
             aiSettings: settings.lifeLogAI,
             aiExcludedEventIDs: lifeLogAI.excludedEventIDs
         ) else { return nil }
-        return CalendarEventCard.LastTime(value: value) { [weak self] in
+        return CalendarEventCard.LastTime(value: value, open: { [weak self] in
             Task { await self?.showLifeLogPreviousOccurrence(value.previous) }
-        }
+        }, openMemo: { [weak self] memo in
+            Task { await self?.showLifeLogMemo(memo) }
+        })
     }
 }

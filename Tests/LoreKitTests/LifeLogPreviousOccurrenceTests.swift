@@ -119,6 +119,83 @@ struct LifeLogPreviousOccurrenceTests {
         #expect(excludedCalendar.followUps.isEmpty)
         #expect(excludedCalendar.previous.firstUtteranceID == "last-week")
     }
+
+    private func memo(_ db: LoreDatabase, _ id: String, at date: Date) async throws {
+        try await db.lifeLog.save(memo: LifeLogMemo(id: id, createdAt: date, text: "memo \(id)"))
+    }
+
+    @Test("Memos of the earlier occurrence are matched by its time range, the newest three, oldest first")
+    func memosByTimeRange() async throws {
+        let db = try await LoreDatabase.inMemory()
+        let sync = event("series", start: at(0, 10))
+        let lastWeek = event("series", start: at(-7, 10))
+        try await db.lifeLog.save(calendarEvents: [sync, lastWeek])
+        try await say(db, "last-week", at: at(-7, 10, 5), eventID: "series")
+        try await memo(db, "before-start", at: at(-7, 9, 59))
+        try await memo(db, "m1", at: at(-7, 10))
+        try await memo(db, "m2", at: at(-7, 10, 10))
+        try await memo(db, "m3", at: at(-7, 10, 20))
+        try await memo(db, "m4", at: at(-7, 10, 29))
+        try await memo(db, "at-end", at: at(-7, 10, 30))
+        try await memo(db, "two-weeks-ago", at: at(-14, 10, 5))
+        try await memo(db, "this-week", at: at(0, 10, 5))
+
+        let day = try await db.lifeLog.day(today, calendar: calendar)
+        let previous = try #require(day.previousOccurrences[EventOccurrence(sync, calendar: calendar)])
+        #expect(previous.memos.map(\.id) == ["m2", "m3", "m4"])
+        let lastTime = try #require(day.lastTime(for: sync, recordingExclusions: .init(), aiSettings: .init(), aiExcludedEventIDs: []))
+        #expect(lastTime.memos.map(\.id) == ["m2", "m3", "m4"])
+    }
+
+    @Test("An occurrence without a stored snapshot has no memos")
+    func memosNeedSnapshot() async throws {
+        let db = try await LoreDatabase.inMemory()
+        let sync = event("series", start: at(0, 10))
+        try await db.lifeLog.save(calendarEvents: [sync])
+        try await say(db, "last-week", at: at(-7, 10, 5), eventID: "series")
+        try await memo(db, "m1", at: at(-7, 10, 10))
+
+        let day = try await db.lifeLog.day(today, calendar: calendar)
+        let lastTime = try #require(day.lastTime(for: sync, recordingExclusions: .init(), aiSettings: .init(), aiExcludedEventIDs: []))
+        #expect(lastTime.memos.isEmpty)
+        #expect(lastTime.previous.firstUtteranceID == "last-week")
+    }
+
+    @Test("Memos stay for an event or calendar excluded from AI, and a held event shows nothing")
+    func memosIgnoreAIExclusion() async throws {
+        let db = try await LoreDatabase.inMemory()
+        let sync = event("series", start: at(0, 10))
+        try await db.lifeLog.save(calendarEvents: [sync, event("series", start: at(-7, 10))])
+        try await say(db, "last-week", at: at(-7, 10, 5), eventID: "series")
+        try await memo(db, "m1", at: at(-7, 10, 10))
+        let day = try await db.lifeLog.day(today, calendar: calendar)
+
+        let excludedEvent = try #require(day.lastTime(for: sync, recordingExclusions: .init(), aiSettings: .init(), aiExcludedEventIDs: ["series"]))
+        #expect(excludedEvent.memos.map(\.id) == ["m1"])
+        var aiSettings = LifeLogAISettings()
+        aiSettings.excludedCalendars = ["Work"]
+        let excludedCalendar = try #require(day.lastTime(for: sync, recordingExclusions: .init(), aiSettings: aiSettings, aiExcludedEventIDs: []))
+        #expect(excludedCalendar.memos.map(\.id) == ["m1"])
+
+        var skipped = LifeLogRecordingExclusions()
+        skipped.setSkipped(true, event: sync)
+        #expect(day.lastTime(for: sync, recordingExclusions: skipped, aiSettings: .init(), aiExcludedEventIDs: []) == nil)
+    }
+
+    @Test("The memo's own day is the jump target when a memo is written after midnight")
+    func memoJumpTargetsItsOwnDay() async throws {
+        let db = try await LoreDatabase.inMemory()
+        let nightly = event("nightly", start: at(0, 23), minutes: 120)
+        try await db.lifeLog.save(calendarEvents: [nightly, event("nightly", start: at(-1, 23), minutes: 120)])
+        try await say(db, "yesterday", at: at(-1, 23, 10), eventID: "nightly")
+        try await memo(db, "after-midnight", at: at(0, 0, 30))
+
+        let day = try await db.lifeLog.day(today, calendar: calendar)
+        let lastTime = try #require(day.lastTime(for: nightly, recordingExclusions: .init(), aiSettings: .init(), aiExcludedEventIDs: []))
+        let jumped = try #require(lastTime.memos.first)
+        #expect(jumped.id == "after-midnight")
+        #expect(LifeLogDateKey.string(for: jumped.createdAt, calendar: calendar) == LifeLogDateKey.string(for: at(0, 0), calendar: calendar))
+    }
 }
 
 @Suite("v13-utterance-event-index migration")
