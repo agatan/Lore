@@ -22,7 +22,8 @@ The test bundle isolates the **database**, not the filesystem or Keychain. These
 | `life-log.capture-toggle` / `life-log-mini.capture-toggle` (start recording) | records the mic and writes audio chunks into the **real** `Lore/LifeLog/` folder, orphaned from the in-memory DB |
 | `privacy.delete-life-log` then confirm | deletes the **real** `Lore/LifeLog/` audio folder |
 | `privacy.reset` ("Loreを初期化…") then confirm | deletes real life-log audio, real Whisper models and **all Lore Keychain secrets (API keys)** |
-| Saving an API key in Settings > AI 整理 | writes into the real Keychain service |
+| Saving an API key in Settings > AI整形 | writes into the real Keychain service |
+| `onboarding.start-life-log` | starts life-log capture once the audio-storage question has been answered (same effect as the capture toggle) |
 | Export sheet "コピー" | overwrites the user's clipboard (ask first) |
 
 `privacy.delete-history` is DB-only and safe. Pressing these buttons only opens a confirmation dialog, which is safe to show. Do not confirm it. If a change needs one of the forbidden paths proven, cover it with `swift test` and tell the user that the live proof needs their own machine state.
@@ -43,9 +44,10 @@ $V launch --demo         # demo data, main window on ライフログ; waits unti
 |---|---|---|
 | `--demo` | `--lore-screenshot-demo` | today's demo events, utterances, memos, one dictation (all Japanese copy by default) |
 | `--empty` | `--lore-ui-test-empty` | in-memory DB with no records (still has built-in modes) |
-| `--settings <privacy\|calendar\|life-log\|modes\|dictation>` | `--lore-ui-test-settings-<x>` | opens the Settings window on that section instead of the main window; ready = `settings.section.privacy` |
+| `--settings <privacy\|calendar\|life-log\|life-log-ai\|modes\|dictation>` | `--lore-ui-test-settings-<x>` | opens the Settings window on that section instead of the main window; `dictation` opens AI整形 (`models`), not 音声入力; ready = `settings.section.privacy` |
 | `--lang <en\|ja\|zh-Hans>` | `--lore-demo-language <x>` | language of the demo **data** only; the UI language is the persisted setting (see Gotchas) |
 | `--ready <id>` | — | override the ready identifier |
+| any other argument | passed through | e.g. `--lore-screenshot-onboarding --ready onboarding.next` shows onboarding (see `features/onboarding.md`) |
 
 Ready means the identifier became visible in the AX tree after boot. `launch` prints the run directory, which receives the evidence. It refuses to start when another `LoreUITests` instance is running (for example `make ui-test` or another agent). Wait for that run to finish instead of killing it.
 
@@ -57,7 +59,7 @@ Teardown: `$V stop` (see Cleanup).
 $V doctor
 ```
 
-This check is read-only. It checks that the test bundle exists, that the terminal has the Accessibility permission (required) and the Screen Recording permission (only for `shot`), and that the build is newer than every file in `Sources/`. With an instance recorded, it also checks that the instance is alive and is the only `LoreUITests` process, that the AX tree is readable, and it lists the window ids. Run it first whenever a step times out or behaves strangely. When the build is stale, run `$V build` and relaunch.
+This check is read-only. It checks that the test bundle exists, that the terminal has the Accessibility permission (required) and the Screen Recording permission (only for `shot`), that the screen is unlocked, and that the build is newer than every file in `Sources/`. With an instance recorded, it also checks that the instance is alive and is the only `LoreUITests` process, that its AX windows resolve as windows, and it lists the window ids. Run it first whenever a step times out or behaves strangely. When the build is stale, run `$V build` and relaunch. When the screen is locked, `launch` refuses to start: on the lock screen AX resolves every window to the application element (only the menu bar is visible), although `shot` still captures the windows. Nothing can be driven until the user unlocks the Mac.
 
 ## Drive
 
@@ -121,7 +123,6 @@ The settings that a run changes persist in the `dev.agatan.Lore.UIE2E` defaults 
 ## Gotchas
 
 - **The UI language persists between runs and is not set by `--lang`.** `applicationLanguage` is stored in the test bundle's defaults. `make lp-media` (the snapshotter and recorder) and Settings > 一般 write it. After an lp-media run it is often `zh-Hans`: the sidebar, inspector and timeline durations render in Chinese, while the demo data, the export sheet and the menu bar stay Japanese. Run `defaults delete dev.agatan.Lore.UIE2E` before launching to return to the system language. Prefer assertions on ids and demo-data strings over chrome labels.
-- **`make ui-test` currently fails at CUJ 1** (as of 2026-11-15): `Scripts/LoreUIE2E.swift` waits for the old demo memo `オンボーディングは3つの価値が順番に伝わる構成にする`, but `ScreenshotDemoData` now seeds `オンボーディングは3つの機能を順番に紹介する`. Do not blame your change for this failure. Fix the runner or report it.
 - `make ui-test` force-terminates every `LoreUITests` instance. Do not run it while you drive one.
 - The main window opens at 1680×960 or larger. `shot` captures sheets as separate windows (`<name>-0.png` is the sheet with its parent behind it).
 - The Settings sidebar rows (`settings.section.*`) are static text. Use `select`, not `press`.

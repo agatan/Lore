@@ -14,6 +14,12 @@ struct Failure: Error, CustomStringConvertible { let description: String }
 
 func fail(_ message: String) -> Failure { Failure(description: message) }
 
+/// While the login screen is up, AX resolves every window to the application element, so no window content is visible.
+func screenIsLocked() -> Bool {
+    let session = CGSessionCopyCurrentDictionary() as? [String: Any]
+    return (session?["CGSSessionScreenIsLocked"] as? Bool) ?? false
+}
+
 // MARK: - Run bookkeeping
 
 func currentRunDir() throws -> URL {
@@ -158,6 +164,7 @@ func launch(_ appPath: String, _ extra: [String]) async throws {
     }
     let url = URL(fileURLWithPath: appPath)
     guard Bundle(url: url)?.bundleIdentifier == testBundleID else { throw fail("\(appPath) is not the UI test bundle; run `lore-verify build`") }
+    guard !screenIsLocked() else { throw fail("the screen is locked; AX cannot see window contents until the user unlocks it") }
 
     var ready = "life-log.capture-toggle"
     var arguments: [String] = []
@@ -167,7 +174,7 @@ func launch(_ appPath: String, _ extra: [String]) async throws {
         case "--demo": arguments.append("--lore-screenshot-demo")
         case "--empty": arguments.append("--lore-ui-test-empty")
         case "--settings":
-            guard let section = iterator.next() else { throw fail("--settings needs privacy|calendar|life-log|modes|dictation") }
+            guard let section = iterator.next() else { throw fail("--settings needs privacy|calendar|life-log|life-log-ai|modes|dictation") }
             arguments.append("--lore-ui-test-settings-\(section)")
             ready = "settings.section.privacy"
         case "--lang":
@@ -232,6 +239,7 @@ func doctor(_ appPath: String) {
     check(Bundle(url: url)?.bundleIdentifier == testBundleID, "test bundle at \(appPath)", "run `lore-verify build`")
     check(AXIsProcessTrusted(), "terminal has Accessibility permission", "System Settings > Privacy & Security > Accessibility")
     check(CGPreflightScreenCaptureAccess(), "terminal has Screen Recording permission (for `shot`)", "only screenshots need it")
+    check(!screenIsLocked(), "screen is unlocked", "AX cannot see window contents on the lock screen; wait for the user to unlock")
     let binary = url.appendingPathComponent("Contents/MacOS/Lore")
     let built = (try? FileManager.default.attributesOfItem(atPath: binary.path)[.modificationDate] as? Date) ?? .distantPast
     let sources = FileManager.default.enumerator(atPath: "Sources")
@@ -249,8 +257,10 @@ func doctor(_ appPath: String) {
         check(true, "recorded instance pid \(app.processIdentifier) is running")
         check(running.count == 1, "exactly one LoreUITests instance", "pids \(running.map(\.processIdentifier)); another driver is active")
         let root = AXUIElementCreateApplication(app.processIdentifier)
-        let ids = descendants(root).compactMap(identifier)
-        check(!ids.isEmpty, "accessibility tree is readable (\(ids.count) identified elements)", "app is still booting or AX is denied")
+        let windows = children(kAXWindowsAttribute as String, of: root)
+        let windowRoles = windows.map { (attribute(kAXRoleAttribute as String, of: $0) as String?) ?? "-" }
+        check(!windows.isEmpty && windowRoles.allSatisfy { $0 != kAXApplicationRole as String },
+              "accessibility tree shows \(windows.count) window(s)", "windows resolve as \(windowRoles); the app is still booting or the screen is locked")
         print("     windows: \(windowIDs(pid: app.processIdentifier).map { "\($0.id) \"\($0.name)\"" }.joined(separator: ", "))")
     } else {
         print("info no instance recorded (pids running for test bundle: \(running.map(\.processIdentifier)))")
