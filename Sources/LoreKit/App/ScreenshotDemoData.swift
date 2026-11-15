@@ -169,6 +169,46 @@ enum ScreenshotDemoData {
         ))
     }
 }
+
+/// Fixed details for the seeded demo events, so screenshots show attendees and join links without EventKit.
+/// Covers each conference provider and each response. Names and addresses are fictional (`example.com`).
+struct DemoCalendarEventDetails: CalendarEventDetailsReading {
+    let descriptions: [String]
+    let room: String
+
+    init(copy: DemoCopy) {
+        descriptions = copy.eventDescriptions
+        room = copy.room
+    }
+
+    func details(eventID: String, startsAt: Date) async -> CalendarEventDetails? {
+        func person(_ name: String, _ status: CalendarParticipationStatus, _ role: CalendarAttendeeRole, isMe: Bool = false) -> CalendarAttendee {
+            let email = "\(name.prefix { $0 != " " }.lowercased())@example.com"
+            return CalendarAttendee(name: name, email: email, status: status, role: role, kind: .person, isCurrentUser: isMe)
+        }
+        let me = person("Aoi Mori", .accepted, .required, isMe: true)
+        let mika = person("Mika Sato", .accepted, .chair)
+        let room = CalendarAttendee(name: room, email: "room-4a@resource.example.com", status: .accepted, role: .nonParticipant, kind: .room)
+        func details(_ index: Int, location: String? = nil, attendees: [CalendarAttendee]) -> CalendarEventDetails {
+            CalendarEventDetails(eventID: eventID, startsAt: startsAt, externalIdentifier: "\(eventID)@google.com",
+                                 notes: descriptions[index], location: location, organizer: attendees[0], attendees: attendees)
+        }
+        switch eventID {
+        case "demo-event-1":
+            return details(0, attendees: [mika, me, person("Ren Kato", .tentative, .optional), room])
+        case "demo-event-2":
+            return details(1, location: "https://example.zoom.us/j/81234567890?pwd=demo",
+                           attendees: [me, person("Sora Ito", .pending, .required), person("Mika Sato", .declined, .required)])
+        case "demo-event-3":
+            return details(2, attendees: [person("Ren Kato", .accepted, .chair), me, person("Mika Sato", .accepted, .required), person("Sora Ito", .pending, .required)])
+        case "demo-event-weekly":
+            return details(3, attendees: [mika, me])
+        default:
+            return nil
+        }
+    }
+}
+
 /// 撮影用の文面。`--lore-demo-language en|ja|zh-Hans`で、表示言語とあわせて切り替える。
 /// LPや説明書に載るため、各言語で自然に話す内容にする（直訳しない）。
 struct DemoCopy {
@@ -201,6 +241,9 @@ struct DemoCopy {
     /// Today's digest: two summary lines, a decision, an action item, and a thing left open.
     /// Then yesterday's digest: a summary line and an action item.
     var digest: [String]
+    /// Descriptions of the three demo events and the weekly 1:1, each with a different join link.
+    var eventDescriptions: [String]
+    var room: String
 
     static var current: DemoCopy {
         let arguments = ProcessInfo.processInfo.arguments
@@ -254,7 +297,14 @@ struct DemoCopy {
             "完了したタスクを後から戻せる場所をどう作るか",
             "リリース計画の前提をそろえ、ベータの配布日を金曜に決めた",
             "ベータの感想を集めるフォームを用意する",
-        ]
+        ],
+        eventDescriptions: [
+            "今日の確認事項\n・初回体験の流れ\n・検索とエクスポートの残りの課題\n\nGoogle Meet に参加: https://meet.google.com/abc-defg-hij\n電話で参加: +1 555-0100 PIN: 123 456",
+            "新しい設定画面のデザインを見ます。事前にコメントを確認してください。",
+            "次のリリースの範囲を決めます。\n\nMicrosoft Teams 会議\n参加: https://teams.microsoft.com/l/meetup-join/19%3ameeting_demo%40thread.v2/0",
+            "今週の進捗と困っていること。\n\nWebex で参加: https://example.webex.com/meet/mika",
+        ],
+        room: "会議室 4A"
     )
 
     static let english = DemoCopy(
@@ -297,7 +347,14 @@ struct DemoCopy {
             "How to give finished tasks a place to come back from",
             "Aligned the release plan and set Friday for the beta",
             "Prepare a form to collect beta feedback",
-        ]
+        ],
+        eventDescriptions: [
+            "Today\n- The first-run flow\n- What is left for search and export\n\nJoin with Google Meet: https://meet.google.com/abc-defg-hij\nJoin by phone: +1 555-0100 PIN: 123 456",
+            "We'll look at the new settings design. Please read the comments first.",
+            "Decide the scope of the next release.\n\nMicrosoft Teams meeting\nJoin: https://teams.microsoft.com/l/meetup-join/19%3ameeting_demo%40thread.v2/0",
+            "Progress this week and anything blocking you.\n\nJoin with Webex: https://example.webex.com/meet/mika",
+        ],
+        room: "Room 4A"
     )
 
     static let chinese = DemoCopy(
@@ -340,7 +397,14 @@ struct DemoCopy {
             "完成的任务要放在哪里才能找回来",
             "对齐了版本规划，测试版定在周五发布",
             "准备收集测试版反馈的表单",
-        ]
+        ],
+        eventDescriptions: [
+            "今天要确认\n・首次使用的流程\n・搜索和导出还剩下的问题\n\n加入 Google Meet: https://meet.google.com/abc-defg-hij\n电话加入: +1 555-0100 PIN: 123 456",
+            "看一下新的设置页面设计，请先看看评论。",
+            "确定下一个版本的范围。\n\nMicrosoft Teams 会议\n加入: https://teams.microsoft.com/l/meetup-join/19%3ameeting_demo%40thread.v2/0",
+            "本周进展和遇到的困难。\n\n通过 Webex 加入: https://example.webex.com/meet/mika",
+        ],
+        room: "4A 会议室"
     )
 }
 #endif

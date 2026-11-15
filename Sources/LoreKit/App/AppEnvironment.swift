@@ -325,6 +325,7 @@ public final class AppEnvironment {
                 database = try await LoreDatabase.inMemory()
                 if !Self.usesEmptyUITestData {
                     try await ScreenshotDemoData.seed(database: database)
+                    lifeLog.useEventDetails(DemoCalendarEventDetails(copy: .current))
                 }
             } else {
                 database = try await openDefaultDatabase()

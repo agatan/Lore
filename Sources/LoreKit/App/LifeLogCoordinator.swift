@@ -32,6 +32,7 @@ public final class LifeLogCoordinator {
 
     private let capture: ContinuousAudioCapture
     private let calendarProvider = CalendarProvider()
+    private var eventDetailsReader: any CalendarEventDetailsReading
     private var database: LoreDatabase?
     /// Called after an explicit calendar refresh of the selected day.
     @ObservationIgnored public var onCalendarRefreshed: (() -> Void)?
@@ -71,6 +72,7 @@ public final class LifeLogCoordinator {
     /// `audioRoot`はUI test bundleが利用者の音声folderへ書かないために渡す。
     public init(audioRoot: URL? = nil) {
         capture = audioRoot.map { ContinuousAudioCapture(root: $0) } ?? ContinuousAudioCapture()
+        eventDetailsReader = calendarProvider
         capture.onCommitted = { [weak self] chunk in await self?.commitLiveChunk(chunk) }
         capture.onFinished = { [weak self] in await self?.captureWriterFinished() }
         capture.onFailure = { [weak self] error in self?.handleCaptureFailure(error) }
@@ -931,6 +933,11 @@ public final class LifeLogCoordinator {
         return try await calendarProvider.events(start: interval.start, end: interval.end, selectedCalendars: calendars)
     }
 
+    /// Details of this occurrence, read now and not saved. Nil without calendar access or when the event is gone.
+    public func eventDetails(for event: CalendarEventSnapshot) async -> CalendarEventDetails? {
+        await eventDetailsReader.details(eventID: event.id, startsAt: event.startsAt)
+    }
+
     /// The wall-clock start of the oldest captured audio whose utterances are not saved yet.
     /// Failed chunks do not count: they wait for the next launch and must not block AI notes forever.
     public func oldestUntranscribedAudioStart() async throws -> Date? {
@@ -951,6 +958,11 @@ public final class LifeLogCoordinator {
     }
 
     #if DEBUG
+    /// The screenshot demo reads fixed details for its seeded events instead of EventKit.
+    func useEventDetails(_ reader: any CalendarEventDetailsReading) {
+        eventDetailsReader = reader
+    }
+
     /// LP用の収録だけで使う。実際のcaptureを動かさず、記録中と聞き取り中の見た目を再現する。
     public func applyPreviewCapture(capturing: Bool, hearingSince: Date? = nil, audioDuration: TimeInterval = 0, transcript: String = "") {
         captureRequested = capturing
