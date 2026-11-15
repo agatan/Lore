@@ -894,7 +894,7 @@ public final class LifeLogCoordinator {
     public func jumpToTime(_ date: Date) async {
         await select(date: date)
         let candidates = day.utterances.map { ($0.startedAt, "u-\($0.id)") }
-            + day.calendarEvents.map { ($0.startsAt, "e-\($0.id)") }
+            + day.calendarEvents.map { ($0.startsAt, EventOccurrence($0).timelineItemID) }
             + day.dictations.map { ($0.startedAt, "d-\($0.id)") }
             + day.memos.map { ($0.createdAt, "m-\($0.id)") }
         guard let nearest = candidates.min(by: {
@@ -911,7 +911,7 @@ public final class LifeLogCoordinator {
     }
 
     public func showEvent(id eventID: String, day: String) async {
-        await navigateToSource(date: LifeLogDateKey.date(from: day) ?? Date(), timelineItemID: "e-\(eventID)")
+        await navigateToSource(date: LifeLogDateKey.date(from: day) ?? Date(), timelineItemID: EventOccurrence(eventID: eventID, day: day).timelineItemID)
     }
 
     public func showUtterance(id utteranceID: String, day: String) async {

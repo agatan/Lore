@@ -141,9 +141,9 @@ public struct LifeLogStore: Sendable {
             let events = try Row.fetchAll(db, sql: "SELECT * FROM calendar_event_snapshots WHERE ends_at > ? AND starts_at < ?\(participationClause) ORDER BY starts_at", arguments: args).map(decodeEvent)
             let notes = try Row.fetchAll(db, sql: "SELECT * FROM generated_notes WHERE scope_day = ? ORDER BY range_start", arguments: [LifeLogDateKey.string(for: dateValue, calendar: calendar)])
                 .map { try decodeGeneratedNote($0, db: db) }
-            var previous: [String: PreviousEventOccurrence] = [:]
+            var previous: [EventOccurrence: PreviousEventOccurrence] = [:]
             for event in events where !event.isAllDay {
-                previous[event.id] = try previousOccurrence(of: event, db: db, calendar: calendar)
+                previous[EventOccurrence(event, calendar: calendar)] = try previousOccurrence(of: event, db: db, calendar: calendar)
             }
             return LifeLogDay(utterances: utterances, dictations: dictations, memos: memos, calendarEvents: events,
                               generatedNotes: notes, previousOccurrences: previous)

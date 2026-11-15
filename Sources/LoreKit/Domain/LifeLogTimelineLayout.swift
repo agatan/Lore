@@ -36,7 +36,7 @@ public enum LifeLogTimelineLayout {
     public static func rows(for day: LifeLogDay) -> [Row] {
         let timedEvents = day.calendarEvents.filter { !$0.isAllDay }
         let items: [(id: String, date: Date, order: Int, kind: Kind)] =
-            timedEvents.map { ("e-\($0.id)", $0.startsAt, 0, .event($0)) }
+            timedEvents.map { (EventOccurrence($0).timelineItemID, $0.startsAt, 0, .event($0)) }
             + day.utterances.map { ("u-\($0.id)", $0.startedAt, 1, .utterance($0)) }
             + day.dictations.map { ("d-\($0.id)", $0.startedAt, 1, .dictation($0)) }
             + day.memos.map { ("m-\($0.id)", $0.createdAt, 1, .memo($0)) }
@@ -96,7 +96,7 @@ public struct LifeLogDayMapLayout: Sendable {
         public var event: CalendarEventSnapshot
         public var column: Int
         public var columnCount: Int
-        public var id: String { event.id }
+        public var id: EventOccurrence { EventOccurrence(event) }
     }
 
     public enum MarkKind: Sendable, Equatable {

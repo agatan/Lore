@@ -45,7 +45,7 @@ struct LifeLogPreviousOccurrenceTests {
         try await say(db, "last-week-second", at: at(-7, 10, 20), eventID: "series")
         try await say(db, "today", at: at(0, 10, 3), eventID: "series")
 
-        let previous = try #require(try await db.lifeLog.day(today, calendar: calendar).previousOccurrences["series"])
+        let previous = try #require(try await db.lifeLog.day(today, calendar: calendar).previousOccurrences[EventOccurrence(sync, calendar: calendar)])
         #expect(previous.occurrence == EventOccurrence(eventID: "series", day: LifeLogDateKey.string(for: at(-7, 0), calendar: calendar)))
         #expect(previous.firstUtteranceID == "last-week-first")
         #expect(previous.notes == nil)
@@ -61,8 +61,8 @@ struct LifeLogPreviousOccurrenceTests {
         try await say(db, "untagged", at: at(-7, 15, 5), eventID: nil)
 
         let day = try await db.lifeLog.day(today, calendar: calendar)
-        #expect(day.previousOccurrences["series"]?.firstUtteranceID == "last-week")
-        #expect(day.previousOccurrences["other"] == nil)
+        #expect(day.previousOccurrences[EventOccurrence(renamed, calendar: calendar)]?.firstUtteranceID == "last-week")
+        #expect(day.previousOccurrences[EventOccurrence(sameTitle, calendar: calendar)] == nil)
     }
 
     @Test("The first occurrence, an all-day event, and an event crossing midnight find nothing")
