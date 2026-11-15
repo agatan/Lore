@@ -274,6 +274,32 @@ struct LifeLogTests {
         #expect(coordinator.sourceNavigationRevision == 2)
     }
 
+    @Test("メイン画面が別の日を開いても、今日の記録は今日のまま更新される")
+    @MainActor
+    func todayStaysOnTodayWhileAnotherDayIsSelected() async throws {
+        let database = try await LoreDatabase.inMemory()
+        let coordinator = LifeLogCoordinator()
+        let now = Date()
+        let lastWeek = try #require(Calendar.current.date(byAdding: .day, value: -7, to: now))
+        try await database.lifeLog.save(memo: LifeLogMemo(id: "today", createdAt: now, text: "今日"))
+        try await database.lifeLog.save(memo: LifeLogMemo(id: "last-week", createdAt: lastWeek, text: "先週"))
+        await coordinator.configure(
+            database: database,
+            engines: EngineRegistry(),
+            vocabulary: { [] },
+            participatingEventsOnly: { true },
+            audioProcessingCompleted: {}
+        )
+
+        await coordinator.select(date: lastWeek)
+        #expect(coordinator.day.memos.map(\.id) == ["last-week"])
+        #expect(coordinator.today.memos.map(\.id) == ["today"])
+
+        await coordinator.addMemo("ミニウィンドウから")
+        #expect(coordinator.day.memos.map(\.id) == ["last-week"])
+        #expect(coordinator.today.memos.map(\.text) == ["今日", "ミニウィンドウから"])
+    }
+
     @Test("メモは発話と分離して保存され、日付境界で正しい日に入る")
     func memosAreTypedAndPartitionedByDay() async throws {
         let database = try await LoreDatabase.inMemory()

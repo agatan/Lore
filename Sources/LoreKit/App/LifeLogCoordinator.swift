@@ -8,6 +8,7 @@ public final class LifeLogCoordinator {
     public private(set) var isCapturing = false
     public private(set) var selectedDate = Date()
     public private(set) var day = LifeLogDay()
+    public var today: LifeLogDay { day }
     public private(set) var errorMessage: String?
     public private(set) var availableCalendars: [String] = []
     public private(set) var highlightedTimelineItemID: String?
