@@ -22,6 +22,8 @@ swiftc -O Scripts/patch-recording.swift -o "$WORK/bin/patch-recording" 2>/dev/nu
 
 run() { caffeinate -d -i "$APP_BIN" --lore-screenshot-demo "$@"; }
 shot() { sips -Z "$3" "$1" --out "$2" >/dev/null; }
+# crop <src> <dest> <x> <y> <width> <height> <max edge>: 3360x1920のmain window画像から、pixelで決めた範囲を切り出す。
+crop() { sips -c "$6" "$5" --cropOffset "$4" "$3" "$1" --out "$2" >/dev/null; sips -Z "$7" "$2" >/dev/null; }
 
 for lang in $LANGUAGES; do
   dest="$OUT/$lang"
@@ -30,7 +32,7 @@ for lang in $LANGUAGES; do
   run --lore-demo-language "$lang" --lore-snapshot "$light" --lore-snapshot-appearance light
   run --lore-demo-language "$lang" --lore-snapshot "$dark" --lore-snapshot-appearance dark
   run --lore-demo-language "$lang" --lore-record "$rec" --lore-snapshot-appearance light
-  for file in main-life-log.png main-history.png search.png life-log-mini.png menu-panel.png hud-recording.png settings-models.png; do
+  for file in main-life-log.png main-life-log-paused.png main-history.png search.png life-log-mini.png menu-panel.png hud-recording.png settings-models.png; do
     [[ -f "$light/$file" ]] || { echo "lp-media: $lang: $file was not captured" >&2; exit 1; }
   done
   [[ -f "$rec/life-log.mp4" && -f "$rec/dictation.mp4" ]] || { echo "lp-media: $lang: recording failed" >&2; exit 1; }
@@ -50,6 +52,8 @@ for lang in $LANGUAGES; do
   shot "$dark/menu-panel.png" "$dest/menu-panel-dark.png" 840
   shot "$light/hud-recording.png" "$dest/hud-recording.png" 1120
   shot "$light/settings-models.png" "$dest/settings-models.png" 1960
+  crop "$light/main-life-log.png" "$dest/event-notes.png" 900 300 1500 540 1500
+  crop "$light/main-life-log-paused.png" "$dest/paused.png" 940 1770 1440 140 1440
   [[ "$lang" == "en" ]] && cp "$light/menu-bar-icons.png" "$OUT/menu-bar-icons.png"
   echo "wrote $dest"
 done

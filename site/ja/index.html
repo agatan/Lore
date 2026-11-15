@@ -87,6 +87,12 @@
           <p>⌘Fで全期間をまとめて検索。結果を選ぶと、タイムラインのその時刻に移動します。</p>
         </div>
       </div>
+      <figure class="wide">
+        <div class="screen">
+          <img src="../assets/ja/event-notes.png" alt="タイムラインのプロダクト朝会の予定の下に並んだノート。決定事項、やること、未解決の問いがAIが生成したものとして表示されている" loading="lazy" width="1500" height="540">
+        </div>
+        <figcaption>デモデータの例です。ノートは予定の下に並び、AIが生成したものであることと、作成したモデルが表示されます。コピー、再生成、削除はワンクリックです。</figcaption>
+      </figure>
     </div>
   </section>
 
@@ -101,8 +107,13 @@
             <li><b>手動でも、スケジュールでも</b><span>曜日と時間帯（例: 平日9:00〜18:00）を設定すると、その間だけ自動で記録します。</span></li>
             <li><b>発話だけを文字起こし</b><span>無音や生活音は文字起こしせず、話している区間だけをMac上で認識します。</span></li>
             <li><b>記録するのは自分の声</b><span>ライフログはMacのマイクで聞き取り、通話の音声は取り込みません。オンライン会議では自分の発言が残り、ヘッドホンを使っていれば相手の声は記録されません。</span></li>
+            <li><b>一時停止しても、自動で戻る</b><span>15分、30分、1時間、または今の予定が終わるまで、メニューバー、ウィンドウ、ショートカットから一時停止できます。時間が来ると自動で再開します。カレンダーを「記録しない」にするか、予定をひとつ「記録しない」にすると、その間は何も記録されません。</span></li>
             <li><b>1日の記録をひと目で</b><span>話した時間、記録の件数、予定を時刻の軸にまとめて表示。クリックするとその時刻に移動します。</span></li>
           </ul>
+          <figure class="strip">
+            <div class="screen"><img src="../assets/ja/paused.png" alt="一時停止中の記録バー。「ライフログ一時停止中」と再開時刻、再開ボタンが表示されている" loading="lazy" width="1440" height="140"></div>
+            <figcaption>一時停止中は、再開する時刻が表示されます。ワンクリックで早めに再開もできます。</figcaption>
+          </figure>
         </div>
         <div class="screen">
           <img src="../assets/ja/life-log-dark.png" alt="ダークモードのライフログ画面。中央に時刻順のタイムライン、右側に1日の記録の概要" loading="lazy" width="2400" height="1371">
@@ -169,7 +180,7 @@
       <div class="split">
         <div class="text">
           <p class="kicker">AI連携</p>
-          <h2 id="ai-title">要約や整理は、<br>お使いのAIで。</h2>
+          <h2 id="ai-title">AIは、<br>あなたが選ぶ。</h2>
           <p class="section-lead">ライフログAIをオンにすると、会議が終わったときにはもうノートができています。決定事項、やること、未解決の問いを、それぞれ元の発言につないで残します。既定ではオフで、Mac上でもクラウドでも、選んだプロバイダで動きます。それ以外の振り返りは、普段使っているAIにライフログを渡せます。</p>
           <ul class="points">
             <li><b>MCP</b><span>AIクライアントに<code>lore-mcp</code>を登録すると、日付や期間を指定して記録を読み込めます。</span></li>

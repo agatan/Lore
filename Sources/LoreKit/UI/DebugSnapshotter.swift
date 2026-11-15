@@ -27,6 +27,8 @@ enum DebugSnapshotter {
     static func run(env: AppEnvironment, presenter: LoreWindowPresenter, into directory: URL) async {
         if let colorTheme { env.settings.colorTheme = colorTheme }
         env.settings.applicationLanguage = DemoCopy.current.language
+        // The test bundle's defaults are shared between runs, so start from the layout the LP crops expect.
+        UserDefaults.standard.set(true, forKey: "lifeLog.showsInspector")
         do {
             try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
             // 自動記録の表示も確認できるよう、現在時刻を含まない時間帯で有効にする。
@@ -81,6 +83,11 @@ enum DebugSnapshotter {
                 as: "search",
                 into: directory
             )
+            env.mainSection = .lifeLog
+            env.lifeLog.applyPreviewCapture(capturing: true)
+            try env.pauseLifeLog(.thirtyMinutes)
+            await settle(1)
+            try await capture(LoreWindow.main, as: "main-life-log-paused", into: directory)
         } catch {
             LoreLog.ui.error("UI snapshotに失敗: \(error.localizedDescription, privacy: .public)")
             FileHandle.standardError.write(Data("UI snapshotに失敗: \(error.localizedDescription)\n".utf8))
