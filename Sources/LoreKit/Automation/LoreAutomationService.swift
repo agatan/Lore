@@ -6,33 +6,45 @@ import Foundation
 public final class LoreAutomationService {
     public let database: LoreDatabase
     public let settings: AppSettings
+    /// Nil: no event details are read, and event entries have the snapshot fields only.
+    private let eventDetails: (any CalendarEventDetailsRangeReading)?
 
     /// 期間取得の上限。AIへ一度に返す量を抑え、DBを日ごとに読む回数を有界にする。
     public static let maximumRangeDays = 31
     public static let maximumDayListDays = 366
 
-    public init(database: LoreDatabase, settings: AppSettings) {
+    public init(
+        database: LoreDatabase,
+        settings: AppSettings,
+        eventDetails: (any CalendarEventDetailsRangeReading)? = nil
+    ) {
         self.database = database
         self.settings = settings
+        self.eventDetails = eventDetails
     }
 
-    public static func openDefault() async throws -> LoreAutomationService {
+    public static func openDefault(eventDetails: (any CalendarEventDetailsRangeReading)? = nil) async throws -> LoreAutomationService {
         guard let defaults = UserDefaults(suiteName: AppEnvironment.bundleIdentifier) else {
             throw AutomationError.preferencesUnavailable
         }
         // App本体より先にMCPサーバーが動いた場合も、旧Koeの設定とdataを同じ手順で移す。
         LegacyKoeMigration.migrateDefaults(legacyDomain: LegacyKoeMigration.legacyDefaultsDomain(), into: defaults)
         let (database, _) = try await LoreDatabase.openDefault()
-        return LoreAutomationService(database: database, settings: AppSettings(defaults: defaults))
+        return LoreAutomationService(database: database, settings: AppSettings(defaults: defaults), eventDetails: eventDetails)
     }
 
-    public func exportDay(_ date: Date, options: LifeLogTextExporter.Options) async throws -> String {
+    public func exportDay(_ date: Date, options: LifeLogTextExporter.Options, calendar: Calendar = .current) async throws -> String {
+        guard !options.includesEventDetails || options.includesCalendarEvents else {
+            throw AutomationError.eventDetailsNeedCalendar
+        }
         guard options.hasSelection else { throw AutomationError.emptyExportSelection }
         let day = try await database.lifeLog.day(
             date,
+            calendar: calendar,
             participatingOnly: settings.lifeLogParticipatingEventsOnly
         )
-        return LifeLogTextExporter.render(date: date, day: day, options: options)
+        let details = options.includesEventDetails ? await details(of: day.calendarEvents) : []
+        return LifeLogTextExporter.render(date: date, day: day, options: options, eventDetails: details, calendar: calendar)
     }
 
     public func search(_ query: String, limit: Int = 100) async throws -> [LifeLogSearchResult] {
@@ -85,8 +97,9 @@ public final class LoreAutomationService {
                 calendar: calendar,
                 participatingOnly: settings.lifeLogParticipatingEventsOnly
             )
+            let details = options.includesCalendarEvents ? await details(of: day.calendarEvents) : []
             // 日をまたぐ予定は各日のsnapshotに現れるため、期間内では1件にする。繰り返し予定は回ごとに残す。
-            entries += LifeLogEntry.entries(of: day, options: options, calendar: calendar).filter {
+            entries += LifeLogEntry.entries(of: day, options: options, eventDetails: details, calendar: calendar).filter {
                 $0.entry.kind != .event
                     || seenOccurrences.insert(EventOccurrence(eventID: $0.entry.id, day: $0.entry.day)).inserted
             }
@@ -109,6 +122,16 @@ public final class LoreAutomationService {
             fromDay: LifeLogDateKey.string(for: first, calendar: calendar),
             throughDay: LifeLogDateKey.string(for: last, calendar: calendar)
         ).map(GeneratedNoteEntry.init)
+    }
+
+    /// Reads the events from the calendar now, once for the span of `events`. Nothing is stored.
+    private func details(of events: [CalendarEventSnapshot]) async -> [CalendarEventDetails] {
+        guard let eventDetails, let start = events.map(\.startsAt).min(), let end = events.map(\.endsAt).max() else { return [] }
+        return await eventDetails.details(
+            start: start,
+            end: max(end, start.addingTimeInterval(1)),
+            selectedCalendars: Set(settings.lifeLogCalendarTitles)
+        )
     }
 
     private static func days(from start: Date, through end: Date, limit: Int, calendar: Calendar) throws -> [Date] {
@@ -208,19 +231,35 @@ public struct LifeLogEntry: Codable, Sendable, Equatable {
     public var title: String?
     public var calendar: String?
     public var allDay: Bool?
+    public var externalIdentifier: String?
+    public var conferenceURL: String?
+    public var description: String?
+    public var organizer: Person?
+    public var attendees: [Attendee]?
+
+    public struct Person: Codable, Sendable, Equatable {
+        public var name: String?
+        public var email: String?
+    }
+
+    public struct Attendee: Codable, Sendable, Equatable {
+        public var name: String?
+        public var email: String?
+        public var response: String
+        public var role: String
+    }
 
     static func entries(
         of day: LifeLogDay,
         options: LifeLogTextExporter.Options,
+        eventDetails: [CalendarEventDetails] = [],
         calendar: Calendar
     ) -> [(date: Date, entry: LifeLogEntry)] {
         func key(_ date: Date) -> String { LifeLogDateKey.string(for: date, calendar: calendar) }
         var result: [(date: Date, entry: LifeLogEntry)] = []
         if options.includesCalendarEvents {
             result += day.calendarEvents.map {
-                ($0.startsAt, LifeLogEntry(id: $0.id, kind: .event, day: key($0.startsAt), start: timestamp($0.startsAt),
-                             end: timestamp($0.endsAt), text: $0.title, title: $0.title,
-                             calendar: $0.calendarTitle, allDay: $0.isAllDay))
+                ($0.startsAt, LifeLogEntry(event: $0, details: eventDetails.occurrence(eventID: $0.id, startsAt: $0.startsAt), day: key($0.startsAt)))
             }
         }
         if options.includesUtterances {
@@ -260,6 +299,24 @@ public struct LifeLogEntry: Codable, Sendable, Equatable {
     }
 }
 
+extension LifeLogEntry {
+    /// The snapshot fields, plus the fields read from the calendar when `details` is found. A field with nothing to say is nil.
+    init(event: CalendarEventSnapshot, details: CalendarEventDetails?, day: String) {
+        self.init(id: event.id, kind: .event, day: day, start: Self.timestamp(event.startsAt), end: Self.timestamp(event.endsAt),
+                  text: event.title, title: event.title, calendar: event.calendarTitle, allDay: event.isAllDay)
+        externalIdentifier = (event.externalIdentifier ?? details?.externalIdentifier)?.nonBlank
+        guard let details else { return }
+        conferenceURL = details.conferenceLink?.url.absoluteString
+        description = details.notes?.nonBlank
+        let organizer = details.organizer.map { Person(name: $0.name?.nonBlank, email: $0.email?.nonBlank) }
+        self.organizer = organizer.flatMap { $0.name == nil && $0.email == nil ? nil : $0 }
+        let attendees = details.attendees.map {
+            Attendee(name: $0.name?.nonBlank, email: $0.email?.nonBlank, response: $0.status.rawValue, role: $0.role.rawValue)
+        }
+        self.attendees = attendees.isEmpty ? nil : attendees
+    }
+}
+
 public enum LifeLogJSON {
     public static func encode<T: Encodable>(_ value: T) throws -> String {
         let encoder = JSONEncoder()
@@ -268,11 +325,12 @@ public enum LifeLogJSON {
     }
 }
 
-public enum AutomationError: LocalizedError, Sendable {
+public enum AutomationError: LocalizedError, Sendable, Equatable {
     case preferencesUnavailable
     case emptyExportSelection
     case invalidRange
     case rangeTooLong(Int)
+    case eventDetailsNeedCalendar
 
     public var errorDescription: String? {
         switch self {
@@ -280,6 +338,7 @@ public enum AutomationError: LocalizedError, Sendable {
         case .emptyExportSelection: "書き出す項目を1つ以上選んでください"
         case .invalidRange: "開始日は終了日以前にしてください"
         case .rangeTooLong(let days): "期間は\(days)日以内にしてください"
+        case .eventDetailsNeedCalendar: "event-detailsはcalendarと一緒に指定してください"
         }
     }
 }
