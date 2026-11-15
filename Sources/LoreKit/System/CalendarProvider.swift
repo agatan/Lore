@@ -6,12 +6,7 @@ public protocol CalendarEventDetailsReading: Sendable {
     func details(eventID: String, startsAt: Date) async -> CalendarEventDetails?
 }
 
-/// Reads the details of every event in a range, in one call. The MCP server uses it to describe a day or period.
-public protocol CalendarEventDetailsRangeReading: Sendable {
-    func details(start: Date, end: Date, selectedCalendars: Set<String>) async -> [CalendarEventDetails]
-}
-
-public actor CalendarProvider: CalendarEventDetailsReading, CalendarEventDetailsRangeReading {
+public actor CalendarProvider: CalendarEventDetailsReading {
     private let store = EKEventStore()
     public init() {}
 
@@ -24,7 +19,7 @@ public actor CalendarProvider: CalendarEventDetailsReading, CalendarEventDetails
     }
 
     public func events(start: Date, end: Date, selectedCalendars: Set<String>) throws -> [CalendarEventSnapshot] {
-        store.events(matching: predicate(start: start, end: end, selectedCalendars: selectedCalendars)).map { event in
+        store.events(matching: Self.predicate(in: store, start: start, end: end, selectedCalendars: selectedCalendars)).map { event in
             CalendarEventSnapshot(
                 id: event.eventIdentifier ?? UUID().uuidString,
                 externalIdentifier: event.calendarItemExternalIdentifier,
@@ -37,8 +32,13 @@ public actor CalendarProvider: CalendarEventDetailsReading, CalendarEventDetails
 
     /// Details of the events in a range. Empty without full calendar access; never asks for it.
     public func details(start: Date, end: Date, selectedCalendars: Set<String>) -> [CalendarEventDetails] {
+        Self.details(in: store, start: start, end: end, selectedCalendars: selectedCalendars)
+    }
+
+    /// The same read for a caller that owns its store and must answer synchronously, such as `LoreAppEventDetailsServer`.
+    static func details(in store: EKEventStore, start: Date, end: Date, selectedCalendars: Set<String>) -> [CalendarEventDetails] {
         guard EKEventStore.authorizationStatus(for: .event) == .fullAccess else { return [] }
-        return store.events(matching: predicate(start: start, end: end, selectedCalendars: selectedCalendars))
+        return store.events(matching: predicate(in: store, start: start, end: end, selectedCalendars: selectedCalendars))
             .compactMap(details(of:))
     }
 
@@ -49,12 +49,12 @@ public actor CalendarProvider: CalendarEventDetailsReading, CalendarEventDetails
             .occurrence(eventID: eventID, startsAt: startsAt)
     }
 
-    private func predicate(start: Date, end: Date, selectedCalendars: Set<String>) -> NSPredicate {
+    private static func predicate(in store: EKEventStore, start: Date, end: Date, selectedCalendars: Set<String>) -> NSPredicate {
         let calendars = store.calendars(for: .event).filter { selectedCalendars.isEmpty || selectedCalendars.contains($0.title) }
         return store.predicateForEvents(withStart: start, end: end, calendars: calendars)
     }
 
-    private func details(of event: EKEvent) -> CalendarEventDetails? {
+    private static func details(of event: EKEvent) -> CalendarEventDetails? {
         guard let eventID = event.eventIdentifier else { return nil }
         return CalendarEventDetails(
             eventID: eventID, startsAt: event.startDate,
@@ -66,13 +66,13 @@ public actor CalendarProvider: CalendarEventDetailsReading, CalendarEventDetails
         )
     }
 
-    private func attendee(_ participant: EKParticipant) -> CalendarAttendee {
+    private static func attendee(_ participant: EKParticipant) -> CalendarAttendee {
         CalendarAttendee(
             name: participant.name,
             email: CalendarAttendee.email(fromParticipantURL: participant.url),
-            status: Self.status(participant.participantStatus),
-            role: Self.role(participant.participantRole),
-            kind: Self.kind(participant.participantType),
+            status: status(participant.participantStatus),
+            role: role(participant.participantRole),
+            kind: kind(participant.participantType),
             isCurrentUser: participant.isCurrentUser
         )
     }

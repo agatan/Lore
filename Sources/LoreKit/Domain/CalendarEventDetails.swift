@@ -2,7 +2,7 @@ import Foundation
 
 /// Details of one event occurrence, read from the calendar on demand and never persisted.
 /// `eventID` and `startsAt` match `CalendarEventSnapshot.id` and `startsAt` of the same occurrence.
-public struct CalendarEventDetails: Sendable, Hashable {
+public struct CalendarEventDetails: Sendable, Hashable, Codable {
     public let eventID: String
     public let startsAt: Date
     /// `calendarItemExternalIdentifier`, the identifier that the calendar server gives the event.
@@ -23,6 +23,35 @@ public struct CalendarEventDetails: Sendable, Hashable {
         self.organizer = organizer; self.attendees = attendees; self.isCanceled = isCanceled
         conferenceLink = ConferenceLink.first(url: url, location: location, notes: notes)
     }
+
+    /// The join link is derived, so it is rebuilt from the decoded fields instead of being encoded.
+    private enum CodingKeys: String, CodingKey {
+        case eventID, startsAt, externalIdentifier, notes, location, url, organizer, attendees, isCanceled
+    }
+
+    public init(from decoder: any Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        self.init(
+            eventID: try c.decode(String.self, forKey: .eventID), startsAt: try c.decode(Date.self, forKey: .startsAt),
+            externalIdentifier: try c.decodeIfPresent(String.self, forKey: .externalIdentifier),
+            notes: try c.decodeIfPresent(String.self, forKey: .notes), location: try c.decodeIfPresent(String.self, forKey: .location),
+            url: try c.decodeIfPresent(URL.self, forKey: .url), organizer: try c.decodeIfPresent(CalendarAttendee.self, forKey: .organizer),
+            attendees: try c.decode([CalendarAttendee].self, forKey: .attendees), isCanceled: try c.decode(Bool.self, forKey: .isCanceled)
+        )
+    }
+
+    public func encode(to encoder: any Encoder) throws {
+        var c = encoder.container(keyedBy: CodingKeys.self)
+        try c.encode(eventID, forKey: .eventID)
+        try c.encode(startsAt, forKey: .startsAt)
+        try c.encodeIfPresent(externalIdentifier, forKey: .externalIdentifier)
+        try c.encodeIfPresent(notes, forKey: .notes)
+        try c.encodeIfPresent(location, forKey: .location)
+        try c.encodeIfPresent(url, forKey: .url)
+        try c.encodeIfPresent(organizer, forKey: .organizer)
+        try c.encode(attendees, forKey: .attendees)
+        try c.encode(isCanceled, forKey: .isCanceled)
+    }
 }
 
 extension Sequence where Element == CalendarEventDetails {
@@ -32,7 +61,7 @@ extension Sequence where Element == CalendarEventDetails {
     }
 }
 
-public struct CalendarAttendee: Sendable, Hashable {
+public struct CalendarAttendee: Sendable, Hashable, Codable {
     public var name: String?
     public var email: String?
     public var status: CalendarParticipationStatus
@@ -55,11 +84,11 @@ public struct CalendarAttendee: Sendable, Hashable {
     }
 }
 
-public enum CalendarAttendeeRole: String, Sendable, Hashable {
+public enum CalendarAttendeeRole: String, Sendable, Hashable, Codable {
     case required, optional, chair, nonParticipant, unknown
 }
 
-public enum CalendarAttendeeKind: String, Sendable, Hashable {
+public enum CalendarAttendeeKind: String, Sendable, Hashable, Codable {
     case person, room, resource, group, unknown
 }
 

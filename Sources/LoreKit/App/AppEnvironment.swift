@@ -29,6 +29,7 @@ public final class AppEnvironment {
     public private(set) var coordinator: DictationCoordinator!
     public private(set) var lifeLogAI: LifeLogAIService!
     @ObservationIgnored private let notifications = NotificationPresenter()
+    @ObservationIgnored private var eventDetailsServer: LoreAppEventDetailsServer?
 
     public private(set) var database: LoreDatabase?
     public private(set) var modes: [Mode] = []
@@ -369,6 +370,7 @@ public final class AppEnvironment {
         }
 
         if !Self.isUITestBundle {
+            startEventDetailsServer()
             startHotkeyMonitor()
             startPermissionWatcher()
         }
@@ -424,6 +426,15 @@ public final class AppEnvironment {
 
     private func appendDataMigrationIssue(_ message: String) {
         dataMigrationIssue = [dataMigrationIssue, message].compactMap { $0 }.joined(separator: "\n")
+    }
+
+    /// `lore-mcp` asks the app for event details, because macOS attributes its own calendar reads to the AI client.
+    private func startEventDetailsServer() {
+        guard !Self.usesScreenshotDemoData else { return }
+        eventDetailsServer = LoreAppEventDetailsServer(settings: settings)
+        if eventDetailsServer == nil {
+            LoreLog.automation.error("予定の詳細のportを登録できませんでした。別のLoreが使っています")
+        }
     }
 
     static var isUITestBundle: Bool {

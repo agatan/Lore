@@ -6,7 +6,7 @@ import LoreKit
 struct LoreMCP {
     static func main() async {
         do {
-            let service = try await LoreAutomationService.openDefault(eventDetails: CalendarProvider())
+            let service = try await LoreAutomationService.openDefault(eventDetails: LoreAppEventDetails())
             while let line = readLine() {
                 guard !line.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { continue }
                 let response = await handle(line, service: service)
@@ -41,8 +41,8 @@ struct LoreMCP {
                     return errorResponse(id: id, code: -32602, message: "name is required")
                 }
                 let arguments = params["arguments"] as? [String: Any] ?? [:]
-                let text = try await call(name, arguments: arguments, service: service)
-                return success(id: id, result: ["content": [["type": "text", "text": text]], "isError": false])
+                let texts = try await call(name, arguments: arguments, service: service)
+                return success(id: id, result: ["content": texts.map { ["type": "text", "text": $0] }, "isError": false])
             default:
                 return errorResponse(id: id, code: -32601, message: "Method not found")
             }
@@ -55,31 +55,38 @@ struct LoreMCP {
         }
     }
 
-    private static func call(_ name: String, arguments: [String: Any], service: LoreAutomationService) async throws -> String {
+    /// One text item, plus a second that says why event details are missing when they could not be read.
+    private static func call(_ name: String, arguments: [String: Any], service: LoreAutomationService) async throws -> [String] {
         switch name {
         case "life_log_export":
             let date = try optionalDay("date", in: arguments) ?? Date()
-            return try await service.exportDay(date, options: exportOptions(arguments["include"], isExport: true))
+            let export = try await service.exportDay(date, options: exportOptions(arguments["include"], isExport: true))
+            return texts(export.value, export.unavailable)
         case "life_log_days":
             let from = try optionalDay("from", in: arguments)
             let to = try optionalDay("to", in: arguments)
-            return try LifeLogJSON.encode(try await service.days(from: from, to: to))
+            return [try LifeLogJSON.encode(try await service.days(from: from, to: to))]
         case "life_log_range":
             let from = try parseDay(requiredString("from", in: arguments), argument: "from")
             let to = try optionalDay("to", in: arguments)
             let options = try exportOptions(arguments["include"])
-            return try LifeLogJSON.encode(try await service.range(from: from, to: to, options: options))
+            let range = try await service.range(from: from, to: to, options: options)
+            return texts(try LifeLogJSON.encode(range.value), range.unavailable)
         case "life_log_ai_notes":
             let from = try optionalDay("from", in: arguments)
             let to = try optionalDay("to", in: arguments)
-            return try LifeLogJSON.encode(try await service.aiNotes(from: from, to: to))
+            return [try LifeLogJSON.encode(try await service.aiNotes(from: from, to: to))]
         case "life_log_search":
             let query = try requiredString("query", in: arguments)
             let results = try await service.search(query, limit: arguments["limit"] as? Int ?? 100)
-            return results.map { "\($0.day)\t\($0.kind.rawValue)\t\($0.text.replacingOccurrences(of: "\n", with: " "))" }.joined(separator: "\n")
+            return [results.map { "\($0.day)\t\($0.kind.rawValue)\t\($0.text.replacingOccurrences(of: "\n", with: " "))" }.joined(separator: "\n")]
         default:
             throw MCPError.unknownTool(name)
         }
+    }
+
+    private static func texts(_ text: String, _ unavailable: EventDetailsUnavailable?) -> [String] {
+        [text] + (unavailable.map { [$0.localizedDescription] } ?? [])
     }
 
     private static func requiredString(_ name: String, in arguments: [String: Any]) throws -> String {
@@ -136,7 +143,7 @@ struct LoreMCP {
                 "to": stringSchema("終了日YYYY-MM-DD(含む)。省略時は今日。期間は最大366日"),
              ]),
         tool("life_log_range",
-             "期間内の予定・発話・音声入力・メモを時刻順の構造化JSON配列で返す。各要素はid、kind(event|utterance|dictation|memo)、day、start、end(任意)、text。eventはtitle、calendar、allDayに加え、分かる場合だけexternalIdentifier(カレンダーサーバーが予定に付ける識別子。GoogleカレンダーやDriveのコネクタの予定と突き合わせる)、conferenceURL(Meet/Zoom/Teams/Webexの参加リンク)、description、organizer(name、email)、attendees(name、email、response=accepted|declined|tentative|pending|unknown、role=required|optional|chair|nonParticipant|unknown)を持つ。分からない項目は省略される。繰り返し予定の回はstartで区別する。時刻はローカル時差付きISO8601。週や月の振り返り、要約、TODO抽出、雑なメモ(kind=memo、include=[memos])を読んで別のメモアプリやタスク管理へ清書・転記する材料に使う。Loreは読み取り専用で、転記先への書き込みは呼び出し側が行う",
+             "期間内の予定・発話・音声入力・メモを時刻順の構造化JSON配列で返す。各要素はid、kind(event|utterance|dictation|memo)、day、start、end(任意)、text。eventはtitle、calendar、allDayに加え、分かる場合だけexternalIdentifier(カレンダーサーバーが予定に付ける識別子。GoogleカレンダーやDriveのコネクタの予定と突き合わせる)、conferenceURL(Meet/Zoom/Teams/Webexの参加リンク)、description、organizer(name、email)、attendees(name、email、response=accepted|declined|tentative|pending|unknown、role=required|optional|chair|nonParticipant|unknown)を持つ。分からない項目は省略される。詳細は起動中のLoreアプリがカレンダーから読む。読めないとき(Loreが起動していない、Loreにカレンダーのアクセスがない)は2つ目のtextに理由が入る。繰り返し予定の回はstartで区別する。時刻はローカル時差付きISO8601。週や月の振り返り、要約、TODO抽出、雑なメモ(kind=memo、include=[memos])を読んで別のメモアプリやタスク管理へ清書・転記する材料に使う。Loreは読み取り専用で、転記先への書き込みは呼び出し側が行う",
              properties: [
                 "from": stringSchema("開始日YYYY-MM-DD"),
                 "to": stringSchema("終了日YYYY-MM-DD(含む)。省略時はfromの1日だけ。期間は最大31日"),
