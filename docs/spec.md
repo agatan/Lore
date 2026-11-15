@@ -14,6 +14,7 @@ This document is the source of truth for the behavior that users and automation 
 | Speech recognition | Chosen separately for dictation and voice memos, and for the Life Log: Apple SpeechAnalyzer or a locally downloaded whisper.cpp GGML model. With whisper.cpp, dictation is recognized in one pass after recording stops, and the Life Log is recognized per speech burst after the burst ends |
 | Default text formatting | On-device processing with Apple Foundation Models |
 | Display language | System Settings, English, Japanese, or Simplified Chinese. The default is System Settings. A change applies to open windows and date formats immediately |
+| Color theme | System Settings, Light, or Dark. The default is System Settings. A change applies to open windows immediately |
 | Storage | SQLite, UserDefaults, Keychain, and Life Log audio files, all on the Mac |
 | Sync | Optional. Lore places text data, encrypted on the Mac, in a folder that the user chooses, and other Macs read it from there (section 6.1) |
 
@@ -175,12 +176,14 @@ Lore's colors are fixed to the three colors of the app icon: ink, white, and ros
 
 The display language is "System Settings", English, 日本語, or 简体中文, and the choice persists across launches. "System Settings" uses the first supported language among the macOS preferred languages and falls back to English when none is supported. Traditional Chinese is not silently replaced with Simplified Chinese. A change applies immediately to the menu bar, window contents, onboarding, Settings, the HUD, dialogs, and notices. The display language reaches speech recognition only when the Life Log recognition language is explicitly "Match Display Language". It does not change dictation, voice memos, modes, prompts, stored text, search, export content, or the machine-facing CLI and MCP interfaces.
 
+The color theme is "System Settings", Light, or Dark, and the choice persists across launches. "System Settings" follows the macOS appearance and changes with it. A change applies immediately to the menu bar menu, window contents, onboarding, Settings, the HUD, and dialogs. The color theme changes only appearance and never changes stored data or the CLI and MCP output.
+
 | Place | Features |
 |---|---|
 | Menu bar panel | Two cards, with no tabs. The Life Log card has the record button, the recording state with the scheduled time (or today's counts), and links to open today and the mini window. The dictation card has the record button, the hotkey, a button to copy the last text, a link to the history, and the mode menu. Notices for permissions, the Koe migration, and database errors appear below the cards. The footer has only Settings and Quit |
 | Main window | Opens on a normal launch as the frontmost key window at 1680×960 pt (minimum 1080×680). Three columns: full-height sidebar (navigation, calendar), timeline, and inspector. Shows today's Life Log at the latest position. Hosts onboarding, the Life Log with the floating bar for typed and voice memos and recording control, and the dictation history (list and detail). Inspector toggle, search, and export are in the window toolbar. The history detail is a readable centered column |
 | Mini window | Life Log state, today's timeline, and typed and voice memos. Once opened it stays in front of other apps, desktop Spaces, and full-screen Spaces until closed. Recording control is in the floating bar at the bottom. The whole window uses a translucent material |
-| Settings: General, Privacy | General has the display language, launch at login, and permissions. Privacy has the data folder, the storage used on this Mac, and deletion |
+| Settings: General, Privacy | General has the display language, the color theme, launch at login, and permissions. Privacy has the data folder, the storage used on this Mac, and deletion |
 | Settings: Life Log, Calendar | Life Log has the recording, mini window, and voice memo hotkeys, scheduled recording days and time window, input device, speech recognition engine, recognition language, whisper.cpp model, and audio retention. Calendar has calendar selection, the participation filter, and "Refresh Events" |
 | Settings: Dictation, AI Formatting, Modes, Vocabulary | Dictation has the hotkey and hold duration, speech recognition engine and whisper.cpp model, display and sounds, and history retention. AI Formatting has the backend, model, API key, connection check, and wait time. Modes has the common rules and modes. Vocabulary has the entries |
 | Settings: Sync, Integrations | Sync is described in section 6.1. Integrations has the MCP server path with a copyable registration command for Claude Code, the CLI installer, and the Agent Skill installer |
@@ -200,7 +203,7 @@ The CLI installer links `~/.local/bin/lore` to the CLI inside Lore.app, so it ch
 | History, modes, common rules, vocabulary, Life Log | `~/Library/Application Support/Lore/lore.sqlite` | History is kept forever. The rest follows each setting |
 | Life Log audio | `~/Library/Application Support/Lore/LifeLog/` | Deleted after transcription succeeds. Can be changed to 7 or 30 days |
 | whisper.cpp models | `~/Library/Application Support/Lore/Models/WhisperCpp/` | Until the user deletes one, or resets Lore |
-| General settings (including display language) | App UserDefaults | Until the user resets Lore |
+| General settings (including display language and color theme) | App UserDefaults | Until the user resets Lore |
 | API keys | macOS Keychain | Until the user replaces one, or resets Lore |
 | Sync key | macOS Keychain (this Mac only, not synced to iCloud Keychain) | Until the user turns off sync, or resets Lore |
 | Sync change files | `Lore Sync/` in the folder that the user chose | Lore never deletes them. The user manages the folder |

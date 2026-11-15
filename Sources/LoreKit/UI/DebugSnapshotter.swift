@@ -15,17 +15,17 @@ enum DebugSnapshotter {
         return URL(fileURLWithPath: arguments[index + 1], isDirectory: true)
     }
 
-    /// `--lore-snapshot-appearance dark|light`で外観を固定して撮る。省略時はsystemの外観。
-    static var appearance: NSAppearance? {
+    /// `--lore-snapshot-appearance dark|light`で配色を固定して撮る。省略時はsystemの外観。
+    static var colorTheme: ColorTheme? {
         let arguments = ProcessInfo.processInfo.arguments
         guard let index = arguments.firstIndex(of: "--lore-snapshot-appearance"), arguments.indices.contains(index + 1) else {
             return nil
         }
-        return NSAppearance(named: arguments[index + 1] == "dark" ? .darkAqua : .aqua)
+        return arguments[index + 1] == "dark" ? .dark : .light
     }
 
     static func run(env: AppEnvironment, presenter: LoreWindowPresenter, into directory: URL) async {
-        if let appearance { NSApp.appearance = appearance }
+        if let colorTheme { env.settings.colorTheme = colorTheme }
         env.settings.applicationLanguage = DemoCopy.current.language
         do {
             try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)

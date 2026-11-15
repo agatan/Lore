@@ -21,9 +21,9 @@ enum DebugRecorder {
             FileHandle.standardError.write(Data("収録は --lore-screenshot-demo と一緒に指定してください\n".utf8))
             exit(1)
         }
-        if let appearance = DebugSnapshotter.appearance { NSApp.appearance = appearance }
+        if let colorTheme = DebugSnapshotter.colorTheme { env.settings.colorTheme = colorTheme }
         env.settings.applicationLanguage = DemoCopy.current.language
-        let suffix = DebugSnapshotter.appearance?.name == .darkAqua ? "-dark" : ""
+        let suffix = DebugSnapshotter.colorTheme == .dark ? "-dark" : ""
         do {
             try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
             try await recordDictation(env: env, to: directory.appending(path: "dictation\(suffix).mp4"))

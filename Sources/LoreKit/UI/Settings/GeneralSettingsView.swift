@@ -19,6 +19,21 @@ struct GeneralSettingsView: View {
                     .frame(width: 180, alignment: .trailing)
                 }
             }
+            SettingsCard(title: "外観") {
+                SettingsRow(title: "カラーテーマ") {
+                    Picker("カラーテーマ", selection: Binding(
+                        get: { env.settings.colorTheme },
+                        set: { env.settings.colorTheme = $0 }
+                    )) {
+                        ForEach(ColorTheme.allCases) { theme in
+                            Text(LocalizedStringKey(theme.label)).tag(theme)
+                        }
+                    }
+                    .labelsHidden()
+                    .frame(width: 180, alignment: .trailing)
+                    .accessibilityIdentifier("general.color-theme")
+                }
+            }
             SettingsCard(title: "起動") {
                 SettingsToggle(
                     title: "ログイン時に起動する",

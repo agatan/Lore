@@ -75,6 +75,7 @@ public final class AppSettings {
         public var formattingTimeoutMs: Int = 6_000
         public var showLevelMeterInMenuBar: Bool = true
         public var applicationLanguage: ApplicationLanguage = .system
+        public var colorTheme: ColorTheme = .system
         /// 初回案内を完了するまで、権限と保存範囲を説明する。
         public var onboardingCompleted: Bool = false
         /// 文章の仕上げをどこで動かすか。既定はオンデバイス(外に出さない)。
@@ -119,6 +120,8 @@ public final class AppSettings {
             showLevelMeterInMenuBar = try container.decodeIfPresent(Bool.self, forKey: .showLevelMeterInMenuBar) ?? fallback.showLevelMeterInMenuBar
             applicationLanguage = (try? container.decodeIfPresent(ApplicationLanguage.self, forKey: .applicationLanguage))
                 .flatMap { $0 } ?? fallback.applicationLanguage
+            colorTheme = (try? container.decodeIfPresent(ColorTheme.self, forKey: .colorTheme))
+                .flatMap { $0 } ?? fallback.colorTheme
             onboardingCompleted = try container.decodeIfPresent(Bool.self, forKey: .onboardingCompleted) ?? false
             // 選択肢が消えた版へ戻したときに、**設定ファイル全体が捨てられない**ようにする。
             // ここで throw すると `AppSettings.init` の `try?` が丸ごと初期値へ倒し、
@@ -236,6 +239,11 @@ public final class AppSettings {
     public var applicationLanguage: ApplicationLanguage {
         get { storage.applicationLanguage }
         set { storage.applicationLanguage = newValue; persist() }
+    }
+
+    public var colorTheme: ColorTheme {
+        get { storage.colorTheme }
+        set { storage.colorTheme = newValue; persist() }
     }
 
     public var onboardingCompleted: Bool {

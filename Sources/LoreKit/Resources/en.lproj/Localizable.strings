@@ -168,6 +168,10 @@
 "表示言語" = "Display Language";
 "システム設定" = "System Settings";
 "表示言語に合わせる" = "Match Display Language";
+"外観" = "Appearance";
+"カラーテーマ" = "Color Theme";
+"ライト" = "Light";
+"ダーク" = "Dark";
 "自動判定" = "Detect Automatically";
 "文字起こし中" = "Transcribing";
 "発話中" = "Listening";
