@@ -11,13 +11,9 @@ WORK="$(mktemp -d)"
 trap 'rm -rf "$WORK"' EXIT
 LANGUAGES=(${=LORE_LP_LANGUAGES:-en ja zh-Hans})
 
-# LORE_LP_STILLS_ONLY=1: 画面ロック中でも、viewを自分で描いて新しい静止画（予定のノート、一時停止中）だけを作る。
-# 動画と既存の画像には触れない。
-STILLS_ONLY="${LORE_LP_STILLS_ONLY:-0}"
-
 locked="$(swift -e 'import CoreGraphics; let d = CGSessionCopyCurrentDictionary() as? [String: Any]; print((d?["CGSSessionScreenIsLocked"] as? Bool) == true)' 2>/dev/null || echo false)"
-if [[ "$locked" == "true" && "$STILLS_ONLY" != "1" ]]; then
-  echo "lp-media: the screen is locked. Unlock it and run again, or set LORE_LP_STILLS_ONLY=1 for the new stills only." >&2
+if [[ "$locked" == "true" ]]; then
+  echo "lp-media: the screen is locked. Unlock it and run again." >&2
   exit 1
 fi
 
@@ -28,28 +24,13 @@ run() { caffeinate -d -i "$APP_BIN" --lore-screenshot-demo "$@"; }
 shot() { sips -Z "$3" "$1" --out "$2" >/dev/null; }
 # crop <src> <dest> <x> <y> <width> <height> <max edge>: 3360x1920のmain window画像から、pixelで決めた範囲を切り出す。
 crop() { sips -c "$6" "$5" --cropOffset "$4" "$3" "$1" --out "$2" >/dev/null; sips -Z "$7" "$2" >/dev/null; }
-snapshot_args=()
-[[ "$STILLS_ONLY" == "1" ]] && snapshot_args=(--lore-snapshot-offscreen)
-
-write_new_stills() {
-  for file in main-life-log.png main-life-log-paused.png; do
-    [[ -f "$light/$file" ]] || { echo "lp-media: $lang: $file was not captured" >&2; exit 1; }
-  done
-  crop "$light/main-life-log.png" "$dest/event-notes.png" 900 300 1500 540 1500
-  crop "$light/main-life-log-paused.png" "$dest/paused.png" 940 1770 1440 140 1440
-  echo "wrote $dest (stills only)"
-}
 
 for lang in $LANGUAGES; do
   dest="$OUT/$lang"
   light="$WORK/$lang/light"; dark="$WORK/$lang/dark"; rec="$WORK/$lang/rec"
   mkdir -p "$dest" "$light" "$dark" "$rec"
-  run --lore-demo-language "$lang" --lore-snapshot "$light" --lore-snapshot-appearance light "${snapshot_args[@]}"
-  if [[ "$STILLS_ONLY" == "1" ]]; then
-    write_new_stills
-    continue
-  fi
-  run --lore-demo-language "$lang" --lore-snapshot "$dark" --lore-snapshot-appearance dark "${snapshot_args[@]}"
+  run --lore-demo-language "$lang" --lore-snapshot "$light" --lore-snapshot-appearance light
+  run --lore-demo-language "$lang" --lore-snapshot "$dark" --lore-snapshot-appearance dark
   run --lore-demo-language "$lang" --lore-record "$rec" --lore-snapshot-appearance light
   for file in main-life-log.png main-life-log-paused.png main-history.png search.png life-log-mini.png menu-panel.png hud-recording.png settings-models.png; do
     [[ -f "$light/$file" ]] || { echo "lp-media: $lang: $file was not captured" >&2; exit 1; }
@@ -71,7 +52,8 @@ for lang in $LANGUAGES; do
   shot "$dark/menu-panel.png" "$dest/menu-panel-dark.png" 840
   shot "$light/hud-recording.png" "$dest/hud-recording.png" 1120
   shot "$light/settings-models.png" "$dest/settings-models.png" 1960
-  write_new_stills
+  crop "$light/main-life-log.png" "$dest/event-notes.png" 900 300 1500 540 1500
+  crop "$light/main-life-log-paused.png" "$dest/paused.png" 940 1770 1440 140 1440
   [[ "$lang" == "en" ]] && cp "$light/menu-bar-icons.png" "$OUT/menu-bar-icons.png"
   echo "wrote $dest"
 done

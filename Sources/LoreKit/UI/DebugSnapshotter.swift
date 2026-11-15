@@ -245,48 +245,10 @@ enum DebugSnapshotter {
         do { try await Task.sleep(for: .seconds(seconds)) } catch {}
     }
 
-    /// `--lore-snapshot-offscreen`: ScreenCaptureKitは画面ロック中は始められないため、viewを自分で描いて保存する。
-    /// windowの枠は含まれない。
-    private static func drawOffscreen(_ window: NSWindow, as name: String, into directory: URL) throws {
-        guard let view = window.contentView, let rep = view.bitmapImageRepForCachingDisplay(in: view.bounds) else {
-            throw CocoaError(.fileWriteUnknown, userInfo: [NSLocalizedDescriptionKey: "\(name)の描画先を作れません"])
-        }
-        view.cacheDisplay(in: view.bounds, to: rep)
-        // The window's own background is not part of the view, so the render is transparent. Put it on the content color.
-        guard let flat = NSBitmapImageRep(
-            bitmapDataPlanes: nil, pixelsWide: rep.pixelsWide, pixelsHigh: rep.pixelsHigh,
-            bitsPerSample: 8, samplesPerPixel: 4, hasAlpha: true, isPlanar: false,
-            colorSpaceName: .deviceRGB, bytesPerRow: 0, bitsPerPixel: 0
-        ), let context = NSGraphicsContext(bitmapImageRep: flat) else {
-            throw CocoaError(.fileWriteUnknown, userInfo: [NSLocalizedDescriptionKey: "\(name)の描画先を作れません"])
-        }
-        NSGraphicsContext.saveGraphicsState()
-        NSGraphicsContext.current = context
-        window.effectiveAppearance.performAsCurrentDrawingAppearance {
-            NSColor.textBackgroundColor.setFill()
-            NSRect(x: 0, y: 0, width: rep.pixelsWide, height: rep.pixelsHigh).fill()
-        }
-        guard let rendered = rep.cgImage else {
-            NSGraphicsContext.restoreGraphicsState()
-            throw CocoaError(.fileWriteUnknown, userInfo: [NSLocalizedDescriptionKey: "\(name)の描画結果を取り出せません"])
-        }
-        context.cgContext.draw(rendered, in: CGRect(origin: .zero, size: CGSize(width: rep.pixelsWide, height: rep.pixelsHigh)))
-        NSGraphicsContext.restoreGraphicsState()
-        flat.size = view.bounds.size
-        guard let data = flat.representation(using: .png, properties: [:]) else {
-            throw CocoaError(.fileWriteUnknown, userInfo: [NSLocalizedDescriptionKey: "\(name)をPNGへ変換できません"])
-        }
-        try data.write(to: directory.appending(path: "\(name).png"))
-    }
-
     /// 自process内のwindowだけを対象にするため、画面収録の権限を要求しない。
     private static func capture(_ identifier: String, as name: String, into directory: URL) async throws {
         guard let window = NSApp.windows.first(where: { $0.identifier?.rawValue == identifier && $0.isVisible }) else {
             throw CocoaError(.fileWriteUnknown, userInfo: [NSLocalizedDescriptionKey: "\(identifier) windowが表示されていません"])
-        }
-        if ProcessInfo.processInfo.arguments.contains("--lore-snapshot-offscreen") {
-            try drawOffscreen(window, as: name, into: directory)
-            return
         }
         let content = try await SCShareableContent.currentProcess
         guard let target = content.windows.first(where: { $0.windowID == CGWindowID(window.windowNumber) }) else {
