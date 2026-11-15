@@ -60,7 +60,14 @@
 <section id="first-launch-and-permissions">
 <h2>2. First launch and permissions</h2>
 <ul>
-<li>The first launch shows a full-window onboarding. It explains the three features (Life Log, dictation, voice memo), the microphone, Accessibility, and optional calendar permissions with their current state, and what Lore stores.</li>
+<li>The first launch shows a full-window onboarding in three steps:
+<ol>
+<li><strong>Welcome.</strong> It explains the three features (Life Log, dictation, voice memo), the microphone, Accessibility, and optional calendar permissions with their current state, and what Lore stores.</li>
+<li><strong>Try dictation.</strong> It shows the dictation hotkey large, a text field, and a prompt to hold the hotkey and say one sentence. While this step is on screen and Lore is the frontmost app, a dictation lands in that field instead of being pasted into another app. It is saved to the history like any other dictation. When text lands, the step shows the recognized text next to the formatted text. If the microphone or Accessibility permission is missing, the step names each missing permission and offers a button back to the permissions in step 1. The step can be skipped.</li>
+<li><strong>Ready.</strong> It offers to start the Life Log as the next step. Starting it goes through the same audio storage consent as any first Life Log start. The user can also open Lore without starting it.</li>
+</ol>
+</li>
+<li>Finishing and skipping both mark onboarding as completed, so it does not show again.</li>
 <li>A normal launch keeps the menu bar item and also opens the main window with the Life Log selected.</li>
 <li>Lore was renamed from Koe. On its first launch, Lore (bundle ID <code>dev.agatan.Lore</code>) takes over the data of Koe (<code>dev.agatan.Koe</code>) once:
 <ul>
@@ -122,6 +129,7 @@
 <h3>3.4 Insertion and history</h3>
 <ul>
 <li>Lore pastes the result in one operation at the cursor of the app that was frontmost when recording started.</li>
+<li>The exception is the try-dictation step of onboarding (section 2). While it is on screen and Lore is frontmost when recording starts, the result goes into the onboarding text field without the clipboard.</li>
 <li>Lore saves the existing clipboard first and restores it after a successful paste. If it cannot insert (no Accessibility permission, Secure Input, or the target app cannot be brought back to the front), it leaves the result on the clipboard and notifies the user.</li>
 <li>After speech recognition finishes, Lore saves the raw text to the history before formatting starts.</li>
 <li>A history entry shows the date and time, target app, mode, trigger (toggle, hold, or manual), speech recognition engine, formatting engine, raw text, result, status, error, the time taken by each stage, and the full instructions that were sent to the model with the vocabulary count.</li>

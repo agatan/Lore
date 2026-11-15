@@ -176,8 +176,9 @@ private enum LoreUIE2E {
             try await runDailyReviewCUJ(appURL: appURL)
             try await runEmptyDayCUJ(appURL: appURL)
             try await runAISettingsCUJ(appURL: appURL)
+            try await runOnboardingCUJ(appURL: appURL)
             terminateTestApp()
-            print("✓ UI E2E: 3 CUJs passed")
+            print("✓ UI E2E: 4 CUJs passed")
         } catch {
             fputs("✗ UI E2E: \(error.localizedDescription)\n", stderr)
             terminateTestApp()
@@ -235,7 +236,7 @@ private enum LoreUIE2E {
         try ui.press(identifier: "life-log.export-day")
         _ = try ui.waitFor(identifier: "export.sheet")
         let initialPreview = try ui.waitForString(identifier: "export.preview") {
-            $0.contains("オンボーディングは3つの価値が順番に伝わる構成にする")
+            $0.contains("オンボーディングは3つの機能を順番に紹介する")
         }
         guard initialPreview.contains("プロダクト朝会") else {
             throw UIE2EError.assertion("予定・メモが日別書き出しへ届いていません")
@@ -248,7 +249,7 @@ private enum LoreUIE2E {
             throw UIE2EError.assertion("書き出し項目の選択解除が反映されません")
         }
         let updatedPreview = try ui.waitForString(identifier: "export.preview") {
-            !$0.contains("オンボーディングは3つの価値が順番に伝わる構成にする")
+            !$0.contains("オンボーディングは3つの機能を順番に紹介する")
         }
         guard updatedPreview.contains("プロダクト朝会") else {
             throw UIE2EError.assertion("選択したままの予定が書き出しプレビューから消えました")
@@ -297,6 +298,34 @@ private enum LoreUIE2E {
         guard !ui.exists(identifier: "mode.row.builtin.ai-agent") else {
             throw UIE2EError.assertion("廃止したAI Agentモードが残っています")
         }
+    }
+
+    @MainActor
+    private static func runOnboardingCUJ(appURL: URL) async throws {
+        print("CUJ 4: 初回案内で音声入力を試す段階を飛ばしても、ライフログへ進んでも完了する")
+        var app = try await launch(appURL, arguments: ["--lore-screenshot-demo", "--lore-screenshot-onboarding"])
+        var ui = AXDriver(pid: app.processIdentifier)
+        try ui.press(identifier: "onboarding.next")
+        _ = try ui.waitFor(identifier: "onboarding.try.hotkey")
+        _ = try ui.waitFor(identifier: "onboarding.try.field")
+        if ui.exists(identifier: "onboarding.try.blocker.microphone") || ui.exists(identifier: "onboarding.try.blocker.accessibility") {
+            try ui.press(identifier: "onboarding.try.back-to-permissions")
+            try ui.press(identifier: "onboarding.next")
+        }
+        try ui.press(identifier: "onboarding.try.skip")
+        try ui.press(identifier: "onboarding.finish")
+        _ = try ui.waitFor(identifier: "life-log.capture-toggle")
+        guard !ui.exists(identifier: "onboarding.next") else {
+            throw UIE2EError.assertion("あとでを選んでも初回案内が閉じません")
+        }
+
+        app = try await launch(appURL, arguments: ["--lore-screenshot-demo", "--lore-screenshot-onboarding"])
+        ui = AXDriver(pid: app.processIdentifier)
+        try ui.press(identifier: "onboarding.next")
+        try ui.press(identifier: "onboarding.try.skip")
+        try ui.press(identifier: "onboarding.start-life-log")
+        _ = try ui.waitFor(identifier: "life-log.capture-toggle")
+        try ui.waitFor(text: "ライフログの音声を保存しますか？")
     }
 
     @MainActor

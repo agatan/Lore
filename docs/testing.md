@@ -36,6 +36,15 @@ The goal is neither the number of tests nor line coverage. Tests verify invarian
 3. The Life Log settings show the voice memo hotkey.
 4. Modes shows Default and Chat, and the removed AI Agent mode does not exist.
 
+### Journey 4: finish onboarding
+
+1. With onboarding forced, "Next" leads to the try-dictation step, which shows the hotkey and the text field.
+2. When the microphone or Accessibility permission is missing, the step names it, and the button goes back to the permissions.
+3. Skipping and then choosing "Later" closes onboarding and shows the Life Log.
+4. Skipping and then choosing "Start Life Log" closes onboarding and shows the audio storage consent.
+
+The hotkey and microphone path of the try step needs a real machine with both permissions, so it stays out of the UI E2E.
+
 The next journeys to add before a refactoring are Life Log start, stop, and recovery, a memo from the mini window, and a vocabulary update from Settings. For anything that involves the microphone or OS permissions, deterministic UI E2E and endurance tests on a real machine are kept separate.
 
 ## Running
@@ -49,7 +58,7 @@ make ui-test
 
 ## Checking the look
 
-Launching the debug build of `LoreUITests.app` with `--lore-screenshot-demo --lore-snapshot <dir>` opens the main window (Life Log and Dictation), every settings section, and the mini window in turn and saves each window to `<dir>` as PNG. It then saves each stage of the HUD on a wallpaper-like background (recording start, streaming text, formatting, done, formatting skipped), the menu bar panel, and the menu bar icon in every state on light and dark menu bars (`menu-bar-icons.png`), and quits. It captures only the windows of its own process with ScreenCaptureKit, so it needs no Screen Recording permission. Adding `--lore-snapshot-appearance dark` (or `light`) fixes the appearance. None of this is in release builds.
+Launching the debug build of `LoreUITests.app` with `--lore-screenshot-demo --lore-snapshot <dir>` opens the main window (Life Log and Dictation), every settings section, and the mini window in turn and saves each window to `<dir>` as PNG. It then saves each stage of the HUD on a wallpaper-like background (recording start, streaming text, formatting, done, formatting skipped), the menu bar panel, and the menu bar icon in every state on light and dark menu bars (`menu-bar-icons.png`), and quits. It captures only the windows of its own process with ScreenCaptureKit, so it needs no Screen Recording permission. Adding `--lore-screenshot-onboarding` shows onboarding as on a first launch instead and saves each step (`onboarding-welcome`, `onboarding-try`, `onboarding-try-done` with a sample recognized and formatted text, and `onboarding-ready`). The flag also marks onboarding and the Life Log audio consent as not done at launch, so the UI E2E can finish both from a first-launch state. Adding `--lore-snapshot-appearance dark` (or `light`) fixes the appearance. None of this is in release builds.
 
 ```sh
 make ui-test-app

@@ -52,6 +52,9 @@ public final class AppEnvironment {
     public var mainSection: MainSection = .lifeLog
     public var settingsSection: SettingsSection = .common
     public var presentsLifeLogAudioConsent = false
+    public var onboardingStep: OnboardingStep = .welcome
+    /// 初回案内の「試す」で最後に確定した音声入力。
+    public private(set) var onboardingDictation: SessionRecord?
     public private(set) var dataOperationError: String?
     public private(set) var lifeLogAudioBytes: Int64 = 0
     public private(set) var appDataBytes: Int64 = 0
@@ -97,6 +100,10 @@ public final class AppEnvironment {
                 onNeedsAppRestart: { [weak self] in self?.relaunchForLostSpeechInventory() }
             )
         )
+        if Self.forcesOnboardingForScreenshot {
+            settings.onboardingCompleted = false
+            settings.lifeLogAudioStorageConfirmed = false
+        }
         wireHotkeys()
         wirePowerNotifications()
         followApplicationLanguage()
@@ -324,6 +331,30 @@ public final class AppEnvironment {
             guard let self, await lifeLog.stopAndWait(), !lifeLog.hasCaptureIntent else { return }
             await engines.unloadLifeLogStt()
         }
+    }
+
+    // MARK: 初回案内
+
+    public func beginOnboardingDictationTrial() {
+        onboardingDictation = nil
+        coordinator.inAppReceiver = { [weak self] record in self?.onboardingDictation = record }
+    }
+
+    public func endOnboardingDictationTrial() {
+        coordinator.inAppReceiver = nil
+    }
+
+#if DEBUG
+    func applyPreviewOnboardingDictation(_ record: SessionRecord?) {
+        onboardingDictation = record
+    }
+#endif
+
+    /// 最後まで進んだときも飛ばしたときも、同じ完了にする。
+    public func completeOnboarding(startingLifeLog: Bool = false) {
+        endOnboardingDictationTrial()
+        settings.onboardingCompleted = true
+        if startingLifeLog { setLifeLogCaptureEnabled(true) }
     }
 
     public func confirmLifeLogAudioStorageAndStart() {

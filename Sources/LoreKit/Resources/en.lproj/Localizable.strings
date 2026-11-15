@@ -28,7 +28,6 @@
 
 /* Onboarding */
 "マイク" = "Microphone";
-"Loreを始める" = "Get Started with Lore";
 
 /* Dictation and HUD */
 "待機中" = "Ready";
@@ -564,3 +563,19 @@
 "失敗" = "Failed";
 "整形スキップ" = "Formatting Skipped";
 "クリップボードのみ" = "Clipboard Only";
+
+"次へ" = "Next";
+"音声入力を試してみましょう" = "Try Dictation";
+"このキーを押したまま、ひと言話してから離してください。" = "Hold this key, say one sentence, then release it.";
+"話した文章がここに入ります" = "What you say appears here";
+"聞いています…" = "Listening…";
+"マイクが許可されていないため、録音できません。" = "Lore can't record because microphone access is not allowed.";
+"アクセシビリティが許可されていないため、ホットキーを検出できません。" = "Lore can't detect the hotkey because Accessibility access is not allowed.";
+"アクセス権に戻る" = "Back to Permissions";
+"認識した言葉" = "What Lore Heard";
+"整えた文章" = "Formatted Text";
+"スキップ" = "Skip";
+"準備ができました" = "You're All Set";
+"次は、ライフログで一日に話したことを残してみましょう。音声入力した文章も、同じ一日の流れに並びます。" = "Next, try the Life Log to keep what you say through the day. Your dictations appear in the same timeline.";
+"ライフログを始める" = "Start Life Log";
+"あとで" = "Later";

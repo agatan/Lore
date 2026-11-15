@@ -35,6 +35,7 @@ enum DebugSnapshotter {
             await settle(3)
             try await capture(LoreWindow.main, as: "main-life-log", into: directory)
             if AppEnvironment.forcesOnboardingForScreenshot {
+                try await captureOnboarding(env: env, into: directory)
                 exit(0)
             }
             // Toolbarのbuttonが切り替える値を変え、inspectorが閉じることを撮って確かめる。
@@ -81,6 +82,32 @@ enum DebugSnapshotter {
             FileHandle.standardError.write(Data("UI snapshotに失敗: \(error.localizedDescription)\n".utf8))
         }
         exit(0)
+    }
+
+    /// 初回案内の各段階。「試す」は結果が入る前と後を撮る。
+    private static func captureOnboarding(env: AppEnvironment, into directory: URL) async throws {
+        let copy = DemoCopy.current
+        let steps: [(String, OnboardingStep, SessionRecord?)] = [
+            ("onboarding-welcome", .welcome, nil),
+            ("onboarding-try", .tryDictation, nil),
+            ("onboarding-try-done", .tryDictation, SessionRecord(
+                id: "demo-onboarding",
+                startedAt: Date(),
+                status: .completed,
+                modeSnapshot: ModeSnapshot(modeName: "Default", modePrompt: "", systemPrompt: "", vocabularyCount: 0, trigger: .pushToTalk),
+                sttEngine: .speechAnalyzer,
+                rawTranscript: copy.spoken,
+                formattedText: copy.formatted
+            )),
+            ("onboarding-ready", .ready, nil),
+        ]
+        for (name, step, record) in steps {
+            env.onboardingStep = step
+            await settle(0.5)
+            env.applyPreviewOnboardingDictation(record)
+            await settle(1)
+            try await capture(LoreWindow.main, as: name, into: directory)
+        }
     }
 
     /// HUDの各段階を、壁紙を模した背景の上に置いて撮る。Glassは同じwindow内の背景を透かす。
