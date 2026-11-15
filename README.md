@@ -36,6 +36,10 @@ macOS grants permissions to the `.app`, so during development use `make run` and
 
 The tested user journeys and the conditions for running them are in the [test policy](docs/testing.md).
 
+### Landing page
+
+`site/` is a static page served as Cloudflare Workers static assets (`wrangler.jsonc`). The `Site` workflow deploys it to production on pushes to `main` that touch `site/`, and uploads a preview version (`pr-<number>`) for pull requests from this repository. The workflow needs the repository secrets `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID`. Create the `lore-site` Worker once, either in the Cloudflare dashboard (Hello World template, no Git connection) or with `npx wrangler@4 login` and `npx wrangler@4 deploy`, then give the CI token the Workers Editor role scoped to the `lore-site` Worker only. Creating a Worker needs the product-level Workers Admin role, which CI does not need after the first deploy.
+
 ### Permissions
 
 1. **Microphone**: used for dictation and Life Log recording.
