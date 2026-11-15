@@ -70,7 +70,7 @@ Only when "Sync" is enabled in Settings does Lore make the same text data availa
 ## Permissions
 
 - Microphone: used for dictation, voice memos, and local recording of the Life Log when it is enabled.
-- Calendar: used to show events on the timeline and to store their association with utterances.
+- Calendar: used to show events on the timeline, to store their association with utterances, and to hold Life Log recording during events of calendars marked "Never Record" and events marked "Do Not Record". For the hold, Lore reads events from every calendar on the Mac only while at least one mark exists, and does not store those events.
 - Accessibility: used to detect global hotkeys and to insert text into the frontmost app.
 - Input Monitoring: used only when a global hotkey is Option plus a letter key, to detect the press and release of that combination. Other typing is neither stored nor processed.
 

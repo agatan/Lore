@@ -65,6 +65,13 @@ public struct CalendarEventSnapshot: Identifiable, Codable, Sendable, Hashable {
     }
 }
 
+extension Sequence where Element == CalendarEventSnapshot {
+    /// `date`に進行中の、時刻のある予定。重なる場合は先に始まったもの。
+    public func timedEventInProgress(at date: Date) -> CalendarEventSnapshot? {
+        filter { !$0.isAllDay && $0.contains(date) }.min { $0.startsAt < $1.startsAt }
+    }
+}
+
 /// Calendarから読み取った参加状態。Loreからは変更しない。
 public enum CalendarParticipationStatus: String, Codable, Sendable, Hashable {
     case none

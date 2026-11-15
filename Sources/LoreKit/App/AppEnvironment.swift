@@ -1,4 +1,5 @@
 import AppKit
+import EventKit
 import Foundation
 import Observation
 
@@ -23,7 +24,7 @@ public final class AppEnvironment {
     public let lifeLogCaptureHotkeys = HotkeyMonitor()
     public let lifeLogMiniWindowHotkeys = HotkeyMonitor()
     public let voiceMemoHotkeys = HotkeyMonitor()
-    public let lifeLog = LifeLogCoordinator()
+    public let lifeLog = LifeLogCoordinator(audioRoot: AppEnvironment.lifeLogAudioRoot)
     public let sync = SyncCoordinator()
     public private(set) var coordinator: DictationCoordinator!
 
@@ -83,8 +84,12 @@ public final class AppEnvironment {
     @ObservationIgnored private var powerObservers: [any NSObjectProtocol] = []
     @ObservationIgnored private var clockObservers: [any NSObjectProtocol] = []
     @ObservationIgnored private var scheduleTask: Task<Void, Never>?
-    /// 自動記録の判断状態。表示（自動記録中か）にも使うため観測対象にする。
-    public private(set) var lifeLogScheduleState = LifeLogScheduleController()
+    @ObservationIgnored private var calendarObserver: (any NSObjectProtocol)?
+    @ObservationIgnored private var exclusionRefreshTask: Task<Void, Never>?
+    /// 「記録しない」予定の判断に使う、全calendarの現在前後の予定。保存しない。
+    @ObservationIgnored private var exclusionEvents: [CalendarEventSnapshot] = []
+    /// 自動記録と一時停止の判断状態。表示（自動記録中か）にも使うため観測対象にする。
+    public private(set) var lifeLogCaptureState = LifeLogCaptureController()
 
     public init() {
         Self.current = self
@@ -147,6 +152,7 @@ public final class AppEnvironment {
             Task { @MainActor [weak self] in
                 self?.lifeLog.systemDidWake()
                 self?.applyLifeLogSchedule()
+                await self?.refreshLifeLogExclusionEvents()
             }
         })
         // 時計やtime zoneが変わると、次の切替時刻の計算が古くなる。
@@ -155,6 +161,9 @@ public final class AppEnvironment {
             clockObservers.append(local.addObserver(forName: name, object: nil, queue: .main) { [weak self] _ in
                 Task { @MainActor [weak self] in self?.applyLifeLogSchedule() }
             })
+        }
+        calendarObserver = local.addObserver(forName: .EKEventStoreChanged, object: nil, queue: .main) { [weak self] _ in
+            Task { @MainActor [weak self] in await self?.refreshLifeLogExclusionEvents() }
         }
     }
 
@@ -253,8 +262,13 @@ public final class AppEnvironment {
         // 記録開始は必ずこのプロセスでの明示操作から行う。
         // crash等で残った前回のruntime stateを起動意図として復元しない。
         settings.lifeLogCaptureEnabled = false
-        // 前回の記録意図ではなく、利用者が決めた時間帯の中にいる場合だけ自動で開始する。
-        if database != nil, !Self.isUITestBundle { applyLifeLogSchedule() }
+        // 前回の記録意図ではなく、利用者が決めた時間帯の中にいる場合と、
+        // 利用者が始めた一時停止が残っている場合だけ自動で開始する。
+        if database != nil, !Self.isUITestBundle {
+            restoreLifeLogPause()
+            applyLifeLogSchedule()
+            startLifeLogExclusionRefresh()
+        }
     }
 
     static var usesScreenshotDemoData: Bool {
@@ -327,8 +341,10 @@ public final class AppEnvironment {
     /// UI、global hotkey、App Intentが共有するライフログ記録の状態遷移。
     /// 手動の開始・停止は自動記録の所有から外し、時間帯の途中の停止は次の時間帯まで再開しない。
     public func setLifeLogCaptureEnabled(_ enabled: Bool) {
-        lifeLogScheduleState.userChangedCapture(enabled: enabled, schedule: settings.lifeLogSchedule, now: Date())
+        let now = Date()
+        lifeLogCaptureState.userChangedCapture(enabled: enabled, schedule: settings.lifeLogSchedule, now: now)
         applyLifeLogCapture(enabled)
+        applyLifeLogHold(now: now)
     }
 
     private func applyLifeLogCapture(_ enabled: Bool) {
@@ -383,6 +399,97 @@ public final class AppEnvironment {
     public enum LifeLogScheduleCaption: Equatable, Sendable {
         case recordingUntil(String)
         case nextStart(String)
+        case resumesAt(String)
+        case heldForEvent(until: String)
+    }
+
+    public enum LifeLogPauseError: LocalizedError, Equatable {
+        case notRecording
+        case noCurrentEvent
+
+        public var errorDescription: String? {
+            switch self {
+            case .notRecording: String(lore: "ライフログを記録していないため、一時停止できません")
+            case .noCurrentEvent: String(lore: "進行中の予定がないため、予定の終わりまでの一時停止はできません")
+            }
+        }
+    }
+
+    /// UIとApp Intentが共有する一時停止。記録意図は保ち、再開時刻に自分で再開する。
+    public func pauseLifeLog(_ length: LifeLogPauseLength, now: Date = Date()) throws {
+        guard lifeLog.hasCaptureIntent else { throw LifeLogPauseError.notRecording }
+        guard let resumesAt = length.resumeDate(now: now, currentEventEnd: currentLifeLogEvent(at: now)?.endsAt) else {
+            throw LifeLogPauseError.noCurrentEvent
+        }
+        lifeLogCaptureState.pause(until: resumesAt)
+        applyLifeLogSchedule(now: now)
+    }
+
+    /// 一時停止を早めに終える。一時停止していなければ何もしない。
+    public func resumeLifeLog() {
+        guard lifeLogCaptureState.pause != nil else { return }
+        lifeLogCaptureState.resume()
+        applyLifeLogSchedule()
+    }
+
+    /// 今日のtimelineで進行中の、時刻のある予定。「予定が終わるまで」の一時停止に使う。
+    public func currentLifeLogEvent(at now: Date = Date()) -> CalendarEventSnapshot? {
+        guard Calendar.current.isDate(lifeLog.selectedDate, inSameDayAs: now) else { return nil }
+        return lifeLog.day.calendarEvents.timedEventInProgress(at: now)
+    }
+
+    public func setLifeLogEventSkipped(_ skipped: Bool, event: CalendarEventSnapshot) {
+        var exclusions = settings.lifeLogRecordingExclusions
+        exclusions.setSkipped(skipped, event: event)
+        saveLifeLogRecordingExclusions(exclusions)
+    }
+
+    public func setLifeLogCalendarNeverRecord(_ neverRecord: Bool, title: String) {
+        var exclusions = settings.lifeLogRecordingExclusions
+        if neverRecord {
+            exclusions.calendarTitles.insert(title)
+        } else {
+            exclusions.calendarTitles.remove(title)
+        }
+        saveLifeLogRecordingExclusions(exclusions)
+    }
+
+    private func saveLifeLogRecordingExclusions(_ exclusions: LifeLogRecordingExclusions) {
+        settings.lifeLogRecordingExclusions = exclusions.pruned(endedBefore: Date())
+        Task { await refreshLifeLogExclusionEvents() }
+    }
+
+    /// 印がある間だけ、全calendarの現在前後の予定を読み直す。アクセスは尋ねない。
+    func refreshLifeLogExclusionEvents(now: Date = Date()) async {
+        if settings.lifeLogRecordingExclusions.isEmpty || !Permissions.isCalendarGranted {
+            exclusionEvents = []
+        } else if let events = await lifeLog.eventsAroundNow(now) {
+            exclusionEvents = events
+        }
+        applyLifeLogSchedule()
+    }
+
+    private func startLifeLogExclusionRefresh() {
+        exclusionRefreshTask?.cancel()
+        exclusionRefreshTask = Task { [weak self] in
+            while !Task.isCancelled {
+                await self?.refreshLifeLogExclusionEvents()
+                do { try await Task.sleep(for: .seconds(15 * 60)) } catch { return }
+            }
+        }
+    }
+
+    /// 前のprocessで利用者が始めた一時停止を、記録意図ごと引き継ぐ。
+    /// 一時停止は記録意図がある時にしか始められないため、録音保存の同意は済んでいる。
+    func restoreLifeLogPause() {
+        guard let pause = settings.lifeLogPause else { return }
+        guard settings.lifeLogAudioStorageConfirmed else {
+            settings.lifeLogPause = nil
+            return
+        }
+        lifeLogCaptureState = LifeLogCaptureController(restoring: pause)
+        lifeLog.setHold(.paused(resumesAt: pause.resumesAt))
+        applyLifeLogCapture(true)
     }
 
     public func updateLifeLogSchedule(_ schedule: LifeLogSchedule) {
@@ -390,29 +497,54 @@ public final class AppEnvironment {
         applyLifeLogSchedule()
     }
 
-    /// 現在時刻で自動記録の開始・停止を判断し、次の切替時刻に一度だけ起きる。
+    /// 現在時刻で自動記録の開始・停止と一時停止の終了を判断し、holdを合わせ、次に判断が変わる時刻に一度だけ起きる。
     func applyLifeLogSchedule(now: Date = Date()) {
-        scheduleTask?.cancel()
-        scheduleTask = nil
         let schedule = settings.lifeLogSchedule
-        switch lifeLogScheduleState.evaluate(schedule: schedule, now: now, hasCaptureIntent: lifeLog.hasCaptureIntent) {
+        switch lifeLogCaptureState.evaluate(schedule: schedule, now: now, hasCaptureIntent: lifeLog.hasCaptureIntent) {
         case .start:
             if settings.lifeLogAudioStorageConfirmed {
                 applyLifeLogCapture(true)
             } else {
                 // 同意画面を勝手に開かない。不在時に起きた時間帯の開始でwindowを奪わないため。
-                lifeLogScheduleState.startFailed(schedule: schedule, now: now)
+                lifeLogCaptureState.startFailed(schedule: schedule, now: now)
                 lifeLog.showNotice(String(lore: "自動記録を始められませんでした。録音の保存に同意するため、一度手動でライフログを開始してください"))
             }
+        case .resume:
+            applyLifeLogCapture(true)
         case .stop:
             applyLifeLogCapture(false)
         case .none:
             break
         }
-        guard let next = schedule.nextTransition(after: now) else { return }
+        applyLifeLogHold(now: now)
+    }
+
+    /// 判断状態からholdを決めて保存し、次に判断が変わる時刻に起きる。一時停止は予定によるholdより優先する。
+    private func applyLifeLogHold(now: Date) {
+        scheduleTask?.cancel()
+        scheduleTask = nil
+        let schedule = settings.lifeLogSchedule
+        let exclusions = settings.lifeLogRecordingExclusions
+        let pause = lifeLogCaptureState.pause
+        if let pause {
+            lifeLog.setHold(.paused(resumesAt: pause.resumesAt))
+        } else if let event = exclusions.holdingEvent(in: exclusionEvents, at: now) {
+            lifeLog.setHold(.event(title: event.title, endsAt: event.endsAt))
+        } else {
+            lifeLog.setHold(nil)
+        }
+        if settings.lifeLogPause != pause { settings.lifeLogPause = pause }
+
+        let transition = schedule.nextTransition(after: now)
+        let wakes = [
+            lifeLogCaptureState.nextWake(schedule: schedule, now: now),
+            exclusions.nextBoundary(in: exclusionEvents, after: now),
+        ].compactMap { $0 }
+        guard let next = wakes.min() else { return }
+        // 時間帯の境界ちょうどは外/内の判定が揺れないよう、わずかに過ぎてから評価する。
+        let margin = next == transition ? 0.5 : 0
         scheduleTask = Task { [weak self] in
-            // 境界ちょうどの時刻は時間帯の外/内の判定が揺れないよう、わずかに過ぎてから評価する。
-            let delay = max(0, next.timeIntervalSinceNow) + 0.5
+            let delay = max(0, next.timeIntervalSinceNow) + margin
             do { try await Task.sleep(for: .seconds(delay)) } catch { return }
             self?.applyLifeLogSchedule()
         }
@@ -420,11 +552,18 @@ public final class AppEnvironment {
 
     /// 自動記録の状態表示。自動記録中は終了時刻、待機中は次の開始時刻を返す。
     public var lifeLogScheduleCaption: LifeLogScheduleCaption? {
-        let schedule = settings.lifeLogSchedule
-        guard schedule.isEnabled else { return nil }
         let now = Date()
         if lifeLog.hasCaptureIntent {
-            guard lifeLogScheduleState.ownsCapture,
+            switch lifeLog.hold {
+            case .paused(let resumesAt): return .resumesAt(Self.scheduleTimeText(resumesAt, now: now))
+            case .event(_, let endsAt): return .heldForEvent(until: Self.scheduleTimeText(endsAt, now: now))
+            case nil: break
+            }
+        }
+        let schedule = settings.lifeLogSchedule
+        guard schedule.isEnabled else { return nil }
+        if lifeLog.hasCaptureIntent {
+            guard lifeLogCaptureState.ownsCapture,
                   let window = schedule.window(containing: now) else { return nil }
             return .recordingUntil(Self.scheduleTimeText(window.end, now: now))
         }
@@ -457,6 +596,8 @@ public final class AppEnvironment {
         voiceMemoHotkeys.stop()
         permissionWatcher?.cancel()
         scheduleTask?.cancel()
+        exclusionRefreshTask?.cancel()
+        // 一時停止(`settings.lifeLogPause`)は消さない。次の起動が再開時刻まで引き継ぐ。
         settings.lifeLogCaptureEnabled = false
 
         async let lifeLogFinished = lifeLog.stopForTermination()
@@ -484,7 +625,7 @@ public final class AppEnvironment {
         lifeLogCaptureHotkeys.update(binding: settings.lifeLogCaptureHotkey)
         lifeLogCaptureHotkeys.onEvent = { [weak self] event in
             guard case .released = event, let self else { return }
-            let enabled = !lifeLog.isCapturing
+            let enabled = !lifeLog.hasCaptureIntent
             setLifeLogCaptureEnabled(enabled)
         }
         lifeLogMiniWindowHotkeys.update(binding: settings.lifeLogMiniWindowHotkey)
@@ -918,7 +1059,8 @@ public final class AppEnvironment {
     public func deleteAllLifeLogData() async {
         guard let database else { return }
         dataOperationError = nil
-        settings.lifeLogCaptureEnabled = false
+        // 利用者による停止として扱い、一時停止も終える。後の再評価が録音を再開しないようにする。
+        setLifeLogCaptureEnabled(false)
         guard await lifeLog.stopAndWait() else {
             reportDataOperation(DataOperationError.captureDidNotStop)
             return
@@ -937,7 +1079,8 @@ public final class AppEnvironment {
     public func deleteAllApplicationData() async {
         guard let database else { return }
         dataOperationError = nil
-        settings.lifeLogCaptureEnabled = false
+        // 利用者による停止として扱い、一時停止も終える。後の再評価が録音を再開しないようにする。
+        setLifeLogCaptureEnabled(false)
         guard await lifeLog.stopAndWait() else {
             reportDataOperation(DataOperationError.captureDidNotStop)
             return
@@ -951,6 +1094,7 @@ public final class AppEnvironment {
             try await database.deleteAllUserData()
             await sync.didDeleteAllData()
             settings.resetAll()
+            await refreshLifeLogExclusionEvents()
             engines.apply(
                 backend: settings.formattingBackend,
                 model: settings.model(for: settings.formattingBackend)
@@ -1013,8 +1157,16 @@ public final class AppEnvironment {
             .appendingPathComponent("Lore", isDirectory: true)
     }
 
+    /// UI test bundleは利用者の音声folderを読み書きしない。削除や容量表示も同じ場所を見る。
     private static var lifeLogAudioRoot: URL {
-        FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+#if DEBUG
+        if isUITestBundle {
+            return FileManager.default.temporaryDirectory.appendingPathComponent(
+                "LoreUITests-LifeLog-\(ProcessInfo.processInfo.processIdentifier)", isDirectory: true
+            )
+        }
+#endif
+        return FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
             .appendingPathComponent("Lore/LifeLog", isDirectory: true)
     }
 

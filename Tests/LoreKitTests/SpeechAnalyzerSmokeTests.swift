@@ -98,7 +98,7 @@ struct SpeechAnalyzerSmokeTests {
     /// 予約が取れない状態は、取得でも再試行でも直らない(C-15d)。案内は再起動一択。
     @Test("予約が取れないときは取得も再試行も促さない")
     func needsRestartMessageOnlyAsksForRestart() {
-        let message = SpeechAnalyzerStt.needsRestartMessage(Locale(identifier: "ja_JP"))
+        let message = SpeechAnalyzerStt.needsRestartMessage(Locale(identifier: "ja_JP"), language: .japanese)
         #expect(message.contains("日本語"))
         #expect(message.contains("再起動"))
         #expect(!message.contains("未取得"))

@@ -43,6 +43,7 @@ struct LifeLogComposerBar: View {
             ) {
                 env.setLifeLogCaptureEnabled(!env.lifeLog.hasCaptureIntent)
             }
+            LifeLogPauseControl(env: env, accessibilityPrefix: accessibilityPrefix)
             statusText
                 .frame(maxWidth: acceptsMemo ? (compact ? 150 : 176) : .infinity, alignment: .leading)
             if acceptsMemo {

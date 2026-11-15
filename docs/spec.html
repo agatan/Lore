@@ -81,7 +81,7 @@
 <li>The CLI is now <code>lore</code> and the MCP server is <code>lore-mcp</code>. AI clients must be registered again. If the CLI or MCP server starts before the app, it performs the same folder and settings migration.</li>
 </ul>
 </li>
-<li>Lore does not restore the recording intent of the previous process. Life Log recording starts only from an explicit action in the UI, a hotkey, or Shortcuts, or inside a scheduled recording window that the user enabled (section 4.1).</li>
+<li>Lore does not restore the recording intent of the previous process. Life Log recording starts only from an explicit action in the UI, a hotkey, or Shortcuts, inside a scheduled recording window that the user enabled, or when a pause that the user started in an earlier process ends (section 4.1).</li>
 <li>Without the microphone permission, Lore cannot record. Without the Accessibility permission, Lore cannot insert text, cannot detect a modifier-only hotkey such as the default Right Option, and cannot detect Esc. A hotkey made of Option plus a letter key also needs Input Monitoring.</li>
 <li>Dictation does not need the calendar permission. Settings &gt; General lists each permission with its state and an "Allow" button for the ones not granted. The Input Monitoring row appears only when a hotkey needs it. For the microphone and the calendar, the button shows the system dialog the first time and opens System Settings after a denial. For Accessibility and Input Monitoring, the button requests access and opens System Settings.</li>
 <li>The first time the Life Log starts, Lore asks the user to confirm that it saves recovery audio in 30-second chunks on the Mac. If Shortcuts starts the Life Log before this consent, the action returns an error that asks the user to open Lore and confirm.</li>
@@ -153,7 +153,7 @@
 <ul>
 <li>The Life Log starts and stops independently of dictation, and both can run at the same time.</li>
 <li>The user controls it from the menu bar panel, the main window, the mini window, a dedicated global hotkey (default ⌃⌥L), and macOS Shortcuts.</li>
-<li>The app starts in the stopped state. It does not start recording because the previous process was recording. Only a launch inside a scheduled recording window starts recording, as a scheduled recording. After wake from sleep or an input device reconnection, recording resumes only for a recording intent that remains in the same process.</li>
+<li>The app starts in the stopped state. It does not start recording because the previous process was recording. Only a launch inside a scheduled recording window starts recording, as a scheduled recording, and a pause that was active when Lore quit is restored (see Pause below). After wake from sleep or an input device reconnection, recording resumes only for a recording intent that remains in the same process.</li>
 <li>When "Scheduled Recording" is enabled in Settings, Lore records the Life Log from the start time to the end time on the selected days. The defaults are off, Monday to Friday, 9:00 to 18:00. If the end time is not later than the start time, the window crosses midnight and belongs to the day it starts on.
 <ul>
 <li>On entering a window, or when the app launches, wakes, or the setting changes inside a window, Lore starts recording if it is not recording.</li>
@@ -164,7 +164,23 @@
 <li>Time checks follow the Mac's calendar and time zone. Lore recalculates the next switch time after a clock change, a time zone change, or wake from sleep.</li>
 </ul>
 </li>
-<li>Every Life Log view and the menu bar icon show the same recording state, taken from whether the audio writer is actually running. The menu bar icon is the "L." of the app icon, and only its dot shows state: rose while recording (dictation or Life Log), a ring in the icon's own color while processing, mint when a dictation completed, gold when formatting was skipped, the result is on the clipboard only, or the dictation failed, and a gold ring while the Life Log is reconnecting. Dictation state takes priority over Life Log state. With no state to show, the icon is a template image.</li>
+<li><strong>Pause.</strong> While a recording intent exists, the menu bar panel, the main window, the mini window, and Shortcuts can pause the Life Log for 15 minutes, 30 minutes, 1 hour, or until the current event ends. "Until the current event ends" is offered only while a timed event of today's timeline is in progress.
+<ul>
+<li>A pause stops capture immediately and commits the audio captured so far as a chunk, as for any stop. No audio is captured while paused.</li>
+<li>Recording resumes by itself at the resume time. The user can resume early with "Resume" in the same places or with Shortcuts. Stopping the Life Log during a pause ends the pause, and recording does not resume.</li>
+<li>The pause is kept across sleep and quit. If the resume time passed while the Mac slept, recording resumes on wake. If Lore quits during a pause and launches again, it stays paused until the resume time and then records. If the resume time has already passed at launch, it records immediately. In both cases the recording keeps the owner it had before the pause, a scheduled recording or a manual one.</li>
+<li>A scheduled start does not end a pause. If the scheduled window of a scheduled recording ends during the pause, the pause ends and recording does not resume. A manual recording that is paused is not affected by the end of a window.</li>
+<li>Pausing again during a pause replaces the resume time.</li>
+</ul>
+</li>
+<li><strong>Never record events.</strong> In Settings &gt; Calendar, the user can mark calendars as "Never Record". A single event can also be marked "Do Not Record" from its row in the timeline, from the moment it is shown until it ends, and the mark can be removed the same way. While a timed event that is marked this way, or that belongs to a "Never Record" calendar, is in progress, Life Log capture is held: no audio chunk is created, and recording resumes by itself when the event ends if the recording intent remains. All-day events never hold capture.
+<ul>
+<li>The hold applies to manual and scheduled recordings and to a recording started during the event. It does not change the recording intent or the schedule.</li>
+<li>Lore reads these events from every calendar on the Mac, including calendars hidden from the timeline, only while at least one calendar or event is marked. It reads them at launch, on wake, after a calendar change in EventKit, after the marks change, and every 15 minutes. Without calendar access no event holds capture, and Settings &gt; Calendar shows the permission request.</li>
+<li>The event marks are stored in the app settings, not in the database, and are removed after the event ends.</li>
+</ul>
+</li>
+<li>Every Life Log view and the menu bar icon show the same recording state, taken from whether the audio writer is actually running. The menu bar icon is the "L." of the app icon, and only its dot shows state: rose while recording (dictation or Life Log), a ring in the icon's own color while processing, mint when a dictation completed, gold when formatting was skipped, the result is on the clipboard only, or the dictation failed, and a gold ring while the Life Log is reconnecting, and a rose ring while the Life Log is paused or held for an event. Dictation state takes priority over Life Log state. With no state to show, the icon is a template image.</li>
 <li>While dictation runs at the same time, the recoverable Life Log audio keeps recording. For a span where dictation succeeded, the dictation's raw transcript is authoritative, and the utterances that the Life Log recognized in the same span do not appear in the timeline, search, or export. If the dictation was canceled or failed, the Life Log utterances remain.</li>
 <li>The user can choose the input device. While recording, Lore commits a recovery <code>.m4a</code> on the Mac every 30 seconds and whenever a speech burst ends. Audio is never sent to a cloud speech service.</li>
 <li>An audio chunk is the unit of durability and recovery. Because the chunk closes when a burst ends, final recognition does not wait for the next periodic commit. Recognition runs per adaptive speech burst, and sustained near-silence is not transcribed.</li>
@@ -213,6 +229,7 @@
 <li>By default, only events that the user accepted, or that have no RSVP, are shown and exported. The user can change this filter.</li>
 <li>"Refresh Events" in the Calendar settings explicitly reloads the events of the day currently selected in the timeline. The button is disabled while it runs. Afterward the timeline and the monthly activity are updated.</li>
 <li>Lore does not change an RSVP and offers no path into the Calendar app.</li>
+<li>"Never Record" calendars and "Do Not Record" events hold Life Log capture while they are in progress (section 4.1). An event row that holds capture shows a "Not Recorded" tag.</li>
 <li>In the monthly activity calendar, the day shown in the timeline is a filled circle: ink, or rose when that day is today. Today, when not selected, has a rose number. Each day has two density dots, one for events and one for speech. The header has previous month, next month, and "Today" buttons.</li>
 </ul>
 <h3>4.4 Handing off to AI</h3>
@@ -237,17 +254,17 @@
 <tr><th>Place</th><th>Features</th></tr>
 </thead>
 <tbody>
-<tr><td>Menu bar panel</td><td>Two cards, with no tabs. The Life Log card has the record button, the recording state with the scheduled time (or today's counts), and links to open today and the mini window. The dictation card has the record button, the hotkey, a button to copy the last text, a link to the history, and the mode menu. Notices for permissions, the Koe migration, and database errors appear below the cards. The footer has only Settings and Quit</td></tr>
+<tr><td>Menu bar panel</td><td>Two cards, with no tabs. The Life Log card has the record button, the pause button, the recording state with the resume time or the scheduled time (or today's counts), and links to open today and the mini window. The dictation card has the record button, the hotkey, a button to copy the last text, a link to the history, and the mode menu. Notices for permissions, the Koe migration, and database errors appear below the cards. The footer has only Settings and Quit</td></tr>
 <tr><td>Main window</td><td>Opens on a normal launch as the frontmost key window at 1680×960 pt (minimum 1080×680). Three columns: full-height sidebar (navigation, calendar), timeline, and inspector. Shows today's Life Log at the latest position. Hosts onboarding, the Life Log with the floating bar for typed and voice memos and recording control, and the dictation history (list and detail). Inspector toggle, search, and export are in the window toolbar. The history detail is a readable centered column</td></tr>
 <tr><td>Mini window</td><td>Life Log state, today's timeline, and typed and voice memos. Once opened it stays in front of other apps, desktop Spaces, and full-screen Spaces until closed. Recording control is in the floating bar at the bottom. The whole window uses a translucent material</td></tr>
 <tr><td>Settings: General, Privacy</td><td>General has the display language, the color theme, launch at login, and permissions. Privacy has the data folder, the storage used on this Mac, and deletion</td></tr>
-<tr><td>Settings: Life Log, Calendar</td><td>Life Log has the recording, mini window, and voice memo hotkeys, scheduled recording days and time window, input device, speech recognition engine, recognition language, whisper.cpp model, and audio retention. Calendar has calendar selection, the participation filter, and "Refresh Events"</td></tr>
+<tr><td>Settings: Life Log, Calendar</td><td>Life Log has the recording, mini window, and voice memo hotkeys, scheduled recording days and time window, input device, speech recognition engine, recognition language, whisper.cpp model, and audio retention. Calendar has calendar selection, the participation filter, "Refresh Events", and the "Never Record" calendars</td></tr>
 <tr><td>Settings: Dictation, AI Formatting, Modes, Vocabulary</td><td>Dictation has the hotkey and hold duration, speech recognition engine and whisper.cpp model, display and sounds, and history retention. AI Formatting has the backend, model, API key, connection check, and wait time. Modes has the common rules and modes. Vocabulary has the entries</td></tr>
 <tr><td>Settings: Sync, Integrations</td><td>Sync is described in section 6.1. Integrations has the MCP server path with a copyable registration command for Claude Code, the CLI installer, and the Agent Skill installer</td></tr>
 </tbody>
 </table>
 <p>The Privacy settings show the total storage that Lore data uses on this Mac, including history, Life Log, stored audio, and whisper.cpp models.</p>
-<p>The Life Log state in the main window, the mini window, and the menu bar panel share one record button. While stopped, the button is an ink circle with a rose dot. While a recording intent exists, it is a rose stop symbol, and it keeps the rose look while reconnecting or paused for a voice memo. The button has no visible text. Its tooltip and accessibility label are "Start Life Log Recording" and "Stop Life Log Recording". The text beside it is the state: "Life Log Stopped", "Starting Life Log", "Life Log Recording", "Reconnecting Life Log", or "Life Log Paused".</p>
+<p>The Life Log state in the main window, the mini window, and the menu bar panel share one record button. While stopped, the button is an ink circle with a rose dot. While a recording intent exists, it is a rose stop symbol, and it keeps the rose look while reconnecting, paused, or held for an event. The button has no visible text. Its tooltip and accessibility label are "Start Life Log Recording" and "Stop Life Log Recording". The text beside it is the state: "Life Log Stopped", "Starting Life Log", "Life Log Recording", "Reconnecting Life Log", or "Life Log Paused". While paused, the line under it shows the resume time, as in "Resumes at 10:30". While held for an event, it shows the event end, as in "Not recording during this event · until 11:00". Next to the record button, a pause button opens the pause durations while recording, and becomes "Resume" while paused. It is hidden while stopped and while capture is held for an event.</p>
 <p>A message that does not prevent continued operation, such as an audio configuration change or a processing failure, appears as a dismissible banner with <code>×</code> at its right edge. Dismissing removes only the message. It does not affect the recording intent, automatic reconnection, or stored data.</p>
 <p>The CLI installer links <code>~/.local/bin/lore</code> to the CLI inside Lore.app, so it changes neither the shell settings nor <code>PATH</code>. The Agent Skill is placed in <code>~/.agents/skills/lore</code> and linked from <code>~/.claude/skills/lore</code>. Neither installer overwrites a file that Lore does not manage.</p>
 </section>
@@ -303,7 +320,7 @@
 </section>
 <section id="macos-shortcuts-app-intents">
 <h2>7. macOS Shortcuts / App Intents</h2>
-<p>Lore exposes the following App Intent actions to Shortcuts. Each action waits for Lore to launch and for database initialization to finish before it runs. "Start Life Log" launches Lore in the foreground because it uses the microphone. "Stop Life Log" runs in the background.</p>
+<p>Lore exposes the following App Intent actions to Shortcuts. Each action waits for Lore to launch and for database initialization to finish before it runs. "Start Life Log" launches Lore in the foreground because it uses the microphone. "Stop Life Log" and "Pause Life Log" run in the background. "Resume Life Log" launches Lore in the foreground for the same reason as "Start Life Log".</p>
 <table>
 <thead>
 <tr><th>Action</th><th>Input / Output</th></tr>
@@ -311,6 +328,8 @@
 <tbody>
 <tr><td>Start Life Log</td><td>Starts recording, idempotently. Returns an error if the user has not consented to audio storage</td></tr>
 <tr><td>Stop Life Log</td><td>Stops recording and waits for the transcription and saving in progress</td></tr>
+<tr><td>Pause Life Log</td><td>Input: duration (15 minutes, 30 minutes, 1 hour, or until the current event ends; defaults to 30 minutes). Pauses as in section 4.1. Returns an error if the Life Log is not recording, or if "until the current event ends" is chosen while no timed event is in progress</td></tr>
+<tr><td>Resume Life Log</td><td>Ends a pause and resumes recording. Does nothing if the Life Log is not paused</td></tr>
 </tbody>
 </table>
 <p>Day export is available from the CLI and MCP, not from Shortcuts.</p>
@@ -391,6 +410,8 @@ lore range --from YYYY-MM-DD [--to YYYY-MM-DD] [--include calendar,speech,voice-
 <li>A candidate with less than 0.5 seconds of voiced audio or a voiced ratio below 20% starts no preview, no final recognition, and no burst checkpoint, and is also excluded when stored audio is reprocessed. The main and mini timelines follow new items only while the bottom is visible, stop following after a scroll back or a jump to a source item, and resume at the bottom.</li>
 <li>The known whisper.cpp boilerplate hallucination "ご視聴ありがとうございました" is removed at the engine boundary only as a standalone sentence, and real speech in the same segment is kept.</li>
 <li>Two Macs with sync enabled share utterance text, memos, dictation history, and vocabulary by placing only encrypted change files in a folder. A different sync code is refused. An unreadable change file is not imported, its reason is shown, and it is imported when it arrives intact later. Individual deletions reach the other Mac. Deletions by retention period and bulk deletions do not.</li>
+<li>A pause stops capture immediately, commits the audio captured so far, and resumes at the stated time without user action, also after sleep and after a quit and relaunch. A scheduled start does not end a pause, and the end of the window of a paused scheduled recording cancels the resume.</li>
+<li>While a timed event of a "Never Record" calendar, or a timed event marked "Do Not Record", is in progress, no Life Log audio chunk is created, and recording resumes after the event if the recording intent remains.</li>
 </ol>
 </section>
 </main>

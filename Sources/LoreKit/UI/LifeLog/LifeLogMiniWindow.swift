@@ -10,7 +10,8 @@ struct LifeLogMiniWindow: View {
         VStack(spacing: 0) {
             CurrentCalendarEventStrip(
                 events: env.lifeLog.day.calendarEvents,
-                selectedDate: env.lifeLog.selectedDate
+                selectedDate: env.lifeLog.selectedDate,
+                recording: env.eventRecording
             )
 
             ScrollViewReader { proxy in
@@ -92,7 +93,10 @@ struct LifeLogMiniWindow: View {
         Group {
             switch row.kind {
             case .event(let event):
-                CalendarEventCard(event: event, above: row.above, below: row.below, compact: true)
+                CalendarEventCard(
+                    event: event, above: row.above, below: row.below, compact: true,
+                    recording: env.eventRecording(event)
+                )
             case .dictation(let dictation):
                 TimelineEntryRow(date: dictation.startedAt, kind: .dictation, text: dictation.text,
                                  above: row.above, below: row.below, compact: true)

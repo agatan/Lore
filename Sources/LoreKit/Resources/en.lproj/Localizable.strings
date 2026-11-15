@@ -583,3 +583,25 @@
 "次は、ライフログで一日に話したことを残してみましょう。音声入力した文章も、同じ一日の流れに並びます。" = "Next, try the Life Log to keep what you say through the day. Your dictations appear in the same timeline.";
 "ライフログを始める" = "Start Life Log";
 "あとで" = "Later";
+/* Life log pause and never-record events */
+"一時停止中" = "Paused";
+"%@に再開" = "Resumes at %@";
+"この予定中は記録しません・%@まで" = "Not recording during this event · until %@";
+"ライフログを記録していないため、一時停止できません" = "Life Log isn’t recording, so it can’t be paused.";
+"進行中の予定がないため、予定の終わりまでの一時停止はできません" = "No event is in progress, so Life Log can’t pause until the event ends.";
+"ライフログを一時停止" = "Pause Life Log";
+"ライフログを再開" = "Resume Life Log";
+"15分" = "15 Minutes";
+"30分" = "30 Minutes";
+"1時間" = "1 Hour";
+"いまの予定が終わるまで" = "Until the Current Event Ends";
+"この予定を記録しない" = "Do Not Record";
+"この予定を記録する" = "Record This Event";
+"記録しない" = "Not Recorded";
+"記録しないカレンダー" = "Never Record";
+"選んだカレンダーの予定が進行している間は、ライフログの録音を止め、予定が終わると再開します。終日の予定では止めません。" = "While an event from a selected calendar is in progress, Life Log stops recording and resumes when the event ends. All-day events don’t stop recording.";
+"許可すると、選んだカレンダーの予定の間は録音を止められます" = "Allow access to stop recording during events from the calendars you choose.";
+"Loreのライフログ記録を一時停止します。選んだ時間が過ぎると自動で再開します。" = "Pauses Life Log recording in Lore. Recording resumes by itself after the chosen time.";
+"一時停止したLoreのライフログ記録を再開します。一時停止していなければ何もしません。" = "Resumes paused Life Log recording in Lore. Does nothing if Life Log isn’t paused.";
+"長さ" = "Duration";
+"一時停止の長さ" = "Pause Duration";

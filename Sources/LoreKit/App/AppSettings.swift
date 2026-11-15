@@ -101,6 +101,9 @@ public final class AppSettings {
         public var lifeLogCalendarTitles: [String] = []
         public var lifeLogParticipatingEventsOnly: Bool = true
         public var lifeLogSchedule: LifeLogSchedule = .default
+        /// 利用者が始めた一時停止。終了や再起動をまたいで再開時刻を保つ。
+        public var lifeLogPause: LifeLogPause?
+        public var lifeLogRecordingExclusions = LifeLogRecordingExclusions()
 
         init() {}
 
@@ -150,6 +153,10 @@ public final class AppSettings {
             lifeLogParticipatingEventsOnly = try container.decodeIfPresent(Bool.self, forKey: .lifeLogParticipatingEventsOnly) ?? true
             lifeLogSchedule = (try? container.decodeIfPresent(LifeLogSchedule.self, forKey: .lifeLogSchedule))
                 .flatMap { $0 } ?? .default
+            lifeLogPause = try container.decodeIfPresent(LifeLogPause.self, forKey: .lifeLogPause)
+            lifeLogRecordingExclusions = try container.decodeIfPresent(
+                LifeLogRecordingExclusions.self, forKey: .lifeLogRecordingExclusions
+            ) ?? LifeLogRecordingExclusions()
         }
     }
 
@@ -299,6 +306,8 @@ public final class AppSettings {
     }
     public var lifeLogAudioStorageConfirmed: Bool { get { storage.lifeLogAudioStorageConfirmed } set { storage.lifeLogAudioStorageConfirmed = newValue; persist() } }
     public var lifeLogSchedule: LifeLogSchedule { get { storage.lifeLogSchedule } set { storage.lifeLogSchedule = newValue; persist() } }
+    public var lifeLogPause: LifeLogPause? { get { storage.lifeLogPause } set { storage.lifeLogPause = newValue; persist() } }
+    public var lifeLogRecordingExclusions: LifeLogRecordingExclusions { get { storage.lifeLogRecordingExclusions } set { storage.lifeLogRecordingExclusions = newValue; persist() } }
     public var lifeLogCalendarTitles: [String] { get { storage.lifeLogCalendarTitles } set { storage.lifeLogCalendarTitles = newValue; persist() } }
     public var lifeLogParticipatingEventsOnly: Bool { get { storage.lifeLogParticipatingEventsOnly } set { storage.lifeLogParticipatingEventsOnly = newValue; persist() } }
     /// 「Loreの全データを削除」で設定も初期状態へ戻す。
