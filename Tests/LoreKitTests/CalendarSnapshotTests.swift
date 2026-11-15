@@ -156,6 +156,22 @@ struct EventOccurrenceSnapshotMigrationTests {
         #expect(event.participationStatus == .accepted)
     }
 
+    @Test("A note made in another time zone does not add a second row for the occurrence the series row holds")
+    func backfillSkipsHeldOccurrence() async throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent("lore-v14-zone-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: root) }
+        let url = try await legacyDatabase(at: root)
+        let start = try PersistenceCoding.decodeDate("2026-11-09T01:00:00.000Z")
+        let otherZoneDay = LifeLogDateKey.string(for: start.addingTimeInterval(-86_400))
+        try await LifeLogStore(queue: try DatabaseQueue(path: url.path)).save(generatedNote: GeneratedNote(
+            kind: .eventNotes, scope: .event(EventOccurrence(eventID: "series", day: otherZoneDay)),
+            rangeStart: start, rangeEnd: start.addingTimeInterval(1800), backend: .onDevice, model: "m", createdAt: start,
+            sourceUtteranceIDs: [], sourceMemoIDs: [], sections: []))
+        let database = try await LoreDatabase.open(fileURL: url, backupDirectory: root.appendingPathComponent("Backups"))
+
+        #expect(try await database.lifeLog.day(start).calendarEvents.count == 1)
+    }
+
     @Test("Utterance changes still reach the sync outbox after the table is recreated")
     func keepsSyncTriggers() async throws {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent("lore-v14-sync-\(UUID().uuidString)")
