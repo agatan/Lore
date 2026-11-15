@@ -70,7 +70,7 @@ All targets are SwiftUI `.accessibilityIdentifier`s (grep `accessibilityIdentifi
 | `$V tree [substring]` | dump AX elements (`role id title value actions`), optionally filtered; use it to discover ids |
 | `$V wait <id>` | wait until an element with that id exists |
 | `$V absent <id>` | assert it does not exist now |
-| `$V press <id>` | AXPress a button/checkbox/segment; **fails** if the element has no AXPress (static text silently ignores presses) |
+| `$V press <id> [--in <window id\|title>]` | AXPress a button/checkbox/segment; **fails** if the element has no AXPress (static text silently ignores presses). Without `--in` it presses the first match, so pass `--in` when the id exists in both the main and mini windows |
 | `$V select <id>` | select the enclosing list row, used for sidebar rows such as `settings.section.<x>` |
 | `$V menu "<title>"` | press a menu-bar item by its exact title, e.g. `設定…`, `ライフログ ミニウィンドウ` (titles are localized; ids are all `menuAction`) |
 | `$V hover <id-or-exact-text> [--in <window id\|title>]` | move the **real pointer** to the element's center so hover-only controls appear (memo edit/delete). It fails when the text matches in several windows (main `lore.main`, mini `lore.life-log-mini`; pass `--in`) or when another window covers the point. It moves the user's cursor, so use it only when needed |

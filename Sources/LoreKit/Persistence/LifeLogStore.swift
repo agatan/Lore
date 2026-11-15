@@ -85,16 +85,29 @@ public struct LifeLogStore: Sendable {
         }
     }
 
+    /// Upserts each occurrence, keyed by event identifier and start.
     public func save(calendarEvents values: [CalendarEventSnapshot]) async throws {
+        try await queue.write { db in try Self.upsert(values, db: db) }
+    }
+
+    /// Replaces the occurrences overlapping `interval` with the events read for it, so a deleted or moved event leaves it.
+    public func replaceCalendarEvents(_ values: [CalendarEventSnapshot], in interval: DateInterval) async throws {
         try await queue.write { db in
-            for value in values {
-                try db.execute(sql: """
-                    INSERT INTO calendar_event_snapshots VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-                    ON CONFLICT(id) DO UPDATE SET title=excluded.title, starts_at=excluded.starts_at,
-                    ends_at=excluded.ends_at, calendar_title=excluded.calendar_title, is_all_day=excluded.is_all_day,
-                    participation_status=excluded.participation_status
-                    """, arguments: [value.id, value.externalIdentifier, value.title, date(value.startsAt), date(value.endsAt), value.calendarTitle, value.isAllDay, value.participationStatus.rawValue])
-            }
+            try db.execute(sql: "DELETE FROM calendar_event_snapshots WHERE ends_at > ? AND starts_at < ?",
+                           arguments: [self.date(interval.start), self.date(interval.end)])
+            try Self.upsert(values, db: db)
+        }
+    }
+
+    private static func upsert(_ values: [CalendarEventSnapshot], db: Database) throws {
+        let date = PersistenceCoding.encode(date:)
+        for value in values {
+            try db.execute(sql: """
+                INSERT INTO calendar_event_snapshots VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(id, starts_at) DO UPDATE SET external_identifier=excluded.external_identifier, title=excluded.title,
+                ends_at=excluded.ends_at, calendar_title=excluded.calendar_title, is_all_day=excluded.is_all_day,
+                participation_status=excluded.participation_status
+                """, arguments: [value.id, value.externalIdentifier, value.title, date(value.startsAt), date(value.endsAt), value.calendarTitle, value.isAllDay, value.participationStatus.rawValue])
         }
     }
 
@@ -396,9 +409,13 @@ public struct LifeLogStore: Sendable {
         let rangeStart = try parse(r["range_start"])
         let rangeEnd = try parse(r["range_end"])
         let scopeDay: String = r["scope_day"]
-        let eventState: GeneratedNote.EventSnapshotState = try Row.fetchOne(db, sql: "SELECT * FROM calendar_event_snapshots WHERE id = ?", arguments: [eventID])
-            .map(decodeEvent)
-            .map { LifeLogDateKey.string(for: $0.startsAt) == scopeDay ? .occurrence($0) : .otherOccurrence } ?? .missing
+        guard let scopeStart = LifeLogDateKey.date(from: scopeDay),
+              let scopeInterval = Calendar.current.dateInterval(of: .day, for: scopeStart) else {
+            throw PersistenceError.invalidStoredValue(column: "scope_day", value: scopeDay)
+        }
+        let occurrence = try Row.fetchOne(db, sql: """
+            SELECT * FROM calendar_event_snapshots WHERE id = ? AND starts_at >= ? AND starts_at < ? ORDER BY starts_at LIMIT 1
+            """, arguments: [eventID, date(scopeInterval.start), date(scopeInterval.end)]).map(decodeEvent)
         let existingUtterances = try Self.count(db, table: "life_log_utterances", ids: utteranceIDs)
         let existingMemos = try Self.count(db, table: "life_log_memos", ids: memoIDs)
         return GeneratedNote(
@@ -416,7 +433,7 @@ public struct LifeLogStore: Sendable {
             staleReasons: GeneratedNote.staleReasons(
                 rangeStart: rangeStart,
                 rangeEnd: rangeEnd,
-                event: eventState,
+                occurrence: occurrence,
                 missingSourceCount: utteranceIDs.count + memoIDs.count - existingUtterances - existingMemos
             )
         )
