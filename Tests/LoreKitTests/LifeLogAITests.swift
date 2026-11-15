@@ -374,6 +374,24 @@ struct LifeLogAITests {
         #expect(note.staleReasons.isEmpty)
     }
 
+    @Test("Saving a later occurrence of a repeating event keeps the earlier day's event and its note title")
+    func earlierOccurrenceKeepsItsEvent() async throws {
+        let harness = Harness(try await Fixture.make())
+        try await harness.service.generate(kind: .eventNotes, scope: harness.scope)
+        let database = harness.fixture.database
+        var nextWeek = harness.fixture.event
+        nextWeek.startsAt = nextWeek.startsAt.addingTimeInterval(7 * 86_400)
+        nextWeek.endsAt = nextWeek.endsAt.addingTimeInterval(7 * 86_400)
+        try await database.lifeLog.save(calendarEvents: [nextWeek])
+
+        let day = try await database.lifeLog.day(harness.fixture.event.startsAt)
+        #expect(day.calendarEvents == [harness.fixture.event])
+        let note = try #require(day.generatedNotes.first)
+        #expect(day.calendarEvents.first { $0.id == note.scope.eventID }?.title == "Release planning")
+        #expect(note.staleReasons.isEmpty)
+        #expect(try await database.lifeLog.day(nextWeek.startsAt).calendarEvents == [nextWeek])
+    }
+
     @Test("Delete Life Log and Reset Lore remove notes and AI exclusions")
     func deletion() async throws {
         for resetsEverything in [false, true] {
