@@ -543,6 +543,10 @@ public final class LoreDatabase: Sendable {
                 CREATE TABLE life_log_ai_dismissed_scopes (scope_key TEXT PRIMARY KEY);
                 """)
         }
+        migrator.registerMigration("v13-utterance-event-index") { db in
+            // "Last time" looks up the latest utterance of an event identifier on every day load.
+            try db.execute(sql: "CREATE INDEX life_log_utterances_event_started_at ON life_log_utterances(calendar_event_id, started_at)")
+        }
 
         return migrator
     }

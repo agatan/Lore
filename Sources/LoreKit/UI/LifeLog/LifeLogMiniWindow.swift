@@ -11,7 +11,8 @@ struct LifeLogMiniWindow: View {
             CurrentCalendarEventStrip(
                 events: env.lifeLog.day.calendarEvents,
                 selectedDate: env.lifeLog.selectedDate,
-                recording: env.eventRecording
+                recording: env.eventRecording,
+                lastTime: env.eventLastTime
             )
 
             ScrollViewReader { proxy in

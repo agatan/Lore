@@ -30,6 +30,10 @@ enum DebugRecorder {
                 try await recordEventNotes(env: env, to: directory.appending(path: "event-notes\(suffix).mp4"))
                 exit(0)
             }
+            if ProcessInfo.processInfo.arguments.contains("--lore-record-last-time") {
+                try await recordLastTime(env: env, to: directory.appending(path: "last-time\(suffix).mp4"))
+                exit(0)
+            }
             try await recordDictation(env: env, to: directory.appending(path: "dictation\(suffix).mp4"))
             try await recordLifeLog(env: env, to: directory.appending(path: "life-log\(suffix).mp4"))
         } catch {
@@ -173,6 +177,27 @@ enum DebugRecorder {
                 env.lifeLog.jumpToTimelineItem(source)
             }
             await settle(2.5)
+        }
+    }
+
+    /// A weekly 1:1 in progress shows last week's follow-ups, and its date opens that day. Needs `--lore-demo-recurring-now`.
+    private static func recordLastTime(env: AppEnvironment, to url: URL) async throws {
+        guard let window = NSApp.windows.first(where: { $0.identifier?.rawValue == LoreWindow.main }) else {
+            throw CocoaError(.fileWriteUnknown, userInfo: [NSLocalizedDescriptionKey: "main windowが表示されていません"])
+        }
+        env.mainSection = .lifeLog
+        window.makeKeyAndOrderFront(nil)
+        await env.lifeLog.followCurrentDay()
+        guard let event = env.lifeLog.day.calendarEvents.first(where: { $0.id == "demo-event-weekly" }),
+              let lastTime = env.eventLastTime(event) else {
+            throw CocoaError(.fileWriteUnknown, userInfo: [NSLocalizedDescriptionKey: "--lore-demo-recurring-now の予定がありません"])
+        }
+        env.lifeLog.jumpToTimelineItem("e-\(event.id)")
+        await settle(1.5)
+        try await record(window: window, to: url) {
+            await settle(2.5)
+            lastTime.open()
+            await settle(3)
         }
     }
 

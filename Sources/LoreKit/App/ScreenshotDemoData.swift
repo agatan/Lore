@@ -67,6 +67,10 @@ enum ScreenshotDemoData {
         try await database.lifeLog.save(memo: LifeLogMemo(id: "demo-memo-1", createdAt: time(11, 6), text: copy.memos[0]))
         try await database.lifeLog.save(memo: LifeLogMemo(id: "demo-memo-2", createdAt: time(15, 20), text: copy.memos[1]))
 
+        if ProcessInfo.processInfo.arguments.contains("--lore-demo-recurring-now") {
+            try await seedRecurringEventInProgress(database: database, now: now, calendar: calendar, copy: copy)
+        }
+
         // 月間カレンダーの密度が自然に見えるよう、過去数日に匿名の活動量だけを作る。
         for (index, offset) in [-2, -4, -7, -9, -13].enumerated() {
             let startedAt = time(10 + index, dayOffset: offset)
@@ -74,6 +78,37 @@ enum ScreenshotDemoData {
             try await database.lifeLog.save(audioChunk: chunk)
             try await database.lifeLog.save(utterance: LifeLogUtterance(id: "demo-past-utterance-\(index)", startedAt: startedAt, endedAt: startedAt.addingTimeInterval(30), text: copy.pastUtterance, audioChunkID: chunk.id))
         }
+    }
+
+    /// A weekly 1:1 in progress now, with last week's occurrence recorded and noted, for the "Last time" row.
+    /// Behind its own flag so LP media, which do not control the clock, keep their layout.
+    private static func seedRecurringEventInProgress(database: LoreDatabase, now: Date, calendar: Calendar, copy: DemoCopy) async throws {
+        let (title, said, firstAction, secondAction, question) = (copy.recurring[0], copy.recurring[1], copy.recurring[2], copy.recurring[3], copy.recurring[4])
+        let start = now.addingTimeInterval(-10 * 60)
+        let event = CalendarEventSnapshot(id: "demo-event-weekly", title: title, startsAt: start, endsAt: now.addingTimeInterval(20 * 60), calendarTitle: copy.calendar, participationStatus: .accepted)
+        try await database.lifeLog.save(calendarEvents: [event])
+        let lastWeek = calendar.date(byAdding: .day, value: -7, to: start) ?? start
+        let spokenAt = lastWeek.addingTimeInterval(3 * 60)
+        try await database.lifeLog.save(utterance: LifeLogUtterance(id: "demo-weekly-last-week", startedAt: spokenAt, endedAt: spokenAt.addingTimeInterval(40), text: said, audioChunkID: nil, calendarEventID: event.id))
+        try await database.lifeLog.save(generatedNote: GeneratedNote(
+            id: "demo-note-weekly",
+            kind: .eventNotes,
+            scope: .event(EventOccurrence(eventID: event.id, day: LifeLogDateKey.string(for: spokenAt, calendar: calendar))),
+            rangeStart: lastWeek,
+            rangeEnd: lastWeek.addingTimeInterval(30 * 60),
+            backend: .onDevice,
+            model: FormattingBackend.onDevice.defaultModel,
+            createdAt: lastWeek.addingTimeInterval(31 * 60),
+            sourceUtteranceIDs: ["demo-weekly-last-week"],
+            sourceMemoIDs: [],
+            sections: [
+                GeneratedNoteSection(kind: .actionItems, items: [
+                    GeneratedNoteItem(text: firstAction, owner: copy.me, sources: ["u-demo-weekly-last-week"]),
+                    GeneratedNoteItem(text: secondAction, sources: ["u-demo-weekly-last-week"]),
+                ]),
+                GeneratedNoteSection(kind: .openQuestions, items: [GeneratedNoteItem(text: question, sources: ["u-demo-weekly-last-week"])]),
+            ]
+        ))
     }
 }
 /// 撮影用の文面。`--lore-demo-language en|ja|zh-Hans`で、表示言語とあわせて切り替える。
@@ -99,6 +134,8 @@ struct DemoCopy {
     var me: String
     /// Decision, action item, and open question of the stored demo note.
     var eventNote: [String]
+    /// Weekly 1:1 title, last week's utterance, two action items, and an open question.
+    var recurring: [String]
 
     static var current: DemoCopy {
         let arguments = ProcessInfo.processInfo.arguments
@@ -140,7 +177,8 @@ struct DemoCopy {
         messageFrom: "Mika",
         messageText: "明日の1on1、時間大丈夫そうですか？",
         me: "自分",
-        eventNote: ["今日は初回体験の流れを確認する", "初回体験の流れを通しで確認する", "検索とエクスポートの次に何を見せるか"]
+        eventNote: ["今日は初回体験の流れを確認する", "初回体験の流れを通しで確認する", "検索とエクスポートの次に何を見せるか"],
+        recurring: ["週次1on1", "評価面談の資料は金曜までに共有します。", "評価面談の資料を金曜までに共有する", "オンボーディング改善の進捗を確認する", "次の四半期の目標をどこまで広げるか"]
     )
 
     static let english = DemoCopy(
@@ -171,7 +209,8 @@ struct DemoCopy {
         messageFrom: "Mika",
         messageText: "Does tomorrow's 1:1 still work for you?",
         me: "You",
-        eventNote: ["Today's focus is the first-run experience", "Walk through the first-run flow end to end", "What should come after search and export?"]
+        eventNote: ["Today's focus is the first-run experience", "Walk through the first-run flow end to end", "What should come after search and export?"],
+        recurring: ["Weekly 1:1", "I'll share the review doc by Friday.", "Share the review doc by Friday", "Check progress on the onboarding fixes", "How far should next quarter's goals reach?"]
     )
 
     static let chinese = DemoCopy(
@@ -202,7 +241,8 @@ struct DemoCopy {
         messageFrom: "Mika",
         messageText: "明天的一对一时间还可以吗？",
         me: "我",
-        eventNote: ["今天先过一遍首次使用的流程", "从头到尾走一遍首次使用流程", "搜索和导出之后，接下来展示什么？"]
+        eventNote: ["今天先过一遍首次使用的流程", "从头到尾走一遍首次使用流程", "搜索和导出之后，接下来展示什么？"],
+        recurring: ["每周一对一", "评估资料我周五前发出来。", "周五前分享评估资料", "确认新手引导改进的进度", "下个季度的目标要定到多大？"]
     )
 }
 #endif

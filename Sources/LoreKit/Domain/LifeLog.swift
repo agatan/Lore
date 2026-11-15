@@ -168,20 +168,62 @@ public struct LifeLogDay: Sendable {
     public var calendarEvents: [CalendarEventSnapshot]
     /// AI notes whose scope is this day.
     public var generatedNotes: [GeneratedNote]
+    /// The latest earlier occurrence with recorded speech, keyed by the event identifier.
+    public var previousOccurrences: [String: PreviousEventOccurrence]
 
     public init(utterances: [LifeLogUtterance] = [], dictations: [LifeLogDictation] = [], memos: [LifeLogMemo] = [],
-                calendarEvents: [CalendarEventSnapshot] = [], generatedNotes: [GeneratedNote] = []) {
+                calendarEvents: [CalendarEventSnapshot] = [], generatedNotes: [GeneratedNote] = [],
+                previousOccurrences: [String: PreviousEventOccurrence] = [:]) {
         self.utterances = utterances
         self.dictations = dictations
         self.memos = memos
         self.calendarEvents = calendarEvents
         self.generatedNotes = generatedNotes
+        self.previousOccurrences = previousOccurrences
+    }
+
+    /// What the "Last time" row of an event shows, or nil when it shows nothing.
+    public func lastTime(
+        for event: CalendarEventSnapshot,
+        recordingExclusions: LifeLogRecordingExclusions,
+        aiSettings: LifeLogAISettings,
+        aiExcludedEventIDs: Set<String>
+    ) -> EventLastTime? {
+        guard !event.isAllDay, !recordingExclusions.excludes(event),
+              let previous = previousOccurrences[event.id] else { return nil }
+        guard let notes = previous.notes, !aiSettings.excludes(event, excludedEventIDs: aiExcludedEventIDs) else {
+            return EventLastTime(previous: previous, followUps: [])
+        }
+        let followUps = notes.items(.actionItems) + notes.items(.openQuestions)
+        return EventLastTime(previous: previous, followUps: Array(followUps.prefix(EventLastTime.maximumFollowUps)))
     }
 
     public func eventNotes(for event: CalendarEventSnapshot, calendar: Calendar = .current) -> GeneratedNote? {
         let scope = GeneratedNoteScope.event(EventOccurrence(event, calendar: calendar))
         return generatedNotes.first { $0.kind == .eventNotes && $0.scope == scope }
     }
+}
+
+/// An earlier occurrence of a repeating event. The calendar snapshot keeps one row per event
+/// identifier, so the past day no longer has the event row; the jump goes to its first utterance.
+public struct PreviousEventOccurrence: Sendable, Hashable {
+    public var occurrence: EventOccurrence
+    public var firstUtteranceID: String
+    public var notes: GeneratedNote?
+
+    public init(occurrence: EventOccurrence, firstUtteranceID: String, notes: GeneratedNote? = nil) {
+        self.occurrence = occurrence
+        self.firstUtteranceID = firstUtteranceID
+        self.notes = notes
+    }
+}
+
+public struct EventLastTime: Sendable, Hashable {
+    public static let maximumFollowUps = 3
+
+    public var previous: PreviousEventOccurrence
+    /// Action items, then open questions, of the earlier occurrence's notes.
+    public var followUps: [GeneratedNoteItem]
 }
 
 /// 月間カレンダーに描画する日ごとの密度。数値そのものはUIへ表示せず、
