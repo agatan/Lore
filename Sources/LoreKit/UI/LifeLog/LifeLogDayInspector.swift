@@ -8,7 +8,7 @@ struct LifeLogDayInspector: View {
     var day: LifeLogDay
     var date: Date
     var onJump: (Date) -> Void
-    var onShowEvent: (String) -> Void = { _ in }
+    var onShowEvent: (EventOccurrence) -> Void = { _ in }
 
     private var isToday: Bool { Calendar.current.isDateInToday(date) }
     private var mapLayout: LifeLogDayMapLayout { LifeLogDayMapLayout(day: day, date: date) }
@@ -44,9 +44,9 @@ struct LifeLogDayInspector: View {
                 .font(LoreTheme.sectionFont)
                 .foregroundStyle(.secondary)
             ForEach(day.generatedNotes) { note in
-                let title = day.calendarEvents.first { $0.id == note.scope.eventID }?.title
+                let title = day.event(of: note)?.title
                 Button {
-                    if let eventID = note.scope.eventID { onShowEvent(eventID) }
+                    if case .event(let occurrence) = note.scope { onShowEvent(occurrence) }
                 } label: {
                     HStack(spacing: 6) {
                         Text(verbatim: title ?? "—")

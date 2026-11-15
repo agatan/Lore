@@ -78,7 +78,7 @@ public enum LifeLogTextExporter {
                 lines.append("AIが生成したノートはありません。")
             }
             for note in day.generatedNotes {
-                let title = day.calendarEvents.first { $0.id == note.scope.eventID }?.title ?? "予定"
+                let title = day.event(of: note, calendar: calendar)?.title ?? "予定"
                 lines += ["", GeneratedNoteMarkdown.render(note, title: title, headingLevel: 3, calendar: calendar)
                     .trimmingCharacters(in: .newlines)]
             }

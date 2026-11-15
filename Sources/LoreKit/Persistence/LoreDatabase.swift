@@ -547,6 +547,56 @@ public final class LoreDatabase: Sendable {
             // "Last time" looks up the latest utterance of an event identifier on every day load.
             try db.execute(sql: "CREATE INDEX life_log_utterances_event_started_at ON life_log_utterances(calendar_event_id, started_at)")
         }
+        migrator.registerMigration("v14-event-snapshot-per-occurrence") { db in
+            // A repeating event shares its identifier, so one row per identifier lost every earlier occurrence.
+            try db.execute(sql: """
+                CREATE TABLE calendar_event_snapshots_new (
+                  id TEXT NOT NULL, external_identifier TEXT, title TEXT NOT NULL,
+                  starts_at TEXT NOT NULL, ends_at TEXT NOT NULL, calendar_title TEXT NOT NULL,
+                  is_all_day INTEGER NOT NULL DEFAULT 0, participation_status TEXT NOT NULL DEFAULT 'none',
+                  PRIMARY KEY (id, starts_at)
+                );
+                INSERT INTO calendar_event_snapshots_new SELECT id, external_identifier, title, starts_at, ends_at,
+                  calendar_title, is_all_day, participation_status FROM calendar_event_snapshots;
+                """)
+            // A note of an earlier occurrence lost its row. Restore it from the note's range so the note keeps
+            // its title and is not marked as changed. A note on the row's own day is left to the stale check.
+            let notes = try Row.fetchAll(db, sql: """
+                SELECT n.scope_day, n.range_start, n.range_end, s.id, s.external_identifier, s.title, s.starts_at,
+                  s.calendar_title, s.is_all_day, s.participation_status
+                FROM generated_notes n JOIN calendar_event_snapshots s ON s.id = n.event_id
+                WHERE n.kind = 'event_notes'
+                """)
+            for note in notes {
+                let scopeDay: String = note["scope_day"]
+                guard LifeLogDateKey.string(for: try PersistenceCoding.decodeDate(note["starts_at"])) != scopeDay else { continue }
+                try db.execute(sql: "INSERT OR IGNORE INTO calendar_event_snapshots_new VALUES (?, ?, ?, ?, ?, ?, ?, ?)", arguments: [
+                    note["id"], note["external_identifier"], note["title"], note["range_start"], note["range_end"],
+                    note["calendar_title"], note["is_all_day"], note["participation_status"],
+                ])
+            }
+            // The utterance foreign key named `id` alone, which is no longer unique. Rebuild the table without it
+            // and restore every index and trigger SQLite holds for it, keeping rowids for the FTS content.
+            let dependents = try String.fetchAll(db, sql: """
+                SELECT sql FROM sqlite_master
+                WHERE tbl_name = 'life_log_utterances' AND type IN ('index', 'trigger') AND sql IS NOT NULL
+                """)
+            try db.execute(sql: """
+                CREATE TABLE life_log_utterances_new (
+                  id TEXT PRIMARY KEY, started_at TEXT NOT NULL, ended_at TEXT NOT NULL, text TEXT NOT NULL,
+                  audio_chunk_id TEXT REFERENCES life_log_audio_chunks(id),
+                  calendar_event_id TEXT
+                );
+                INSERT INTO life_log_utterances_new (rowid, id, started_at, ended_at, text, audio_chunk_id, calendar_event_id)
+                  SELECT rowid, id, started_at, ended_at, text, audio_chunk_id, calendar_event_id FROM life_log_utterances;
+                DROP TABLE life_log_utterances;
+                ALTER TABLE life_log_utterances_new RENAME TO life_log_utterances;
+                DROP TABLE calendar_event_snapshots;
+                ALTER TABLE calendar_event_snapshots_new RENAME TO calendar_event_snapshots;
+                """)
+            for statement in dependents { try db.execute(sql: statement) }
+            try db.execute(sql: "INSERT INTO life_log_utterances_fts(life_log_utterances_fts) VALUES ('rebuild')")
+        }
 
         return migrator
     }

@@ -8,6 +8,8 @@ public final class LifeLogCoordinator {
     public private(set) var isCapturing = false
     public private(set) var selectedDate = Date()
     public private(set) var day = LifeLogDay()
+    /// Always the current day, whatever the main window selects. The mini window and the menu bar read it.
+    public private(set) var today = LifeLogDay()
     public private(set) var errorMessage: String?
     public private(set) var availableCalendars: [String] = []
     public private(set) var highlightedTimelineItemID: String?
@@ -345,11 +347,9 @@ public final class LifeLogCoordinator {
                 do { try await Task.sleep(for: .seconds(max(1, nextDay.timeIntervalSince(now)))) } catch { return }
                 guard let self, self.captureRequested else { return }
                 let newDay = Date()
-                if self.followsCurrentDay {
-                    self.selectedDate = newDay
-                    await self.reload()
-                    await self.loadActivity(containing: newDay)
-                }
+                if self.followsCurrentDay { self.selectedDate = newDay }
+                await self.reload()
+                if self.followsCurrentDay { await self.loadActivity(containing: newDay) }
             }
         }
     }
@@ -786,7 +786,7 @@ public final class LifeLogCoordinator {
         guard !value.isEmpty else { return }
         do {
             try await database.lifeLog.save(memo: LifeLogMemo(createdAt: date, text: value))
-            if Calendar.current.isDate(selectedDate, inSameDayAs: date) { await reload() }
+            await reload()
         } catch { fail(error) }
     }
 
@@ -828,7 +828,7 @@ public final class LifeLogCoordinator {
         do {
             guard try await calendarProvider.requestAccess() else { return }
             let events = try await calendarProvider.events(start: interval.start, end: interval.end, selectedCalendars: selectedCalendars)
-            try await database.lifeLog.save(calendarEvents: events)
+            try await database.lifeLog.replaceCalendarEvents(events, in: interval)
             lastCalendarRefreshAt = Date()
             lastCalendarRefreshDay = LifeLogDateKey.string(for: selectedDate)
             await reload()
@@ -894,7 +894,7 @@ public final class LifeLogCoordinator {
     public func jumpToTime(_ date: Date) async {
         await select(date: date)
         let candidates = day.utterances.map { ($0.startedAt, "u-\($0.id)") }
-            + day.calendarEvents.map { ($0.startsAt, "e-\($0.id)") }
+            + day.calendarEvents.map { ($0.startsAt, EventOccurrence($0).timelineItemID) }
             + day.dictations.map { ($0.startedAt, "d-\($0.id)") }
             + day.memos.map { ($0.createdAt, "m-\($0.id)") }
         guard let nearest = candidates.min(by: {
@@ -911,7 +911,7 @@ public final class LifeLogCoordinator {
     }
 
     public func showEvent(id eventID: String, day: String) async {
-        await navigateToSource(date: LifeLogDateKey.date(from: day) ?? Date(), timelineItemID: "e-\(eventID)")
+        await navigateToSource(date: LifeLogDateKey.date(from: day) ?? Date(), timelineItemID: EventOccurrence(eventID: eventID, day: day).timelineItemID)
     }
 
     public func showUtterance(id utteranceID: String, day: String) async {
@@ -923,8 +923,8 @@ public final class LifeLogCoordinator {
     public func saveTodayCalendarSnapshot(selectedCalendars: Set<String>, now: Date = Date()) async throws {
         guard let database, let interval = Calendar.current.dateInterval(of: .day, for: now) else { return }
         let events = try await calendarProvider.events(start: interval.start, end: interval.end, selectedCalendars: selectedCalendars)
-        try await database.lifeLog.save(calendarEvents: events)
-        if Calendar.current.isDate(selectedDate, inSameDayAs: now) { await reload() }
+        try await database.lifeLog.replaceCalendarEvents(events, in: interval)
+        await reload()
     }
 
     /// Events of the given calendars, read from EventKit without saving a snapshot.
@@ -979,7 +979,11 @@ public final class LifeLogCoordinator {
     public func reload() async {
         guard let database else { return }
         do {
-            day = try await database.lifeLog.day(selectedDate, participatingOnly: participatingEventsOnly())
+            let participatingOnly = participatingEventsOnly()
+            day = try await database.lifeLog.day(selectedDate, participatingOnly: participatingOnly)
+            today = Calendar.current.isDateInToday(selectedDate)
+                ? day
+                : try await database.lifeLog.day(Date(), participatingOnly: participatingOnly)
         } catch { fail(error) }
     }
 

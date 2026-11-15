@@ -27,7 +27,7 @@ public struct LifeLogWindow: View {
                     day: env.lifeLog.day,
                     date: env.lifeLog.selectedDate,
                     onJump: { date in Task { await env.lifeLog.jumpToTime(date) } },
-                    onShowEvent: { id in env.lifeLog.jumpToTimelineItem("e-\(id)") }
+                    onShowEvent: { occurrence in env.lifeLog.jumpToTimelineItem(occurrence.timelineItemID) }
                 )
                 .inspectorColumnWidth(min: 260, ideal: 300, max: 380)
             }
@@ -272,7 +272,7 @@ public struct LifeLogWindow: View {
                     below: row.below,
                     isCurrent: isToday && value.contains(Date()),
                     recording: env.eventRecording(value),
-                    lastTime: env.eventLastTime(value),
+                    lastTime: env.eventLastTime(value, in: env.lifeLog.day),
                     ai: CalendarEventCard.AI(
                         notes: AnyView(EventNotesView(env: env, event: value)),
                         isExcluded: env.lifeLogAI.excludedEventIDs.contains(value.id),

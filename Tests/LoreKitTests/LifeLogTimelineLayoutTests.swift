@@ -30,7 +30,7 @@ struct LifeLogTimelineLayoutTests {
             calendarEvents: [event("standup", at(9, 30), at(10))]
         )
         let rows = LifeLogTimelineLayout.rows(for: day)
-        #expect(rows.map(\.id) == ["e-standup", "u-a", "u-b", "u-c"])
+        #expect(rows.map(\.id) == [EventOccurrence(day.calendarEvents[0]).timelineItemID, "u-a", "u-b", "u-c"])
         #expect(rows.map(\.above) == [.none, .event, .event, .plain])
         #expect(rows.map(\.below) == [.event, .event, .plain, .none])
     }
@@ -96,7 +96,7 @@ struct LifeLogTimelineLayoutTests {
             calendar: calendar
         )
         #expect((layout.startHour, layout.endHour) == (9, 24))
-        #expect(layout.blocks.map(\.id) == ["night"])
+        #expect(layout.blocks.map(\.event.id) == ["night"])
     }
 
     @Test("重なる予定は列に分け、重ならない予定は全幅に戻す")
@@ -107,7 +107,7 @@ struct LifeLogTimelineLayoutTests {
             event("c", at(10), at(10, 30)),
             event("d", at(12), at(13)),
         ])
-        let byID = Dictionary(uniqueKeysWithValues: blocks.map { ($0.id, $0) })
+        let byID = Dictionary(uniqueKeysWithValues: blocks.map { ($0.event.id, $0) })
         #expect(byID["a"].map { [$0.column, $0.columnCount] } == [0, 2])
         #expect(byID["b"].map { [$0.column, $0.columnCount] } == [1, 2])
         #expect(byID["c"].map { [$0.column, $0.columnCount] } == [0, 2])

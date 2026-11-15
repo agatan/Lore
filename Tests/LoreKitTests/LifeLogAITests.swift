@@ -362,8 +362,8 @@ struct LifeLogAITests {
         #expect(harness.fixture.spy.prompts.count == 1)
     }
 
-    @Test("A repeating event's snapshot moving to another occurrence does not mark the note")
-    func otherOccurrenceIsNotStale() async throws {
+    @Test("Saving the next occurrence of a repeating event leaves this occurrence's note unmarked")
+    func nextOccurrenceDoesNotMarkNote() async throws {
         let harness = Harness(try await Fixture.make())
         try await harness.service.generate(kind: .eventNotes, scope: harness.scope)
         var tomorrow = harness.fixture.event

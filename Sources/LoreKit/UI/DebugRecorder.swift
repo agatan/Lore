@@ -161,7 +161,7 @@ enum DebugRecorder {
         settings.backend = .onDevice
         env.updateLifeLogAI(settings)
         await env.lifeLog.reload()
-        env.lifeLog.jumpToTimelineItem("e-\(event.id)")
+        env.lifeLog.jumpToTimelineItem(EventOccurrence(event).timelineItemID)
         await settle(1.5)
 
         try await record(window: window, to: url) {
@@ -189,10 +189,10 @@ enum DebugRecorder {
         window.makeKeyAndOrderFront(nil)
         await env.lifeLog.followCurrentDay()
         guard let event = env.lifeLog.day.calendarEvents.first(where: { $0.id == "demo-event-weekly" }),
-              let lastTime = env.eventLastTime(event) else {
+              let lastTime = env.eventLastTime(event, in: env.lifeLog.day) else {
             throw CocoaError(.fileWriteUnknown, userInfo: [NSLocalizedDescriptionKey: "--lore-demo-recurring-now の予定がありません"])
         }
-        env.lifeLog.jumpToTimelineItem("e-\(event.id)")
+        env.lifeLog.jumpToTimelineItem(EventOccurrence(event).timelineItemID)
         await settle(1.5)
         try await record(window: window, to: url) {
             await settle(2.5)
