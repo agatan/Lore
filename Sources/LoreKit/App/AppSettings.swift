@@ -79,7 +79,6 @@ public final class AppSettings {
         public var onboardingCompleted: Bool = false
         /// 文章の仕上げをどこで動かすか。既定はオンデバイス(外に出さない)。
         public var formattingBackend: FormattingBackend = .onDevice
-        /// ライフログの要約・TODO生成は音声入力の整形と独立して選ぶ。
         public var openAIModel: String = "gpt-5.4-mini"
         public var anthropicModel: String = "claude-sonnet-5"
         public var geminiModel: String = "gemini-3.6-flash"
@@ -298,15 +297,5 @@ public final class AppSettings {
     public func resetAll() {
         storage = Storage()
         persist()
-    }
-
-    /// CLI/MCPが同じ設定ドメインを書き換えた後、起動中のUIへ反映する。
-    public func reload() {
-        guard let data = defaults.data(forKey: Self.defaultsKey) else { return }
-        do {
-            storage = try JSONDecoder().decode(Storage.self, from: data)
-        } catch {
-            LoreLog.persistence.error("外部変更された設定を読み込めません: \(error.localizedDescription, privacy: .public)")
-        }
     }
 }

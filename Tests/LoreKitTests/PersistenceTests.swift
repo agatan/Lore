@@ -30,6 +30,30 @@ import Testing
     try FileManager.default.removeItem(at: root)
 }
 
+/// backupを作れないときはmigrationを始めず、元のDBを変えない。
+@Test func backupFailureBlocksMigration() async throws {
+    let root = FileManager.default.temporaryDirectory.appendingPathComponent("lore-backup-fail-\(UUID().uuidString)")
+    let databaseURL = root.appendingPathComponent("lore.sqlite")
+    let backupDirectory = root.appendingPathComponent("Backups")
+    try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: root) }
+    do {
+        let legacy = try DatabaseQueue(path: databaseURL.path)
+        try LoreDatabase.migrator.migrate(legacy, upTo: "v8-llm-token-usage")
+    }
+    // backup先と同じ名前の通常fileがあると、directoryを作れない。
+    try Data().write(to: backupDirectory)
+
+    await #expect(throws: (any Error).self) {
+        _ = try await LoreDatabase.open(fileURL: databaseURL, backupDirectory: backupDirectory)
+    }
+
+    let queue = try DatabaseQueue(path: databaseURL.path)
+    #expect(try await queue.read { try $0.tableExists("life_log_todos") })
+    #expect(try await queue.read { try LoreDatabase.migrator.appliedIdentifiers($0).contains("v8-llm-token-usage") })
+    #expect(try await queue.read { try !LoreDatabase.migrator.hasCompletedMigrations($0) })
+}
+
 /// TODO・要約・token集計を廃止したv9は、発話とメモを保ったまま旧tableを消す。
 @Test func removingTodoSummaryAndUsageKeepsLifeLogText() async throws {
     let root = FileManager.default.temporaryDirectory.appendingPathComponent("lore-v9-test-\(UUID().uuidString)")

@@ -83,12 +83,6 @@ public final class SyncCoordinator {
         await reloadState()
     }
 
-    /// CLI/MCPなど別processの書き込みは、DBの変更監視では届かないため明示的に呼ぶ。
-    public func localDataChanged() {
-        guard isEnabled else { return }
-        scheduleExport()
-    }
-
     public func syncNow() async {
         guard isEnabled, !isSyncing, let database else { return }
         isSyncing = true

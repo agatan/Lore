@@ -17,7 +17,7 @@ let package = Package(
         .executable(name: "lore-mcp", targets: ["LoreMCP"]),
         .library(name: "LoreKit", targets: ["LoreKit"]),
     ],
-    // 通常音声入力はOS内蔵認識を使い、Life Logでは選択時だけローカルwhisper.cppを使う。
+    // 音声認識はOS内蔵のSpeechAnalyzerか、選択時だけローカルのwhisper.cppを使う。
     // クラウド／ローカルLLMはURLSessionで接続する。
     dependencies: [
         .package(url: "https://github.com/groue/GRDB.swift.git", from: "7.9.0"),

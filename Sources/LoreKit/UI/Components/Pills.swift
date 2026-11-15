@@ -59,32 +59,6 @@ struct StatusBadge: View {
     }
 }
 
-/// メニューパネルの行。ホバーで背景が付く。
-struct MenuRow<Label: View>: View {
-    var action: () -> Void
-    @ViewBuilder var label: () -> Label
-
-    @State private var isHovering = false
-
-    var body: some View {
-        Button(action: action) {
-            label()
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(.horizontal, 10)
-                .padding(.vertical, 6)
-                // ホバーしていないときは `.identity`(効果なし)。同じ modifier を
-                // 出し入れせず強さだけ変えることで、行の大きさが動かない。
-                .glassEffect(
-                    isHovering ? .regular.interactive() : .identity,
-                    in: RoundedRectangle(cornerRadius: LoreTheme.smallCornerRadius, style: .continuous)
-                )
-                .contentShape(.rect)
-        }
-        .buttonStyle(.plain)
-        .onHover { isHovering = $0 }
-    }
-}
-
 /// 「浮いている面」の共通表現。カード・バナー・パネルはすべてこれを通す。
 ///
 /// 面の役割は 2 つだけに保つ: **浮いているものはガラス**(`raisedGlass`)、
