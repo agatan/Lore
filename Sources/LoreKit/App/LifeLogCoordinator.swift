@@ -10,6 +10,8 @@ public final class LifeLogCoordinator {
     public private(set) var day = LifeLogDay()
     /// Always the current day, whatever the main window selects. The mini window and the menu bar read it.
     public private(set) var today = LifeLogDay()
+    /// The event whose details the main window inspector shows.
+    public let eventInspector = EventInspectorModel()
     public private(set) var errorMessage: String?
     public private(set) var availableCalendars: [String] = []
     public private(set) var highlightedTimelineItemID: String?
@@ -771,6 +773,7 @@ public final class LifeLogCoordinator {
     }
 
     public func select(date: Date) async {
+        if !Calendar.current.isDate(date, inSameDayAs: selectedDate) { eventInspector.clear() }
         selectedDate = date
         followsCurrentDay = Calendar.current.isDateInToday(date)
         await reload()
@@ -938,6 +941,12 @@ public final class LifeLogCoordinator {
         await eventDetailsReader.details(eventID: event.id, startsAt: event.startsAt)
     }
 
+    public func selectEvent(_ event: CalendarEventSnapshot) {
+        eventInspector.select(event) { [weak self] event in await self?.eventDetails(for: event) }
+    }
+
+    public func clearEventSelection() { eventInspector.clear() }
+
     /// The wall-clock start of the oldest captured audio whose utterances are not saved yet.
     /// Failed chunks do not count: they wait for the next launch and must not block AI notes forever.
     public func oldestUntranscribedAudioStart() async throws -> Date? {
@@ -991,6 +1000,7 @@ public final class LifeLogCoordinator {
         do {
             let participatingOnly = participatingEventsOnly()
             day = try await database.lifeLog.day(selectedDate, participatingOnly: participatingOnly)
+            eventInspector.reconcile(with: day.calendarEvents)
             today = Calendar.current.isDateInToday(selectedDate)
                 ? day
                 : try await database.lifeLog.day(Date(), participatingOnly: participatingOnly)

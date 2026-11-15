@@ -175,13 +175,17 @@ enum ScreenshotDemoData {
 struct DemoCalendarEventDetails: CalendarEventDetailsReading {
     let descriptions: [String]
     let room: String
+    /// `--lore-demo-slow-details` makes each read take a moment, so a recording can show the state while it loads.
+    let delay: Duration
 
-    init(copy: DemoCopy) {
+    init(copy: DemoCopy, delay: Duration = .zero) {
         descriptions = copy.eventDescriptions
         room = copy.room
+        self.delay = delay
     }
 
     func details(eventID: String, startsAt: Date) async -> CalendarEventDetails? {
+        if delay > .zero { try? await Task.sleep(for: delay) }
         func person(_ name: String, _ status: CalendarParticipationStatus, _ role: CalendarAttendeeRole, isMe: Bool = false) -> CalendarAttendee {
             let email = "\(name.prefix { $0 != " " }.lowercased())@example.com"
             return CalendarAttendee(name: name, email: email, status: status, role: role, kind: .person, isCurrentUser: isMe)
@@ -299,7 +303,7 @@ struct DemoCopy {
             "ベータの感想を集めるフォームを用意する",
         ],
         eventDescriptions: [
-            "今日の確認事項\n・初回体験の流れ\n・検索とエクスポートの残りの課題\n\nGoogle Meet に参加: https://meet.google.com/abc-defg-hij\n電話で参加: +1 555-0100 PIN: 123 456",
+            "<p>今日の確認事項</p><ul><li>初回体験の流れ</li><li>検索とエクスポートの残りの課題</li><li>採用の進み具合</li></ul><p>会議室の画面は左の壁です。資料は前日までに共有してください。</p><p>Google Meet に参加: <a href=\"https://meet.google.com/abc-defg-hij\">https://meet.google.com/abc-defg-hij</a></p><p>電話で参加: +1 555-0100 PIN: 123 456</p>",
             "新しい設定画面のデザインを見ます。事前にコメントを確認してください。",
             "次のリリースの範囲を決めます。\n\nMicrosoft Teams 会議\n参加: https://teams.microsoft.com/l/meetup-join/19%3ameeting_demo%40thread.v2/0",
             "今週の進捗と困っていること。\n\nWebex で参加: https://example.webex.com/meet/mika",
@@ -349,7 +353,7 @@ struct DemoCopy {
             "Prepare a form to collect beta feedback",
         ],
         eventDescriptions: [
-            "Today\n- The first-run flow\n- What is left for search and export\n\nJoin with Google Meet: https://meet.google.com/abc-defg-hij\nJoin by phone: +1 555-0100 PIN: 123 456",
+            "<p>Today</p><ul><li>The first-run flow</li><li>What is left for search and export</li><li>Hiring update</li></ul><p>The room screen is on the left wall. Please share slides by the day before.</p><p>Join with Google Meet: <a href=\"https://meet.google.com/abc-defg-hij\">https://meet.google.com/abc-defg-hij</a></p><p>Join by phone: +1 555-0100 PIN: 123 456</p>",
             "We'll look at the new settings design. Please read the comments first.",
             "Decide the scope of the next release.\n\nMicrosoft Teams meeting\nJoin: https://teams.microsoft.com/l/meetup-join/19%3ameeting_demo%40thread.v2/0",
             "Progress this week and anything blocking you.\n\nJoin with Webex: https://example.webex.com/meet/mika",
@@ -399,7 +403,7 @@ struct DemoCopy {
             "准备收集测试版反馈的表单",
         ],
         eventDescriptions: [
-            "今天要确认\n・首次使用的流程\n・搜索和导出还剩下的问题\n\n加入 Google Meet: https://meet.google.com/abc-defg-hij\n电话加入: +1 555-0100 PIN: 123 456",
+            "<p>今天要确认</p><ul><li>首次使用的流程</li><li>搜索和导出还剩下的问题</li><li>招聘进展</li></ul><p>会议室的屏幕在左边的墙上。请在前一天分享资料。</p><p>加入 Google Meet: <a href=\"https://meet.google.com/abc-defg-hij\">https://meet.google.com/abc-defg-hij</a></p><p>电话加入: +1 555-0100 PIN: 123 456</p>",
             "看一下新的设置页面设计，请先看看评论。",
             "确定下一个版本的范围。\n\nMicrosoft Teams 会议\n加入: https://teams.microsoft.com/l/meetup-join/19%3ameeting_demo%40thread.v2/0",
             "本周进展和遇到的困难。\n\n通过 Webex 加入: https://example.webex.com/meet/mika",

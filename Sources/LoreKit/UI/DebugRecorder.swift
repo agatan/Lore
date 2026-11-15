@@ -30,6 +30,10 @@ enum DebugRecorder {
                 try await recordEventNotes(env: env, to: directory.appending(path: "event-notes\(suffix).mp4"))
                 exit(0)
             }
+            if ProcessInfo.processInfo.arguments.contains("--lore-record-event-details") {
+                try await recordEventDetails(env: env, to: directory.appending(path: "event-details\(suffix).mp4"))
+                exit(0)
+            }
             if ProcessInfo.processInfo.arguments.contains("--lore-record-last-time") {
                 try await recordLastTime(env: env, to: directory.appending(path: "last-time\(suffix).mp4"))
                 exit(0)
@@ -181,6 +185,38 @@ enum DebugRecorder {
                 env.lifeLog.jumpToTimelineItem(source)
             }
             await settle(2.5)
+        }
+    }
+
+    /// Selecting three events one after another, then another day. Run with `--lore-demo-slow-details`, so each
+    /// switch shows the new event's header alone while its details load, never the previous event's details.
+    private static func recordEventDetails(env: AppEnvironment, to url: URL) async throws {
+        guard let window = NSApp.windows.first(where: { $0.identifier?.rawValue == LoreWindow.main }) else {
+            throw CocoaError(.fileWriteUnknown, userInfo: [NSLocalizedDescriptionKey: "main windowが表示されていません"])
+        }
+        env.mainSection = .lifeLog
+        window.makeKeyAndOrderFront(nil)
+        await env.lifeLog.followCurrentDay()
+        let events = ["demo-event-1", "demo-event-2", "demo-event-3"].compactMap { id in
+            env.lifeLog.day.calendarEvents.first { $0.id == id }
+        }
+        guard events.count == 3 else {
+            throw CocoaError(.fileWriteUnknown, userInfo: [NSLocalizedDescriptionKey: "demo eventがありません"])
+        }
+        env.lifeLog.jumpToTimelineItem(EventOccurrence(events[1]).timelineItemID)
+        await settle(1.5)
+        try await record(window: window, to: url) {
+            await settle(1.2)
+            for event in events {
+                env.lifeLog.selectEvent(event)
+                await settle(2.4)
+            }
+            env.lifeLog.selectEvent(events[0])
+            await settle(2.4)
+            if let yesterday = Calendar.current.date(byAdding: .day, value: -1, to: Date()) {
+                await env.lifeLog.select(date: yesterday)
+                await settle(1.8)
+            }
         }
     }
 

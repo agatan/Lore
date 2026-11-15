@@ -25,6 +25,9 @@ struct CalendarEventCard: View {
     }
     /// The AI notes and the "do not send to AI" toggle. Only the main window passes it.
     var ai: AI?
+    /// Shows the event in the inspector. Only the main window passes it.
+    var onSelect: (() -> Void)?
+    var isSelected = false
 
     struct AI {
         var notes: AnyView
@@ -52,6 +55,9 @@ struct CalendarEventCard: View {
                     Text(event.title)
                         .font(.system(size: titleSize, weight: .semibold))
                         .fixedSize(horizontal: false, vertical: true)
+                        .accessibilityAddTraits(onSelect == nil ? [] : .isButton)
+                        .accessibilityAction { onSelect?() }
+                        .accessibilityIdentifier("life-log.event-select-\(event.id)")
                     if isCurrent {
                         tag("いま", color: LoreTheme.event)
                     }
@@ -72,10 +78,20 @@ struct CalendarEventCard: View {
                 if let ai { ai.notes }
             }
             .padding(.leading, compact ? 4 : 6)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background {
+                if isSelected {
+                    RoundedRectangle(cornerRadius: LoreTheme.smallCornerRadius, style: .continuous)
+                        .fill(LoreTheme.event.opacity(0.14))
+                        .padding(.vertical, -4)
+                        .padding(.trailing, -6)
+                }
+            }
         }
         .padding(.trailing, compact ? 12 : 8)
         .fixedSize(horizontal: false, vertical: true)
         .contentShape(.rect)
+        .onTapGesture { onSelect?() }
         .contextMenu {
             recordingMenu
             aiMenu
