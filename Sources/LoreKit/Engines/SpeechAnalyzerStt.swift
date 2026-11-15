@@ -202,8 +202,9 @@ public final class SpeechAnalyzerStt: SttEngine {
     ///
     /// **取得も再試行も促してはいけない**。アセットは取得済みで、このプロセスの
     /// `AssetInventory` はもう何をしても戻らない(C-15d)。打つ手は起動し直すことだけ。
-    static func needsRestartMessage(_ locale: Locale) -> String {
-        String(lore: "音声モデル(\(locale.localizedDisplayName))を使えなくなりました。Lore を再起動してください")
+    static func needsRestartMessage(_ locale: Locale, language: ApplicationLanguage = LoreLocalization.language) -> String {
+        let name = language.resolvedLocale().localizedString(forIdentifier: locale.identifier) ?? locale.identifier
+        return LoreLocalization.string("音声モデル(\(name))を使えなくなりました。Lore を再起動してください", language: language)
     }
 
     /// Speech framework への問い合わせをまとめた層。**状態は持たない**。
