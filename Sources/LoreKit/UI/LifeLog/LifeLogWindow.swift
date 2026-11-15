@@ -26,6 +26,8 @@ public struct LifeLogWindow: View {
                 LifeLogDayInspector(
                     day: env.lifeLog.day,
                     date: env.lifeLog.selectedDate,
+                    schedule: env.settings.lifeLogSchedule,
+                    participatingOnly: env.settings.lifeLogParticipatingEventsOnly,
                     onJump: { date in Task { await env.lifeLog.jumpToTime(date) } },
                     onShowEvent: { occurrence in env.lifeLog.jumpToTimelineItem(occurrence.timelineItemID) }
                 )

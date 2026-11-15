@@ -67,6 +67,14 @@ enum ScreenshotDemoData {
         try await database.lifeLog.save(memo: LifeLogMemo(id: "demo-memo-1", createdAt: time(11, 6), text: copy.memos[0]))
         try await database.lifeLog.save(memo: LifeLogMemo(id: "demo-memo-2", createdAt: time(15, 20), text: copy.memos[1]))
 
+        if ProcessInfo.processInfo.arguments.contains("--lore-demo-busy-day") {
+            try await database.lifeLog.save(calendarEvents: [
+                CalendarEventSnapshot(id: "demo-busy-1", title: copy.busyDay[0], startsAt: time(14), endsAt: time(14, 30), calendarTitle: copy.calendar, participationStatus: .accepted),
+                CalendarEventSnapshot(id: "demo-busy-2", title: copy.busyDay[1], startsAt: time(14, 15), endsAt: time(15), calendarTitle: copy.calendar, participationStatus: .accepted),
+                CalendarEventSnapshot(id: "demo-busy-declined", title: copy.busyDay[2], startsAt: time(11), endsAt: time(12), calendarTitle: copy.calendar, participationStatus: .declined),
+            ])
+        }
+
         if ProcessInfo.processInfo.arguments.contains("--lore-demo-recurring-now") {
             try await seedRecurringEventInProgress(database: database, now: now, calendar: calendar, copy: copy)
         }
@@ -139,6 +147,8 @@ struct DemoCopy {
     var eventNote: [String]
     /// Weekly 1:1 title, last week's utterance, two action items, and an open question.
     var recurring: [String]
+    /// Back-to-back, overlapping, and declined titles of the `--lore-demo-busy-day` events.
+    var busyDay: [String]
 
     static var current: DemoCopy {
         let arguments = ProcessInfo.processInfo.arguments
@@ -181,7 +191,8 @@ struct DemoCopy {
         messageText: "明日の1on1、時間大丈夫そうですか？",
         me: "自分",
         eventNote: ["今日は初回体験の流れを確認する", "初回体験の流れを通しで確認する", "検索とエクスポートの次に何を見せるか"],
-        recurring: ["週次1on1", "評価面談の資料は金曜までに共有します。", "評価面談の資料を金曜までに共有する", "オンボーディング改善の進捗を確認する", "次の四半期の目標をどこまで広げるか"]
+        recurring: ["週次1on1", "評価面談の資料は金曜までに共有します。", "評価面談の資料を金曜までに共有する", "オンボーディング改善の進捗を確認する", "次の四半期の目標をどこまで広げるか"],
+        busyDay: ["顧客との定例", "採用の打ち合わせ", "全社ミーティング（辞退）"]
     )
 
     static let english = DemoCopy(
@@ -213,7 +224,8 @@ struct DemoCopy {
         messageText: "Does tomorrow's 1:1 still work for you?",
         me: "You",
         eventNote: ["Today's focus is the first-run experience", "Walk through the first-run flow end to end", "What should come after search and export?"],
-        recurring: ["Weekly 1:1", "I'll share the review doc by Friday.", "Share the review doc by Friday", "Check progress on the onboarding fixes", "How far should next quarter's goals reach?"]
+        recurring: ["Weekly 1:1", "I'll share the review doc by Friday.", "Share the review doc by Friday", "Check progress on the onboarding fixes", "How far should next quarter's goals reach?"],
+        busyDay: ["Customer Sync", "Hiring Sync", "All-Hands (Declined)"]
     )
 
     static let chinese = DemoCopy(
@@ -245,7 +257,8 @@ struct DemoCopy {
         messageText: "明天的一对一时间还可以吗？",
         me: "我",
         eventNote: ["今天先过一遍首次使用的流程", "从头到尾走一遍首次使用流程", "搜索和导出之后，接下来展示什么？"],
-        recurring: ["每周一对一", "评估资料我周五前发出来。", "周五前分享评估资料", "确认新手引导改进的进度", "下个季度的目标要定到多大？"]
+        recurring: ["每周一对一", "评估资料我周五前发出来。", "周五前分享评估资料", "确认新手引导改进的进度", "下个季度的目标要定到多大？"],
+        busyDay: ["客户例会", "招聘沟通", "全员大会（已拒绝）"]
     )
 }
 #endif

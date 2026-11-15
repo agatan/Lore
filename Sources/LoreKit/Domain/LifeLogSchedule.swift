@@ -57,7 +57,9 @@ public struct LifeLogSchedule: Codable, Sendable, Equatable {
         }
     }
 
-    private func window(startingOn day: Date, calendar: Calendar) -> DateInterval? {
+    /// `day`に始まる時間帯。無効、または`day`の曜日が対象外ならnil。
+    func window(startingOn day: Date, calendar: Calendar) -> DateInterval? {
+        guard isEnabled else { return nil }
         guard weekdays.contains(calendar.component(.weekday, from: day)),
               let start = time(startMinute, on: day, calendar: calendar) else { return nil }
         let endDay = endMinute > startMinute ? day : calendar.date(byAdding: .day, value: 1, to: day)
