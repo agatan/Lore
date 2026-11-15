@@ -204,8 +204,7 @@ public struct LifeLogDay: Sendable {
     }
 }
 
-/// An earlier occurrence of a repeating event. The calendar snapshot keeps one row per event
-/// identifier, so the past day no longer has the event row; the jump goes to its first utterance.
+/// An earlier occurrence of a repeating event. The jump goes to its first utterance.
 public struct PreviousEventOccurrence: Sendable, Hashable {
     public var occurrence: EventOccurrence
     public var firstUtteranceID: String

@@ -362,18 +362,6 @@ struct LifeLogAITests {
         #expect(harness.fixture.spy.prompts.count == 1)
     }
 
-    @Test("A repeating event's snapshot moving to another occurrence does not mark the note")
-    func otherOccurrenceIsNotStale() async throws {
-        let harness = Harness(try await Fixture.make())
-        try await harness.service.generate(kind: .eventNotes, scope: harness.scope)
-        var tomorrow = harness.fixture.event
-        tomorrow.startsAt = tomorrow.startsAt.addingTimeInterval(86_400)
-        tomorrow.endsAt = tomorrow.endsAt.addingTimeInterval(86_400)
-        try await harness.fixture.database.lifeLog.save(calendarEvents: [tomorrow])
-        let note = try #require(try await harness.fixture.database.lifeLog.generatedNote(kind: .eventNotes, scope: harness.scope))
-        #expect(note.staleReasons.isEmpty)
-    }
-
     @Test("Saving a later occurrence of a repeating event keeps the earlier day's event and its note title")
     func earlierOccurrenceKeepsItsEvent() async throws {
         let harness = Harness(try await Fixture.make())

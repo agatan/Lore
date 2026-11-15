@@ -85,15 +85,28 @@ public struct LifeLogStore: Sendable {
         }
     }
 
-    public func save(calendarEvents values: [CalendarEventSnapshot]) async throws {
+    /// Saves one row per occurrence. With `fetchedInterval`, the rows overlapping its part after `now`
+    /// that the fetch no longer has are deleted. Rows that ended stay.
+    public func save(calendarEvents values: [CalendarEventSnapshot], replacingUnendedIn fetchedInterval: DateInterval? = nil, now: Date = Date()) async throws {
         try await queue.write { db in
+            if let fetchedInterval, now < fetchedInterval.end {
+                let fetched = Set(values.map { EventOccurrence($0) })
+                let unended = try Row.fetchAll(db, sql: "SELECT id, start_day FROM calendar_event_snapshots WHERE ends_at > ? AND starts_at < ?",
+                                               arguments: [date(max(now, fetchedInterval.start)), date(fetchedInterval.end)])
+                for row in unended where !fetched.contains(EventOccurrence(eventID: row["id"], day: row["start_day"])) {
+                    try db.execute(sql: "DELETE FROM calendar_event_snapshots WHERE id = ? AND start_day = ?", arguments: [row["id"], row["start_day"]])
+                }
+            }
             for value in values {
                 try db.execute(sql: """
-                    INSERT INTO calendar_event_snapshots VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-                    ON CONFLICT(id) DO UPDATE SET title=excluded.title, starts_at=excluded.starts_at,
+                    INSERT INTO calendar_event_snapshots (id, start_day, external_identifier, title, starts_at, ends_at,
+                      calendar_title, is_all_day, participation_status)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    ON CONFLICT(id, start_day) DO UPDATE SET title=excluded.title, starts_at=excluded.starts_at,
                     ends_at=excluded.ends_at, calendar_title=excluded.calendar_title, is_all_day=excluded.is_all_day,
                     participation_status=excluded.participation_status
-                    """, arguments: [value.id, value.externalIdentifier, value.title, date(value.startsAt), date(value.endsAt), value.calendarTitle, value.isAllDay, value.participationStatus.rawValue])
+                    """, arguments: [value.id, EventOccurrence(value).day, value.externalIdentifier, value.title, date(value.startsAt),
+                                     date(value.endsAt), value.calendarTitle, value.isAllDay, value.participationStatus.rawValue])
             }
         }
     }
@@ -396,9 +409,8 @@ public struct LifeLogStore: Sendable {
         let rangeStart = try parse(r["range_start"])
         let rangeEnd = try parse(r["range_end"])
         let scopeDay: String = r["scope_day"]
-        let eventState: GeneratedNote.EventSnapshotState = try Row.fetchOne(db, sql: "SELECT * FROM calendar_event_snapshots WHERE id = ?", arguments: [eventID])
+        let event = try Row.fetchOne(db, sql: "SELECT * FROM calendar_event_snapshots WHERE id = ? AND start_day = ?", arguments: [eventID, scopeDay])
             .map(decodeEvent)
-            .map { LifeLogDateKey.string(for: $0.startsAt) == scopeDay ? .occurrence($0) : .otherOccurrence } ?? .missing
         let existingUtterances = try Self.count(db, table: "life_log_utterances", ids: utteranceIDs)
         let existingMemos = try Self.count(db, table: "life_log_memos", ids: memoIDs)
         return GeneratedNote(
@@ -416,7 +428,7 @@ public struct LifeLogStore: Sendable {
             staleReasons: GeneratedNote.staleReasons(
                 rangeStart: rangeStart,
                 rangeEnd: rangeEnd,
-                event: eventState,
+                event: event,
                 missingSourceCount: utteranceIDs.count + memoIDs.count - existingUtterances - existingMemos
             )
         )

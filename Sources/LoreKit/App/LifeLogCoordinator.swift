@@ -828,7 +828,7 @@ public final class LifeLogCoordinator {
         do {
             guard try await calendarProvider.requestAccess() else { return }
             let events = try await calendarProvider.events(start: interval.start, end: interval.end, selectedCalendars: selectedCalendars)
-            try await database.lifeLog.save(calendarEvents: events)
+            try await database.lifeLog.save(calendarEvents: events, replacingUnendedIn: interval)
             lastCalendarRefreshAt = Date()
             lastCalendarRefreshDay = LifeLogDateKey.string(for: selectedDate)
             await reload()
@@ -923,7 +923,7 @@ public final class LifeLogCoordinator {
     public func saveTodayCalendarSnapshot(selectedCalendars: Set<String>, now: Date = Date()) async throws {
         guard let database, let interval = Calendar.current.dateInterval(of: .day, for: now) else { return }
         let events = try await calendarProvider.events(start: interval.start, end: interval.end, selectedCalendars: selectedCalendars)
-        try await database.lifeLog.save(calendarEvents: events)
+        try await database.lifeLog.save(calendarEvents: events, replacingUnendedIn: interval, now: now)
         if Calendar.current.isDate(selectedDate, inSameDayAs: now) { await reload() }
     }
 

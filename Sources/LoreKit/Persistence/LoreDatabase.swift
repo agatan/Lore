@@ -547,6 +547,67 @@ public final class LoreDatabase: Sendable {
             // "Last time" looks up the latest utterance of an event identifier on every day load.
             try db.execute(sql: "CREATE INDEX life_log_utterances_event_started_at ON life_log_utterances(calendar_event_id, started_at)")
         }
+        migrator.registerMigration("v14-event-occurrence-snapshots") { db in
+            // EventKit shares one identifier across a repeating series, so each occurrence needs its own row.
+            try db.execute(sql: """
+                DROP TRIGGER life_log_utterances_fts_insert;
+                DROP TRIGGER life_log_utterances_fts_delete;
+                DROP TRIGGER life_log_utterances_fts_update;
+                DROP TABLE life_log_utterances_fts;
+                CREATE TABLE life_log_utterances_new (
+                  id TEXT PRIMARY KEY, started_at TEXT NOT NULL, ended_at TEXT NOT NULL, text TEXT NOT NULL,
+                  audio_chunk_id TEXT REFERENCES life_log_audio_chunks(id),
+                  calendar_event_id TEXT
+                );
+                INSERT INTO life_log_utterances_new (id, started_at, ended_at, text, audio_chunk_id, calendar_event_id)
+                  SELECT id, started_at, ended_at, text, audio_chunk_id, calendar_event_id FROM life_log_utterances;
+                DROP TABLE life_log_utterances;
+                ALTER TABLE life_log_utterances_new RENAME TO life_log_utterances;
+                CREATE INDEX life_log_utterances_started_at ON life_log_utterances(started_at);
+                CREATE INDEX life_log_utterances_event_started_at ON life_log_utterances(calendar_event_id, started_at);
+                CREATE VIRTUAL TABLE life_log_utterances_fts USING fts5(text, content='life_log_utterances', content_rowid='rowid', tokenize='trigram');
+                CREATE TRIGGER life_log_utterances_fts_insert AFTER INSERT ON life_log_utterances BEGIN
+                  INSERT INTO life_log_utterances_fts(rowid, text) VALUES (new.rowid, new.text);
+                END;
+                CREATE TRIGGER life_log_utterances_fts_delete AFTER DELETE ON life_log_utterances BEGIN
+                  INSERT INTO life_log_utterances_fts(life_log_utterances_fts, rowid, text) VALUES ('delete', old.rowid, old.text);
+                END;
+                CREATE TRIGGER life_log_utterances_fts_update AFTER UPDATE ON life_log_utterances BEGIN
+                  INSERT INTO life_log_utterances_fts(life_log_utterances_fts, rowid, text) VALUES ('delete', old.rowid, old.text);
+                  INSERT INTO life_log_utterances_fts(rowid, text) VALUES (new.rowid, new.text);
+                END;
+                INSERT INTO life_log_utterances_fts(life_log_utterances_fts) VALUES ('rebuild');
+
+                CREATE TABLE calendar_event_snapshots_new (
+                  id TEXT NOT NULL, start_day TEXT NOT NULL, external_identifier TEXT, title TEXT NOT NULL,
+                  starts_at TEXT NOT NULL, ends_at TEXT NOT NULL, calendar_title TEXT NOT NULL,
+                  is_all_day INTEGER NOT NULL DEFAULT 0, participation_status TEXT NOT NULL DEFAULT 'none',
+                  PRIMARY KEY (id, start_day)
+                );
+                """)
+            for row in try Row.fetchAll(db, sql: "SELECT * FROM calendar_event_snapshots") {
+                let startDay = LifeLogDateKey.string(for: try PersistenceCoding.decodeDate(row["starts_at"]))
+                try db.execute(sql: "INSERT INTO calendar_event_snapshots_new VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)", arguments: [
+                    row["id"], startDay, row["external_identifier"], row["title"], row["starts_at"], row["ends_at"],
+                    row["calendar_title"], row["is_all_day"], row["participation_status"],
+                ])
+            }
+            try db.execute(sql: """
+                DROP TABLE calendar_event_snapshots;
+                ALTER TABLE calendar_event_snapshots_new RENAME TO calendar_event_snapshots;
+                """)
+            for (event, row) in [("INSERT", "new"), ("UPDATE", "new"), ("DELETE", "old")] {
+                try db.execute(sql: """
+                    CREATE TRIGGER sync_utterance_\(event.lowercased()) AFTER \(event) ON life_log_utterances
+                    WHEN (SELECT enabled = 1 AND suppressed = 0 FROM sync_control WHERE id = 1)
+                    BEGIN
+                      INSERT INTO sync_outbox (entity, record_id, changed_at)
+                      VALUES ('utterance', \(row).id, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+                      ON CONFLICT (entity, record_id) DO UPDATE SET changed_at = excluded.changed_at;
+                    END;
+                    """)
+            }
+        }
 
         return migrator
     }

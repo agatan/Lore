@@ -86,8 +86,12 @@ enum ScreenshotDemoData {
         let (title, said, firstAction, secondAction, question) = (copy.recurring[0], copy.recurring[1], copy.recurring[2], copy.recurring[3], copy.recurring[4])
         let start = now.addingTimeInterval(-10 * 60)
         let event = CalendarEventSnapshot(id: "demo-event-weekly", title: title, startsAt: start, endsAt: now.addingTimeInterval(20 * 60), calendarTitle: copy.calendar, participationStatus: .accepted)
-        try await database.lifeLog.save(calendarEvents: [event])
         let lastWeek = calendar.date(byAdding: .day, value: -7, to: start) ?? start
+        var lastWeekEvent = event
+        lastWeekEvent.startsAt = lastWeek
+        lastWeekEvent.endsAt = lastWeek.addingTimeInterval(30 * 60)
+        try await database.lifeLog.save(calendarEvents: [lastWeekEvent])
+        try await database.lifeLog.save(calendarEvents: [event])
         let spokenAt = lastWeek.addingTimeInterval(3 * 60)
         try await database.lifeLog.save(utterance: LifeLogUtterance(id: "demo-weekly-last-week", startedAt: spokenAt, endedAt: spokenAt.addingTimeInterval(40), text: said, audioChunkID: nil, calendarEventID: event.id))
         try await database.lifeLog.save(generatedNote: GeneratedNote(
