@@ -1,0 +1,12 @@
+// LP (site/) を Cloudflare Workers の静的アセットとして配信する。Worker のコードは持たない。
+// デプロイは .github/workflows/site.yml が行う。
+{
+  "name": "lore-site",
+  "compatibility_date": "2026-11-01",
+  "assets": {
+    "directory": "./site",
+    "html_handling": "auto-trailing-slash"
+  },
+  "workers_dev": true,
+  "preview_urls": true
+}
