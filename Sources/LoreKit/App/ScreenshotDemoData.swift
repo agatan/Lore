@@ -75,6 +75,50 @@ enum ScreenshotDemoData {
             ])
         }
 
+        // A stored daily digest, so the top of the day, the inspector, and search show one without any request.
+        let digest = copy.digest
+        try await database.lifeLog.save(generatedNote: GeneratedNote(
+            id: "demo-digest-today",
+            kind: .dailyDigest,
+            scope: .day(LifeLogDateKey.string(for: day, calendar: calendar)),
+            rangeStart: day,
+            rangeEnd: time(24),
+            backend: .onDevice,
+            model: FormattingBackend.onDevice.defaultModel,
+            createdAt: time(18),
+            sourceUtteranceIDs: ["demo-utterance-1", "demo-utterance-2", "demo-utterance-4", "demo-utterance-5"],
+            sourceMemoIDs: ["demo-memo-1"],
+            sections: [
+                GeneratedNoteSection(kind: .summary, items: [
+                    GeneratedNoteItem(text: digest[0], sources: ["u-demo-utterance-1", "m-demo-memo-1"]),
+                    GeneratedNoteItem(text: digest[1], sources: ["u-demo-utterance-4"]),
+                ]),
+                GeneratedNoteSection(kind: .decisions, items: [GeneratedNoteItem(text: digest[2], sources: ["u-demo-utterance-4"])]),
+                GeneratedNoteSection(kind: .actionItems, items: [GeneratedNoteItem(text: digest[3], owner: copy.me, sources: ["u-demo-utterance-5"])]),
+                GeneratedNoteSection(kind: .openQuestions, items: [GeneratedNoteItem(text: digest[4], sources: ["u-demo-utterance-2"])]),
+            ]
+        ))
+        if ProcessInfo.processInfo.arguments.contains("--lore-demo-morning-digest") {
+            let yesterday = time(0, dayOffset: -1)
+            try await database.lifeLog.save(generatedNote: GeneratedNote(
+                id: "demo-digest-yesterday",
+                kind: .dailyDigest,
+                scope: .day(LifeLogDateKey.string(for: yesterday, calendar: calendar)),
+                rangeStart: yesterday,
+                rangeEnd: day,
+                backend: .onDevice,
+                model: FormattingBackend.onDevice.defaultModel,
+                createdAt: time(18, dayOffset: -1),
+                sourceUtteranceIDs: [],
+                sourceMemoIDs: [],
+                omittedSourceCount: 12,
+                sections: [
+                    GeneratedNoteSection(kind: .summary, items: [GeneratedNoteItem(text: digest[5], sources: ["digest-yesterday"])]),
+                    GeneratedNoteSection(kind: .actionItems, items: [GeneratedNoteItem(text: digest[6], owner: copy.me, sources: ["digest-yesterday"])]),
+                ]
+            ))
+        }
+
         if ProcessInfo.processInfo.arguments.contains("--lore-demo-recurring-now") {
             try await seedRecurringEventInProgress(database: database, now: now, calendar: calendar, copy: copy)
         }
@@ -154,6 +198,9 @@ struct DemoCopy {
     var busyDay: [String]
     /// Four memos from the weekly 1:1, oldest first. The row shows the newest three.
     var recurringMemos: [String]
+    /// Today's digest: two summary lines, a decision, an action item, and a thing left open.
+    /// Then yesterday's digest: a summary line and an action item.
+    var digest: [String]
 
     static var current: DemoCopy {
         let arguments = ProcessInfo.processInfo.arguments
@@ -198,7 +245,16 @@ struct DemoCopy {
         eventNote: ["今日は初回体験の流れを確認する", "初回体験の流れを通しで確認する", "検索とエクスポートの次に何を見せるか"],
         recurring: ["週次1on1", "評価面談の資料は金曜までに共有します。", "評価面談の資料を金曜までに共有する", "オンボーディング改善の進捗を確認する", "次の四半期の目標をどこまで広げるか"],
         busyDay: ["顧客との定例", "採用の打ち合わせ", "全社ミーティング（辞退）"],
-        recurringMemos: ["先週の評価の件、先に背景を聞く", "異動の希望は本人から切り出すのを待つ", "オンボーディングの遅れは人手の相談として出す", "来週までに目標案を自分から送る"]
+        recurringMemos: ["先週の評価の件、先に背景を聞く", "異動の希望は本人から切り出すのを待つ", "オンボーディングの遅れは人手の相談として出す", "来週までに目標案を自分から送る"],
+        digest: [
+            "初回体験の流れを確認し、オンボーディングで3つの機能を順に紹介することにした",
+            "午後は設定画面の文言とデザインレビューの指摘を整理した",
+            "設定画面の文言は次のスプリントで見直す",
+            "次のベータでショートカットからの書き出しを試す",
+            "完了したタスクを後から戻せる場所をどう作るか",
+            "リリース計画の前提をそろえ、ベータの配布日を金曜に決めた",
+            "ベータの感想を集めるフォームを用意する",
+        ]
     )
 
     static let english = DemoCopy(
@@ -232,7 +288,16 @@ struct DemoCopy {
         eventNote: ["Today's focus is the first-run experience", "Walk through the first-run flow end to end", "What should come after search and export?"],
         recurring: ["Weekly 1:1", "I'll share the review doc by Friday.", "Share the review doc by Friday", "Check progress on the onboarding fixes", "How far should next quarter's goals reach?"],
         busyDay: ["Customer Sync", "Hiring Sync", "All-Hands (Declined)"],
-        recurringMemos: ["Ask about the backstory of last week's review first", "Let them bring up the transfer request themselves", "Raise the onboarding delay as a staffing question", "Send my draft goals before next week"]
+        recurringMemos: ["Ask about the backstory of last week's review first", "Let them bring up the transfer request themselves", "Raise the onboarding delay as a staffing question", "Send my draft goals before next week"],
+        digest: [
+            "Walked through the first-run experience and settled on introducing the three core features in order",
+            "In the afternoon, sorted out the settings wording and the design review feedback",
+            "Rework the settings screen wording next sprint",
+            "Try exporting from a shortcut in the next beta",
+            "How to give finished tasks a place to come back from",
+            "Aligned the release plan and set Friday for the beta",
+            "Prepare a form to collect beta feedback",
+        ]
     )
 
     static let chinese = DemoCopy(
@@ -266,7 +331,16 @@ struct DemoCopy {
         eventNote: ["今天先过一遍首次使用的流程", "从头到尾走一遍首次使用流程", "搜索和导出之后，接下来展示什么？"],
         recurring: ["每周一对一", "评估资料我周五前发出来。", "周五前分享评估资料", "确认新手引导改进的进度", "下个季度的目标要定到多大？"],
         busyDay: ["客户例会", "招聘沟通", "全员大会（已拒绝）"],
-        recurringMemos: ["先问清楚上周评估的背景", "调岗的事等对方自己提", "把新手引导的延误作为人手问题提出来", "下周前我先发出目标草案"]
+        recurringMemos: ["先问清楚上周评估的背景", "调岗的事等对方自己提", "把新手引导的延误作为人手问题提出来", "下周前我先发出目标草案"],
+        digest: [
+            "过了一遍首次使用流程，决定新手引导按顺序介绍三个核心功能",
+            "下午整理了设置页面的文案和设计评审的意见",
+            "设置页面的文案下个迭代再改",
+            "下一个测试版试试用快捷键导出",
+            "完成的任务要放在哪里才能找回来",
+            "对齐了版本规划，测试版定在周五发布",
+            "准备收集测试版反馈的表单",
+        ]
     )
 }
 #endif

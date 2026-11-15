@@ -128,12 +128,16 @@ public final class AppEnvironment {
                 return try await lifeLog.calendarEvents(in: interval, calendars: calendars)
             },
             participatingEventsOnly: { [weak self] in self?.settings.lifeLogParticipatingEventsOnly ?? true },
-            noteSaved: { [weak self] note, event, automatic in await self?.eventNotesSaved(note, event: event, automatic: automatic) }
+            lifeLogSchedule: { [weak self] in self?.settings.lifeLogSchedule ?? LifeLogSchedule() },
+            noteSaved: { [weak self] note, event, automatic in await self?.generatedNoteSaved(note, event: event, automatic: automatic) }
         ))
         notifications.onOpenEvent = { [weak self] occurrence in
             Task { @MainActor [weak self] in await self?.showLifeLogEvent(occurrence) }
         }
-        lifeLog.onCalendarRefreshed = { [weak self] in self?.evaluateEventNotes() }
+        notifications.onOpenDay = { [weak self] day in
+            Task { @MainActor [weak self] in await self?.showLifeLogDigest(day: day) }
+        }
+        lifeLog.onCalendarRefreshed = { [weak self] in self?.evaluateLifeLogAI() }
         wireHotkeys()
         wirePowerNotifications()
         followApplicationLanguage()
@@ -160,9 +164,12 @@ public final class AppEnvironment {
     /// so a test run makes no request.
     private static var generatesAutomatically: Bool { !usesScreenshotDemoData && Bundle.main.bundleIdentifier == bundleIdentifier }
 
-    public func evaluateEventNotes() {
+    public func evaluateLifeLogAI() {
         guard Self.generatesAutomatically, database != nil else { return }
-        Task { await lifeLogAI.evaluateEventNotes() }
+        Task {
+            await lifeLogAI.evaluateEventNotes()
+            await lifeLogAI.evaluateDailyDigest()
+        }
     }
 
     public func updateLifeLogAI(_ value: LifeLogAISettings) {
@@ -171,11 +178,12 @@ public final class AppEnvironment {
         if value.confirmedCloudBackend != value.backend { value.confirmedCloudBackend = nil }
         let previous = settings.lifeLogAI
         settings.lifeLogAI = value
-        if value.isEnabled, value.notifiesWhenEventNotesReady,
-           !previous.isEnabled || !previous.notifiesWhenEventNotesReady, Self.generatesAutomatically {
+        let notifies = value.notifiesWhenEventNotesReady || value.notifiesWhenDailyDigestReady
+        let notified = previous.isEnabled && (previous.notifiesWhenEventNotesReady || previous.notifiesWhenDailyDigestReady)
+        if value.isEnabled, notifies, !notified, Self.generatesAutomatically {
             Task { await notifications.requestAuthorization() }
         }
-        evaluateEventNotes()
+        evaluateLifeLogAI()
     }
 
     public func showLifeLogEvent(_ occurrence: EventOccurrence) async {
@@ -196,15 +204,40 @@ public final class AppEnvironment {
         await lifeLog.showMemo(id: memo.id, createdAt: memo.createdAt)
     }
 
-    private func eventNotesSaved(_ note: GeneratedNote, event: CalendarEventSnapshot, automatic: Bool) async {
+    public func showLifeLogDigest(day: String) async {
+        mainSection = .lifeLog
+        onShowMainWindow?()
+        await lifeLog.showDigest(day: day)
+    }
+
+    private func generatedNoteSaved(_ note: GeneratedNote, event: CalendarEventSnapshot?, automatic: Bool) async {
         if LifeLogDateKey.string(for: lifeLog.selectedDate) == note.scope.day { await lifeLog.reload() }
-        guard automatic, settings.lifeLogAI.notifiesWhenEventNotesReady, Self.generatesAutomatically,
-              case .event(let occurrence) = note.scope else { return }
-        await notifications.postEventNotesReady(
-            title: event.title,
-            body: String(lore: "AIのノートができました"),
-            occurrence: occurrence
-        )
+        guard automatic, Self.generatesAutomatically else { return }
+        switch note.scope {
+        case .event(let occurrence):
+            guard settings.lifeLogAI.notifiesWhenEventNotesReady, let event else { return }
+            await notifications.postEventNotesReady(title: event.title, body: String(lore: "AIのノートができました"), occurrence: occurrence)
+        case .day(let day):
+            guard settings.lifeLogAI.notifiesWhenDailyDigestReady, let date = LifeLogDateKey.date(from: day), let database else { return }
+            do {
+                let contents = try await database.lifeLog.day(date, participatingOnly: settings.lifeLogParticipatingEventsOnly)
+                await notifications.postDailyDigestReady(
+                    title: String(lore: "1日のまとめができました"),
+                    body: DailyDigestNotification.body(LifeLogDaySummary(day: contents), events: contents.calendarEvents.count),
+                    day: day
+                )
+            } catch {
+                LoreLog.session.error("Reading the day for the digest notification failed: \(error.localizedDescription, privacy: .public)")
+            }
+        }
+    }
+
+    /// Yesterday's digest, shown once as a sheet the first time the Life Log appears after it was made.
+    public var morningDigest: GeneratedNote?
+
+    public func presentMorningDigestIfNeeded() async {
+        guard morningDigest == nil else { return }
+        morningDigest = await lifeLogAI.takeMorningDigest()
     }
 
     /// coordinatorやengineが組み立てる文言も、Viewと同じ表示言語で作らせる。
@@ -231,7 +264,7 @@ public final class AppEnvironment {
                 self?.lifeLog.systemDidWake()
                 self?.applyLifeLogSchedule()
                 await self?.refreshLifeLogExclusionEvents()
-                self?.evaluateEventNotes()
+                self?.evaluateLifeLogAI()
             }
         })
         // 時計やtime zoneが変わると、次の切替時刻の計算が古くなる。
@@ -313,7 +346,7 @@ public final class AppEnvironment {
                 participatingEventsOnly: { [weak self] in self?.settings.lifeLogParticipatingEventsOnly ?? true },
                 audioProcessingCompleted: { [weak self] in
                     await self?.purgeExpiredLifeLogAudio()
-                    self?.evaluateEventNotes()
+                    self?.evaluateLifeLogAI()
                 }
             )
             lifeLog.selectInputDevice(uid: settings.lifeLogInputDeviceUID)
@@ -354,7 +387,7 @@ public final class AppEnvironment {
             startLifeLogExclusionRefresh()
         }
         await lifeLogAI.configure()
-        evaluateEventNotes()
+        evaluateLifeLogAI()
     }
 
     static var usesScreenshotDemoData: Bool {
@@ -581,6 +614,8 @@ public final class AppEnvironment {
     public func updateLifeLogSchedule(_ schedule: LifeLogSchedule) {
         settings.lifeLogSchedule = schedule
         applyLifeLogSchedule()
+        // The end of the window is the digest time.
+        evaluateLifeLogAI()
     }
 
     /// 現在時刻で自動記録の開始・停止と一時停止の終了を判断し、holdを合わせ、次に判断が変わる時刻に一度だけ起きる。

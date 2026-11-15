@@ -248,12 +248,15 @@ public struct LifeLogStore: Sendable {
             }
             return try rows.map { row in
                 let occurredAt = try PersistenceCoding.decodeDate(row["occurred_at"])
+                let kind = LifeLogSearchResult.Kind(rawValue: row["kind"])!
+                let id: String = row["id"]
                 return LifeLogSearchResult(
-                    id: "\(row["kind"] as String)-\(row["id"] as String)",
-                    kind: LifeLogSearchResult.Kind(rawValue: row["kind"])!,
+                    id: "\(kind.rawValue)-\(id)",
+                    kind: kind,
                     text: row["text"],
                     occurredAt: occurredAt,
-                    day: LifeLogDateKey.string(for: occurredAt, calendar: calendar)
+                    day: LifeLogDateKey.string(for: occurredAt, calendar: calendar),
+                    timelineItemID: kind == .utterance ? "u-\(id)" : "m-\(id)"
                 )
             }
         }
@@ -265,7 +268,62 @@ public struct LifeLogStore: Sendable {
         }
         let projectedResults = storedResults.filter { $0.kind != .utterance || visibleUtteranceIDs.contains($0.id) }
         let dictationResults = try await searchDictations(trimmed, limit: fetchLimit, calendar: calendar)
-        return Array((projectedResults + dictationResults).sorted { $0.occurredAt > $1.occurredAt }.prefix(max(1, limit)))
+        let generatedResults = try await searchGeneratedNotes(trimmed, limit: fetchLimit)
+        return Array((projectedResults + dictationResults + generatedResults).sorted { $0.occurredAt > $1.occurredAt }.prefix(max(1, limit)))
+    }
+
+    /// Event notes and daily digests. They are labeled as generated and open at their own place in the day.
+    private func searchGeneratedNotes(_ query: String, limit: Int) async throws -> [LifeLogSearchResult] {
+        try await queue.read { db in
+            let rows: [Row]
+            if query.count >= 3 {
+                rows = try Row.fetchAll(db, sql: """
+                    SELECT n.id, n.kind, n.event_id, n.scope_day, n.search_text, n.range_start
+                    FROM generated_notes n JOIN generated_notes_fts f ON f.rowid=n.rowid
+                    WHERE generated_notes_fts MATCH ? ORDER BY n.range_start DESC LIMIT ?
+                    """, arguments: [Self.ftsPhrase(query), limit])
+            } else {
+                rows = try Row.fetchAll(db, sql: """
+                    SELECT id, kind, event_id, scope_day, search_text, range_start FROM generated_notes
+                    WHERE search_text LIKE ? ESCAPE '\\' ORDER BY range_start DESC LIMIT ?
+                    """, arguments: [Self.likePattern(query), limit])
+            }
+            return try rows.map { row in
+                let kindValue: String = row["kind"]
+                let day: String = row["scope_day"]
+                let scope: GeneratedNoteScope
+                switch GeneratedNoteKind(rawValue: kindValue) {
+                case .eventNotes:
+                    guard let eventID: String = row["event_id"] else { throw PersistenceError.invalidStoredValue(column: "event_id", value: "NULL") }
+                    scope = .event(EventOccurrence(eventID: eventID, day: day))
+                case .dailyDigest:
+                    scope = .day(day)
+                case nil:
+                    throw PersistenceError.invalidStoredValue(column: "kind", value: kindValue)
+                }
+                // A note holds many items; the result shows the ones that matched.
+                let text: String = row["search_text"]
+                let matching = text.split(separator: "\n").filter { $0.range(of: query, options: [.caseInsensitive, .widthInsensitive]) != nil }
+                return LifeLogSearchResult(
+                    id: "generated-\(row["id"] as String)",
+                    kind: .generated,
+                    text: matching.isEmpty ? text : matching.joined(separator: "\n"),
+                    occurredAt: try PersistenceCoding.decodeDate(row["range_start"]),
+                    day: day,
+                    timelineItemID: scope.timelineItemID
+                )
+            }
+        }
+    }
+
+    private static func ftsPhrase(_ query: String) -> String { "\"\(query.replacingOccurrences(of: "\"", with: "\"\""))\"" }
+
+    private static func likePattern(_ query: String) -> String {
+        let escaped = query
+            .replacingOccurrences(of: "\\", with: "\\\\")
+            .replacingOccurrences(of: "%", with: "\\%")
+            .replacingOccurrences(of: "_", with: "\\_")
+        return "%\(escaped)%"
     }
 
     private func searchDictations(_ query: String, limit: Int, calendar: Calendar) async throws -> [LifeLogSearchResult] {
@@ -301,7 +359,8 @@ public struct LifeLogStore: Sendable {
                     kind: .dictation,
                     text: row["text"],
                     occurredAt: occurredAt,
-                    day: LifeLogDateKey.string(for: occurredAt, calendar: calendar)
+                    day: LifeLogDateKey.string(for: occurredAt, calendar: calendar),
+                    timelineItemID: "d-\(row["id"] as String)"
                 )
             }
         }
@@ -352,15 +411,17 @@ public struct LifeLogStore: Sendable {
         try await queue.write { db in
             try db.execute(sql: """
                 INSERT INTO generated_notes (id, kind, scope_key, scope_day, event_id, range_start, range_end, provider, model,
-                  created_at, source_utterance_ids, source_memo_ids, content)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                  created_at, source_utterance_ids, source_memo_ids, content, omitted_source_count, search_text)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT(kind, scope_key) DO UPDATE SET id=excluded.id, range_start=excluded.range_start,
                 range_end=excluded.range_end, provider=excluded.provider, model=excluded.model, created_at=excluded.created_at,
-                source_utterance_ids=excluded.source_utterance_ids, source_memo_ids=excluded.source_memo_ids, content=excluded.content
+                source_utterance_ids=excluded.source_utterance_ids, source_memo_ids=excluded.source_memo_ids, content=excluded.content,
+                omitted_source_count=excluded.omitted_source_count, search_text=excluded.search_text
                 """, arguments: [value.id, value.kind.rawValue, value.scope.key, value.scope.day, value.scope.eventID,
                                    date(value.rangeStart), date(value.rangeEnd), value.backend.rawValue, value.model,
                                    date(value.createdAt), try PersistenceCoding.encode(value.sourceUtteranceIDs),
-                                   try PersistenceCoding.encode(value.sourceMemoIDs), try PersistenceCoding.encode(value.sections)])
+                                   try PersistenceCoding.encode(value.sourceMemoIDs), try PersistenceCoding.encode(value.sections),
+                                   value.omittedSourceCount, value.searchText])
             try db.execute(sql: "DELETE FROM life_log_ai_dismissed_scopes WHERE scope_key = ?", arguments: [Self.dismissalKey(value.kind, value.scope)])
         }
     }
@@ -418,7 +479,6 @@ public struct LifeLogStore: Sendable {
         let providerValue: String = r["provider"]
         guard let kind = GeneratedNoteKind(rawValue: kindValue) else { throw PersistenceError.invalidStoredValue(column: "kind", value: kindValue) }
         guard let backend = FormattingBackend(rawValue: providerValue) else { throw PersistenceError.invalidStoredValue(column: "provider", value: providerValue) }
-        guard let eventID: String = r["event_id"] else { throw PersistenceError.invalidStoredValue(column: "event_id", value: "NULL") }
         let utteranceIDs = try PersistenceCoding.decode([String].self, from: r["source_utterance_ids"])
         let memoIDs = try PersistenceCoding.decode([String].self, from: r["source_memo_ids"])
         let rangeStart = try parse(r["range_start"])
@@ -428,15 +488,28 @@ public struct LifeLogStore: Sendable {
               let scopeInterval = Calendar.current.dateInterval(of: .day, for: scopeStart) else {
             throw PersistenceError.invalidStoredValue(column: "scope_day", value: scopeDay)
         }
-        let occurrence = try Row.fetchOne(db, sql: """
-            SELECT * FROM calendar_event_snapshots WHERE id = ? AND starts_at >= ? AND starts_at < ? ORDER BY starts_at LIMIT 1
-            """, arguments: [eventID, date(scopeInterval.start), date(scopeInterval.end)]).map(decodeEvent)
-        let existingUtterances = try Self.count(db, table: "life_log_utterances", ids: utteranceIDs)
-        let existingMemos = try Self.count(db, table: "life_log_memos", ids: memoIDs)
+        let missingSourceCount = utteranceIDs.count + memoIDs.count
+            - (try Self.count(db, table: "life_log_utterances", ids: utteranceIDs))
+            - (try Self.count(db, table: "life_log_memos", ids: memoIDs))
+        let scope: GeneratedNoteScope
+        var staleReasons: Set<GeneratedNoteStaleReason>
+        switch kind {
+        case .eventNotes:
+            guard let eventID: String = r["event_id"] else { throw PersistenceError.invalidStoredValue(column: "event_id", value: "NULL") }
+            let occurrence = try Row.fetchOne(db, sql: """
+                SELECT * FROM calendar_event_snapshots WHERE id = ? AND starts_at >= ? AND starts_at < ? ORDER BY starts_at LIMIT 1
+                """, arguments: [eventID, date(scopeInterval.start), date(scopeInterval.end)]).map(decodeEvent)
+            scope = .event(EventOccurrence(eventID: eventID, day: scopeDay))
+            staleReasons = GeneratedNote.staleReasons(rangeStart: rangeStart, rangeEnd: rangeEnd, occurrence: occurrence,
+                                                      missingSourceCount: missingSourceCount)
+        case .dailyDigest:
+            scope = .day(scopeDay)
+            staleReasons = missingSourceCount > 0 ? [.sourcesDeleted] : []
+        }
         return GeneratedNote(
             id: r["id"],
             kind: kind,
-            scope: .event(EventOccurrence(eventID: eventID, day: scopeDay)),
+            scope: scope,
             rangeStart: rangeStart,
             rangeEnd: rangeEnd,
             backend: backend,
@@ -444,13 +517,9 @@ public struct LifeLogStore: Sendable {
             createdAt: try parse(r["created_at"]),
             sourceUtteranceIDs: utteranceIDs,
             sourceMemoIDs: memoIDs,
+            omittedSourceCount: r["omitted_source_count"],
             sections: try PersistenceCoding.decode([GeneratedNoteSection].self, from: r["content"]),
-            staleReasons: GeneratedNote.staleReasons(
-                rangeStart: rangeStart,
-                rangeEnd: rangeEnd,
-                occurrence: occurrence,
-                missingSourceCount: utteranceIDs.count + memoIDs.count - existingUtterances - existingMemos
-            )
+            staleReasons: staleReasons
         )
     }
 

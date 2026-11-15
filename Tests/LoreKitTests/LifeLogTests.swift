@@ -268,7 +268,8 @@ struct LifeLogTests {
             kind: .memo,
             text: before.text,
             occurredAt: before.createdAt,
-            day: LifeLogDateKey.string(for: before.createdAt)
+            day: LifeLogDateKey.string(for: before.createdAt),
+            timelineItemID: "m-before"
         ))
         #expect(coordinator.highlightedTimelineItemID == "m-before")
         #expect(coordinator.sourceNavigationRevision == 2)

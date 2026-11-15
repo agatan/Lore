@@ -254,7 +254,7 @@ struct LifeLogAITests {
         let after = event.endsAt.addingTimeInterval(60)
         func decide(_ settings: LifeLogAISettings = on, event: CalendarEventSnapshot = event, now: Date = after,
                     excluded: Bool = false, hasNote: Bool = false, wasDeleted: Bool = false, characters: Int = 500,
-                    backlog: Date? = nil) -> EventNotesDecision {
+                    backlog: Date? = nil) -> GenerationDecision {
             EventNotesTrigger.decide(event: event, now: now, settings: settings, isExcluded: excluded, hasNote: hasNote, wasDeleted: wasDeleted,
                                      spokenCharacters: characters, oldestUntranscribedAudio: backlog)
         }
@@ -419,8 +419,8 @@ struct LifeLogAITests {
 
     @Test("The parser reads one item per line, accepts NONE, and rejects an unreadable answer")
     func parser() throws {
-        let sent = [EventNotesInput.Source(label: "S1", kind: .utterance, timelineID: "u-a", recordID: "a", at: Date(), text: "x"),
-                    EventNotesInput.Source(label: "S2", kind: .memo, timelineID: "m-b", recordID: "b", at: Date(), text: "y")]
+        let sent = [GeneratedNoteSource(label: "S1", kind: .utterance, timelineID: "u-a", recordID: "a", at: Date(), text: "x"),
+                    GeneratedNoteSource(label: "S2", kind: .memo, timelineID: "m-b", recordID: "b", at: Date(), text: "y")]
         let sections = try EventNotesPolicy.parse("""
             Here are the notes:
             - DECISION (S1, S2): Keep the plan
@@ -431,7 +431,7 @@ struct LifeLogAITests {
         #expect(sections.first { $0.kind == .actionItems }?.items.first?.owner == nil)
         #expect(sections.first { $0.kind == .openQuestions }?.items.isEmpty == true)
         #expect(try EventNotesPolicy.parse("NONE", sent: sent).allSatisfy(\.items.isEmpty))
-        #expect(throws: EventNotesPolicy.ParseError.self) {
+        #expect(throws: GeneratedNoteResponse.ParseError.self) {
             try EventNotesPolicy.parse(#"{"decisions":[{"text": "x",sources":["S1"]}]"#, sent: sent)
         }
     }

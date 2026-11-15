@@ -148,6 +148,7 @@ public struct GeneratedNoteEntry: Codable, Sendable, Equatable {
     public var model: String
     public var createdAt: String
     public var stale: [String]
+    public var omittedSources: Int
     public var sourceUtteranceIds: [String]
     public var sourceMemoIds: [String]
     public var sections: [Section]
@@ -163,6 +164,7 @@ public struct GeneratedNoteEntry: Codable, Sendable, Equatable {
         model = note.model
         createdAt = LifeLogEntry.timestamp(note.createdAt)
         stale = note.staleReasons.map(\.rawValue).sorted()
+        omittedSources = note.omittedSourceCount
         sourceUtteranceIds = note.sourceUtteranceIDs
         sourceMemoIds = note.sourceMemoIDs
         sections = note.sections.map { section in

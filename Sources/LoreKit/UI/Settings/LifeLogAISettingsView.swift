@@ -16,7 +16,7 @@ struct LifeLogAISettingsView: View {
             SettingsCard(footnote: "オフの間は、ライフログの文章をどこにも送りません。") {
                 SettingsToggle(
                     title: "ライフログAI",
-                    caption: "予定が終わったときに、その時間の発話とメモから決定事項・やること・未解決の問いをまとめます",
+                    caption: "予定が終わったときに、その時間の発話とメモから決定事項・やること・未解決の問いをまとめます。1日の終わりには、その日のまとめを作ります",
                     isOn: Binding(get: { value.isEnabled }, set: { enabled in
                         var next = value
                         next.isEnabled = enabled
@@ -60,7 +60,7 @@ struct LifeLogAISettingsView: View {
                     Text(LocalizedStringKey(destination))
                         .font(LoreTheme.bodyFont)
                         .fixedSize(horizontal: false, vertical: true)
-                    Text("送るのは、決まった指示文、予定の件名と開始・終了時刻、予定の時間内にある発話とメモの時刻と本文だけです。録音した音声、カレンダー名、参加者、ほかの時間や日の記録、音声入力の履歴、APIキーは送りません。")
+                    Text("送るのは、決まった指示文、予定の件名と開始・終了時刻、予定の時間内にある発話とメモの時刻と本文だけです。1日のまとめでは、その日の予定の件名と時刻、作成済みの予定のノート、その日の発話とメモを送ります。録音した音声、カレンダー名、参加者、ほかの日の記録、音声入力の履歴、APIキーは送りません。")
                         .font(LoreTheme.captionFont)
                         .foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
@@ -83,8 +83,8 @@ struct LifeLogAISettingsView: View {
                         next.eventNotesTrigger = trigger
                         apply(next)
                     })) {
-                        Text("予定の終了時").tag(EventNotesTriggerMode.automatic)
-                        Text("手動").tag(EventNotesTriggerMode.manual)
+                        Text("予定の終了時").tag(GenerationTriggerMode.automatic)
+                        Text("手動").tag(GenerationTriggerMode.manual)
                     }
                     .labelsHidden()
                     .pickerStyle(.segmented)
@@ -99,6 +99,55 @@ struct LifeLogAISettingsView: View {
                         apply(next)
                     })
                 )
+            }
+
+            SettingsCard(title: "1日のまとめ", footnote: "記録の時間帯を設定している日は、その時間帯が終わったときに作ります。Macがスリープ中だったときやLoreが起動していなかったときは、次に起動したときに前日の分だけ作ります。") {
+                SettingsRow(title: "まとめを作るタイミング") {
+                    Picker("", selection: Binding(get: { value.dailyDigestTrigger }, set: { trigger in
+                        var next = value
+                        next.dailyDigestTrigger = trigger
+                        apply(next)
+                    })) {
+                        Text("毎日").tag(GenerationTriggerMode.automatic)
+                        Text("手動").tag(GenerationTriggerMode.manual)
+                    }
+                    .labelsHidden()
+                    .pickerStyle(.segmented)
+                    .frame(width: 220)
+                    .accessibilityIdentifier("life-log-ai.digest-trigger")
+                }
+                SettingsRow(title: "作成する時刻", caption: "記録の時間帯がない日に使います") {
+                    DatePicker(
+                        "",
+                        selection: Binding(
+                            get: {
+                                Calendar.current.date(bySettingHour: value.dailyDigestMinute / 60, minute: value.dailyDigestMinute % 60, second: 0, of: Date()) ?? Date()
+                            },
+                            set: { date in
+                                let parts = Calendar.current.dateComponents([.hour, .minute], from: date)
+                                var next = value
+                                next.dailyDigestMinute = (parts.hour ?? 0) * 60 + (parts.minute ?? 0)
+                                apply(next)
+                            }
+                        ),
+                        displayedComponents: .hourAndMinute
+                    )
+                    .labelsHidden()
+                    .datePickerStyle(.field)
+                    .fixedSize()
+                    .disabled(value.dailyDigestTrigger == .manual)
+                    .accessibilityIdentifier("life-log-ai.digest-time")
+                }
+                SettingsToggle(
+                    title: "まとめができたら通知",
+                    caption: "話した時間、予定とメモの件数を知らせます",
+                    isOn: Binding(get: { value.notifiesWhenDailyDigestReady }, set: { notifies in
+                        var next = value
+                        next.notifiesWhenDailyDigestReady = notifies
+                        apply(next)
+                    })
+                )
+                .accessibilityIdentifier("life-log-ai.digest-notification")
             }
 
             SettingsCard(title: "AIに送らないカレンダー", footnote: "選んだカレンダーの予定の時間内にある発話とメモは、ほかの予定と重なっていても送りません。1件ずつの予定は、タイムラインの予定を右クリックして選べます。") {
@@ -126,7 +175,7 @@ struct LifeLogAISettingsView: View {
             }
             Button("キャンセル", role: .cancel) { pending = nil }
         } message: {
-            Text("予定が終わるたびに、その時間の発話とメモの本文を\(pending?.backend.displayName ?? "")のAPIへ送ります。音声は送りません。データはそのサービスの規約に従って扱われます。")
+            Text("予定が終わるたびに、その時間の発話とメモの本文を\(pending?.backend.displayName ?? "")のAPIへ送ります。1日のまとめでは、その日の発話とメモも送ります。音声は送りません。データはそのサービスの規約に従って扱われます。")
         }
     }
 

@@ -878,17 +878,7 @@ public final class LifeLogCoordinator {
     }
 
     public func jumpToSearchResult(_ result: LifeLogSearchResult) async {
-        let date = LifeLogDateKey.date(from: result.day) ?? result.occurredAt
-        let prefix = "\(result.kind.rawValue)-"
-        let recordID = result.id.hasPrefix(prefix) ? String(result.id.dropFirst(prefix.count)) : result.id
-        switch result.kind {
-        case .utterance:
-            await navigateToSource(date: date, timelineItemID: "u-\(recordID)")
-        case .dictation:
-            await navigateToSource(date: date, timelineItemID: "d-\(recordID)")
-        case .memo:
-            await navigateToSource(date: date, timelineItemID: "m-\(recordID)")
-        }
+        await navigateToSource(date: LifeLogDateKey.date(from: result.day) ?? result.occurredAt, timelineItemID: result.timelineItemID)
     }
 
     public func jumpToTime(_ date: Date) async {
@@ -912,6 +902,10 @@ public final class LifeLogCoordinator {
 
     public func showEvent(id eventID: String, day: String) async {
         await navigateToSource(date: LifeLogDateKey.date(from: day) ?? Date(), timelineItemID: EventOccurrence(eventID: eventID, day: day).timelineItemID)
+    }
+
+    public func showDigest(day: String) async {
+        await navigateToSource(date: LifeLogDateKey.date(from: day) ?? Date(), timelineItemID: GeneratedNoteScope.digestTimelineItemID)
     }
 
     public func showUtterance(id utteranceID: String, day: String) async {

@@ -25,7 +25,7 @@ Data sent to a cloud API is subject to the terms and the privacy policy of that 
 
 Life Log AI is off by default. While it is off, Lore sends no Life Log text to any LLM or service.
 
-When the user turns it on in Settings > Life Log AI, Lore generates notes for calendar events with the provider chosen there. The choice is separate from dictation formatting.
+When the user turns it on in Settings > Life Log AI, Lore generates notes for calendar events and a daily digest with the provider chosen there. The choice is separate from dictation formatting.
 
 - With Apple Foundation Models, the text is processed on this Mac. With Ollama or LM Studio, it goes to the fixed localhost address of that server (`localhost:11434` or `localhost:1234`) and does not leave this Mac.
 - With OpenAI, Claude, Gemini, or Groq, the text goes to that service's API, authenticated with the API key stored for it in the Keychain. Lore sends nothing to a cloud provider until the user confirms a dialog that names it.
@@ -37,11 +37,19 @@ For the notes of one calendar event, a request contains exactly these fields:
 - The event start and end time
 - For each Life Log utterance and memo inside the event's time range: its time, its kind (utterance or memo), and its text
 
-Recorded audio, the calendar name, attendees, text outside the event's time range, other days, dictation history, information about the frontmost app, and API keys are never sent. A calendar or a single event can be marked "do not send to AI". Text inside the time range of an excluded event, or of an event in an excluded calendar, is never sent, even when another event overlaps it.
+For the daily digest of one day, a request contains exactly these fields:
 
-Requests are made only when an event ends or when the user asks for notes, never continuously. Settings shows how many requests Lore made today. Data sent to a cloud API is subject to the terms and the privacy policy of that service.
+- The fixed instructions that ask for a short summary, decisions, action items, and things left open
+- The date
+- For each event of that day: its title, start time, and end time
+- The items of the event notes that Lore already generated for that day
+- For each Life Log utterance and memo of that day: its time, its kind (utterance or memo), and its text
 
-Generated notes are stored in the database on this Mac with the provider, the model, the time, and the identifiers of their source utterances and memos. They are not synced between Macs. They are deleted individually, by "Delete Life Log", and by "Reset Lore…".
+Recorded audio, the calendar name, attendees, text outside the event's time range (for event notes) or outside the day (for a digest), other days, dictation history, information about the frontmost app, and API keys are never sent. A calendar or a single event can be marked "do not send to AI". Text inside the time range of an excluded event, or of an event in an excluded calendar, is never sent, even when another event overlaps it. The title and notes of such an event are not part of a digest.
+
+Requests are made only when an event ends, once a day at the digest time (or at the next launch or wake for yesterday when that time was missed), or when the user asks, never continuously. When a day has more text than the provider accepts, Lore sends less, never more, and the digest says how many records were left out. Settings shows how many requests Lore made today. Data sent to a cloud API is subject to the terms and the privacy policy of that service.
+
+Generated notes and digests are stored in the database on this Mac with the provider, the model, the time, the identifiers of their source utterances and memos, and a search index of their text. They are not synced between Macs. They are deleted individually, by "Delete Life Log", and by "Reset Lore…".
 
 ## AI clients
 
