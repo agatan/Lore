@@ -27,6 +27,9 @@ jobs:
           key: spm-${{ runner.os }}-${{ hashFiles('Package.resolved') }}
           restore-keys: spm-${{ runner.os }}-
 
+      - name: Check changelog fragments
+        run: python3 Scripts/changelog.py check
+
       - name: Build
         run: swift build --product Lore
 
