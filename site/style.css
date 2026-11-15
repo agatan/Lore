@@ -160,6 +160,7 @@ h2 { margin: 0; font-size: clamp(30px, 4.4vw, 46px); line-height: 1.15; letter-s
 .card .shot img { max-height: 300px; width: auto; border-radius: var(--radius-m); }
 
 .wide { margin-top: 56px; }
+.strip { margin-top: 28px; }
 
 /* Hand off to AI */
 .code {
