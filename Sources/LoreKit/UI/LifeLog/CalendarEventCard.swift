@@ -28,6 +28,8 @@ struct CalendarEventCard: View {
     /// Shows the event in the inspector. Only the main window passes it.
     var onSelect: (() -> Void)?
     var isSelected = false
+    /// "Join" for the meeting to join next. Only the event pinned in the mini window passes it.
+    var join: (() -> Void)?
 
     struct AI {
         var notes: AnyView
@@ -64,6 +66,10 @@ struct CalendarEventCard: View {
                     if recording?.exclusions.excludes(event) == true {
                         tag("記録しない", color: LoreTheme.recording)
                             .accessibilityIdentifier("life-log.event-not-recorded-\(event.id)")
+                    }
+                    if let join {
+                        Spacer(minLength: 0)
+                        MeetingJoinButton(accessibilityIdentifier: "life-log-mini.current-event.join", action: join)
                     }
                 }
                 detail
@@ -189,18 +195,36 @@ struct CalendarEventCard: View {
     }
 }
 
-/// 現在進行中の予定をscroll領域の外に置き、main / miniで同じ時刻判定を使う。
+/// The event in progress and the meeting to join next, pinned outside the mini window's scroll area.
+/// It redraws only when an event starts or ends or the countdown changes.
 struct CurrentCalendarEventStrip: View {
     /// Today's events. The strip never follows the main window's selected day.
     var events: [CalendarEventSnapshot]
+    var meetings: UpcomingMeetings
     var recording: (CalendarEventSnapshot) -> CalendarEventCard.Recording?
     var lastTime: (CalendarEventSnapshot) -> CalendarEventCard.LastTime?
+    var join: (JoinableMeeting) -> Void
 
     var body: some View {
-        TimelineView(.periodic(from: .now, by: 30)) { context in
-            if let event = events.timedEventInProgress(at: context.date) {
-                CalendarEventCard(event: event, isCurrent: true, compact: true, recording: recording(event), lastTime: lastTime(event))
+        UpcomingMeetingsTimeline(meetings: meetings, extraBoundaries: events.flatMap { [$0.startsAt, $0.endsAt] }) { now, entries in
+            let current = events.timedEventInProgress(at: now)
+            let next = entries.first
+            let nextIsCurrent = next.map { $0.meeting.event.id == current?.id && $0.meeting.event.startsAt == current?.startsAt } ?? false
+            VStack(spacing: 0) {
+                if let next, !nextIsCurrent {
+                    MeetingJoinRow(entry: next, accessibilityPrefix: "life-log-mini.meeting") { join(next.meeting) }
+                        .padding(.leading, 16)
+                        .padding(.trailing, 12)
+                        .padding(.vertical, 6)
+                }
+                if let current {
+                    CalendarEventCard(
+                        event: current, isCurrent: true, compact: true,
+                        recording: recording(current), lastTime: lastTime(current),
+                        join: nextIsCurrent ? next.map { entry in { join(entry.meeting) } } : nil
+                    )
                     .padding(.bottom, 6)
+                }
             }
         }
     }

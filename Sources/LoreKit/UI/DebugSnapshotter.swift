@@ -47,6 +47,10 @@ enum DebugSnapshotter {
                 try await captureEventDetails(env: env, into: directory)
                 exit(0)
             }
+            if ProcessInfo.processInfo.arguments.contains("--lore-snapshot-meeting-join") {
+                try await captureMeetingJoin(env: env, presenter: presenter, into: directory)
+                exit(0)
+            }
             try await capture(LoreWindow.main, as: "main-life-log", into: directory)
             if AppEnvironment.forcesOnboardingForScreenshot {
                 try await captureOnboarding(env: env, into: directory)
@@ -188,6 +192,38 @@ enum DebugSnapshotter {
         await settle(1.5)
         try await capture(LoreWindow.main, as: "main-after-jump", into: directory)
         try await capture(LoreWindow.lifeLogMini, as: "mini-after-jump", into: directory)
+    }
+
+    /// The meeting to join in the mini window and the menu bar panel, and the notification switch.
+    /// Needs `--lore-demo-meeting-soon`; with `--lore-demo-recurring-now` the two meetings overlap.
+    private static func captureMeetingJoin(env: AppEnvironment, presenter: LoreWindowPresenter, into directory: URL) async throws {
+        let deadline = Date().addingTimeInterval(5)
+        while env.upcomingMeetings.entries(at: Date()).isEmpty, Date() < deadline { await settle(0.2) }
+        guard let next = env.upcomingMeetings.entries(at: Date()).first else {
+            throw CocoaError(.fileWriteUnknown, userInfo: [NSLocalizedDescriptionKey: "--lore-demo-meeting-soon の会議がありません"])
+        }
+        presenter.toggleLifeLogMini()
+        await settle(1.5)
+        try await capture(LoreWindow.lifeLogMini, as: "mini-meeting-join", into: directory)
+        // `LoreApp` gives the real panel the display language; a hosted copy needs it too.
+        try await captureHosted(
+            MenuBarPanel(env: env)
+                .environment(\.locale, env.settings.applicationLanguage.resolvedLocale())
+                .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+                .padding(40)
+                .background(SnapshotWallpaper()),
+            as: "menu-panel-meeting-join",
+            into: directory
+        )
+        let notified = env.settings.notifiesBeforeMeetings
+        defer { env.setNotifiesBeforeMeetings(notified) }
+        for enabled in [false, true] {
+            env.setNotifiesBeforeMeetings(enabled)
+            presenter.showSettings(.calendar)
+            await settle(1)
+            try await capture(LoreWindow.settings, as: "settings-calendar-notification-\(enabled ? "on" : "off")", into: directory)
+        }
+        env.joinMeeting(next.meeting)
     }
 
     /// HUDの各段階を、壁紙を模した背景の上に置いて撮る。Glassは同じwindow内の背景を透かす。

@@ -122,6 +122,14 @@ enum ScreenshotDemoData {
         if ProcessInfo.processInfo.arguments.contains("--lore-demo-recurring-now") {
             try await seedRecurringEventInProgress(database: database, now: now, calendar: calendar, copy: copy)
         }
+        if ProcessInfo.processInfo.arguments.contains("--lore-demo-meeting-soon") {
+            // Starts a little over a minute after launch, so a recording sees "in 2 min", "in 1 min", and "Now".
+            let start = now.addingTimeInterval(meetingSoonLeadTime)
+            try await database.lifeLog.save(calendarEvents: [
+                CalendarEventSnapshot(id: meetingSoonID, title: copy.meetingSoon, startsAt: start, endsAt: start.addingTimeInterval(30 * 60),
+                                      calendarTitle: copy.calendar, participationStatus: .accepted),
+            ])
+        }
 
         // 月間カレンダーの密度が自然に見えるよう、過去数日に匿名の活動量だけを作る。
         for (index, offset) in [-2, -4, -7, -9, -13].enumerated() {
@@ -131,6 +139,10 @@ enum ScreenshotDemoData {
             try await database.lifeLog.save(utterance: LifeLogUtterance(id: "demo-past-utterance-\(index)", startedAt: startedAt, endedAt: startedAt.addingTimeInterval(30), text: copy.pastUtterance, audioChunkID: chunk.id))
         }
     }
+
+    static let meetingSoonID = "demo-event-meeting-soon"
+    static let meetingSoonLeadTime: TimeInterval = 75
+    static let meetingSoonLink = "https://example.zoom.us/j/85550100123?pwd=demo-soon"
 
     /// A weekly 1:1 in progress now, with last week's occurrence recorded and noted, for the "Last time" row.
     /// Behind its own flag so LP media, which do not control the clock, keep their layout.
@@ -207,6 +219,9 @@ struct DemoCalendarEventDetails: CalendarEventDetailsReading {
             return details(2, attendees: [person("Ren Kato", .accepted, .chair), me, person("Mika Sato", .accepted, .required), person("Sora Ito", .pending, .required)])
         case "demo-event-weekly":
             return details(3, attendees: [mika, me])
+        case ScreenshotDemoData.meetingSoonID:
+            return CalendarEventDetails(eventID: eventID, startsAt: startsAt, location: ScreenshotDemoData.meetingSoonLink,
+                                        organizer: mika, attendees: [mika, me])
         default:
             return nil
         }
@@ -248,6 +263,8 @@ struct DemoCopy {
     /// Descriptions of the three demo events and the weekly 1:1, each with a different join link.
     var eventDescriptions: [String]
     var room: String
+    /// The meeting that `--lore-demo-meeting-soon` starts a minute after launch.
+    var meetingSoon: String
 
     static var current: DemoCopy {
         let arguments = ProcessInfo.processInfo.arguments
@@ -308,7 +325,8 @@ struct DemoCopy {
             "次のリリースの範囲を決めます。\n\nMicrosoft Teams 会議\n参加: https://teams.microsoft.com/l/meetup-join/19%3ameeting_demo%40thread.v2/0",
             "今週の進捗と困っていること。\n\nWebex で参加: https://example.webex.com/meet/mika",
         ],
-        room: "会議室 4A"
+        room: "会議室 4A",
+        meetingSoon: "デザイン同期"
     )
 
     static let english = DemoCopy(
@@ -358,7 +376,8 @@ struct DemoCopy {
             "Decide the scope of the next release.\n\nMicrosoft Teams meeting\nJoin: https://teams.microsoft.com/l/meetup-join/19%3ameeting_demo%40thread.v2/0",
             "Progress this week and anything blocking you.\n\nJoin with Webex: https://example.webex.com/meet/mika",
         ],
-        room: "Room 4A"
+        room: "Room 4A",
+        meetingSoon: "Design Sync"
     )
 
     static let chinese = DemoCopy(
@@ -408,7 +427,8 @@ struct DemoCopy {
             "确定下一个版本的范围。\n\nMicrosoft Teams 会议\n加入: https://teams.microsoft.com/l/meetup-join/19%3ameeting_demo%40thread.v2/0",
             "本周进展和遇到的困难。\n\n通过 Webex 加入: https://example.webex.com/meet/mika",
         ],
-        room: "4A 会议室"
+        room: "4A 会议室",
+        meetingSoon: "设计同步"
     )
 }
 #endif

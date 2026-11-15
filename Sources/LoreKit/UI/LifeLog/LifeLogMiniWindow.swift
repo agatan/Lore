@@ -10,8 +10,10 @@ struct LifeLogMiniWindow: View {
         VStack(spacing: 0) {
             CurrentCalendarEventStrip(
                 events: env.lifeLog.today.calendarEvents,
+                meetings: env.upcomingMeetings,
                 recording: env.eventRecording,
-                lastTime: { env.eventLastTime($0, in: env.lifeLog.today) }
+                lastTime: { env.eventLastTime($0, in: env.lifeLog.today) },
+                join: env.joinMeeting
             )
 
             ScrollViewReader { proxy in

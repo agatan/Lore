@@ -696,3 +696,13 @@
 "未回答" = "No Response";
 "続きを表示" = "Show More";
 "表示を減らす" = "Show Less";
+
+/* Joining meetings */
+"%lld分後" = "in %lld min";
+"会議のリンクを開く" = "Open the meeting link";
+"会議のリンクを開けませんでした" = "Could not open the meeting link";
+"1分後に始まります" = "Starts in 1 minute";
+"会議" = "Meetings";
+"会議の1分前に通知" = "Notify 1 Minute Before Meetings";
+"参加用のリンクがある予定の1分前に、「参加」ボタン付きの通知を出します" = "One minute before an event with a join link starts, show a notification with a Join button";
+"参加用のリンクがある予定は、始まる10分前からミニウィンドウとメニューバーに「参加」ボタンを表示します。" = "For an event with a join link, the mini window and the menu bar show a Join button from 10 minutes before it starts.";

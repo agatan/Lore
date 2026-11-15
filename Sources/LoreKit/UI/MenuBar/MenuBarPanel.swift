@@ -14,6 +14,7 @@ struct MenuBarPanel: View {
     var body: some View {
         VStack(spacing: 10) {
             header
+            meetingsCard
             lifeLogCard
             dictationCard
             if !notices.isEmpty { noticeArea }
@@ -38,6 +39,31 @@ struct MenuBarPanel: View {
         }
         .padding(.horizontal, 4)
         .padding(.top, 2)
+    }
+
+    // MARK: 会議
+
+    /// Every offered meeting, so overlapping ones stay reachable. Absent when there is none.
+    private var meetingsCard: some View {
+        UpcomingMeetingsTimeline(meetings: env.upcomingMeetings) { _, entries in
+            if !entries.isEmpty {
+                VStack(alignment: .leading, spacing: 10) {
+                    Text("会議")
+                        .font(LoreTheme.sectionFont)
+                        .foregroundStyle(.secondary)
+                    ForEach(entries) { entry in
+                        MeetingJoinRow(entry: entry, accessibilityPrefix: "menu.meeting-\(entry.meeting.event.id)") {
+                            dismiss()
+                            env.joinMeeting(entry.meeting)
+                        }
+                    }
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.horizontal, 14)
+                .padding(.vertical, 12)
+                .menuCardSurface()
+            }
+        }
     }
 
     // MARK: ライフログ
@@ -261,11 +287,17 @@ private struct MenuCard<Content: View, Footer: View>: View {
         .padding(.horizontal, 14)
         .padding(.top, 12)
         .padding(.bottom, 6)
-        .background(Color.primary.opacity(0.045), in: RoundedRectangle(cornerRadius: LoreTheme.panelCornerRadius, style: .continuous))
-        .overlay {
-            RoundedRectangle(cornerRadius: LoreTheme.panelCornerRadius, style: .continuous)
-                .strokeBorder(Color.primary.opacity(0.06), lineWidth: 1)
-        }
+        .menuCardSurface()
+    }
+}
+
+private extension View {
+    func menuCardSurface() -> some View {
+        background(Color.primary.opacity(0.045), in: RoundedRectangle(cornerRadius: LoreTheme.panelCornerRadius, style: .continuous))
+            .overlay {
+                RoundedRectangle(cornerRadius: LoreTheme.panelCornerRadius, style: .continuous)
+                    .strokeBorder(Color.primary.opacity(0.06), lineWidth: 1)
+            }
     }
 }
 

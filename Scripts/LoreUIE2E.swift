@@ -43,6 +43,16 @@ private struct AXDriver {
         }
     }
 
+    func pressMenuItem(title: String) throws {
+        let item = try waitFor("menu item=\(title)", timeout: 8) { element in
+            attribute(kAXRoleAttribute as String, of: element) == kAXMenuItemRole as String
+                && attribute(kAXTitleAttribute as String, of: element) == title
+        }
+        guard AXUIElementPerformAction(item, kAXPressAction as CFString) == .success else {
+            throw UIE2EError.action("menuを押せませんでした: \(title)")
+        }
+    }
+
     func setValue(_ value: String, identifier: String) throws {
         let element = try waitFor(identifier: identifier)
         guard AXUIElementSetAttributeValue(
@@ -60,6 +70,21 @@ private struct AXDriver {
             let value: String? = attribute(kAXValueAttribute as String, of: element)
             return title == text || value == text
         }
+    }
+
+    /// The accessibility label, which SwiftUI reports as the description.
+    func label(identifier: String) throws -> String? {
+        let element = try waitFor(identifier: identifier)
+        return attribute(kAXDescriptionAttribute as String, of: element)
+    }
+
+    /// A switch reports its state as a number.
+    func isOn(identifier: String) throws -> Bool {
+        let element = try waitFor(identifier: identifier)
+        guard let value: NSNumber = attribute(kAXValueAttribute as String, of: element) else {
+            throw UIE2EError.missing("value of \(identifier)")
+        }
+        return value.boolValue
     }
 
     func stringValue(identifier: String) throws -> String? {
@@ -180,8 +205,9 @@ private enum LoreUIE2E {
             try await runEventNotesCUJ(appURL: appURL)
             try await runDailyDigestCUJ(appURL: appURL)
             try await runMorningDigestCUJ(appURL: appURL)
+            try await runJoinMeetingCUJ(appURL: appURL)
             terminateTestApp()
-            print("✓ UI E2E: 7 CUJs passed")
+            print("✓ UI E2E: 8 CUJs passed")
         } catch {
             fputs("✗ UI E2E: \(error.localizedDescription)\n", stderr)
             terminateTestApp()
@@ -399,6 +425,62 @@ private enum LoreUIE2E {
             throw UIE2EError.assertion("昨日のまとめが二度目の表示でも出ています")
         }
         terminateTestApp()
+    }
+
+    @MainActor
+    private static func runJoinMeetingCUJ(appURL: URL) async throws {
+        print("CUJ 8: ミニウィンドウで次の会議の参加を押すと、そのリンクだけが開き、録音状態は変わらない")
+        let launchedAt = Date()
+        var app = try await launch(appURL, arguments: ["--lore-screenshot-demo", "--lore-demo-meeting-soon", "--lore-demo-recurring-now"])
+        var ui = AXDriver(pid: app.processIdentifier)
+        _ = try ui.waitFor(identifier: "life-log.capture-toggle")
+        try ui.pressMenuItem(title: "ライフログ ミニウィンドウ")
+        try ui.waitFor(text: "デザイン同期")
+        let countdown = try ui.waitForString(identifier: "life-log-mini.meeting.countdown") { $0.hasSuffix("分後") }
+        guard countdown == "2分後" || countdown == "1分後" else {
+            throw UIE2EError.assertion("1分あまり後に始まる会議の残り時間が違います: \(countdown)")
+        }
+        // The weekly 1:1 in progress is not the meeting to join next, so its pinned card has no Join.
+        guard !ui.exists(identifier: "life-log-mini.current-event.join") else {
+            throw UIE2EError.assertion("次に参加する会議ではない進行中の予定に参加ボタンがあります")
+        }
+        let captureBefore = try ui.label(identifier: "life-log-mini.capture-toggle")
+        guard captureBefore == "ライフログ録音を開始" else {
+            throw UIE2EError.assertion("ライフログが停止状態で始まっていません: \(captureBefore ?? "-")")
+        }
+        try ui.press(identifier: "life-log-mini.meeting.join")
+        try await expectLogged("Join opened https://example.zoom.us/j/85550100123?pwd=demo-soon", since: launchedAt)
+        guard try ui.label(identifier: "life-log-mini.capture-toggle") == captureBefore else {
+            throw UIE2EError.assertion("参加を押したらライフログの録音状態が変わりました")
+        }
+
+        app = try await launch(appURL, arguments: ["--lore-screenshot-demo", "--lore-ui-test-settings-calendar"])
+        ui = AXDriver(pid: app.processIdentifier)
+        guard try !ui.isOn(identifier: "calendar.meeting-notification") else {
+            throw UIE2EError.assertion("会議の1分前の通知が既定でオンです")
+        }
+        terminateTestApp()
+    }
+
+    /// The demo build logs a join link instead of opening the user's browser.
+    private static func expectLogged(_ message: String, since start: Date) async throws {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "yyyy-MM-dd HH:mm:ss"
+        let deadline = Date().addingTimeInterval(10)
+        repeat {
+            let process = Process()
+            process.executableURL = URL(fileURLWithPath: "/usr/bin/log")
+            process.arguments = ["show", "--style", "compact", "--start", formatter.string(from: start.addingTimeInterval(-1)),
+                                 "--predicate", "subsystem == \"dev.agatan.Lore\" AND category == \"ui\""]
+            let pipe = Pipe()
+            process.standardOutput = pipe
+            try process.run()
+            let output = String(decoding: pipe.fileHandleForReading.readDataToEndOfFile(), as: UTF8.self)
+            process.waitUntilExit()
+            if output.contains(message) { return }
+            try await Task.sleep(for: .seconds(1))
+        } while Date() < deadline
+        throw UIE2EError.assertion("ログに出ていません: \(message)")
     }
 
     @MainActor

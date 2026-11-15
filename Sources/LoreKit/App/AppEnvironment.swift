@@ -93,6 +93,14 @@ public final class AppEnvironment {
     @ObservationIgnored private var exclusionEvents: [CalendarEventSnapshot] = []
     /// 自動記録と一時停止の判断状態。表示（自動記録中か）にも使うため観測対象にする。
     public private(set) var lifeLogCaptureState = LifeLogCaptureController()
+    /// Today's meetings with a join link, for the mini window and the menu bar panel.
+    public private(set) var upcomingMeetings = UpcomingMeetings()
+    @ObservationIgnored private var meetingSourceEvents: [CalendarEventSnapshot] = []
+    @ObservationIgnored private var meetingsTask: Task<Void, Never>?
+    @ObservationIgnored private var meetingReminderTask: Task<Void, Never>?
+    @ObservationIgnored private var remindedMeetingIDs: Set<String> = []
+    /// Hands a join link to the default browser or meeting app. Returns false when nothing opened it.
+    @ObservationIgnored var openURL: @MainActor (URL) -> Bool = { NSWorkspace.shared.open($0) }
 
     public init() {
         Self.current = self
@@ -138,7 +146,9 @@ public final class AppEnvironment {
         notifications.onOpenDay = { [weak self] day in
             Task { @MainActor [weak self] in await self?.showLifeLogDigest(day: day) }
         }
+        notifications.onJoinMeeting = { [weak self] url in self?.openJoinLink(url) }
         lifeLog.onCalendarRefreshed = { [weak self] in self?.evaluateLifeLogAI() }
+        followTodayEvents()
         wireHotkeys()
         wirePowerNotifications()
         followApplicationLanguage()
@@ -266,6 +276,7 @@ public final class AppEnvironment {
                 self?.applyLifeLogSchedule()
                 await self?.refreshLifeLogExclusionEvents()
                 self?.evaluateLifeLogAI()
+                await self?.refreshTodayCalendarForMeetings()
             }
         })
         // 時計やtime zoneが変わると、次の切替時刻の計算が古くなる。
@@ -276,7 +287,10 @@ public final class AppEnvironment {
             })
         }
         calendarObserver = local.addObserver(forName: .EKEventStoreChanged, object: nil, queue: .main) { [weak self] _ in
-            Task { @MainActor [weak self] in await self?.refreshLifeLogExclusionEvents() }
+            Task { @MainActor [weak self] in
+                await self?.refreshLifeLogExclusionEvents()
+                await self?.refreshTodayCalendarForMeetings()
+            }
         }
     }
 
@@ -328,6 +342,12 @@ public final class AppEnvironment {
                     try await ScreenshotDemoData.seed(database: database)
                     let slow = ProcessInfo.processInfo.arguments.contains("--lore-demo-slow-details")
                     lifeLog.useEventDetails(DemoCalendarEventDetails(copy: .current, delay: slow ? .milliseconds(900) : .zero))
+                }
+                // Demo links are fictional, so the demo logs them instead of opening a browser.
+                openURL = { url in
+                    LoreLog.ui.notice("Join opened \(url.absoluteString, privacy: .public)")
+                    FileHandle.standardError.write(Data("Join opened \(url.absoluteString)\n".utf8))
+                    return true
                 }
             } else {
                 database = try await openDefaultDatabase()
@@ -392,6 +412,7 @@ public final class AppEnvironment {
         }
         await lifeLogAI.configure()
         evaluateLifeLogAI()
+        await refreshTodayCalendarForMeetings()
     }
 
     static var usesScreenshotDemoData: Bool {
@@ -684,6 +705,91 @@ public final class AppEnvironment {
         }
     }
 
+    // MARK: Meetings
+
+    /// Rebuilds the meetings when today's events change. Other reloads of `today`, such as a new utterance, read nothing.
+    private func followTodayEvents() {
+        let events = withObservationTracking {
+            lifeLog.today.calendarEvents
+        } onChange: { [weak self] in
+            Task { @MainActor [weak self] in self?.followTodayEvents() }
+        }
+        guard events != meetingSourceEvents else { return }
+        meetingSourceEvents = events
+        refreshUpcomingMeetings()
+    }
+
+    /// Reads today's events of the shown calendars, so a meeting added later is offered without opening the main window.
+    /// Never in the screenshot demo, whose seeded events must not be replaced by the user's calendar.
+    private func refreshTodayCalendarForMeetings() async {
+        if !Self.usesScreenshotDemoData, database != nil, Permissions.isCalendarGranted {
+            do {
+                try await lifeLog.saveTodayCalendarSnapshot(selectedCalendars: Set(settings.lifeLogCalendarTitles))
+            } catch {
+                LoreLog.persistence.error("Reading today's events failed: \(error.localizedDescription, privacy: .public)")
+            }
+        }
+        // The links and the canceled state live in the details, which change without changing the snapshot.
+        refreshUpcomingMeetings()
+    }
+
+    private func refreshUpcomingMeetings() {
+        let events = meetingSourceEvents
+        meetingsTask?.cancel()
+        meetingsTask = Task { [weak self] in
+            guard let self else { return }
+            let now = Date()
+            var meetings: [JoinableMeeting] = []
+            for event in events where event.endsAt > now {
+                if let meeting = JoinableMeeting(event: event, details: await lifeLog.eventDetails(for: event)) {
+                    meetings.append(meeting)
+                }
+            }
+            guard !Task.isCancelled else { return }
+            upcomingMeetings = UpcomingMeetings(meetings: meetings)
+            scheduleMeetingReminder()
+        }
+    }
+
+    /// Opens only the link. The Life Log state stays as it is.
+    public func joinMeeting(_ meeting: JoinableMeeting) {
+        openJoinLink(meeting.link.url)
+    }
+
+    private func openJoinLink(_ url: URL) {
+        if !openURL(url) {
+            lifeLog.showNotice(String(lore: "会議のリンクを開けませんでした"))
+        }
+    }
+
+    public func setNotifiesBeforeMeetings(_ enabled: Bool) {
+        settings.notifiesBeforeMeetings = enabled
+        if enabled, Self.generatesAutomatically {
+            Task { await notifications.requestAuthorization() }
+        }
+        scheduleMeetingReminder()
+    }
+
+    /// Posts the reminders that are due and sleeps until the next one.
+    private func scheduleMeetingReminder(now: Date = Date()) {
+        meetingReminderTask?.cancel()
+        meetingReminderTask = nil
+        guard settings.notifiesBeforeMeetings, Self.generatesAutomatically else { return }
+        for meeting in upcomingMeetings.remindersDue(at: now, excluding: remindedMeetingIDs) {
+            remindedMeetingIDs.insert(meeting.id)
+            Task {
+                await notifications.postMeetingStartingSoon(
+                    meeting, body: String(lore: "1分後に始まります"), joinTitle: String(lore: "参加")
+                )
+            }
+        }
+        guard let next = upcomingMeetings.nextReminder(after: now) else { return }
+        meetingReminderTask = Task { [weak self] in
+            do { try await Task.sleep(for: .seconds(max(0, next.timeIntervalSinceNow))) } catch { return }
+            self?.scheduleMeetingReminder()
+        }
+    }
+
     /// 自動記録の状態表示。自動記録中は終了時刻、待機中は次の開始時刻を返す。
     public var lifeLogScheduleCaption: LifeLogScheduleCaption? {
         let now = Date()
@@ -731,6 +837,8 @@ public final class AppEnvironment {
         permissionWatcher?.cancel()
         scheduleTask?.cancel()
         exclusionRefreshTask?.cancel()
+        meetingsTask?.cancel()
+        meetingReminderTask?.cancel()
         // 一時停止(`settings.lifeLogPause`)は消さない。次の起動が再開時刻まで引き継ぐ。
         settings.lifeLogCaptureEnabled = false
 
