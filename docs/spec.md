@@ -13,6 +13,7 @@ This document is the source of truth for the behavior that users and automation 
 | Optional permission | Calendar, to show events in the Life Log |
 | Speech recognition | Chosen separately for dictation and voice memos, and for the Life Log: Apple SpeechAnalyzer or a locally downloaded whisper.cpp GGML model. With whisper.cpp, dictation is recognized in one pass after recording stops, and the Life Log is recognized per speech burst after the burst ends |
 | Default text formatting | On-device processing with Apple Foundation Models |
+| Life Log AI | Optional and off by default. Generates notes for calendar events from Life Log text with a provider that the user chooses (section 4.4) |
 | Display language | System Settings, English, Japanese, or Simplified Chinese. The default is System Settings. A change applies to open windows and date formats immediately |
 | Color theme | System Settings, Light, or Dark. The default is System Settings. A change applies to open windows immediately |
 | Storage | SQLite, UserDefaults, Keychain, and Life Log audio files, all on the Mac |
@@ -173,14 +174,39 @@ Lore inserts the raw transcript unchanged when the formatted output is empty, is
 - "Never Record" calendars and "Do Not Record" events hold Life Log capture while they are in progress (section 4.1). An event row that holds capture shows a "Not Recorded" tag.
 - In the monthly activity calendar, the day shown in the timeline is a filled circle: ink, or rose when that day is today. Today, when not selected, has a rose number. Each day has two density dots, one for events and one for speech. The header has previous month, next month, and "Today" buttons.
 
-### 4.4 Handing off to AI
+### 4.4 Life Log AI
 
-Lore does not generate summaries, topics, or to-do items from the Life Log. For review and organizing work, the user passes the daily records to a general-purpose AI of their choice through the CLI or MCP. Lore does not send Life Log utterances, memos, or events to an LLM or to the cloud.
+Life Log AI generates a small set of notes from the Life Log at fixed moments. It is off by default. Until the user turns it on and picks a provider, no Life Log text is sent anywhere. The CLI and MCP still give an external AI client read access (sections 8 and 9).
+
+**Setting and consent.**
+
+- Settings > Life Log AI has the on/off switch, the provider, the model, a statement of what is sent to whom, the excluded calendars, the event notes trigger (automatic or manual), the "notes are ready" notification switch, and the number of requests Lore made today.
+- The providers are the same set as dictation formatting: Apple Foundation Models (on this Mac), Ollama (`localhost:11434`), LM Studio (`localhost:1234`), OpenAI, Claude, Gemini, and Groq. The choice is separate from the formatting provider. An API-key provider uses the key stored for that provider in AI Formatting.
+- Turning Life Log AI on with a cloud provider, or switching to a cloud provider while it is on, asks for an explicit confirmation that names the provider. Without that confirmation, Lore refuses to send to that provider. An on-device or localhost provider needs no confirmation.
+- Recorded audio never leaves the Mac. A request contains only the fixed instructions and, for event notes, the event title, its start and end time, and the time and text of each utterance and memo inside the event's time range. Calendar names, attendees, other days, dictation history, the frontmost app, and API keys are never part of the prompt.
+- Generation runs only at the moments described below, never continuously, and never blocks or changes recording, transcription, or the timeline. A provider failure shows its reason on the event with a "Retry" button.
+
+**Exclusions.**
+
+- In Settings > Life Log AI, a calendar can be marked "do not send to AI". In the timeline, the context menu of an event has "Do Not Send to AI" and "Allow Sending to AI". An excluded event shows "Not sent to AI".
+- An exclusion applies to the event's identifier, so it covers every occurrence of a repeating event.
+- Text inside the time range of an excluded event or of an event in an excluded calendar is never part of any request, even when it also falls inside another event's range. An utterance that overlaps such a range at all is left out. An excluded all-day event covers its whole day. Lore reads the events of excluded calendars from the calendar for this, even when those calendars are not shown in the timeline. Without calendar access, Lore knows only the events already in the snapshot.
+
+**Event notes.**
+
+- When a timed calendar event that overlaps recorded speech ends, Lore generates notes for it from the utterances and memos inside its time range. The notes have three short sections: decisions, action items (with the owner when one was stated), and open questions. Every item names the source utterances or memos it came from, and an item that names none is dropped. A result with no items is stored as "nothing to note".
+- The Life Log records only this Mac's microphone. In an online meeting the notes cover what the user said, not the other participants. The instructions and the UI say so and never claim a full meeting record.
+- The notes appear under the event in the main window timeline, marked "AI-generated" with the provider name. Selecting an item moves the timeline to its first source. The day inspector lists the events of the day that have notes. Actions on the notes: copy as Markdown, regenerate, and delete.
+- A notification says the notes are ready, unless the user turned it off. Clicking it opens the main window on that event.
+- With the manual trigger, Lore never generates on its own. An ended event that has no notes shows "Generate Notes" while Life Log AI is on.
+- Lore generates automatically only when all of these hold: Life Log AI is on, the trigger is automatic, the event is not all-day, it passes the participation filter of the Life Log settings, it ended today (an event that ends at midnight counts for the day it ended on, and an event that ended while the Mac slept or Lore was not running is handled at the next launch or wake on the same day), it has no notes yet, the user did not delete its notes, neither the event nor its calendar is excluded, and its range has at least 120 characters of utterance text. If audio captured before the event ended is not transcribed yet, Lore waits for it and checks again every 2 minutes. Audio whose transcription failed does not hold generation back.
+- Generation is idempotent per event occurrence, identified by the event identifier and the day it starts. Relaunching, waking, or refreshing the calendar never creates a second note. Regenerating replaces the note. Deleting the notes stops automatic generation for that occurrence. "Generate Notes" still works.
+- When the event is edited or moved after generation so that its start or end no longer matches the range the note was made from, or the event no longer exists in the snapshot, the note is marked "Event changed" and offers "Regenerate". When a source utterance or memo is deleted, the note is marked "Sources deleted" and offers "Regenerate". Lore never regenerates a marked note on its own. The calendar snapshot keeps one entry per event identifier, which a repeating event shares across its occurrences. When that entry describes another day's occurrence, Lore cannot check a note's range and does not mark it.
 
 ### 4.5 Search and export
 
 - Search covers Life Log utterances, dictations, and memos with substring matching.
-- A day export selects calendar events, Life Log utterances, dictations, and memos individually. Voice memos are included with memos.
+- A day export selects calendar events, Life Log utterances, dictations, and memos individually. Voice memos are included with memos. AI notes are an optional item, off by default. When selected, the export ends with an "AI-generated notes" section that names the provider and model of each note.
 - An export is human-readable Markdown with the date as the heading. It lists events, utterances, dictations, and memos as readable chronological bullets. It contains no machine-oriented uppercase tags or raw metadata.
 - In an export, consecutive utterances less than 90 seconds apart, with no other item between them, are merged into one paragraph with a time range.
 - The export sheet treats the data at the time it opened as a snapshot and builds the preview off the UI thread. While it prepares, it shows progress and does not block selection changes, closing the sheet, or other voice processing. The preview shows the first 4,000 characters. The export contains everything.
@@ -200,7 +226,7 @@ The color theme is "System Settings", Light, or Dark, and the choice persists ac
 | Main window | Opens on a normal launch as the frontmost key window at 1680×960 pt (minimum 1080×680). Three columns: full-height sidebar (navigation, calendar), timeline, and inspector. Shows today's Life Log at the latest position. Hosts onboarding, the Life Log with the floating bar for typed and voice memos and recording control, and the dictation history (list and detail). Inspector toggle, search, and export are in the window toolbar. The history detail is a readable centered column |
 | Mini window | Life Log state, today's timeline, and typed and voice memos. Once opened it stays in front of other apps, desktop Spaces, and full-screen Spaces until closed. Recording control is in the floating bar at the bottom. The whole window uses a translucent material |
 | Settings: General, Privacy | General has the display language, the color theme, launch at login, and permissions. Privacy has the data folder, the storage used on this Mac, and deletion |
-| Settings: Life Log, Calendar | Life Log has the recording, mini window, and voice memo hotkeys, scheduled recording days and time window, input device, speech recognition engine, recognition language, whisper.cpp model, and audio retention. Calendar has calendar selection, the participation filter, "Refresh Events", and the "Never Record" calendars |
+| Settings: Life Log, Calendar, Life Log AI | Life Log has the recording, mini window, and voice memo hotkeys, scheduled recording days and time window, input device, speech recognition engine, recognition language, whisper.cpp model, and audio retention. Calendar has calendar selection, the participation filter, "Refresh Events", and the "Never Record" calendars. Life Log AI is described in section 4.4 |
 | Settings: Dictation, AI Formatting, Modes, Vocabulary | Dictation has the hotkey and hold duration, speech recognition engine and whisper.cpp model, display and sounds, and history retention. AI Formatting has the backend, model, API key, connection check, and wait time. Modes has the common rules and modes. Vocabulary has the entries |
 | Settings: Sync, Integrations | Sync is described in section 6.1. Integrations has the MCP server path with a copyable registration command for Claude Code, the CLI installer, and the Agent Skill installer |
 
@@ -216,7 +242,7 @@ The CLI installer links `~/.local/bin/lore` to the CLI inside Lore.app, so it ch
 
 | Data | Location | Default retention |
 |---|---|---|
-| History, modes, common rules, vocabulary, Life Log | `~/Library/Application Support/Lore/lore.sqlite` | History is kept forever. The rest follows each setting |
+| History, modes, common rules, vocabulary, Life Log, AI notes, AI exclusions | `~/Library/Application Support/Lore/lore.sqlite` | History is kept forever. AI notes are kept until the user deletes them. The rest follows each setting |
 | Life Log audio | `~/Library/Application Support/Lore/LifeLog/` | Deleted after transcription succeeds. Can be changed to 7 or 30 days |
 | whisper.cpp models | `~/Library/Application Support/Lore/Models/WhisperCpp/` | Until the user deletes one, or resets Lore |
 | General settings (including display language and color theme) | App UserDefaults | Until the user resets Lore |
@@ -232,8 +258,8 @@ The CLI installer links `~/.local/bin/lore` to the CLI inside Lore.app, so it ch
 | Row | What it deletes | What it keeps |
 |---|---|---|
 | Dictation History | Transcripts and formatted text | Vocabulary, Life Log, settings, Keychain |
-| Life Log | Utterances, memos, imported events, and stored audio | Dictation history, settings, Keychain |
-| All Data ("Reset Lore…") | History, Life Log, stored audio, vocabulary, modes, common rules, downloaded whisper.cpp models, partial downloads, legacy WhisperKit models, database backups, and every Keychain item (API keys, the sync key, and keys registered by older versions). Settings return to their defaults, sync is turned off, and the built-in modes and common rules are created again | Files in the sync folder |
+| Life Log | Utterances, memos, imported events, stored audio, AI notes, and AI event exclusions | Dictation history, settings, Keychain |
+| All Data ("Reset Lore…") | History, Life Log, stored audio, AI notes, AI event exclusions, vocabulary, modes, common rules, downloaded whisper.cpp models, partial downloads, legacy WhisperKit models, database backups, and every Keychain item (API keys, the sync key, and keys registered by older versions). Settings return to their defaults, sync is turned off, and the built-in modes and common rules are created again | Files in the sync folder |
 
 - A database from an older version that stored to-do items, daily summaries, topics, or cloud AI token counts is backed up immediately before migration, and then those tables are deleted. Utterances, memos, events, and dictation history are unchanged. API keys that an older version registered for the Life Log are never read and are removed from the Keychain by "Reset Lore…".
 
@@ -241,7 +267,7 @@ The CLI installer links `~/.local/bin/lore` to the CLI inside Lore.app, so it ch
 
 - Settings > Sync lets several Macs use the same text data. It is off by default.
 - Synced: Life Log utterance text, memos (additions, edits, deletions), dictation history (raw text, formatted result, status, mode snapshot, target app name and bundle ID, engine and model, error, timings), and vocabulary.
-- Not synced: recorded audio, API keys, settings, event snapshots (each Mac reads its own calendar), whisper.cpp models, database backups, and modes. An utterance that arrives from another Mac has no stored audio and no event association.
+- Not synced: recorded audio, API keys, settings, event snapshots (each Mac reads its own calendar), AI notes and AI event exclusions, whisper.cpp models, database backups, and modes. Each Mac generates its own AI notes. An utterance that arrives from another Mac has no stored audio and no event association.
 - Lore writes only encrypted change files into `Lore Sync/` inside the folder that the user chose (iCloud Drive, Dropbox, Syncthing, and so on). Lore itself makes no network connection. The folder provider transports the files.
 - Encryption happens on the Mac with AES-GCM and a 256-bit key. The first Mac generates the key and shows it as a "sync code". Other Macs join by entering that code. The key is stored only in each Mac's Keychain, and the folder provider cannot read the contents. A joined Mac can show the sync code again from Settings after a confirmation. If every joined Mac is lost and the sync code was not written down, nobody can read the folder.
 - A wrong sync code is detected with a check file in the folder, and joining is refused. A change file that is unreadable, tampered with, only partly delivered, or in a newer format is not imported. Lore shows the reason in Settings and in the log and retries at the next sync. Later changes from the same Mac wait behind that file to keep their order.
@@ -269,14 +295,16 @@ Day export is available from the CLI and MCP, not from Shortcuts.
 The build product is named `lore-cli`. The installed and linked name is `lore`. On success the CLI writes to standard output. On failure it writes `lore: ...` to stderr and exits with status 1. `lore help`, `--help`, and `-h` print the usage.
 
 ```text
-lore export day [--date YYYY-MM-DD] [--include calendar,speech,voice-input,memos] [--clipboard|--output PATH]
+lore export day [--date YYYY-MM-DD] [--include calendar,speech,voice-input,memos,ai-notes] [--clipboard|--output PATH]
 lore search "query" [--limit N]
 lore days [--from YYYY-MM-DD] [--to YYYY-MM-DD]
 lore range --from YYYY-MM-DD [--to YYYY-MM-DD] [--include calendar,speech,voice-input,memos]
+lore notes [--from YYYY-MM-DD] [--to YYYY-MM-DD]
 ```
 
 - `--clipboard` and `--output` cannot be combined. `--output .` writes the default file name, `Lore-LifeLog-YYYY-MM-DD.md`, into the current directory.
-- An unknown `--include` value is an error.
+- An unknown `--include` value is an error. Without `--include`, `export day` includes calendar, speech, voice-input, and memos. `ai-notes` is included only when named.
+- `notes` prints the same JSON as the MCP tool `life_log_ai_notes`.
 - Search results are tab-separated lines, newest first. The default limit is 100.
 - `days` and `range` print the same JSON as the MCP tools `life_log_days` and `life_log_range`.
 - The CLI never changes the user's records. Like the app, opening the database applies pending migrations with their backup, takes the daily backup, and performs the one-time Koe data migration.
@@ -289,7 +317,8 @@ lore range --from YYYY-MM-DD [--to YYYY-MM-DD] [--include calendar,speech,voice-
 |---|---|---|
 | `life_log_days` | `from?: YYYY-MM-DD`, `to?: YYYY-MM-DD`. `to` defaults to today and `from` defaults to 29 days before `to`. At most 366 days | An array with only the days that have records. Each has `day`, the counts `utterances`, `dictations`, `memos`, and `events`, and `spokenSeconds`, the seconds of utterances that remain in the timeline |
 | `life_log_range` | `from: YYYY-MM-DD`, `to?: YYYY-MM-DD` (inclusive, defaults to the single day `from`, at most 31 days), `include?: [calendar,speech,voice-input,memos]` (defaults to all) | An array of entries in time order. Each has `id`, `kind` (`event`, `utterance`, `dictation`, `memo`), `day`, `start`, optional `end`, and `text`. Events also have `title`, `calendar`, and `allDay` |
-| `life_log_export` | `date?: YYYY-MM-DD`, `include?: [calendar,speech,voice-input,memos]` | Human-readable Markdown |
+| `life_log_export` | `date?: YYYY-MM-DD`, `include?: [calendar,speech,voice-input,memos,ai-notes]` (defaults to all except `ai-notes`) | Human-readable Markdown |
+| `life_log_ai_notes` | `from?: YYYY-MM-DD`, `to?: YYYY-MM-DD`. `to` defaults to today and `from` to `to`. At most 31 days | An array of AI-generated notes in time order. Each has `id`, `generated: true`, `kind` (`event_notes`), `day`, `eventId`, `start`, `end`, `provider`, `model`, `createdAt`, `stale` (an array of `event_changed` and `sources_deleted`), `sourceUtteranceIds`, `sourceMemoIds`, and `sections` (each with `kind`: `decisions`, `action_items`, or `open_questions`, and `items` with `text`, optional `owner`, and `sources`) |
 | `life_log_search` | `query: string`, `limit?: integer` (minimum 1, default 100) | Tab-separated lines of `day`, `kind`, and text, newest first |
 
 - Times are ISO 8601 strings with the local UTC offset. Events follow the participation filter of the Life Log settings. Life Log utterances that overlap a successful dictation are excluded, as on screen and in exports.
@@ -315,7 +344,7 @@ lore range --from YYYY-MM-DD [--to YYYY-MM-DD] [--include calendar,speech,voice-
 8. The public interfaces of the CLI, MCP, and Shortcuts match this document.
 9. The dot of the menu bar "L." icon is rose only while audio is actually being recorded, shows a gold ring while the Life Log reconnects, and has no color while stopped.
 10. A dictation that succeeds during Life Log recording appears exactly once in the timeline, search, and export. For the span of a canceled or failed dictation, the Life Log utterances are not lost.
-11. Life Log utterances, memos, and events are not sent from Lore to an LLM or the cloud, and no summaries, topics, or to-do items are generated.
+11. With Life Log AI off, no Life Log text is sent to any provider. With it on, only the fields listed in section 4.4 are sent, only to the chosen provider, only after the confirmation for a cloud provider, and never for excluded events or calendars. A localhost provider sends nothing beyond localhost.
 12. "Refresh Events" in the Calendar settings updates the snapshot of the currently selected day, the timeline, and the monthly activity.
 13. After an audio configuration change such as a microphone switch, Life Log capture resumes automatically as long as the recording intent remains.
 14. One voice memo creates exactly one memo, and the same content is added neither to the dictation history nor to the Life Log utterances.
@@ -336,3 +365,5 @@ lore range --from YYYY-MM-DD [--to YYYY-MM-DD] [--include calendar,speech,voice-
 29. Two Macs with sync enabled share utterance text, memos, dictation history, and vocabulary by placing only encrypted change files in a folder. A different sync code is refused. An unreadable change file is not imported, its reason is shown, and it is imported when it arrives intact later. Individual deletions reach the other Mac. Deletions by retention period and bulk deletions do not.
 30. A pause stops capture immediately, commits the audio captured so far, and resumes at the stated time without user action, also after sleep and after a quit and relaunch. A scheduled start does not end a pause, and the end of the window of a paused scheduled recording cancels the resume.
 31. While a timed event of a "Never Record" calendar, or a timed event marked "Do Not Record", is in progress, no Life Log audio chunk is created, and recording resumes after the event if the recording intent remains.
+32. Ending an event with enough speech while Life Log AI is on with the automatic trigger produces exactly one note. Relaunching or refreshing the calendar produces no duplicate. An event that ended earlier the same day is handled at the next launch, pending transcription is waited for, and a note whose event moved or whose sources were deleted is marked and offers regeneration.
+33. Deleting the Life Log and "Reset Lore…" remove every AI note and AI event exclusion.

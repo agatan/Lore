@@ -5,7 +5,7 @@ description: Read, search, and export the user's Lore life log (speech, dictatio
 
 # Lore
 
-Use the `lore` CLI as the supported interface to the user's Lore life log. Run `lore help` for the authoritative command list. Lore only records; summaries, task lists, and reviews are your job, built from what these commands return.
+Use the `lore` CLI as the supported interface to the user's Lore life log. Run `lore help` for the authoritative command list. Lore records, and when the user turns on Life Log AI it also writes short notes for calendar events. Other summaries, task lists, and reviews are your job, built from what these commands return.
 
 ## Find days with records
 
@@ -40,6 +40,16 @@ lore export day --date 2026-08-29 --include calendar,speech,voice-input,memos
 ```
 
 Add `--clipboard` to copy, or `--output <path>` to create a file. Confirm the destination before creating or replacing a file.
+
+## AI notes for events
+
+If the user turned on Life Log AI, Lore stores notes for calendar events (decisions, action items, open questions). Read them as JSON for up to 31 days (default: today). Every note has `generated: true`, the `provider` and `model`, and `stale` (non-empty when the event changed or a source was deleted). Each item lists its `sources` (`u-<utterance id>`, `m-<memo id>`). Treat the notes as AI output, not as the user's words, and check them against the sources when it matters. Lore records only the user's microphone, so the notes never cover what other meeting participants said.
+
+```sh
+lore notes --from 2026-08-25 --to 2026-08-29
+```
+
+`lore export day --include ai-notes` adds the notes to a day export. They are left out unless named.
 
 ## Rough memos → another app
 
