@@ -597,6 +597,29 @@ public final class LoreDatabase: Sendable {
             for statement in dependents { try db.execute(sql: statement) }
             try db.execute(sql: "INSERT INTO life_log_utterances_fts(life_log_utterances_fts) VALUES ('rebuild')")
         }
+        migrator.registerMigration("v15-daily-digest") { db in
+            // Search needs the item text, which the JSON content hides behind its keys.
+            try db.execute(sql: """
+                ALTER TABLE generated_notes ADD COLUMN omitted_source_count INTEGER NOT NULL DEFAULT 0;
+                ALTER TABLE generated_notes ADD COLUMN search_text TEXT NOT NULL DEFAULT '';
+                UPDATE generated_notes SET search_text = coalesce((
+                  SELECT group_concat(json_extract(item.value, '$.text'), char(10))
+                  FROM json_each(generated_notes.content) section, json_each(section.value, '$.items') item
+                ), '');
+                CREATE VIRTUAL TABLE generated_notes_fts USING fts5(search_text, content='generated_notes', content_rowid='rowid', tokenize='trigram');
+                CREATE TRIGGER generated_notes_fts_insert AFTER INSERT ON generated_notes BEGIN
+                  INSERT INTO generated_notes_fts(rowid, search_text) VALUES (new.rowid, new.search_text);
+                END;
+                CREATE TRIGGER generated_notes_fts_delete AFTER DELETE ON generated_notes BEGIN
+                  INSERT INTO generated_notes_fts(generated_notes_fts, rowid, search_text) VALUES ('delete', old.rowid, old.search_text);
+                END;
+                CREATE TRIGGER generated_notes_fts_update AFTER UPDATE ON generated_notes BEGIN
+                  INSERT INTO generated_notes_fts(generated_notes_fts, rowid, search_text) VALUES ('delete', old.rowid, old.search_text);
+                  INSERT INTO generated_notes_fts(rowid, search_text) VALUES (new.rowid, new.search_text);
+                END;
+                INSERT INTO generated_notes_fts(generated_notes_fts) VALUES ('rebuild');
+                """)
+        }
 
         return migrator
     }

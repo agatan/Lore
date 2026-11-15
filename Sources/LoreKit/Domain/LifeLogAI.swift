@@ -1,7 +1,7 @@
 import Foundation
 
-/// When Lore generates event notes on its own.
-public enum EventNotesTriggerMode: String, Codable, Sendable, CaseIterable, Identifiable {
+/// When Lore generates event notes or the daily digest on its own.
+public enum GenerationTriggerMode: String, Codable, Sendable, CaseIterable, Identifiable {
     case automatic
     case manual
 
@@ -16,8 +16,12 @@ public struct LifeLogAISettings: Codable, Sendable, Equatable {
     public var model: String = FormattingBackend.onDevice.defaultModel
     public var confirmedCloudBackend: FormattingBackend?
     public var excludedCalendars: [String] = []
-    public var eventNotesTrigger: EventNotesTriggerMode = .automatic
+    public var eventNotesTrigger: GenerationTriggerMode = .automatic
     public var notifiesWhenEventNotesReady = true
+    public var dailyDigestTrigger: GenerationTriggerMode = .automatic
+    /// Minutes after midnight. Used on days without a scheduled recording window.
+    public var dailyDigestMinute = 18 * 60
+    public var notifiesWhenDailyDigestReady = true
 
     public init() {}
 
@@ -29,8 +33,11 @@ public struct LifeLogAISettings: Codable, Sendable, Equatable {
         model = try container.decodeIfPresent(String.self, forKey: .model) ?? backend.defaultModel
         confirmedCloudBackend = (try? container.decodeIfPresent(FormattingBackend.self, forKey: .confirmedCloudBackend)).flatMap { $0 }
         excludedCalendars = try container.decodeIfPresent([String].self, forKey: .excludedCalendars) ?? []
-        eventNotesTrigger = (try? container.decodeIfPresent(EventNotesTriggerMode.self, forKey: .eventNotesTrigger)).flatMap { $0 } ?? fallback.eventNotesTrigger
+        eventNotesTrigger = (try? container.decodeIfPresent(GenerationTriggerMode.self, forKey: .eventNotesTrigger)).flatMap { $0 } ?? fallback.eventNotesTrigger
         notifiesWhenEventNotesReady = try container.decodeIfPresent(Bool.self, forKey: .notifiesWhenEventNotesReady) ?? fallback.notifiesWhenEventNotesReady
+        dailyDigestTrigger = (try? container.decodeIfPresent(GenerationTriggerMode.self, forKey: .dailyDigestTrigger)).flatMap { $0 } ?? fallback.dailyDigestTrigger
+        dailyDigestMinute = min(max(try container.decodeIfPresent(Int.self, forKey: .dailyDigestMinute) ?? fallback.dailyDigestMinute, 0), 24 * 60 - 1)
+        notifiesWhenDailyDigestReady = try container.decodeIfPresent(Bool.self, forKey: .notifiesWhenDailyDigestReady) ?? fallback.notifiesWhenDailyDigestReady
     }
 
     public enum SendPermission: Equatable, Sendable {
@@ -50,6 +57,18 @@ public struct LifeLogAISettings: Codable, Sendable, Equatable {
 
     public func excludes(_ event: CalendarEventSnapshot, excludedEventIDs: Set<String>) -> Bool {
         excludedEventIDs.contains(event.id) || excludedCalendars.contains(event.calendarTitle)
+    }
+
+    /// Ranges whose text never joins a request. Snapshots cover only the calendars shown in the timeline,
+    /// so the caller passes the events of excluded calendars read straight from the calendar. An all-day
+    /// exclusion covers its whole span.
+    public func excludedRanges(
+        in day: LifeLogDay,
+        excludedEventIDs: Set<String>,
+        excludedCalendarEvents: [CalendarEventSnapshot]
+    ) -> [Range<Date>] {
+        (day.calendarEvents.filter { excludes($0, excludedEventIDs: excludedEventIDs) } + excludedCalendarEvents)
+            .map { $0.startsAt..<$0.endsAt }
     }
 }
 
@@ -73,28 +92,44 @@ public struct EventOccurrence: Hashable, Codable, Sendable {
 
 public enum GeneratedNoteKind: String, Codable, Sendable {
     case eventNotes = "event_notes"
+    case dailyDigest = "daily_digest"
 }
 
 public enum GeneratedNoteScope: Hashable, Sendable {
     case event(EventOccurrence)
+    /// A day key (`yyyy-MM-dd`).
+    case day(String)
 
     public var key: String {
         switch self {
         case .event(let occurrence): "event:\(occurrence.eventID)@\(occurrence.day)"
+        case .day(let day): "day:\(day)"
         }
     }
 
     public var day: String {
         switch self {
         case .event(let occurrence): occurrence.day
+        case .day(let day): day
         }
     }
 
     public var eventID: String? {
         switch self {
         case .event(let occurrence): occurrence.eventID
+        case .day: nil
         }
     }
+
+    /// Where the note sits in the main window timeline.
+    public var timelineItemID: String {
+        switch self {
+        case .event(let occurrence): occurrence.timelineItemID
+        case .day: Self.digestTimelineItemID
+        }
+    }
+
+    public static let digestTimelineItemID = "digest"
 }
 
 public struct GeneratedNoteItem: Codable, Sendable, Hashable {
@@ -111,6 +146,8 @@ public struct GeneratedNoteItem: Codable, Sendable, Hashable {
 }
 
 public enum GeneratedNoteSectionKind: String, Codable, Sendable, CaseIterable {
+    /// A few lines about what the day was about. Daily digest only.
+    case summary
     case decisions
     case actionItems = "action_items"
     case openQuestions = "open_questions"
@@ -144,6 +181,8 @@ public struct GeneratedNote: Identifiable, Sendable, Hashable {
     public var createdAt: Date
     public var sourceUtteranceIDs: [String]
     public var sourceMemoIDs: [String]
+    /// Sources that did not fit the provider's input limit and were left out.
+    public var omittedSourceCount: Int
     public var sections: [GeneratedNoteSection]
     /// Computed by the store on every read; never persisted.
     public var staleReasons: Set<GeneratedNoteStaleReason>
@@ -159,6 +198,7 @@ public struct GeneratedNote: Identifiable, Sendable, Hashable {
         createdAt: Date,
         sourceUtteranceIDs: [String],
         sourceMemoIDs: [String],
+        omittedSourceCount: Int = 0,
         sections: [GeneratedNoteSection],
         staleReasons: Set<GeneratedNoteStaleReason> = []
     ) {
@@ -172,11 +212,17 @@ public struct GeneratedNote: Identifiable, Sendable, Hashable {
         self.createdAt = createdAt
         self.sourceUtteranceIDs = sourceUtteranceIDs
         self.sourceMemoIDs = sourceMemoIDs
+        self.omittedSourceCount = omittedSourceCount
         self.sections = sections
         self.staleReasons = staleReasons
     }
 
     public var isEmpty: Bool { sections.allSatisfy(\.items.isEmpty) }
+
+    /// What search matches: every item text, one per line.
+    public var searchText: String {
+        sections.flatMap(\.items).map(\.text).joined(separator: "\n")
+    }
 
     public func items(_ kind: GeneratedNoteSectionKind) -> [GeneratedNoteItem] {
         sections.first { $0.kind == kind }?.items ?? []

@@ -205,6 +205,8 @@ public struct LifeLogDay: Sendable {
         return generatedNotes.first { $0.kind == .eventNotes && $0.scope == scope }
     }
 
+    public var dailyDigest: GeneratedNote? { generatedNotes.first { $0.kind == .dailyDigest } }
+
     public func event(of note: GeneratedNote, calendar: Calendar = .current) -> CalendarEventSnapshot? {
         calendarEvents.first { .event(EventOccurrence($0, calendar: calendar)) == note.scope }
     }
@@ -258,12 +260,15 @@ public struct LifeLogSearchResult: Identifiable, Sendable, Equatable {
         case utterance
         case dictation
         case memo
+        /// Event notes and daily digests written by Life Log AI.
+        case generated
 
         public var displayName: String {
             switch self {
             case .utterance: "発話"
             case .dictation: "音声入力"
             case .memo: "メモ"
+            case .generated: "AIが生成"
             }
         }
     }
@@ -273,13 +278,16 @@ public struct LifeLogSearchResult: Identifiable, Sendable, Equatable {
     public var text: String
     public var occurredAt: Date
     public var day: String
+    /// The item of `day` that selecting the result moves the timeline to.
+    public var timelineItemID: String
 
-    public init(id: String, kind: Kind, text: String, occurredAt: Date, day: String) {
+    public init(id: String, kind: Kind, text: String, occurredAt: Date, day: String, timelineItemID: String) {
         self.id = id
         self.kind = kind
         self.text = text
         self.occurredAt = occurredAt
         self.day = day
+        self.timelineItemID = timelineItemID
     }
 }
 

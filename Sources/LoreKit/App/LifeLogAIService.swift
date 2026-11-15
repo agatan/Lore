@@ -16,8 +16,10 @@ public final class LifeLogAIService {
         /// snapshot holds only the calendars shown in the timeline.
         public var excludedCalendarEvents: @MainActor (DateInterval, Set<String>) async throws -> [CalendarEventSnapshot]
         public var participatingEventsOnly: @MainActor () -> Bool
-        /// Called after a note is stored. `automatic` is true when the trigger made it.
-        public var noteSaved: @MainActor (GeneratedNote, CalendarEventSnapshot, _ automatic: Bool) async -> Void
+        /// The recording schedule. The end of a day's window is that day's digest time.
+        public var lifeLogSchedule: @MainActor () -> LifeLogSchedule
+        /// Called after a note is stored, with its event for event notes. `automatic` is true when the trigger made it.
+        public var noteSaved: @MainActor (GeneratedNote, CalendarEventSnapshot?, _ automatic: Bool) async -> Void
         public var now: @MainActor () -> Date
 
         public init(
@@ -28,7 +30,8 @@ public final class LifeLogAIService {
             refreshTodayCalendar: @escaping @MainActor () async throws -> Void = {},
             excludedCalendarEvents: @escaping @MainActor (DateInterval, Set<String>) async throws -> [CalendarEventSnapshot] = { _, _ in [] },
             participatingEventsOnly: @escaping @MainActor () -> Bool = { true },
-            noteSaved: @escaping @MainActor (GeneratedNote, CalendarEventSnapshot, Bool) async -> Void = { _, _, _ in },
+            lifeLogSchedule: @escaping @MainActor () -> LifeLogSchedule = { LifeLogSchedule() },
+            noteSaved: @escaping @MainActor (GeneratedNote, CalendarEventSnapshot?, Bool) async -> Void = { _, _, _ in },
             now: @escaping @MainActor () -> Date = { Date() }
         ) {
             self.settings = settings
@@ -38,6 +41,7 @@ public final class LifeLogAIService {
             self.refreshTodayCalendar = refreshTodayCalendar
             self.excludedCalendarEvents = excludedCalendarEvents
             self.participatingEventsOnly = participatingEventsOnly
+            self.lifeLogSchedule = lifeLogSchedule
             self.noteSaved = noteSaved
             self.now = now
         }
@@ -50,6 +54,7 @@ public final class LifeLogAIService {
         case eventNotFound
         case excluded
         case nothingToSend
+        case tooLittleSpeech
 
         public var errorDescription: String? {
             switch self {
@@ -59,6 +64,7 @@ public final class LifeLogAIService {
             case .eventNotFound: String(lore: "予定が見つかりません")
             case .excluded: String(lore: "この予定はAIに送らない設定です")
             case .nothingToSend: String(lore: "予定の時間内に送れる発話やメモがありません")
+            case .tooLittleSpeech: String(lore: "まとめを作るには、この日の発話が少なすぎます")
             }
         }
     }
@@ -78,6 +84,7 @@ public final class LifeLogAIService {
     @ObservationIgnored private let dependencies: Dependencies
     @ObservationIgnored private var tasks: [String: Task<GeneratedNote, Error>] = [:]
     @ObservationIgnored private var wakeTask: Task<Void, Never>?
+    @ObservationIgnored private var digestWakeTask: Task<Void, Never>?
     /// An automatic run tries an occurrence once per process. "Retry" in the UI always asks again.
     @ObservationIgnored private var automaticFailures: Set<String> = []
 
@@ -129,9 +136,17 @@ public final class LifeLogAIService {
 
     private func perform(kind: GeneratedNoteKind, scope: GeneratedNoteScope, settings: LifeLogAISettings, automatic: Bool) async throws -> GeneratedNote {
         guard let database = dependencies.database() else { throw GenerationError.databaseUnavailable }
-        guard case .event(let occurrence) = scope, let date = LifeLogDateKey.date(from: occurrence.day) else {
-            throw GenerationError.eventNotFound
+        switch scope {
+        case .event(let occurrence):
+            return try await performEventNotes(occurrence: occurrence, kind: kind, settings: settings, automatic: automatic, database: database)
+        case .day(let day):
+            return try await performDailyDigest(day: day, settings: settings, automatic: automatic, database: database)
         }
+    }
+
+    private func performEventNotes(occurrence: EventOccurrence, kind: GeneratedNoteKind, settings: LifeLogAISettings,
+                                   automatic: Bool, database: LoreDatabase) async throws -> GeneratedNote {
+        guard let date = LifeLogDateKey.date(from: occurrence.day) else { throw GenerationError.eventNotFound }
         let day = try await database.lifeLog.day(date)
         guard let event = day.calendarEvents.first(where: { EventOccurrence($0) == occurrence }) else {
             throw GenerationError.eventNotFound
@@ -149,7 +164,7 @@ public final class LifeLogAIService {
         let output = try await engine.complete(prompt: prompt, timeout: Self.requestTimeout)
         let note = GeneratedNote(
             kind: kind,
-            scope: scope,
+            scope: .event(occurrence),
             rangeStart: event.startsAt,
             rangeEnd: event.endsAt,
             backend: settings.backend,
@@ -157,11 +172,56 @@ public final class LifeLogAIService {
             createdAt: dependencies.now(),
             sourceUtteranceIDs: sent.filter { $0.kind == .utterance }.map(\.recordID),
             sourceMemoIDs: sent.filter { $0.kind == .memo }.map(\.recordID),
+            omittedSourceCount: input.sources.count - sent.count,
             sections: try EventNotesPolicy.parse(output, sent: sent)
         )
         try await database.lifeLog.save(generatedNote: note)
         await dependencies.noteSaved(note, event, automatic)
         return note
+    }
+
+    private func performDailyDigest(day: String, settings: LifeLogAISettings, automatic: Bool, database: LoreDatabase) async throws -> GeneratedNote {
+        guard let date = LifeLogDateKey.date(from: day), let interval = Calendar.current.dateInterval(of: .day, for: date) else {
+            throw GenerationError.nothingToSend
+        }
+        let input = try await digestInput(day: day, date: date, interval: interval, settings: settings, database: database)
+        guard input.spokenCharacters >= DailyDigestPolicy.minimumSpokenCharacters else { throw GenerationError.tooLittleSpeech }
+        let engine = dependencies.engine(settings.backend, settings.model)
+        let (prompt, sent, omitted) = DailyDigestPolicy.prompt(for: input, characterBudget: engine.inputCharacterBudget)
+        guard !sent.isEmpty else { throw GenerationError.nothingToSend }
+        try await countRequest(database: database)
+        let output = try await engine.complete(prompt: prompt, timeout: Self.requestTimeout)
+        let note = GeneratedNote(
+            kind: .dailyDigest,
+            scope: .day(day),
+            rangeStart: interval.start,
+            rangeEnd: interval.end,
+            backend: settings.backend,
+            model: engine.modelName ?? settings.model,
+            createdAt: dependencies.now(),
+            sourceUtteranceIDs: sent.filter { $0.kind == .utterance }.map(\.recordID),
+            sourceMemoIDs: sent.filter { $0.kind == .memo }.map(\.recordID),
+            omittedSourceCount: omitted,
+            sections: try DailyDigestPolicy.parse(output, sent: sent)
+        )
+        try await database.lifeLog.save(generatedNote: note)
+        await dependencies.noteSaved(note, nil, automatic)
+        return note
+    }
+
+    private func digestInput(day: String, date: Date, interval: DateInterval, settings: LifeLogAISettings,
+                             database: LoreDatabase) async throws -> DailyDigestInput {
+        let contents = try await database.lifeLog.day(date)
+        let listed = dependencies.participatingEventsOnly()
+            ? contents.calendarEvents.filter(\.participationStatus.isParticipating)
+            : contents.calendarEvents
+        let excludedCalendarEvents = settings.excludedCalendars.isEmpty ? []
+            : try await dependencies.excludedCalendarEvents(interval, Set(settings.excludedCalendars))
+        return DailyDigestPolicy.input(
+            dayKey: day, day: contents, listedEvents: listed, settings: settings,
+            excludedEventIDs: try await database.lifeLog.aiExcludedEventIDs(),
+            excludedCalendarEvents: excludedCalendarEvents
+        )
     }
 
     private func excludedCalendarEvents(around event: CalendarEventSnapshot, settings: LifeLogAISettings) async throws -> [CalendarEventSnapshot] {
@@ -263,6 +323,93 @@ public final class LifeLogAIService {
             // Drop the reference first, or the evaluation would cancel the task it runs in.
             self?.wakeTask = nil
             await self?.evaluateEventNotes()
+        }
+    }
+
+    /// Decides the digest of yesterday and today and sleeps until the next digest time. Safe to call from
+    /// any trigger source at any time: a day with a digest is never sent again.
+    public func evaluateDailyDigest() async {
+        digestWakeTask?.cancel()
+        digestWakeTask = nil
+        let settings = dependencies.settings()
+        guard settings.sendPermission == .allowed, settings.dailyDigestTrigger == .automatic,
+              let database = dependencies.database() else { return }
+        var nextWake: Date?
+        do {
+            let now = dependencies.now()
+            let calendar = Calendar.current
+            let today = calendar.startOfDay(for: now)
+            let backlog = try await dependencies.oldestUntranscribedAudio()
+            for offset in [-1, 0] {
+                guard let date = calendar.date(byAdding: .day, value: offset, to: today),
+                      let interval = calendar.dateInterval(of: .day, for: date) else { continue }
+                let day = LifeLogDateKey.string(for: date)
+                let scope = GeneratedNoteScope.day(day)
+                guard !automaticFailures.contains(scope.key) else { continue }
+                let digestTime = DailyDigestTrigger.digestTime(for: date, schedule: dependencies.lifeLogSchedule(), minute: settings.dailyDigestMinute)
+                // The day is read only once its digest time has passed.
+                let spoken = digestTime <= now
+                    ? try await digestInput(day: day, date: date, interval: interval, settings: settings, database: database).spokenCharacters
+                    : 0
+                let decision = DailyDigestTrigger.decide(
+                    day: date,
+                    now: now,
+                    digestTime: digestTime,
+                    settings: settings,
+                    hasDigest: try await database.lifeLog.generatedNote(kind: .dailyDigest, scope: scope) != nil,
+                    wasDeleted: try await database.lifeLog.isGeneratedNoteDismissed(kind: .dailyDigest, scope: scope),
+                    spokenCharacters: spoken,
+                    oldestUntranscribedAudio: backlog
+                )
+                switch decision {
+                case .generate:
+                    do {
+                        try await generate(kind: .dailyDigest, scope: scope, automatic: true)
+                    } catch {
+                        automaticFailures.insert(scope.key)
+                        LoreLog.session.error("Daily digest generation failed: \(error.localizedDescription, privacy: .public)")
+                    }
+                case .waitUntil(let date):
+                    nextWake = min(nextWake ?? date, date)
+                case .waitForTranscription:
+                    let date = now.addingTimeInterval(Self.transcriptionRetryInterval)
+                    nextWake = min(nextWake ?? date, date)
+                case .skip:
+                    continue
+                }
+            }
+            // Tomorrow's digest time, so a Mac that stays awake past midnight still makes it.
+            if nextWake == nil, let tomorrow = calendar.date(byAdding: .day, value: 1, to: today) {
+                nextWake = DailyDigestTrigger.digestTime(for: tomorrow, schedule: dependencies.lifeLogSchedule(), minute: settings.dailyDigestMinute)
+            }
+        } catch { report(error) }
+        guard let nextWake else { return }
+        let delay = max(1, nextWake.timeIntervalSince(dependencies.now()))
+        digestWakeTask = Task { [weak self] in
+            do { try await Task.sleep(for: .seconds(delay)) } catch { return }
+            self?.digestWakeTask = nil
+            await self?.evaluateDailyDigest()
+        }
+    }
+
+    // MARK: Morning digest
+
+    static let presentedDigestDayKey = "daily_digest_presented_day"
+
+    /// Yesterday's digest the first time this is asked after it exists, nil every later time. The day is
+    /// recorded before it is returned, so the sheet appears once even if the window closes at once.
+    public func takeMorningDigest() async -> GeneratedNote? {
+        guard let database = dependencies.database(),
+              let yesterday = Calendar.current.date(byAdding: .day, value: -1, to: Calendar.current.startOfDay(for: dependencies.now())) else { return nil }
+        let day = LifeLogDateKey.string(for: yesterday)
+        do {
+            guard try await database.meta.string(forKey: Self.presentedDigestDayKey) != day,
+                  let digest = try await database.lifeLog.generatedNote(kind: .dailyDigest, scope: .day(day)) else { return nil }
+            try await database.meta.setString(day, forKey: Self.presentedDigestDayKey)
+            return digest
+        } catch {
+            report(error)
+            return nil
         }
     }
 

@@ -185,6 +185,7 @@ struct LifeLogSearchSheet: View {
         case .utterance: "waveform"
         case .dictation: "keyboard"
         case .memo: "pencil"
+        case .generated: "sparkles"
         }
     }
 
@@ -193,6 +194,7 @@ struct LifeLogSearchSheet: View {
         case .utterance: .secondary
         case .dictation: LoreTheme.accent
         case .memo: LoreTheme.accent
+        case .generated: LoreTheme.accent
         }
     }
 }

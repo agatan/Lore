@@ -35,6 +35,10 @@ enum DebugSnapshotter {
             let minute = (Calendar.current.component(.hour, from: Date()) + 2) % 24 * 60
             env.updateLifeLogSchedule(LifeLogSchedule(isEnabled: true, startMinute: minute, endMinute: (minute + 9 * 60) % (24 * 60)))
             await settle(3)
+            if ProcessInfo.processInfo.arguments.contains("--lore-snapshot-digest") {
+                try await captureDailyDigest(env: env, presenter: presenter, into: directory)
+                exit(0)
+            }
             if ProcessInfo.processInfo.arguments.contains("--lore-snapshot-mini-today") {
                 try await captureMiniStaysOnToday(env: env, presenter: presenter, into: directory)
                 exit(0)
@@ -118,6 +122,32 @@ enum DebugSnapshotter {
             env.applyPreviewOnboardingDictation(record)
             await settle(1)
             try await capture(LoreWindow.main, as: name, into: directory)
+        }
+    }
+
+    /// The stored demo digest at the top of the day and in the inspector, found by search, in Settings,
+    /// and as the morning sheet (yesterday's digest needs `--lore-demo-morning-digest`).
+    private static func captureDailyDigest(env: AppEnvironment, presenter: LoreWindowPresenter, into directory: URL) async throws {
+        // The window may already hold the morning sheet, which would cover the timeline.
+        let morning = env.morningDigest
+        env.morningDigest = nil
+        env.lifeLog.jumpToTimelineItem(GeneratedNoteScope.digestTimelineItemID)
+        await settle(1.5)
+        try await capture(LoreWindow.main, as: "digest-timeline", into: directory)
+        let query = switch DemoCopy.current.language {
+        case .english: "exporting from a shortcut"
+        case .simplifiedChinese: "用快捷键导出"
+        default: "ショートカットからの書き出し"
+        }
+        let locale = env.settings.applicationLanguage.resolvedLocale()
+        try await captureHosted(LifeLogSearchSheet(env: env, initialQuery: query).background(.background).environment(\.locale, locale),
+                                as: "digest-search", into: directory)
+        presenter.showSettings(.lifeLogAI)
+        await settle(1)
+        try await capture(LoreWindow.settings, as: "digest-settings", into: directory)
+        if let yesterday = morning {
+            try await captureHosted(MorningDigestSheet(env: env, digest: yesterday).background(.background).environment(\.locale, locale),
+                                    as: "digest-morning", into: directory)
         }
     }
 

@@ -9,6 +9,8 @@ struct LifeLogDayInspector: View {
     var date: Date
     var schedule: LifeLogSchedule = .default
     var participatingOnly: Bool = true
+    /// The daily digest in its compact style, when the day has one.
+    var digest: AnyView?
     var onJump: (Date) -> Void
     var onShowEvent: (EventOccurrence) -> Void = { _ in }
 
@@ -26,7 +28,8 @@ struct LifeLogDayInspector: View {
         VStack(alignment: .leading, spacing: 18) {
             summary
             if let meetingLoad { MeetingLoadSection(load: meetingLoad) }
-            if !day.generatedNotes.isEmpty { aiNotes }
+            if let digest { digest }
+            if day.generatedNotes.contains(where: { $0.kind == .eventNotes }) { aiNotes }
             // 過去日で予定も記録もなければ、空の目盛りは何も伝えないので出さない。
             // 今日は現在時刻の線が残りの時間を示すため、空でも出す。
             if isToday || !mapLayout.blocks.isEmpty || !mapLayout.marks.isEmpty {
@@ -53,7 +56,7 @@ struct LifeLogDayInspector: View {
             Label("AIノート", systemImage: "sparkles")
                 .font(LoreTheme.sectionFont)
                 .foregroundStyle(.secondary)
-            ForEach(day.generatedNotes) { note in
+            ForEach(day.generatedNotes.filter { $0.kind == .eventNotes }) { note in
                 let title = day.event(of: note)?.title
                 Button {
                     if case .event(let occurrence) = note.scope { onShowEvent(occurrence) }

@@ -3,21 +3,11 @@ import Foundation
 /// What one event-notes request may contain. Built only from text inside the event range, minus
 /// every range that the user excluded from AI.
 public struct EventNotesInput: Sendable, Equatable {
-    public struct Source: Sendable, Equatable {
-        public enum Kind: String, Sendable { case utterance, memo }
-        public var label: String
-        public var kind: Kind
-        public var timelineID: String
-        public var recordID: String
-        public var at: Date
-        public var text: String
-    }
-
     public var occurrence: EventOccurrence
     public var title: String
     public var start: Date
     public var end: Date
-    public var sources: [Source]
+    public var sources: [GeneratedNoteSource]
 
     public var spokenCharacters: Int {
         sources.filter { $0.kind == .utterance }.reduce(0) { $0 + $1.text.count }
@@ -36,25 +26,14 @@ public enum EventNotesPolicy {
         excludedCalendarEvents: [CalendarEventSnapshot] = [],
         calendar: Calendar = .current
     ) -> EventNotesInput {
-        // Snapshots cover only the calendars shown in the timeline, so the caller passes the events of
-        // excluded calendars read straight from the calendar. An all-day exclusion covers its whole span.
-        let excludedRanges = (day.calendarEvents.filter { settings.excludes($0, excludedEventIDs: excludedEventIDs) } + excludedCalendarEvents)
-            .map { $0.startsAt..<$0.endsAt }
+        let excluded = settings.excludedRanges(in: day, excludedEventIDs: excludedEventIDs, excludedCalendarEvents: excludedCalendarEvents)
         func allowed(_ start: Date, _ end: Date) -> Bool {
-            event.startsAt <= start && start < event.endsAt
-                && !excludedRanges.contains { $0.lowerBound < max(end, start.addingTimeInterval(0.001)) && start < $0.upperBound }
+            event.startsAt <= start && start < event.endsAt && !GeneratedNoteSource.overlaps(start, end, excluded)
         }
-        let utterances = day.utterances.filter { allowed($0.startedAt, $0.endedAt) }
-            .map { (at: $0.startedAt, kind: EventNotesInput.Source.Kind.utterance, timelineID: "u-\($0.id)", id: $0.id, text: $0.text) }
-        let memos = day.memos.filter { allowed($0.createdAt, $0.createdAt) }
-            .map { (at: $0.createdAt, kind: EventNotesInput.Source.Kind.memo, timelineID: "m-\($0.id)", id: $0.id, text: $0.text) }
-        let sources = (utterances + memos)
-            .sorted { $0.at < $1.at }
-            .enumerated()
-            .map { index, value in
-                EventNotesInput.Source(label: "S\(index + 1)", kind: value.kind, timelineID: value.timelineID,
-                                       recordID: value.id, at: value.at, text: value.text)
-            }
+        let sources = GeneratedNoteSource.labeled(
+            day.utterances.filter { allowed($0.startedAt, $0.endedAt) }.map(GeneratedNoteSource.init(utterance:))
+                + day.memos.filter { allowed($0.createdAt, $0.createdAt) }.map(GeneratedNoteSource.init(memo:))
+        )
         return EventNotesInput(
             occurrence: EventOccurrence(event, calendar: calendar),
             title: event.title,
@@ -80,26 +59,19 @@ public enum EventNotesPolicy {
         - Write nothing else.
         """
 
-    /// The prompt and the sources that fit the engine budget. Only those sources count as cited.
+    /// The prompt and the earliest sources that fit the engine budget. Only those sources count as cited.
     public static func prompt(
         for input: EventNotesInput,
         characterBudget: Int,
         timeZone: TimeZone = .current
-    ) -> (prompt: FormattingPrompt, sent: [EventNotesInput.Source]) {
-        let formatter = DateFormatter()
-        formatter.locale = Locale(identifier: "en_US_POSIX")
-        formatter.timeZone = timeZone
-        formatter.dateFormat = "yyyy-MM-dd HH:mm"
-        let clock = DateFormatter()
-        clock.locale = Locale(identifier: "en_US_POSIX")
-        clock.timeZone = timeZone
-        clock.dateFormat = "HH:mm:ss"
+    ) -> (prompt: FormattingPrompt, sent: [GeneratedNoteSource]) {
+        let formatter = GeneratedNoteSource.formatter("yyyy-MM-dd HH:mm", timeZone: timeZone)
         var user = "Event: \(input.title)\nTime: \(formatter.string(from: input.start)) to \(formatter.string(from: input.end))\nSources:\n"
         let budget = max(0, characterBudget - instructions.count - user.count)
         var used = 0
-        var sent: [EventNotesInput.Source] = []
+        var sent: [GeneratedNoteSource] = []
         for source in input.sources {
-            let line = "\(source.label) [\(clock.string(from: source.at))] \(source.kind.rawValue): \(source.text)\n"
+            let line = source.line(timeZone: timeZone)
             guard used + line.count <= budget else { break }
             used += line.count
             user += line
@@ -108,51 +80,12 @@ public enum EventNotesPolicy {
         return (FormattingPrompt(system: instructions, user: user), sent)
     }
 
-    public enum ParseError: LocalizedError, Sendable {
-        case unreadable
-
-        public var errorDescription: String? {
-            String(lore: "AIの応答を読み取れませんでした")
-        }
-    }
-
-    private static var itemPattern: Regex<(Substring, Substring, Substring, Substring?, Substring)> { /^\W*(DECISION|ACTION|QUESTION)\W*\(([^)]*)\)\s*(?:\[([^\]]*)\])?\s*[:：]\s*(.+)$/ }
-
-    /// Reads one item per line. Drops every item without a label that was actually sent, so nothing
-    /// untraceable is stored. An answer with no readable line and no NONE is an error, not "nothing to note".
-    public static func parse(_ output: String, sent: [EventNotesInput.Source]) throws -> [GeneratedNoteSection] {
-        let byLabel = Dictionary(uniqueKeysWithValues: sent.map { ($0.label, $0) })
-        var items: [GeneratedNoteSectionKind: [GeneratedNoteItem]] = [:]
-        var understood = false
-        for raw in output.split(whereSeparator: \.isNewline) {
-            let line = raw.trimmingCharacters(in: .whitespaces)
-            if line.trimmingCharacters(in: .punctuationCharacters).uppercased() == "NONE" { understood = true; continue }
-            guard let match = line.wholeMatch(of: itemPattern) else { continue }
-            understood = true
-            let kind: GeneratedNoteSectionKind = switch match.1 {
-            case "DECISION": .decisions
-            case "ACTION": .actionItems
-            default: .openQuestions
-            }
-            var seen = Set<String>()
-            let sources = match.2.split(whereSeparator: { $0 == "," || $0 == " " || $0 == "、" })
-                .compactMap { byLabel[String($0)]?.timelineID }
-                .filter { seen.insert($0).inserted }
-            let text = String(match.4).trimmingCharacters(in: .whitespaces)
-            guard !sources.isEmpty, !text.isEmpty else { continue }
-            let owner = kind == .actionItems ? match.3.map { String($0).trimmingCharacters(in: .whitespaces) } : nil
-            items[kind, default: []].append(GeneratedNoteItem(
-                text: text,
-                owner: owner.flatMap { $0.isEmpty || ["null", "none", "owner"].contains($0.lowercased()) ? nil : $0 },
-                sources: sources
-            ))
-        }
-        guard understood else { throw ParseError.unreadable }
-        return GeneratedNoteSectionKind.allCases.map { GeneratedNoteSection(kind: $0, items: items[$0] ?? []) }
+    public static func parse(_ output: String, sent: [GeneratedNoteSource]) throws -> [GeneratedNoteSection] {
+        try GeneratedNoteResponse.parse(output, sent: sent, sections: [.decisions, .actionItems, .openQuestions])
     }
 }
 
-public enum EventNotesSkipReason: Equatable, Sendable {
+public enum GenerationSkipReason: Equatable, Sendable {
     case notAllowed
     case manualTrigger
     case allDay
@@ -163,11 +96,11 @@ public enum EventNotesSkipReason: Equatable, Sendable {
     case tooLittleSpeech
 }
 
-public enum EventNotesDecision: Equatable, Sendable {
+public enum GenerationDecision: Equatable, Sendable {
     case generate
     case waitUntil(Date)
     case waitForTranscription
-    case skip(EventNotesSkipReason)
+    case skip(GenerationSkipReason)
 }
 
 /// When an ended event gets notes on its own. Pure, so every trigger source (launch, wake, timer,
@@ -186,7 +119,7 @@ public enum EventNotesTrigger {
         spokenCharacters: Int,
         oldestUntranscribedAudio: Date?,
         calendar: Calendar = .current
-    ) -> EventNotesDecision {
+    ) -> GenerationDecision {
         guard settings.sendPermission == .allowed else { return .skip(.notAllowed) }
         guard settings.eventNotesTrigger == .automatic else { return .skip(.manualTrigger) }
         guard !event.isAllDay else { return .skip(.allDay) }

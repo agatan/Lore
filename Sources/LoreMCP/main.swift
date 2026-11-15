@@ -118,7 +118,7 @@ struct LoreMCP {
         Loreは、利用者の発話(ライフログと音声入力)、メモ、カレンダーの予定を日ごとにMac上へ保存するアプリ。このサーバーは読み取り専用で、記録を書き換えず、ネットワークにも接続しない。
         使い方: まずlife_log_daysで記録がある日を確かめ、life_log_rangeで期間を構造化JSONとして読む(最大31日)。人にそのまま見せるMarkdownはlife_log_export、語句を探すときはlife_log_search。
         要約、TODOの抽出、雑なメモ(kind=memo)の清書や別のメモアプリ・タスク管理への転記は呼び出し側の仕事で、Loreへ書き戻す手段はない。
-        life_log_ai_notesとlife_log_exportのai-notesが返すノートは、LoreのAIが生成したもので、利用者の発言ではない。内容が重要なときは、各項目のsources(u-<発話id>、m-<メモid>)が指す元の発話・メモと照らして確かめる。録音はこのMacのマイクだけなので、オンライン会議の他の参加者の発言はノートにも記録にも含まれない。
+        life_log_ai_notesとlife_log_exportのai-notesが返すノートと1日のまとめ(kind=daily_digest)、life_log_searchの種類generatedの行は、LoreのAIが生成したもので、利用者の発言ではない。内容が重要なときは、各項目のsources(u-<発話id>、m-<メモid>)が指す元の発話・メモと照らして確かめる。録音はこのMacのマイクだけなので、オンライン会議の他の参加者の発言はノートにも記録にも含まれない。
         """
 
     private static let includeSchema: [String: Any] = [
@@ -155,13 +155,13 @@ struct LoreMCP {
                 "include": exportIncludeSchema,
              ]),
         tool("life_log_ai_notes",
-             "LoreのライフログAIが予定ごとに生成したノートをJSON配列で返す。利用者の発言やメモそのものではなく、generated=trueのAI生成物なので、重要な内容は各itemのsources(u-<発話id>、m-<メモid>)が指す元の記録と照らして確かめる。各要素はid、kind(event_notes)、day、eventId、start、end、provider、model、createdAt、stale(event_changed|sources_deletedの配列。空でなければ内容が古い)、sourceUtteranceIds、sourceMemoIds、sections(kind=decisions|action_items|open_questions、itemsはtext、owner(任意)、sources)。録音はこのMacのマイクだけなので、オンライン会議では他の参加者の発言を含まない",
+             "LoreのライフログAIが予定ごとに生成したノートと、1日のまとめをJSON配列で返す。利用者の発言やメモそのものではなく、generated=trueのAI生成物なので、重要な内容は各itemのsources(u-<発話id>、m-<メモid>)が指す元の記録と照らして確かめる。各要素はid、kind(event_notes|daily_digest)、day、eventId(daily_digestには無い)、start、end、provider、model、createdAt、stale(event_changed|sources_deletedの配列。空でなければ内容が古い)、omittedSources(入力上限に収めるため省いた記録の件数)、sourceUtteranceIds、sourceMemoIds、sections(kind=summary(daily_digestのみ)|decisions|action_items|open_questions、itemsはtext、owner(任意)、sources)。録音はこのMacのマイクだけなので、オンライン会議では他の参加者の発言を含まない",
              properties: [
                 "from": stringSchema("開始日YYYY-MM-DD。省略時はtoと同じ日"),
                 "to": stringSchema("終了日YYYY-MM-DD(含む)。省略時は今日。期間は最大31日"),
              ]),
         tool("life_log_search",
-             "発話・音声入力・メモを日本語部分一致で横断検索し、新しい順に「日付<TAB>種類<TAB>本文」の行で返す。前後の文脈はlife_log_rangeでその日を読む",
+             "発話・音声入力・メモと、ライフログAIが生成したノートとまとめを日本語部分一致で横断検索し、新しい順に「日付<TAB>種類<TAB>本文」の行で返す。種類generatedはAIの生成物で、利用者の発言ではない。前後の文脈はlife_log_rangeでその日を読む",
              properties: ["query": stringSchema("検索語"), "limit": ["type": "integer", "minimum": 1, "description": "最大件数。省略時は100"]],
              required: ["query"]),
     ] }

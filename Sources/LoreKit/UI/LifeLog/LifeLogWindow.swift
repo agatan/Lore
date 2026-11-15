@@ -28,6 +28,7 @@ public struct LifeLogWindow: View {
                     date: env.lifeLog.selectedDate,
                     schedule: env.settings.lifeLogSchedule,
                     participatingOnly: env.settings.lifeLogParticipatingEventsOnly,
+                    digest: env.lifeLog.day.dailyDigest == nil ? nil : AnyView(GeneratedNoteView(env: env, subject: .day(selectedDayKey), style: .compact)),
                     onJump: { date in Task { await env.lifeLog.jumpToTime(date) } },
                     onShowEvent: { occurrence in env.lifeLog.jumpToTimelineItem(occurrence.timelineItemID) }
                 )
@@ -49,6 +50,11 @@ public struct LifeLogWindow: View {
             }
             .sheet(isPresented: $showsSearchSheet) {
                 LifeLogSearchSheet(env: env)
+            }
+            // The window can appear before the database opens at launch.
+            .task(id: env.database != nil) { await env.presentMorningDigestIfNeeded() }
+            .sheet(item: Binding(get: { env.morningDigest }, set: { env.morningDigest = $0 })) { digest in
+                MorningDigestSheet(env: env, digest: digest)
             }
             .alert("書き出せませんでした", isPresented: Binding(
                 get: { exportError != nil },
@@ -81,6 +87,7 @@ public struct LifeLogWindow: View {
     }
 
     private var isToday: Bool { Calendar.current.isDateInToday(env.lifeLog.selectedDate) }
+    private var selectedDayKey: String { LifeLogDateKey.string(for: env.lifeLog.selectedDate) }
 
     /// Things 3のように、その日を大きな日付で始める。小さな見出しで今日か何年かを示し、
     /// 記録状態と終日の予定は日付の下に一列だけ置く。Scrollすると見出しごとtoolbarの下へ流れる。
@@ -125,6 +132,10 @@ public struct LifeLogWindow: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 0) {
                     header
+                    GeneratedNoteView(env: env, subject: .day(selectedDayKey))
+                        .padding(.leading, TimelineRowFrame<EmptyView>.timeWidth(compact: false) + TimelineRail.width(compact: false) + 6)
+                        .padding(.bottom, env.lifeLog.day.dailyDigest == nil ? 0 : 18)
+                        .id(GeneratedNoteScope.digestTimelineItemID)
                     LazyVStack(alignment: .leading, spacing: 0) {
                         ForEach(timelineRows) { row in
                             if let gap = row.gapBefore {
@@ -153,7 +164,9 @@ public struct LifeLogWindow: View {
             .onChange(of: env.lifeLog.sourceNavigationRevision) { _, _ in
                 guard let id = env.lifeLog.highlightedTimelineItemID else { return }
                 timelineFollowsLatest = false
-                withAnimation { proxy.scrollTo(id, anchor: .center) }
+                // The digest is read from its first line, so it starts at the top.
+                let anchor: UnitPoint = id == GeneratedNoteScope.digestTimelineItemID ? .top : .center
+                withAnimation { proxy.scrollTo(id, anchor: anchor) }
             }
             .onChange(of: timelineRows.last?.id) { _, _ in
                 guard timelineFollowsLatest else { return }
@@ -276,7 +289,7 @@ public struct LifeLogWindow: View {
                     recording: env.eventRecording(value),
                     lastTime: env.eventLastTime(value, in: env.lifeLog.day),
                     ai: CalendarEventCard.AI(
-                        notes: AnyView(EventNotesView(env: env, event: value)),
+                        notes: AnyView(GeneratedNoteView(env: env, subject: .event(value))),
                         isExcluded: env.lifeLogAI.excludedEventIDs.contains(value.id),
                         isCalendarExcluded: env.settings.lifeLogAI.excludedCalendars.contains(value.calendarTitle),
                         setExcluded: { excluded in Task { await env.lifeLogAI.setExcluded(excluded, eventID: value.id) } }

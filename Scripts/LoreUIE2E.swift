@@ -178,8 +178,10 @@ private enum LoreUIE2E {
             try await runAISettingsCUJ(appURL: appURL)
             try await runOnboardingCUJ(appURL: appURL)
             try await runEventNotesCUJ(appURL: appURL)
+            try await runDailyDigestCUJ(appURL: appURL)
+            try await runMorningDigestCUJ(appURL: appURL)
             terminateTestApp()
-            print("✓ UI E2E: 4 CUJs passed")
+            print("✓ UI E2E: 7 CUJs passed")
         } catch {
             fputs("✗ UI E2E: \(error.localizedDescription)\n", stderr)
             terminateTestApp()
@@ -312,7 +314,7 @@ private enum LoreUIE2E {
 
     @MainActor
     private static func runEventNotesCUJ(appURL: URL) async throws {
-        print("CUJ 4: 予定の下に保存済みのAIノートを読み、元の発話へ移動し、書き出しに含める")
+        print("CUJ 5: 予定の下に保存済みのAIノートを読み、元の発話へ移動し、書き出しに含める")
         let app = try await launch(appURL, arguments: ["--lore-screenshot-demo"])
         let ui = AXDriver(pid: app.processIdentifier)
         let notes = "life-log.event-notes-demo-event-1"
@@ -334,6 +336,54 @@ private enum LoreUIE2E {
             $0.contains("今日は初回体験の流れを確認する") && $0.contains("AIが生成したノート")
         }
         try ui.press(identifier: "export.close")
+        terminateTestApp()
+    }
+
+    @MainActor
+    private static func runDailyDigestCUJ(appURL: URL) async throws {
+        print("CUJ 6: 1日のまとめを日の先頭とinspectorで読み、元の記録へ移動し、検索でAIの生成物として見つける")
+        let app = try await launch(appURL, arguments: ["--lore-screenshot-demo"])
+        let ui = AXDriver(pid: app.processIdentifier)
+        let digest = "life-log.daily-digest"
+        _ = try ui.waitFor(identifier: digest)
+        for part in ["generated-mark", "provider", "copy", "regenerate", "delete", "item-summary-0", "item-decisions-0"] {
+            _ = try ui.waitFor(identifier: "\(digest).\(part)")
+        }
+        _ = try ui.waitFor(identifier: "\(digest).compact")
+        _ = try ui.waitFor(identifier: "\(digest).compact.item-summary-0")
+        guard !ui.exists(identifier: "\(digest).compact.item-decisions-0") else {
+            throw UIE2EError.assertion("inspectorのまとめに要約以外の項目が出ています")
+        }
+        try ui.press(identifier: "\(digest).item-action_items-0")
+        try ui.waitFor(text: "次のベータではショートカットから書き出して、好きなLLMへ渡せることも試します。")
+
+        try ui.press(identifier: "life-log.search")
+        try ui.setValue("ショートカットからの書き出し", identifier: "life-log.search-input")
+        _ = try ui.waitFor(identifier: "life-log.search-result-generated-demo-digest-today")
+        try ui.press(identifier: "life-log.search-result-generated-demo-digest-today")
+        _ = try ui.waitFor(identifier: digest)
+        terminateTestApp()
+    }
+
+    @MainActor
+    private static func runMorningDigestCUJ(appURL: URL) async throws {
+        print("CUJ 7: 翌朝の最初の表示で昨日のまとめを一度だけ見せる")
+        let app = try await launch(appURL, arguments: ["--lore-screenshot-demo", "--lore-demo-morning-digest"])
+        let ui = AXDriver(pid: app.processIdentifier)
+        _ = try ui.waitFor(identifier: "life-log.morning-digest")
+        _ = try ui.waitFor(identifier: "life-log.daily-digest.read-only.omitted")
+        guard !ui.exists(identifier: "life-log.daily-digest.read-only.delete") else {
+            throw UIE2EError.assertion("昨日のまとめの画面に削除が出ています")
+        }
+        try ui.press(identifier: "life-log.morning-digest.close")
+        try ui.press(identifier: "main.section.history")
+        _ = try ui.waitFor(identifier: "history.root")
+        try ui.press(identifier: "main.section.lifeLog")
+        _ = try ui.waitFor(identifier: "life-log.daily-digest")
+        try await Task.sleep(for: .seconds(1))
+        guard !ui.exists(identifier: "life-log.morning-digest") else {
+            throw UIE2EError.assertion("昨日のまとめが二度目の表示でも出ています")
+        }
         terminateTestApp()
     }
 
