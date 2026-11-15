@@ -34,6 +34,10 @@ enum DebugRecorder {
                 try await recordEventDetails(env: env, to: directory.appending(path: "event-details\(suffix).mp4"))
                 exit(0)
             }
+            if ProcessInfo.processInfo.arguments.contains("--lore-record-meeting-join") {
+                try await recordMeetingJoin(env: env, presenter: presenter, to: directory.appending(path: "meeting-join\(suffix).mp4"))
+                exit(0)
+            }
             if ProcessInfo.processInfo.arguments.contains("--lore-record-last-time") {
                 try await recordLastTime(env: env, to: directory.appending(path: "last-time\(suffix).mp4"))
                 exit(0)
@@ -243,6 +247,25 @@ enum DebugRecorder {
                 lastTime.open()
             }
             await settle(3)
+        }
+    }
+
+    /// The mini window counts down to the start of a meeting, shows "Now", and joins it. Needs `--lore-demo-meeting-soon`.
+    private static func recordMeetingJoin(env: AppEnvironment, presenter: LoreWindowPresenter, to url: URL) async throws {
+        let deadline = Date().addingTimeInterval(5)
+        while env.upcomingMeetings.meetings.isEmpty, Date() < deadline { await settle(0.2) }
+        guard let meeting = env.upcomingMeetings.meetings.first(where: { $0.event.id == ScreenshotDemoData.meetingSoonID }) else {
+            throw CocoaError(.fileWriteUnknown, userInfo: [NSLocalizedDescriptionKey: "--lore-demo-meeting-soon の会議がありません"])
+        }
+        presenter.toggleLifeLogMini()
+        await settle(1.5)
+        guard let window = NSApp.windows.first(where: { $0.identifier?.rawValue == LoreWindow.lifeLogMini }) else {
+            throw CocoaError(.fileWriteUnknown, userInfo: [NSLocalizedDescriptionKey: "mini windowが表示されていません"])
+        }
+        try await record(window: window, to: url) {
+            await settle(max(0, meeting.event.startsAt.timeIntervalSinceNow) + 3)
+            env.joinMeeting(meeting)
+            await settle(1)
         }
     }
 

@@ -105,6 +105,7 @@ public final class AppSettings {
         public var lifeLogPause: LifeLogPause?
         public var lifeLogRecordingExclusions = LifeLogRecordingExclusions()
         public var lifeLogAI = LifeLogAISettings()
+        public var notifiesBeforeMeetings = false
 
         init() {}
 
@@ -160,6 +161,7 @@ public final class AppSettings {
             ) ?? LifeLogRecordingExclusions()
             lifeLogAI = (try? container.decodeIfPresent(LifeLogAISettings.self, forKey: .lifeLogAI))
                 .flatMap { $0 } ?? LifeLogAISettings()
+            notifiesBeforeMeetings = try container.decodeIfPresent(Bool.self, forKey: .notifiesBeforeMeetings) ?? false
         }
     }
 
@@ -314,6 +316,7 @@ public final class AppSettings {
     public var lifeLogCalendarTitles: [String] { get { storage.lifeLogCalendarTitles } set { storage.lifeLogCalendarTitles = newValue; persist() } }
     public var lifeLogParticipatingEventsOnly: Bool { get { storage.lifeLogParticipatingEventsOnly } set { storage.lifeLogParticipatingEventsOnly = newValue; persist() } }
     public var lifeLogAI: LifeLogAISettings { get { storage.lifeLogAI } set { storage.lifeLogAI = newValue; persist() } }
+    public var notifiesBeforeMeetings: Bool { get { storage.notifiesBeforeMeetings } set { storage.notifiesBeforeMeetings = newValue; persist() } }
     /// 「Loreの全データを削除」で設定も初期状態へ戻す。
     public func resetAll() {
         storage = Storage()

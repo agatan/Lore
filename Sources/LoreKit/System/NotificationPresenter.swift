@@ -1,14 +1,18 @@
 import Foundation
 import UserNotifications
 
-/// Posts "notes are ready" and "digest is ready", and reports a click back with the event occurrence or the day.
+/// Posts "notes are ready", "digest is ready", and the meeting reminder, and reports a click back with the event occurrence, the day, or the join link.
 @MainActor
 final class NotificationPresenter: NSObject, UNUserNotificationCenterDelegate {
     private nonisolated static let eventIDKey = "eventID"
     private nonisolated static let dayKey = "day"
+    private nonisolated static let joinURLKey = "joinURL"
+    private nonisolated static let meetingCategory = "meeting-join"
+    private nonisolated static let joinAction = "join"
 
     var onOpenEvent: ((EventOccurrence) -> Void)?
     var onOpenDay: ((String) -> Void)?
+    var onJoinMeeting: ((URL) -> Void)?
 
     func activate() {
         UNUserNotificationCenter.current().delegate = self
@@ -43,11 +47,36 @@ final class NotificationPresenter: NSObject, UNUserNotificationCenterDelegate {
         }
     }
 
+    /// The "Join" action title is set at each post, so it follows the display language.
+    func postMeetingStartingSoon(_ meeting: JoinableMeeting, body: String, joinTitle: String) async {
+        let center = UNUserNotificationCenter.current()
+        let join = UNNotificationAction(identifier: Self.joinAction, title: joinTitle, options: [])
+        center.setNotificationCategories([
+            UNNotificationCategory(identifier: Self.meetingCategory, actions: [join], intentIdentifiers: []),
+        ])
+        let content = UNMutableNotificationContent()
+        content.title = meeting.event.title
+        content.body = body
+        content.categoryIdentifier = Self.meetingCategory
+        content.userInfo = [Self.joinURLKey: meeting.link.url.absoluteString]
+        let request = UNNotificationRequest(identifier: "meeting-join-\(meeting.id)", content: content, trigger: nil)
+        do {
+            try await center.add(request)
+        } catch {
+            LoreLog.session.error("Posting the meeting notification failed: \(error.localizedDescription, privacy: .public)")
+        }
+    }
+
     nonisolated func userNotificationCenter(
         _ center: UNUserNotificationCenter,
         didReceive response: UNNotificationResponse
     ) async {
         let info = response.notification.request.content.userInfo
+        if let link = info[Self.joinURLKey] as? String, let url = URL(string: link) {
+            guard [Self.joinAction, UNNotificationDefaultActionIdentifier].contains(response.actionIdentifier) else { return }
+            await MainActor.run { onJoinMeeting?(url) }
+            return
+        }
         guard let day = info[Self.dayKey] as? String else { return }
         if let eventID = info[Self.eventIDKey] as? String {
             await MainActor.run { onOpenEvent?(EventOccurrence(eventID: eventID, day: day)) }

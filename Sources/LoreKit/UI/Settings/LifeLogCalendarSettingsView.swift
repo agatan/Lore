@@ -47,6 +47,20 @@ struct LifeLogCalendarSettingsView: View {
                 }
             }
             SettingsCard(
+                title: "会議",
+                footnote: "参加用のリンクがある予定は、始まる10分前からミニウィンドウとメニューバーに「参加」ボタンを表示します。"
+            ) {
+                SettingsRow(title: "会議の1分前に通知", caption: "参加用のリンクがある予定の1分前に、「参加」ボタン付きの通知を出します") {
+                    Toggle("", isOn: Binding(
+                        get: { settings.notifiesBeforeMeetings },
+                        set: { env.setNotifiesBeforeMeetings($0) }
+                    ))
+                    .labelsHidden()
+                    .controlSize(.small)
+                    .accessibilityIdentifier("calendar.meeting-notification")
+                }
+            }
+            SettingsCard(
                 title: "記録しないカレンダー",
                 footnote: "選んだカレンダーの予定が進行している間は、ライフログの録音を止め、予定が終わると再開します。終日の予定では止めません。"
             ) {
