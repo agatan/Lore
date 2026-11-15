@@ -57,6 +57,7 @@ struct MenuBarPanel: View {
                 ) {
                     env.setLifeLogCaptureEnabled(!env.lifeLog.hasCaptureIntent)
                 }
+                LifeLogPauseControl(env: env, accessibilityPrefix: "menu.life-log", diameter: 28)
                 VStack(alignment: .leading, spacing: 2) {
                     Text(LocalizedStringKey(lifeLogStatus.title))
                         .font(.system(size: LoreTheme.TextSize.body, weight: .semibold))

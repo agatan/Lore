@@ -44,4 +44,31 @@ struct MenuBarStatusIconTests {
         #expect(MenuBarStatusIcon.badge(phase: .finished(.failed("x")), lifeLog: lifeLog) == .attention)
         #expect(MenuBarStatusIcon.badge(phase: .finished(.cancelled), lifeLog: lifeLog) == nil)
     }
+
+    @Test("ライフログの一時停止中はroseの輪にし、音声入力の状態を優先する")
+    func pausedBadge() throws {
+        let lifeLog = LifeLogCoordinator()
+        lifeLog.setHold(.paused(resumesAt: Date().addingTimeInterval(900)))
+        #expect(MenuBarStatusIcon.badge(phase: .idle, lifeLog: lifeLog) == nil)
+        lifeLog.setCaptureEnabled(true)
+        #expect(MenuBarStatusIcon.badge(phase: .idle, lifeLog: lifeLog) == .paused)
+        #expect(MenuBarStatusIcon.badge(phase: .recording, lifeLog: lifeLog) == .recording)
+        lifeLog.setHold(nil)
+        #expect(MenuBarStatusIcon.badge(phase: .idle, lifeLog: lifeLog) != .paused)
+
+        let image = MenuBarStatusIcon.image(badge: .paused)
+        #expect(!image.isTemplate)
+        let bitmap = try #require(image.tiffRepresentation.flatMap(NSBitmapImageRep.init(data:)))
+        let scale = CGFloat(bitmap.pixelsWide) / image.size.width
+        func color(x: CGFloat, yFromBottom: CGFloat) throws -> NSColor {
+            try #require(bitmap.colorAt(
+                x: Int(x * scale), y: Int((image.size.height - yFromBottom) * scale)
+            )?.usingColorSpace(.deviceRGB))
+        }
+        // 点の中心(17, 3.5)は抜け、半径の縁はroseで描く。
+        #expect(try color(x: 17, yFromBottom: 3.5).alphaComponent < 0.2)
+        let rim = try color(x: 17 + 1.85, yFromBottom: 3.5)
+        #expect(rim.alphaComponent > 0.5)
+        #expect(rim.redComponent > rim.blueComponent)
+    }
 }

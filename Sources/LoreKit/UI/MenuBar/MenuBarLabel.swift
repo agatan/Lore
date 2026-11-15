@@ -3,7 +3,7 @@ import SwiftUI
 
 /// メニューバーのアイコン。App iconと同じ「L.」を描き、状態は「.」の色だけで示す。
 ///
-/// - 録音中（音声入力またはライフログ）はrose、処理中は「L」と同じ色の輪、完了はmint、要確認はgold。ライフログの再接続中はgoldの輪。
+/// - 録音中（音声入力またはライフログ）はrose、処理中は「L」と同じ色の輪、完了はmint、要確認はgold。ライフログの再接続中はgoldの輪、一時停止中はroseの輪。
 /// - 入力level表示が有効な音声入力の録音中は、「.」が直近の声の大きさで膨らむ。
 /// - 状態がない時はtemplate画像にして、menu barの明暗と強調表示をsystemに任せる。
 struct MenuBarLabel: View {
@@ -24,7 +24,7 @@ struct MenuBarLabel: View {
 
     private var accessibilityText: String {
         if coordinator.phase != .idle { return LoreTheme.label(for: coordinator.phase) }
-        if lifeLog.isCapturing || lifeLog.isRecoveringCapture { return lifeLog.captureStatusText }
+        if lifeLog.isCapturing || lifeLog.isRecoveringCapture || lifeLog.isHeld { return lifeLog.captureStatusText }
         return "Lore"
     }
 }
@@ -39,10 +39,19 @@ enum MenuBarStatusIcon {
         case attention
         /// ライフログの再接続中。goldの輪で「止まってはいないが記録できていない」を示す。
         case reconnecting
+        /// ライフログの一時停止中、または記録しない予定の進行中。roseの輪で「記録意図はあるが録音していない」を示す。
+        case paused
+
+        var isRing: Bool {
+            switch self {
+            case .processing, .reconnecting, .paused: true
+            case .recording, .done, .attention: false
+            }
+        }
 
         var color: NSColor {
             switch self {
-            case .recording: NSColor(LoreTheme.recording)
+            case .recording, .paused: NSColor(LoreTheme.recording)
             case .processing: .labelColor
             case .done: NSColor(LoreTheme.success)
             case .attention, .reconnecting: NSColor(LoreTheme.warning)
@@ -61,6 +70,7 @@ enum MenuBarStatusIcon {
         case .finished(.formattingSkipped), .finished(.clipboardOnly), .finished(.failed): return .attention
         case .idle, .finished(.cancelled): break
         }
+        if lifeLog.isHeld { return .paused }
         if lifeLog.isCapturing { return .recording }
         if lifeLog.isRecoveringCapture { return .reconnecting }
         return nil
@@ -114,7 +124,7 @@ enum MenuBarStatusIcon {
             NSBezierPath(ovalIn: rect).fill()
             return
         }
-        if badge == .reconnecting || badge == .processing {
+        if badge.isRing {
             let ring = NSBezierPath(ovalIn: rect.insetBy(dx: 0.75, dy: 0.75))
             ring.lineWidth = 1.5
             badge.color.setStroke()
