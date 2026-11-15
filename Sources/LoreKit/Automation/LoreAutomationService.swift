@@ -78,16 +78,18 @@ public final class LoreAutomationService {
             calendar: calendar
         )
         var entries: [(date: Date, entry: LifeLogEntry)] = []
-        var seenEventIDs = Set<String>()
+        var seenOccurrences = Set<EventOccurrence>()
         for date in dates {
             let day = try await database.lifeLog.day(
                 date,
                 calendar: calendar,
                 participatingOnly: settings.lifeLogParticipatingEventsOnly
             )
-            // 日をまたぐ予定は各日のsnapshotに現れるため、期間内では1件にする。
-            entries += LifeLogEntry.entries(of: day, options: options, calendar: calendar)
-                .filter { $0.entry.kind != .event || seenEventIDs.insert($0.entry.id).inserted }
+            // 日をまたぐ予定は各日のsnapshotに現れるため、期間内では1件にする。繰り返し予定は回ごとに残す。
+            entries += LifeLogEntry.entries(of: day, options: options, calendar: calendar).filter {
+                $0.entry.kind != .event
+                    || seenOccurrences.insert(EventOccurrence(eventID: $0.entry.id, day: $0.entry.day)).inserted
+            }
         }
         return entries.sorted { ($0.date, $0.entry.id) < ($1.date, $1.entry.id) }.map(\.entry)
     }
