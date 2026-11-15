@@ -12,7 +12,7 @@
 <meta property="og:type" content="website">
 <meta property="og:site_name" content="Lore">
 <meta property="og:title" content="Lore — Mac 上的生活日志与语音输入">
-<meta property="og:description" content="为 Mac 打造的生活日志与语音输入。语音识别在 Mac 上完成。">
+<meta property="og:description" content="说过的话，不再忘记。为 Mac 打造的生活日志与语音输入，语音识别在 Mac 上完成。">
 <meta property="og:image" content="../assets/zh-Hans/life-log.png">
 <meta property="og:locale" content="zh_CN">
 <meta property="og:locale:alternate" content="en_US">
@@ -31,6 +31,7 @@
   <div class="wrap">
     <a class="brand" href="../zh-Hans/index.html"><img src="../assets/icon.png" alt="" width="28" height="28">Lore</a>
     <nav class="links" aria-label="页面导航">
+      <a href="#scenes">使用场景</a>
       <a href="#life-log">生活日志</a>
       <a href="#dictation">语音输入</a>
       <a href="#ai">交给 AI</a>
@@ -43,7 +44,7 @@
         <li><a href="../zh-Hans/index.html" hreflang="zh-Hans" lang="zh-Hans" aria-current="page">简体中文</a></li>
       </ul>
     </nav>
-    <a class="btn btn-ink" href="#download">即将推出</a>
+    <a class="btn btn-ink" href="https://github.com/agatan/Lore"><svg class="gh" viewBox="0 0 16 16" width="16" height="16" fill="currentColor" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38v-1.33c-2.23.48-2.7-1.07-2.7-1.07-.36-.92-.89-1.17-.89-1.17-.73-.5.06-.49.06-.49.8.06 1.23.83 1.23.83.72 1.23 1.88.87 2.34.67.07-.52.28-.87.51-1.07-1.78-.2-3.65-.89-3.65-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82a7.6 7.6 0 0 1 4 0c1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48v2.2c0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8z"/></svg>GitHub</a>
   </div>
 </header>
 
@@ -51,13 +52,13 @@
   <section class="hero" aria-labelledby="hero-title">
     <div class="wrap">
       <p class="eyebrow">为 Mac 打造的生活日志与语音输入</p>
-      <h1 id="hero-title">说过的话，<br>随时可查<span class="dot">。</span></h1>
-      <p class="lead">Lore 把会议和工作中说过的话转写成文字，和日历日程排在同一条时间线上；按下热键说话，就能把整理好的文字输入任何 App。语音识别在 Mac 上完成，录音从不离开你的 Mac。</p>
+      <h1 id="hero-title">说过的话，<br>不再忘记<span class="dot">。</span></h1>
+      <p class="lead">会上答应下来的事。自言自语时冒出的想法。做出决定的理由。Lore 把你的话留在日历旁边，你不必再回想“我当时是怎么说的”。按下热键说话，还能在任何 App 里输入文字。语音识别在 Mac 上完成，录音从不离开你的 Mac。</p>
       <div class="cta">
-        <span class="btn btn-ink" role="link" aria-disabled="true"><span class="rec" aria-hidden="true"></span>即将推出</span>
+        <a class="btn btn-ink" href="https://github.com/agatan/Lore"><svg class="gh" viewBox="0 0 16 16" width="16" height="16" fill="currentColor" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38v-1.33c-2.23.48-2.7-1.07-2.7-1.07-.36-.92-.89-1.17-.89-1.17-.73-.5.06-.49.06-.49.8.06 1.23.83 1.23.83.72 1.23 1.88.87 2.34.67.07-.52.28-.87.51-1.07-1.78-.2-3.65-.89-3.65-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82a7.6 7.6 0 0 1 4 0c1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48v2.2c0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8z"/></svg>在 GitHub 上查看</a>
         <a class="btn btn-line" href="#life-log">了解功能</a>
       </div>
-      <p class="req">macOS 26 或更高版本 · Apple Silicon</p>
+      <p class="req">开源，MIT 许可证 · macOS 26 或更高版本 · Apple Silicon</p>
     </div>
     <figure class="stage">
       <div class="screen">
@@ -65,6 +66,28 @@
       </div>
       <figcaption>开始记录后，每说完一段话，它就会带着时间出现在时间线上。</figcaption>
     </figure>
+  </section>
+
+  <section class="feature" id="scenes" aria-labelledby="scenes-title">
+    <div class="wrap">
+      <p class="kicker">使用场景</p>
+      <h2 id="scenes-title">记录在这些时刻派上用场。</h2>
+      <p class="section-lead">Lore 在你工作时安静地记录。一天中的这几个时刻，它最有用。</p>
+      <div class="grid-3">
+        <div class="card">
+          <h3>会议结束后</h3>
+          <p>打开生活日志 AI，日程一结束，笔记就已经在它下面了：决定、待办和未决问题，每一条都链接到原话。</p>
+        </div>
+        <div class="card">
+          <h3>一天结束时</h3>
+          <p>发言、备忘和语音输入与日历排在同一条时间线上，一天的内容可以直接回顾。一键导出为 Markdown。</p>
+        </div>
+        <div class="card">
+          <h3>"那件事我是怎么说的？"</h3>
+          <p>按 ⌘F 一次搜索所有日期。选中结果，即可跳到时间线上的那个时刻。</p>
+        </div>
+      </div>
+    </div>
   </section>
 
   <section class="feature" id="life-log" aria-labelledby="life-log-title">
@@ -77,6 +100,7 @@
           <ul class="points">
             <li><b>手动开始，或按计划自动记录</b><span>设定星期和时段（如工作日 9:00–18:00），Lore 只在这段时间内自动记录。</span></li>
             <li><b>只转写说话的部分</b><span>静音和环境声不会被转写，只有真正的语音会在 Mac 上识别。</span></li>
+            <li><b>记录的是你自己的声音</b><span>生活日志通过 Mac 的麦克风收音，不会获取通话的音频。在线上会议中，它记下的是你说的话；戴着耳机时，对方的声音不会被录下。</span></li>
             <li><b>一天的记录，一目了然</b><span>说话时长、记录数量和日程排在同一条时间轴上，点击任意位置即可跳转到那个时间。</span></li>
           </ul>
         </div>
@@ -236,9 +260,10 @@
     <div class="wrap">
       <img class="logo" src="../assets/icon.png" alt="Lore 图标" width="88" height="88" loading="lazy">
       <h2 id="download-title">把说过的话，留下来<span class="dot">。</span></h2>
-      <p class="section-lead">Lore 即将登陆 Mac。</p>
+      <p class="section-lead">Lore 以 MIT 许可证开源。目前还没有签名的下载版本。现在可以从源代码构建，或在 GitHub 上关注发布，第一时间获取首个版本。</p>
       <div class="cta">
-        <span class="btn btn-ink" role="link" aria-disabled="true"><span class="rec" aria-hidden="true"></span>即将推出</span>
+        <a class="btn btn-ink" href="https://github.com/agatan/Lore"><svg class="gh" viewBox="0 0 16 16" width="16" height="16" fill="currentColor" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38v-1.33c-2.23.48-2.7-1.07-2.7-1.07-.36-.92-.89-1.17-.89-1.17-.73-.5.06-.49.06-.49.8.06 1.23.83 1.23.83.72 1.23 1.88.87 2.34.67.07-.52.28-.87.51-1.07-1.78-.2-3.65-.89-3.65-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82a7.6 7.6 0 0 1 4 0c1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48v2.2c0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8z"/></svg>在 GitHub 上查看</a>
+        <a class="btn btn-line" href="https://github.com/agatan/Lore/releases">关注发布</a>
       </div>
       <p class="req">macOS 26 或更高版本 · Apple Silicon</p>
     </div>
@@ -247,7 +272,7 @@
 
 <footer>
   <div class="wrap">
-    <span>© 2026 Lore</span>
+    <span>© 2026 Lore · <a href="https://github.com/agatan/Lore/blob/main/LICENSE">MIT 许可证</a> · <a href="https://github.com/agatan/Lore">GitHub 源代码</a></span>
     <span>语音识别和默认的文字整理均在 Mac 上完成。</span>
   </div>
 </footer>
