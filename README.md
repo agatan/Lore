@@ -7,6 +7,7 @@ Speech recognition and the default text formatting run on the Mac. Dictation aud
 - External specification: [Markdown](docs/spec.md) / [HTML](docs/spec.html)
 - Internal design: [Markdown](docs/design.md) / [HTML](docs/design.html)
 - Overview: [docs/overview/index.html](docs/overview/index.html)
+- Changes in each release: [CHANGELOG.md](CHANGELOG.md)
 
 ## Requirements
 

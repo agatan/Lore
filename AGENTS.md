@@ -17,6 +17,7 @@ Keep Lore's implementation, external specification, and internal design aligned 
 - For review, explanation, or diagnosis requests, inspect and report; do not edit unless the user also asks for a change.
 - For implementation or refactoring requests, make the smallest coherent change, preserve external behavior unless explicitly changed, and validate in proportion to risk.
 - Before changing external behavior, module boundaries, persistence models, deletion semantics, or data transmission, update the relevant Markdown and HTML documents first. Treat the updated design and specification as automatically approved and continue to implementation unless the user explicitly requests pair review or an approval pause.
+- For a change a Lore user can notice, add one fragment to `changelog.d/` as `changelog.d/README.md` describes. Do not edit `CHANGELOG.md` by hand; `python3 Scripts/changelog.py release <version>` writes it.
 - Do not commit, push, publish, open a pull request, install software, or change external systems unless explicitly requested.
 - Ask before destructive or hard-to-recover actions whose exact target is not already explicit.
 
@@ -31,6 +32,7 @@ Keep Lore's implementation, external specification, and internal design aligned 
 
 ## Validation
 
+- Changelog fragments: run `python3 Scripts/changelog.py check`.
 - Documentation-only changes: verify local links, headings, and Markdown/HTML parity.
 - Domain, persistence, engine, or automation changes: run `swift test`.
 - User-visible UI or workflow changes: also run `make ui-test` against the signed app.
