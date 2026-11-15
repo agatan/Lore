@@ -168,7 +168,7 @@ Lore inserts the raw transcript unchanged when the formatted output is empty, is
 ### 4.3 Calendar
 
 - Lore reads the events of the selected calendars and saves a snapshot of the time, title, calendar name, all-day flag, and participation status.
-- The snapshot keeps one entry per occurrence, so every occurrence of a repeating event stays on its own day. When Lore reloads a day's events, an event that has not ended and is no longer on that day in the calendar, because it was moved or deleted, leaves the snapshot. An event that has ended keeps the entry it had.
+- The snapshot keeps one entry per occurrence, so every occurrence of a repeating event stays on its own day. When Lore reloads a day's events, an event that has not ended and is no longer on that day in the calendar, because it was moved or deleted, leaves the snapshot. An event that has ended keeps the entry it had. An occurrence keeps one entry after a time zone change.
 - By default, only events that the user accepted, or that have no RSVP, are shown and exported. The user can change this filter.
 - "Refresh Events" in the Calendar settings explicitly reloads the events of the day currently selected in the timeline. The button is disabled while it runs. Afterward the timeline and the monthly activity are updated.
 - Lore does not change an RSVP and offers no path into the Calendar app.
