@@ -31,24 +31,20 @@ all: app
 build:
 	swift build -c $(CONFIG) --product Lore
 
-## Shortcutsより細かい自動化向けのCLIとstdio MCPサーバー
+## Shortcutsより細かい自動化向けのstdio MCPサーバー
 tools:
-	swift build -c $(CONFIG) --product lore-cli
 	swift build -c $(CONFIG) --product lore-mcp
 	@mkdir -p build/tools
-	@cp "$(BUILD_DIR)/lore-cli" build/tools/lore
 	@cp "$(BUILD_DIR)/lore-mcp" build/tools/lore-mcp
-	@echo "built build/tools/lore and build/tools/lore-mcp"
+	@echo "built build/tools/lore-mcp"
 
 ## Lore.app を組み立てて署名する
 app: build tools
 	@rm -rf "$(APP)"
-	@mkdir -p "$(CONTENTS)/MacOS" "$(CONTENTS)/Helpers" "$(CONTENTS)/Frameworks" "$(CONTENTS)/Resources/Skills"
+	@mkdir -p "$(CONTENTS)/MacOS" "$(CONTENTS)/Helpers" "$(CONTENTS)/Frameworks" "$(CONTENTS)/Resources"
 	@cp "$(BUILD_DIR)/Lore" "$(CONTENTS)/MacOS/Lore"
-	@cp build/tools/lore "$(CONTENTS)/Helpers/lore"
 	@cp build/tools/lore-mcp "$(CONTENTS)/Helpers/lore-mcp"
 	@cp -R "$(WHISPER_FRAMEWORK)" "$(CONTENTS)/Frameworks/whisper.framework"
-	@cp -R Resources/Skills/lore "$(CONTENTS)/Resources/Skills/lore"
 	@cp Resources/Info.plist "$(CONTENTS)/Info.plist"
 	@cp THIRD_PARTY_NOTICES "$(CONTENTS)/Resources/THIRD_PARTY_NOTICES.txt"
 	@printf 'APPL????' > "$(CONTENTS)/PkgInfo"
@@ -62,8 +58,6 @@ app: build tools
 	@zsh Scripts/extract-app-intents.sh "$(BUILD_DIR)" "$(CONTENTS)"
 	@codesign --force --sign "$(CODESIGN_ID)" --timestamp=none \
 		"$(CONTENTS)/Frameworks/whisper.framework"
-	@codesign --force --sign "$(CODESIGN_ID)" --identifier $(BUNDLE_ID).cli \
-		--timestamp=none "$(CONTENTS)/Helpers/lore"
 	@codesign --force --sign "$(CODESIGN_ID)" --identifier $(BUNDLE_ID).mcp \
 		--timestamp=none "$(CONTENTS)/Helpers/lore-mcp"
 	@codesign --force --sign "$(CODESIGN_ID)" --identifier $(BUNDLE_ID) \

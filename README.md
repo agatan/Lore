@@ -1,6 +1,6 @@
 # Lore
 
-Lore is a voice app for macOS. It provides dictation, and a **Life Log** that keeps what you say, your calendar events, and your memos on one timeline per day. Lore does not summarize or extract to-do items. You hand the records to the AI of your choice through the CLI or MCP.
+Lore is a voice app for macOS. It provides dictation, and a **Life Log** that keeps what you say, your calendar events, and your memos on one timeline per day. Lore does not summarize or extract to-do items. You hand the records to the AI of your choice through MCP.
 
 Speech recognition and the default text formatting run on the Mac. Dictation audio is never stored. Only when you explicitly enable the Life Log does Lore save reprocessable audio chunks on the Mac. Audio is never sent anywhere. For details, see [Data handling](PRIVACY.md).
 
@@ -27,7 +27,7 @@ macOS grants permissions to the `.app`, so during development use `make run` and
 |---|---|
 | `make run` | Builds and launches `Lore.app` |
 | `make app` | Assembles and signs `Lore.app` |
-| `make tools` | Builds only the CLI and the MCP server into `build/tools/` |
+| `make tools` | Builds only the MCP server into `build/tools/` |
 | `make test` | Runs the unit tests |
 | `make ui-test` | Runs the UI E2E that drives the main user journeys in the real app |
 | `make install` | Places a release build in `/Applications` |
@@ -71,22 +71,13 @@ In Settings > Life Log > Scheduled Recording, choose days and a time window (for
 
 Lore exposes "Start Life Log", "Stop Life Log", "Pause Life Log", and "Resume Life Log" to the macOS Shortcuts app. The stop action waits for the final transcription and saving to finish. The pause action takes a duration, and recording resumes by itself when it ends.
 
-A day can be exported from the Life Log screen, the CLI, and MCP. You select events, speech, dictation, and memos individually, and the result is chronological Markdown.
+A day can be exported from the Life Log screen and through MCP. You select events, speech, dictation, and memos individually, and the result is chronological Markdown.
 
-## CLI / MCP
+## MCP
 
-For finer automation there is a CLI and a stdio MCP server that use the same database and export definition.
+For finer automation there is a stdio MCP server that uses the same database and export definition. Settings > Integrations shows its path and copies the registration command.
 
-Settings > Integrations installs the CLI and the Agent Skill. The CLI is a link from `~/.local/bin/lore` to the binary inside Lore.app, so it changes neither `PATH` nor your shell settings and updates together with the app. The Agent Skill goes to `~/.agents/skills/lore`, and Claude reads the same content through a link.
-
-```sh
-lore export day --date 2026-08-29 --include speech,memos
-lore search "billing"
-lore days --from 2026-08-01
-lore range --from 2026-08-25 --to 2026-08-29 --include speech,memos
-```
-
-`/Applications/Lore.app/Contents/Helpers/lore-mcp` is a standard input/output MCP server. It exposes the list of days with records (`life_log_days`), the entries of a range as JSON (`life_log_range`), the day Markdown (`life_log_export`), and cross-record search (`life_log_search`). None of them changes your records. A Lore memo is a rough draft captured quickly by voice. Review, summaries, to-do extraction, and rewriting rough memos into another notes or task app are left to the AI on the MCP client side. The server only reads the database on the Mac.
+`/Applications/Lore.app/Contents/Helpers/lore-mcp` is a standard input/output MCP server. It exposes the list of days with records (`life_log_days`), the entries of a range as JSON (`life_log_range`), the day Markdown (`life_log_export`), the notes that Life Log AI generated for events (`life_log_ai_notes`), and cross-record search (`life_log_search`). None of them changes your records. A Lore memo is a rough draft captured quickly by voice. Review, summaries, to-do extraction, and rewriting rough memos into another notes or task app are left to the AI on the MCP client side. The server only reads the database on the Mac.
 
 ```sh
 claude mcp add lore -- /Applications/Lore.app/Contents/Helpers/lore-mcp
@@ -118,7 +109,7 @@ Sources/LoreKit/
 ├── Persistence/   History, Life Log, modes, and sync state on GRDB / SQLite
 ├── Sync/          Sync between Macs through encrypted change files
 ├── Analysis/      Text generation for export
-├── Automation/    Read-only use cases shared by the CLI and MCP
+├── Automation/    Read-only use cases for the MCP server
 ├── App/           Coordinators, settings, and the composition root
 └── UI/            Menu bar, HUD, main and mini windows, settings, history
 ```

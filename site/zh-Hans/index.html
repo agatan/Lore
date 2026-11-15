@@ -172,27 +172,18 @@
           <h2 id="ai-title">总结和整理，<br>交给你的 AI。</h2>
           <p class="section-lead">打开生活日志 AI 后，会议一结束，笔记就已经准备好了：决定、待办和未决问题，每一条都链接到原话。它默认关闭，使用你选择的提供方运行，可以在 Mac 上，也可以在云端。其他整理工作，可以把生活日志交给你常用的 AI。</p>
           <ul class="points">
-            <li><b>CLI</b><span>用 <code>lore</code> 把一天的记录导出为 Markdown、搜索全部内容，或按日期范围获取 JSON，方便写脚本。</span></li>
             <li><b>MCP</b><span>在 AI 客户端中添加 <code>lore-mcp</code>，即可按日期或日期范围读取记录。</span></li>
-            <li><b>只读，本地运行</b><span>两者都在 Mac 上通过 stdio 运行，不会修改你的数据，Lore 也不会为此发起任何网络连接。</span></li>
+            <li><b>只读，本地运行</b><span>它在 Mac 上通过 stdio 运行，不会修改你的数据，Lore 也不会为此发起任何网络连接。</span></li>
           </ul>
         </div>
         <div>
-<pre class="code" tabindex="0" aria-label="CLI 命令和 MCP 设置示例"><code><span class="c"># 将今天的记录复制为 Markdown</span>
-<span class="p">$ </span>lore export day --clipboard
-
-<span class="c"># 搜索过去的对话</span>
-<span class="p">$ </span>lore search "发布计划" --limit 20
-
-<span class="c"># 一周的语音和备忘，输出为 JSON</span>
-<span class="p">$ </span>lore range --from 2026-11-09 --to 2026-11-13 --include speech,memos
-
-<span class="c"># 添加到 MCP 客户端</span>
+<pre class="code" tabindex="0" aria-label="MCP 设置示例"><code><span class="c"># 添加到 MCP 客户端</span>
 <span class="p">$ </span>claude mcp add lore -- /Applications/Lore.app/Contents/Helpers/lore-mcp
 
 <span class="c"># MCP 工具
 #   life_log_days    life_log_range
-#   life_log_export  life_log_search</span></code></pre>
+#   life_log_export  life_log_ai_notes
+#   life_log_search</span></code></pre>
         </div>
       </div>
     </div>

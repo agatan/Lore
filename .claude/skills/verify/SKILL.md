@@ -1,6 +1,6 @@
 ---
 name: verify
-description: Drive the real Lore macOS app (SwiftUI menu-bar app for dictation and life-log) through the macOS Accessibility API to prove a UI change works the way a user would see it. Launches the isolated LoreUITests.app on an in-memory demo database, presses/types by accessibility identifier, and captures screenshots, AX values and a transcript. Use after changing anything user-visible in Sources/LoreKit/UI or the flows behind it, when asked to "verify", "run the app", "screenshot", or to confirm a feature end to end. Also covers the read-only lore CLI.
+description: Drive the real Lore macOS app (SwiftUI menu-bar app for dictation and life-log) through the macOS Accessibility API to prove a UI change works the way a user would see it. Launches the isolated LoreUITests.app on an in-memory demo database, presses/types by accessibility identifier, and captures screenshots, AX values and a transcript. Use after changing anything user-visible in Sources/LoreKit/UI or the flows behind it, when asked to "verify", "run the app", "screenshot", or to confirm a feature end to end. Also covers the read-only lore-mcp server.
 ---
 
 # Verify Lore by driving the real app
@@ -28,7 +28,7 @@ The test bundle isolates the **database**, not the filesystem or Keychain. These
 
 `privacy.delete-history` is DB-only and safe. Pressing these buttons only opens a confirmation dialog, which is safe to show. Do not confirm it. If a change needs one of the forbidden paths proven, cover it with `swift test` and tell the user that the live proof needs their own machine state.
 
-The `lore` CLI and `lore-mcp` ignore `HOME` and always open the **real** `~/Library/Application Support/Lore/lore.sqlite`. They also may write that day's backup on open. Use only their read-only commands (see `features/cli.md`).
+`lore-mcp` ignores `HOME` and always opens the **real** `~/Library/Application Support/Lore/lore.sqlite`. It may also write that day's backup on open. Use only its read-only tools (see `features/mcp.md`).
 
 ## Launch
 

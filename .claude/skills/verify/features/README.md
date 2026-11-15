@@ -31,4 +31,4 @@ This directory is the maintained source for verifying Lore's user-facing behavio
 - [Dictation history](./dictation-history.md): 音声入力 section listing formatted and raw text.
 - [Settings](./settings.md): opening Settings, section navigation, general, privacy storage, calendar, life-log hotkeys, Life Log AI, modes.
 - [Onboarding](./onboarding.md): first-run guide, permissions and the dictation trial.
-- [CLI and MCP](./cli.md): automation surface against the real DB; guard against pending migrations first.
+- [MCP](./mcp.md): automation surface against the real DB; guard against pending migrations first.

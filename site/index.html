@@ -172,27 +172,18 @@
           <h2 id="ai-title">Bring<br>your own AI.</h2>
           <p class="section-lead">Turn on Life Log AI, and when a meeting ends its notes are already there: decisions, action items and open questions, each linked to what was said. It's off by default and runs on the provider you pick, on your Mac or in the cloud. For anything else, hand your Life Log to the AI you already use.</p>
           <ul class="points">
-            <li><b>CLI.</b><span><code>lore</code> exports a day as Markdown, searches everything, and returns date ranges as JSON for scripts.</span></li>
             <li><b>MCP.</b><span>Add <code>lore-mcp</code> to your AI client, and it can read any day or range of days.</span></li>
-            <li><b>Read-only and local.</b><span>Both run on your Mac over stdio, never change your data, and Lore makes no network connection for them.</span></li>
+            <li><b>Read-only and local.</b><span>It runs on your Mac over stdio, never changes your data, and Lore makes no network connection for it.</span></li>
           </ul>
         </div>
         <div>
-<pre class="code" tabindex="0" aria-label="Example CLI commands and MCP setup"><code><span class="c"># Copy today as Markdown</span>
-<span class="p">$ </span>lore export day --clipboard
-
-<span class="c"># Search past conversations</span>
-<span class="p">$ </span>lore search "release plan" --limit 20
-
-<span class="c"># A week of speech and memos, as JSON</span>
-<span class="p">$ </span>lore range --from 2026-11-09 --to 2026-11-13 --include speech,memos
-
-<span class="c"># Connect an MCP client</span>
+<pre class="code" tabindex="0" aria-label="Example MCP setup"><code><span class="c"># Connect an MCP client</span>
 <span class="p">$ </span>claude mcp add lore -- /Applications/Lore.app/Contents/Helpers/lore-mcp
 
 <span class="c"># MCP tools
 #   life_log_days    life_log_range
-#   life_log_export  life_log_search</span></code></pre>
+#   life_log_export  life_log_ai_notes
+#   life_log_search</span></code></pre>
         </div>
       </div>
     </div>

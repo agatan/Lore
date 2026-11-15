@@ -1,6 +1,6 @@
 import Foundation
 
-/// CLIとMCPが共有する読み取り専用のユースケース。
+/// MCPサーバーが使う読み取り専用のユースケース。
 /// 雑なメモや発話を別アプリへ転記するのは外部AIの役割で、Loreへの書き戻しは提供しない。
 @MainActor
 public final class LoreAutomationService {
@@ -20,7 +20,7 @@ public final class LoreAutomationService {
         guard let defaults = UserDefaults(suiteName: AppEnvironment.bundleIdentifier) else {
             throw AutomationError.preferencesUnavailable
         }
-        // App本体より先にCLI/MCPが動いた場合も、旧Koeの設定とdataを同じ手順で移す。
+        // App本体より先にMCPサーバーが動いた場合も、旧Koeの設定とdataを同じ手順で移す。
         LegacyKoeMigration.migrateDefaults(legacyDomain: LegacyKoeMigration.legacyDefaultsDomain(), into: defaults)
         let (database, _) = try await LoreDatabase.openDefault()
         return LoreAutomationService(database: database, settings: AppSettings(defaults: defaults))
@@ -122,7 +122,7 @@ public final class LoreAutomationService {
     }
 }
 
-/// One AI note as the CLI and MCP return it. `generated` is always true so a client never mistakes
+/// One AI note as the MCP server returns it. `generated` is always true so a client never mistakes
 /// it for something the user said or wrote.
 public struct GeneratedNoteEntry: Codable, Sendable, Equatable {
     public struct Item: Codable, Sendable, Equatable {
@@ -191,7 +191,7 @@ public struct LifeLogDayOverview: Codable, Sendable, Equatable {
     var isEmpty: Bool { utterances + dictations + memos + events == 0 }
 }
 
-/// CLI/MCPが返すlife logの1項目。時刻はlocal時差付きISO8601文字列にする。
+/// MCPが返すlife logの1項目。時刻はlocal時差付きISO8601文字列にする。
 public struct LifeLogEntry: Codable, Sendable, Equatable {
     public enum Kind: String, Codable, Sendable { case event, utterance, dictation, memo }
 

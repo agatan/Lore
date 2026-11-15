@@ -45,9 +45,9 @@ Generated notes are stored in the database on this Mac with the provider, the mo
 
 ## AI clients
 
-To review the Life Log with another AI, the user can also pass it to an AI client of their choice through the CLI or MCP. Where that client sends data, and under what terms, follows the client's settings.
+To review the Life Log with another AI, the user can also pass it to an AI client of their choice through MCP. Where that client sends data, and under what terms, follows the client's settings.
 
-The CLI and the MCP server (`lore-mcp`) run on the Mac and return results only to the client connected through standard input and output. They can read generated notes, marked as generated. They make no network connection and never change the user's records. Like the app, opening the database can apply a pending migration, create a backup, and perform the one-time move of Koe data.
+The MCP server (`lore-mcp`) runs on the Mac and returns results only to the client connected through standard input and output. It can read generated notes, marked as generated. It makes no network connection and never changes the user's records. Like the app, opening the database can apply a pending migration, create a backup, and perform the one-time move of Koe data.
 
 ## Data stored on the Mac
 

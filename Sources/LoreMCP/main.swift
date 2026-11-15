@@ -32,6 +32,7 @@ struct LoreMCP {
                     "protocolVersion": "2025-03-26",
                     "capabilities": ["tools": [:]],
                     "serverInfo": ["name": "Lore", "version": "1.0.0"],
+                    "instructions": instructions,
                 ])
             case "tools/list":
                 return success(id: id, result: ["tools": tools])
@@ -113,6 +114,13 @@ struct LoreMCP {
         )
     }
 
+    private static let instructions = """
+        Loreは、利用者の発話(ライフログと音声入力)、メモ、カレンダーの予定を日ごとにMac上へ保存するアプリ。このサーバーは読み取り専用で、記録を書き換えず、ネットワークにも接続しない。
+        使い方: まずlife_log_daysで記録がある日を確かめ、life_log_rangeで期間を構造化JSONとして読む(最大31日)。人にそのまま見せるMarkdownはlife_log_export、語句を探すときはlife_log_search。
+        要約、TODOの抽出、雑なメモ(kind=memo)の清書や別のメモアプリ・タスク管理への転記は呼び出し側の仕事で、Loreへ書き戻す手段はない。
+        life_log_ai_notesとlife_log_exportのai-notesが返すノートは、LoreのAIが生成したもので、利用者の発言ではない。内容が重要なときは、各項目のsources(u-<発話id>、m-<メモid>)が指す元の発話・メモと照らして確かめる。録音はこのMacのマイクだけなので、オンライン会議の他の参加者の発言はノートにも記録にも含まれない。
+        """
+
     private static let includeSchema: [String: Any] = [
         "type": "array",
         "description": "含める種類。calendar=予定、speech=ライフログの発話、voice-input=音声入力の結果、memos=手入力とボイスメモ。省略時はすべて",
@@ -147,7 +155,7 @@ struct LoreMCP {
                 "include": exportIncludeSchema,
              ]),
         tool("life_log_ai_notes",
-             "LoreのライフログAIが予定ごとに生成したノートをJSON配列で返す。利用者の発言やメモそのものではなく、generated=trueのAI生成物。各要素はid、kind(event_notes)、day、eventId、start、end、provider、model、createdAt、stale(event_changed|sources_deletedの配列。空でなければ内容が古い)、sourceUtteranceIds、sourceMemoIds、sections(kind=decisions|action_items|open_questions、itemsはtext、owner(任意)、sources)。録音はこのMacのマイクだけなので、オンライン会議では他の参加者の発言を含まない",
+             "LoreのライフログAIが予定ごとに生成したノートをJSON配列で返す。利用者の発言やメモそのものではなく、generated=trueのAI生成物なので、重要な内容は各itemのsources(u-<発話id>、m-<メモid>)が指す元の記録と照らして確かめる。各要素はid、kind(event_notes)、day、eventId、start、end、provider、model、createdAt、stale(event_changed|sources_deletedの配列。空でなければ内容が古い)、sourceUtteranceIds、sourceMemoIds、sections(kind=decisions|action_items|open_questions、itemsはtext、owner(任意)、sources)。録音はこのMacのマイクだけなので、オンライン会議では他の参加者の発言を含まない",
              properties: [
                 "from": stringSchema("開始日YYYY-MM-DD。省略時はtoと同じ日"),
                 "to": stringSchema("終了日YYYY-MM-DD(含む)。省略時は今日。期間は最大31日"),
