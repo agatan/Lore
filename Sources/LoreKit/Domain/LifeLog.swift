@@ -73,7 +73,7 @@ extension Sequence where Element == CalendarEventSnapshot {
 }
 
 /// Calendarから読み取った参加状態。Loreからは変更しない。
-public enum CalendarParticipationStatus: String, Codable, Sendable, Hashable {
+public enum CalendarParticipationStatus: String, Codable, Sendable, Hashable, CaseIterable {
     case none
     case pending
     case accepted
@@ -83,6 +83,10 @@ public enum CalendarParticipationStatus: String, Codable, Sendable, Hashable {
 
     /// RSVPが存在しない自分の予定と、参加済みの予定だけを利用する。
     public var isParticipating: Bool { self == .none || self == .accepted }
+
+    /// 「参加する予定だけ」がオンのとき、画面・エクスポート・自動化に出す予定。
+    /// 未回答の招待は、利用者が見つけて返答できるよう含める。辞退・仮承諾・不明は隠す。
+    public var isShownWhenAttendingOnly: Bool { isParticipating || self == .pending }
 }
 
 public struct LifeLogUtterance: Identifiable, Codable, Sendable, Hashable {

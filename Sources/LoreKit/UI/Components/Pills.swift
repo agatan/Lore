@@ -163,6 +163,7 @@ struct SettingsToggle: View {
     var title: String
     var caption: String?
     @Binding var isOn: Bool
+    var identifier: String?
 
     var body: some View {
         SettingsRow(title: title, caption: caption) {
@@ -170,6 +171,7 @@ struct SettingsToggle: View {
                 .labelsHidden()
                 .toggleStyle(.switch)
                 .controlSize(.small)
+                .accessibilityIdentifier(identifier ?? "")
         }
     }
 }

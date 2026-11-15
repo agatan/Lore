@@ -328,7 +328,7 @@
 "Option＋文字キーのホットキーに必要です。パスワード入力中は使えません。" = "Required for Option + letter hotkeys. Not available while you’re entering a password.";
 "%@ + キー、または離して確定" = "%@ + a key, or release to confirm";
 "選んだカレンダーの予定を、ライフログのタイムラインに表示します。" = "Events from the calendars you choose appear in the Life Log timeline.";
-"承諾した予定と、まだ返答していない予定を表示します" = "Shows events you’ve accepted and events you haven’t responded to yet";
+"承諾した予定、未回答の招待、招待ではない自分の予定を表示します" = "Shows events you’ve accepted, invitations you haven’t answered, and your own events that aren’t invitations";
 "%@の予定をカレンダーから読み込み直します" = "Reload events for %@ from Calendar";
 "最終取得: %@" = "Last refreshed: %@";
 "カレンダーへのアクセスが許可されていません" = "Calendar Access Not Allowed";
@@ -706,3 +706,5 @@
 "会議の1分前に通知" = "Notify 1 Minute Before Meetings";
 "参加用のリンクがある予定の1分前に、「参加」ボタン付きの通知を出します" = "One minute before an event with a join link starts, show a notification with a Join button";
 "参加用のリンクがある予定は、始まる10分前からミニウィンドウとメニューバーに「参加」ボタンを表示します。" = "For an event with a join link, the mini window and the menu bar show a Join button from 10 minutes before it starts.";
+"カレンダーで開く" = "Open in Calendar";
+"Googleカレンダーで開く" = "Open in Google Calendar";

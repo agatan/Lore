@@ -13,14 +13,15 @@ struct LifeLogCalendarSettingsView: View {
             ) {
                 SettingsToggle(
                     title: "参加する予定だけ",
-                    caption: "承諾した予定と、まだ返答していない予定を表示します",
+                    caption: "承諾した予定、未回答の招待、招待ではない自分の予定を表示します",
                     isOn: Binding(
                         get: { settings.lifeLogParticipatingEventsOnly },
                         set: { value in
                             settings.lifeLogParticipatingEventsOnly = value
                             Task { await env.lifeLog.calendarFilterChanged() }
                         }
-                    )
+                    ),
+                    identifier: "calendar.participating-only"
                 )
                 calendars
                 SettingsRow(

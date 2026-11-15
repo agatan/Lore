@@ -19,7 +19,8 @@ struct LoreAppEventDetailsTests {
         let sent = [
             CalendarEventDetails(eventID: "review", startsAt: start, externalIdentifier: "review@example.com",
                                  notes: "Agenda", location: "https://example.zoom.us/j/81234567890", organizer: mika,
-                                 attendees: [mika, room], isCanceled: true),
+                                 attendees: [mika, room], isCanceled: true,
+                                 googleCalendarURL: URL(string: "https://calendar.google.com/calendar/event?eid=ZGVtbw")),
             CalendarEventDetails(eventID: "lunch", startsAt: start.addingTimeInterval(1_800)),
         ]
         var asked: (Date, Date)?

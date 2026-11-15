@@ -8,7 +8,7 @@ The Settings window (`lore.settings`) has a sidebar of eleven sections in four g
 - `settings-nav` switches sections in the sidebar.
 - `settings-privacy` shows storage use and the three deletion buttons.
 - `settings-general` shows the color theme picker (`general.color-theme`) and the language picker (no id).
-- `settings-calendar` shows the refresh control for calendar events and the 記録しないカレンダー toggles (`calendar.never-record.<title>`, value オン/オフ).
+- `settings-calendar` shows the participation filter switch (`calendar.participating-only`, an AXCheckBox without a value), the refresh control for calendar events, and the 記録しないカレンダー toggles (`calendar.never-record.<title>`, value オン/オフ).
 - `settings-life-log` shows the voice-memo hotkey and the schedule. Pausing life-log is not here: it is a menu on the capture control that appears only while recording.
 - `settings-life-log-ai` shows Life Log AI: `life-log-ai.enabled`, `life-log-ai.provider`, `life-log-ai.sent-fields`, `life-log-ai.requests-today`, `life-log-ai.trigger`, and the AIに送らないカレンダー toggles.
 - `settings-modes` lists the built-in modes Default and Chat and no AI Agent mode.
