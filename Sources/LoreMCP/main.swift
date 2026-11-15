@@ -58,7 +58,7 @@ struct LoreMCP {
         switch name {
         case "life_log_export":
             let date = try optionalDay("date", in: arguments) ?? Date()
-            return try await service.exportDay(date, options: exportOptions(arguments["include"]))
+            return try await service.exportDay(date, options: exportOptions(arguments["include"], allowsAINotes: true))
         case "life_log_days":
             let from = try optionalDay("from", in: arguments)
             let to = try optionalDay("to", in: arguments)
@@ -68,6 +68,10 @@ struct LoreMCP {
             let to = try optionalDay("to", in: arguments)
             let options = try exportOptions(arguments["include"])
             return try LifeLogJSON.encode(try await service.range(from: from, to: to, options: options))
+        case "life_log_ai_notes":
+            let from = try optionalDay("from", in: arguments)
+            let to = try optionalDay("to", in: arguments)
+            return try LifeLogJSON.encode(try await service.aiNotes(from: from, to: to))
         case "life_log_search":
             let query = try requiredString("query", in: arguments)
             let results = try await service.search(query, limit: arguments["limit"] as? Int ?? 100)
@@ -94,17 +98,18 @@ struct LoreMCP {
     }
 
     /// 省略時は全項目。未知の種類はAIの綴り違いを黙って無視しないようerrorにする。
-    private static func exportOptions(_ value: Any?) throws -> LifeLogTextExporter.Options {
+    private static func exportOptions(_ value: Any?, allowsAINotes: Bool = false) throws -> LifeLogTextExporter.Options {
         guard let value else { return .init() }
         guard let values = value as? [String] else { throw MCPError.invalidArgument("include") }
-        let allowed: Set<String> = ["calendar", "speech", "voice-input", "memos"]
+        let allowed: Set<String> = Set(["calendar", "speech", "voice-input", "memos"] + (allowsAINotes ? ["ai-notes"] : []))
         let names = Set(values)
         guard names.isSubset(of: allowed) else { throw MCPError.invalidArgument("include") }
         return .init(
             includesCalendarEvents: names.contains("calendar"),
             includesUtterances: names.contains("speech"),
             includesDictations: names.contains("voice-input"),
-            includesMemos: names.contains("memos")
+            includesMemos: names.contains("memos"),
+            includesAINotes: names.contains("ai-notes")
         )
     }
 
@@ -112,6 +117,12 @@ struct LoreMCP {
         "type": "array",
         "description": "含める種類。calendar=予定、speech=ライフログの発話、voice-input=音声入力の結果、memos=手入力とボイスメモ。省略時はすべて",
         "items": ["type": "string", "enum": ["calendar", "speech", "voice-input", "memos"]],
+    ]
+
+    private static let exportIncludeSchema: [String: Any] = [
+        "type": "array",
+        "description": "含める種類。calendar=予定、speech=ライフログの発話、voice-input=音声入力の結果、memos=手入力とボイスメモ、ai-notes=LoreのAIが生成した予定のノート。省略時はai-notes以外のすべて",
+        "items": ["type": "string", "enum": ["calendar", "speech", "voice-input", "memos", "ai-notes"]],
     ]
 
     private static var tools: [[String: Any]] { [
@@ -133,7 +144,13 @@ struct LoreMCP {
              "1日分の予定・発話・音声入力・メモを人が読むMarkdownで返す。人へそのまま見せる用途向け。機械的に処理するならlife_log_rangeを使う",
              properties: [
                 "date": stringSchema("YYYY-MM-DD。省略時は今日"),
-                "include": includeSchema,
+                "include": exportIncludeSchema,
+             ]),
+        tool("life_log_ai_notes",
+             "LoreのライフログAIが予定ごとに生成したノートをJSON配列で返す。利用者の発言やメモそのものではなく、generated=trueのAI生成物。各要素はid、kind(event_notes)、day、eventId、start、end、provider、model、createdAt、stale(event_changed|sources_deletedの配列。空でなければ内容が古い)、sourceUtteranceIds、sourceMemoIds、sections(kind=decisions|action_items|open_questions、itemsはtext、owner(任意)、sources)。録音はこのMacのマイクだけなので、オンライン会議では他の参加者の発言を含まない",
+             properties: [
+                "from": stringSchema("開始日YYYY-MM-DD。省略時はtoと同じ日"),
+                "to": stringSchema("終了日YYYY-MM-DD(含む)。省略時は今日。期間は最大31日"),
              ]),
         tool("life_log_search",
              "発話・音声入力・メモを日本語部分一致で横断検索し、新しい順に「日付<TAB>種類<TAB>本文」の行で返す。前後の文脈はlife_log_rangeでその日を読む",

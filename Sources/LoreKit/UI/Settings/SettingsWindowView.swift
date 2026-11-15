@@ -11,6 +11,7 @@ public enum SettingsSection: String, CaseIterable, Identifiable, Hashable, Senda
     case vocabulary
     case lifeLog
     case calendar
+    case lifeLogAI
 
     public var id: String { rawValue }
 
@@ -26,6 +27,7 @@ public enum SettingsSection: String, CaseIterable, Identifiable, Hashable, Senda
         case .vocabulary: "語彙"
         case .lifeLog: "ライフログ"
         case .calendar: "カレンダー"
+        case .lifeLogAI: "ライフログAI"
         }
     }
 
@@ -41,6 +43,7 @@ public enum SettingsSection: String, CaseIterable, Identifiable, Hashable, Senda
         case .vocabulary: "character.book.closed"
         case .lifeLog: "calendar.day.timeline.left"
         case .calendar: "calendar"
+        case .lifeLogAI: "sparkles"
         }
     }
 
@@ -48,7 +51,7 @@ public enum SettingsSection: String, CaseIterable, Identifiable, Hashable, Senda
     var tint: Color {
         switch self {
         case .common, .privacy: LoreTheme.generalTint
-        case .lifeLog, .calendar: LoreTheme.lifeLogTint
+        case .lifeLog, .calendar, .lifeLogAI: LoreTheme.lifeLogTint
         case .dictation, .models, .modes, .vocabulary: LoreTheme.dictationTint
         case .sync, .automation: LoreTheme.connectTint
         }
@@ -70,6 +73,7 @@ struct SettingsWindowView: View {
                 Section {
                     row(.lifeLog)
                     row(.calendar)
+                    row(.lifeLogAI)
                 }
                 Section {
                     row(.dictation)
@@ -134,6 +138,7 @@ struct SettingsWindowView: View {
         case .vocabulary: VocabularySettingsView(env: env)
         case .lifeLog: LifeLogSettingsView(env: env)
         case .calendar: LifeLogCalendarSettingsView(env: env)
+        case .lifeLogAI: LifeLogAISettingsView(env: env)
         }
     }
 }

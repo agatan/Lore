@@ -62,6 +62,7 @@ struct LifeLogExportSheet: View {
                     exportToggle("発話", id: "speech", count: snapshot.day.utterances.count, isOn: $options.includesUtterances)
                     exportToggle("音声入力", id: "voice-input", count: snapshot.day.dictations.count, isOn: $options.includesDictations)
                     exportToggle("メモ", id: "memo", count: snapshot.day.memos.count, isOn: $options.includesMemos)
+                    exportToggle("AIノート", id: "ai-notes", count: snapshot.day.generatedNotes.count, isOn: $options.includesAINotes)
                 }
             }
 

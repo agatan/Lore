@@ -49,6 +49,19 @@ public enum FormattingBackend: String, Codable, Sendable, CaseIterable, Identifi
         case cloud
     }
 
+    /// The model a provider starts with. Formatting and Life Log AI keep their own choice.
+    public var defaultModel: String {
+        switch self {
+        case .onDevice: "Apple Foundation Models"
+        case .openAI: "gpt-5.4-mini"
+        case .anthropic: "claude-sonnet-5"
+        case .gemini: "gemini-3.6-flash"
+        case .groq: GroqLlm.defaultModel
+        case .ollama: "gpt-oss:20b"
+        case .lmStudio: "openai/gpt-oss-20b"
+        }
+    }
+
     /// 発話した内容がこの Mac の外に出るか。
     public var sendsTranscriptOffDevice: Bool {
         switch self {

@@ -147,6 +147,9 @@ public final class LoreDatabase: Sendable {
             try db.execute(sql: "DELETE FROM life_log_memos")
             try db.execute(sql: "DELETE FROM calendar_event_snapshots")
             try db.execute(sql: "DELETE FROM life_log_audio_chunks")
+            try db.execute(sql: "DELETE FROM generated_notes")
+            try db.execute(sql: "DELETE FROM life_log_ai_event_exclusions")
+            try db.execute(sql: "DELETE FROM life_log_ai_dismissed_scopes")
             try db.execute(sql: "DELETE FROM sessions")
             try db.execute(sql: "DELETE FROM vocabulary")
             try db.execute(sql: "DELETE FROM modes")
@@ -515,6 +518,30 @@ public final class LoreDatabase: Sendable {
                 sql: "DELETE FROM meta WHERE key IN (?, ?)",
                 arguments: ["vocab_analysis_watermark", "vocab_analysis_last_run"]
             )
+        }
+        migrator.registerMigration("v12-life-log-ai") { db in
+            // Generated notes and AI exclusions stay on this Mac: no sync triggers.
+            try db.execute(sql: """
+                CREATE TABLE generated_notes (
+                  id TEXT PRIMARY KEY,
+                  kind TEXT NOT NULL,
+                  scope_key TEXT NOT NULL,
+                  scope_day TEXT NOT NULL,
+                  event_id TEXT,
+                  range_start TEXT NOT NULL,
+                  range_end TEXT NOT NULL,
+                  provider TEXT NOT NULL,
+                  model TEXT NOT NULL,
+                  created_at TEXT NOT NULL,
+                  source_utterance_ids TEXT NOT NULL,
+                  source_memo_ids TEXT NOT NULL,
+                  content TEXT NOT NULL,
+                  UNIQUE(kind, scope_key)
+                );
+                CREATE INDEX generated_notes_scope_day ON generated_notes(scope_day);
+                CREATE TABLE life_log_ai_event_exclusions (event_id TEXT PRIMARY KEY);
+                CREATE TABLE life_log_ai_dismissed_scopes (scope_key TEXT PRIMARY KEY);
+                """)
         }
 
         return migrator

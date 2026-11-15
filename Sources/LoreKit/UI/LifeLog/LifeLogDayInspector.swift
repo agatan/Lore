@@ -8,6 +8,7 @@ struct LifeLogDayInspector: View {
     var day: LifeLogDay
     var date: Date
     var onJump: (Date) -> Void
+    var onShowEvent: (String) -> Void = { _ in }
 
     private var isToday: Bool { Calendar.current.isDateInToday(date) }
     private var mapLayout: LifeLogDayMapLayout { LifeLogDayMapLayout(day: day, date: date) }
@@ -15,6 +16,7 @@ struct LifeLogDayInspector: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 18) {
             summary
+            if !day.generatedNotes.isEmpty { aiNotes }
             // 過去日で予定も記録もなければ、空の目盛りは何も伝えないので出さない。
             // 今日は現在時刻の線が残りの時間を示すため、空でも出す。
             if isToday || !mapLayout.blocks.isEmpty || !mapLayout.marks.isEmpty {
@@ -33,6 +35,39 @@ struct LifeLogDayInspector: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("life-log.day-insights")
+    }
+
+    /// Events of the day that have AI notes. Selecting one moves the timeline to the event.
+    private var aiNotes: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Label("AIノート", systemImage: "sparkles")
+                .font(LoreTheme.sectionFont)
+                .foregroundStyle(.secondary)
+            ForEach(day.generatedNotes) { note in
+                let title = day.calendarEvents.first { $0.id == note.scope.eventID }?.title
+                Button {
+                    if let eventID = note.scope.eventID { onShowEvent(eventID) }
+                } label: {
+                    HStack(spacing: 6) {
+                        Text(verbatim: title ?? "—")
+                            .lineLimit(1)
+                        Spacer(minLength: 4)
+                        if !note.staleReasons.isEmpty {
+                            Image(systemName: "exclamationmark.triangle.fill")
+                                .foregroundStyle(LoreTheme.warning)
+                                .help(Text("内容が古い可能性があります"))
+                        }
+                        Text(verbatim: "\(note.sections.reduce(0) { $0 + $1.items.count })")
+                            .monospacedDigit()
+                            .foregroundStyle(.secondary)
+                    }
+                    .font(.system(size: LoreTheme.TextSize.body))
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityIdentifier("life-log.inspector-ai-note-\(note.scope.eventID ?? note.id)")
+            }
+        }
     }
 
     @ViewBuilder

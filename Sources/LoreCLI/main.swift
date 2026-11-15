@@ -22,6 +22,7 @@ struct LoreCLI {
         case "search": try await search(Array(arguments.dropFirst()), service: service)
         case "days": try await days(Array(arguments.dropFirst()), service: service)
         case "range": try await range(Array(arguments.dropFirst()), service: service)
+        case "notes": try await notes(Array(arguments.dropFirst()), service: service)
         case "help", "--help", "-h": print(usage)
         default: throw CLIError.usage("不明なコマンド: \(command)\n\n\(usage)")
         }
@@ -30,7 +31,7 @@ struct LoreCLI {
     private static func export(_ arguments: [String], service: LoreAutomationService) async throws {
         guard arguments.first == "day" else { throw CLIError.usage("使い方: lore export day [options]") }
         let date = try value(after: "--date", in: arguments).map(parseDay) ?? Date()
-        let options = try exportOptions(value(after: "--include", in: arguments))
+        let options = try exportOptions(value(after: "--include", in: arguments), allowsAINotes: true)
         let text = try await service.exportDay(date, options: options)
         try write(text, arguments: arguments, defaultFilename: "Lore-LifeLog-\(LifeLogDateKey.string(for: date)).md")
     }
@@ -61,17 +62,24 @@ struct LoreCLI {
         print(try LifeLogJSON.encode(try await service.range(from: from, to: to, options: options)))
     }
 
-    private static func exportOptions(_ value: String?) throws -> LifeLogTextExporter.Options {
+    private static func notes(_ arguments: [String], service: LoreAutomationService) async throws {
+        let from = try value(after: "--from", in: arguments).map(parseDay)
+        let to = try value(after: "--to", in: arguments).map(parseDay)
+        print(try LifeLogJSON.encode(try await service.aiNotes(from: from, to: to)))
+    }
+
+    private static func exportOptions(_ value: String?, allowsAINotes: Bool = false) throws -> LifeLogTextExporter.Options {
         guard let value else { return .init() }
         let names = Set(value.split(separator: ",").map(String.init))
-        let allowed = Set(["calendar", "speech", "voice-input", "memos"])
+        let allowed = Set(["calendar", "speech", "voice-input", "memos"] + (allowsAINotes ? ["ai-notes"] : []))
         let unknown = names.subtracting(allowed)
         guard unknown.isEmpty else { throw CLIError.invalidValue("include", unknown.sorted().joined(separator: ",")) }
         return .init(
             includesCalendarEvents: names.contains("calendar"),
             includesUtterances: names.contains("speech"),
             includesDictations: names.contains("voice-input"),
-            includesMemos: names.contains("memos")
+            includesMemos: names.contains("memos"),
+            includesAINotes: names.contains("ai-notes")
         )
     }
 
@@ -107,10 +115,11 @@ struct LoreCLI {
     }
 
     private static let usage = """
-    lore export day [--date YYYY-MM-DD] [--include calendar,speech,voice-input,memos] [--clipboard|--output PATH]
+    lore export day [--date YYYY-MM-DD] [--include calendar,speech,voice-input,memos,ai-notes] [--clipboard|--output PATH]
     lore search "検索語" [--limit N]
     lore days [--from YYYY-MM-DD] [--to YYYY-MM-DD]
     lore range --from YYYY-MM-DD [--to YYYY-MM-DD] [--include calendar,speech,voice-input,memos]
+    lore notes [--from YYYY-MM-DD] [--to YYYY-MM-DD]
     """
 }
 

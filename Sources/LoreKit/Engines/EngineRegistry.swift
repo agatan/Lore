@@ -46,11 +46,11 @@ public final class EngineRegistry {
         stt: any SttEngine = SpeechAnalyzerStt(),
         llm: any LlmEngine = FoundationModelsLlm(),
         groq: GroqLlm = GroqLlm(),
-        openAI: RemoteLlm = RemoteLlm(identifier: .openAI, providerName: "OpenAI", api: .openAI, model: "gpt-5.4-mini", apiKeySource: { try SecretStore.read(.openAIApiKey) }),
-        anthropic: RemoteLlm = RemoteLlm(identifier: .anthropic, providerName: "Claude", api: .anthropic, model: "claude-sonnet-5", apiKeySource: { try SecretStore.read(.anthropicApiKey) }),
-        gemini: RemoteLlm = RemoteLlm(identifier: .gemini, providerName: "Gemini", api: .gemini, model: "gemini-3.6-flash", apiKeySource: { try SecretStore.read(.geminiApiKey) }),
-        ollama: RemoteLlm = RemoteLlm(identifier: .ollama, providerName: "Ollama", api: .openAICompatible(baseURL: URL(string: "http://localhost:11434/v1")!, authorizationValue: nil), model: "gpt-oss:20b"),
-        lmStudio: RemoteLlm = RemoteLlm(identifier: .lmStudio, providerName: "LM Studio", api: .openAICompatible(baseURL: URL(string: "http://localhost:1234/v1")!, authorizationValue: nil), model: "openai/gpt-oss-20b")
+        openAI: RemoteLlm = EngineRegistry.makeRemote(.openAI),
+        anthropic: RemoteLlm = EngineRegistry.makeRemote(.anthropic),
+        gemini: RemoteLlm = EngineRegistry.makeRemote(.gemini),
+        ollama: RemoteLlm = EngineRegistry.makeRemote(.ollama),
+        lmStudio: RemoteLlm = EngineRegistry.makeRemote(.lmStudio)
     ) {
         self.stt = stt
         dictationWhisper = WhisperCppStt(model: .largeV3Turbo)
@@ -62,6 +62,33 @@ public final class EngineRegistry {
         self.gemini = gemini
         self.ollama = ollama
         self.lmStudio = lmStudio
+    }
+
+    /// The single description of each remote provider: endpoint, display name, and Keychain key.
+    /// Ollama and LM Studio are fixed to localhost.
+    public nonisolated static func makeRemote(
+        _ backend: FormattingBackend,
+        model: String? = nil,
+        session: URLSession = .shared
+    ) -> RemoteLlm {
+        let model = model ?? backend.defaultModel
+        return switch backend {
+        case .openAI: RemoteLlm(identifier: .openAI, providerName: "OpenAI", api: .openAI, model: model, session: session, apiKeySource: { try SecretStore.read(.openAIApiKey) })
+        case .anthropic: RemoteLlm(identifier: .anthropic, providerName: "Claude", api: .anthropic, model: model, session: session, apiKeySource: { try SecretStore.read(.anthropicApiKey) })
+        case .gemini: RemoteLlm(identifier: .gemini, providerName: "Gemini", api: .gemini, model: model, session: session, apiKeySource: { try SecretStore.read(.geminiApiKey) })
+        case .lmStudio: RemoteLlm(identifier: .lmStudio, providerName: "LM Studio", api: .openAICompatible(baseURL: URL(string: "http://localhost:1234/v1")!, authorizationValue: nil), model: model, session: session)
+        case .onDevice, .groq: preconditionFailure("\(backend) has its own engine type")
+        case .ollama: RemoteLlm(identifier: .ollama, providerName: "Ollama", api: .openAICompatible(baseURL: URL(string: "http://localhost:11434/v1")!, authorizationValue: nil), model: model, session: session)
+        }
+    }
+
+    /// A fresh engine for one Life Log AI request, so its model never changes the formatting model.
+    public func lifeLogAIEngine(backend: FormattingBackend, model: String, session: URLSession = .shared) -> any LlmEngine {
+        switch backend {
+        case .onDevice: onDeviceLlm
+        case .groq: GroqLlm(model: model, session: session)
+        case .openAI, .anthropic, .gemini, .ollama, .lmStudio: Self.makeRemote(backend, model: model, session: session)
+        }
     }
 
     /// いま整形に使うエンジン。セッション開始時にここから 1 つ取り、

@@ -45,6 +45,25 @@ enum ScreenshotDemoData {
             insertLatencyMs: 1_140
         ))
 
+        // One stored AI note, so the timeline and the export show notes without any request.
+        try await database.lifeLog.save(generatedNote: GeneratedNote(
+            id: "demo-note-1",
+            kind: .eventNotes,
+            scope: .event(EventOccurrence(events[0], calendar: calendar)),
+            rangeStart: events[0].startsAt,
+            rangeEnd: events[0].endsAt,
+            backend: .onDevice,
+            model: FormattingBackend.onDevice.defaultModel,
+            createdAt: events[0].endsAt.addingTimeInterval(20),
+            sourceUtteranceIDs: ["demo-utterance-1"],
+            sourceMemoIDs: [],
+            sections: [
+                GeneratedNoteSection(kind: .decisions, items: [GeneratedNoteItem(text: copy.eventNote[0], sources: ["u-demo-utterance-1"])]),
+                GeneratedNoteSection(kind: .actionItems, items: [GeneratedNoteItem(text: copy.eventNote[1], owner: copy.me, sources: ["u-demo-utterance-1"])]),
+                GeneratedNoteSection(kind: .openQuestions, items: [GeneratedNoteItem(text: copy.eventNote[2], sources: ["u-demo-utterance-1"])]),
+            ]
+        ))
+
         try await database.lifeLog.save(memo: LifeLogMemo(id: "demo-memo-1", createdAt: time(11, 6), text: copy.memos[0]))
         try await database.lifeLog.save(memo: LifeLogMemo(id: "demo-memo-2", createdAt: time(15, 20), text: copy.memos[1]))
 
@@ -78,6 +97,8 @@ struct DemoCopy {
     var messageFrom: String
     var messageText: String
     var me: String
+    /// Decision, action item, and open question of the stored demo note.
+    var eventNote: [String]
 
     static var current: DemoCopy {
         let arguments = ProcessInfo.processInfo.arguments
@@ -118,7 +139,8 @@ struct DemoCopy {
         messageTitle: "メッセージ — #design",
         messageFrom: "Mika",
         messageText: "明日の1on1、時間大丈夫そうですか？",
-        me: "自分"
+        me: "自分",
+        eventNote: ["今日は初回体験の流れを確認する", "初回体験の流れを通しで確認する", "検索とエクスポートの次に何を見せるか"]
     )
 
     static let english = DemoCopy(
@@ -148,7 +170,8 @@ struct DemoCopy {
         messageTitle: "Messages — #design",
         messageFrom: "Mika",
         messageText: "Does tomorrow's 1:1 still work for you?",
-        me: "You"
+        me: "You",
+        eventNote: ["Today's focus is the first-run experience", "Walk through the first-run flow end to end", "What should come after search and export?"]
     )
 
     static let chinese = DemoCopy(
@@ -178,7 +201,8 @@ struct DemoCopy {
         messageTitle: "消息 — #design",
         messageFrom: "Mika",
         messageText: "明天的一对一时间还可以吗？",
-        me: "我"
+        me: "我",
+        eventNote: ["今天先过一遍首次使用的流程", "从头到尾走一遍首次使用流程", "搜索和导出之后，接下来展示什么？"]
     )
 }
 #endif

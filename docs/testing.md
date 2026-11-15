@@ -35,6 +35,13 @@ The goal is neither the number of tests nor line coverage. Tests verify invarian
 2. The Calendar settings show the refresh action.
 3. The Life Log settings show the voice memo hotkey.
 4. Modes shows Default and Chat, and the removed AI Agent mode does not exist.
+5. The Life Log AI settings show that it is off and that nothing is sent while it is off.
+
+### Journey 4: read AI notes on an event
+
+1. The demo data has one stored note for the first event. The timeline shows it under the event, marked as AI-generated with the provider. No request is made.
+2. Selecting an item moves the timeline to its source utterance.
+3. "Export" with "AI Notes" turned on shows the notes in the preview. It is off when the sheet opens.
 
 ### Journey 4: finish onboarding
 

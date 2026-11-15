@@ -26,7 +26,8 @@ public struct LifeLogWindow: View {
                 LifeLogDayInspector(
                     day: env.lifeLog.day,
                     date: env.lifeLog.selectedDate,
-                    onJump: { date in Task { await env.lifeLog.jumpToTime(date) } }
+                    onJump: { date in Task { await env.lifeLog.jumpToTime(date) } },
+                    onShowEvent: { id in env.lifeLog.jumpToTimelineItem("e-\(id)") }
                 )
                 .inspectorColumnWidth(min: 260, ideal: 300, max: 380)
             }
@@ -195,6 +196,17 @@ public struct LifeLogWindow: View {
                 )
                 .accessibilityIdentifier("life-log.notice")
             }
+            if let error = env.lifeLogAI.errorMessage {
+                NoticeBanner(
+                    title: "ライフログAIの処理に失敗しました",
+                    message: error,
+                    tint: LoreTheme.warning,
+                    actionTitle: nil,
+                    action: nil,
+                    onDismiss: env.lifeLogAI.dismissError
+                )
+                .accessibilityIdentifier("life-log-ai.notice")
+            }
             LifeLogComposerBar(
                 env: env,
                 memoDraft: $memoDraft,
@@ -259,8 +271,15 @@ public struct LifeLogWindow: View {
                     above: row.above,
                     below: row.below,
                     isCurrent: isToday && value.contains(Date()),
-                    recording: env.eventRecording(value)
+                    recording: env.eventRecording(value),
+                    ai: CalendarEventCard.AI(
+                        notes: AnyView(EventNotesView(env: env, event: value)),
+                        isExcluded: env.lifeLogAI.excludedEventIDs.contains(value.id),
+                        isCalendarExcluded: env.settings.lifeLogAI.excludedCalendars.contains(value.calendarTitle),
+                        setExcluded: { excluded in Task { await env.lifeLogAI.setExcluded(excluded, eventID: value.id) } }
+                    )
                 )
+                .accessibilityElement(children: .contain)
                 .accessibilityIdentifier("life-log.timeline-event-\(value.id)")
             case .dictation(let value):
                 TimelineEntryRow(

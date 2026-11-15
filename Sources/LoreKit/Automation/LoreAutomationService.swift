@@ -92,6 +92,23 @@ public final class LoreAutomationService {
         return entries.sorted { ($0.date, $0.entry.id) < ($1.date, $1.entry.id) }.map(\.entry)
     }
 
+    /// AI-generated notes whose day falls in the range, marked as generated, oldest first.
+    public func aiNotes(
+        from: Date? = nil,
+        to: Date? = nil,
+        now: Date = Date(),
+        calendar: Calendar = .current
+    ) async throws -> [GeneratedNoteEntry] {
+        let end = calendar.startOfDay(for: to ?? now)
+        let start = calendar.startOfDay(for: from ?? end)
+        let dates = try Self.days(from: start, through: end, limit: Self.maximumRangeDays, calendar: calendar)
+        guard let first = dates.first, let last = dates.last else { return [] }
+        return try await database.lifeLog.generatedNotes(
+            fromDay: LifeLogDateKey.string(for: first, calendar: calendar),
+            throughDay: LifeLogDateKey.string(for: last, calendar: calendar)
+        ).map(GeneratedNoteEntry.init)
+    }
+
     private static func days(from start: Date, through end: Date, limit: Int, calendar: Calendar) throws -> [Date] {
         guard start <= end else { throw AutomationError.invalidRange }
         var dates: [Date] = []
@@ -102,6 +119,53 @@ public final class LoreAutomationService {
             cursor = calendar.date(byAdding: .day, value: 1, to: cursor)!
         }
         return dates
+    }
+}
+
+/// One AI note as the CLI and MCP return it. `generated` is always true so a client never mistakes
+/// it for something the user said or wrote.
+public struct GeneratedNoteEntry: Codable, Sendable, Equatable {
+    public struct Item: Codable, Sendable, Equatable {
+        public var text: String
+        public var owner: String?
+        public var sources: [String]
+    }
+    public struct Section: Codable, Sendable, Equatable {
+        public var kind: String
+        public var items: [Item]
+    }
+
+    public var id: String
+    public var generated = true
+    public var kind: String
+    public var day: String
+    public var eventId: String?
+    public var start: String
+    public var end: String
+    public var provider: String
+    public var model: String
+    public var createdAt: String
+    public var stale: [String]
+    public var sourceUtteranceIds: [String]
+    public var sourceMemoIds: [String]
+    public var sections: [Section]
+
+    init(_ note: GeneratedNote) {
+        id = note.id
+        kind = note.kind.rawValue
+        day = note.scope.day
+        eventId = note.scope.eventID
+        start = LifeLogEntry.timestamp(note.rangeStart)
+        end = LifeLogEntry.timestamp(note.rangeEnd)
+        provider = note.backend.displayName
+        model = note.model
+        createdAt = LifeLogEntry.timestamp(note.createdAt)
+        stale = note.staleReasons.map(\.rawValue).sorted()
+        sourceUtteranceIds = note.sourceUtteranceIDs
+        sourceMemoIds = note.sourceMemoIDs
+        sections = note.sections.map { section in
+            Section(kind: section.kind.rawValue, items: section.items.map { Item(text: $0.text, owner: $0.owner, sources: $0.sources) })
+        }
     }
 }
 

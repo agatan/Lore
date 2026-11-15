@@ -17,15 +17,37 @@ Only when the user explicitly selects OpenAI, Claude, Gemini, or Groq in Setting
 - The instructions of the selected mode
 - The enabled vocabulary
 
-Recorded audio, dictation history, Life Log utterances, memos, and events, and information about the frontmost app are not sent. Fetching the model list and checking the connection use the stored API key to authenticate with the selected API.
+Recorded audio, dictation history, Life Log utterances, memos, and events, and information about the frontmost app are not sent as part of formatting. Fetching the model list and checking the connection use the stored API key to authenticate with the selected API.
 
 Data sent to a cloud API is subject to the terms and the privacy policy of that service.
 
-## Life Log and AI clients
+## Life Log AI
 
-Lore never sends the Life Log to an LLM or to the cloud to summarize or analyze it. To review the Life Log with AI, the user passes it to an AI client of their choice through the CLI or MCP. Where that client sends data, and under what terms, follows the client's settings.
+Life Log AI is off by default. While it is off, Lore sends no Life Log text to any LLM or service.
 
-The CLI and the MCP server (`lore-mcp`) run on the Mac and return results only to the client connected through standard input and output. They make no network connection and never change the user's records. Like the app, opening the database can apply a pending migration, create a backup, and perform the one-time move of Koe data.
+When the user turns it on in Settings > Life Log AI, Lore generates notes for calendar events with the provider chosen there. The choice is separate from dictation formatting.
+
+- With Apple Foundation Models, the text is processed on this Mac. With Ollama or LM Studio, it goes to the fixed localhost address of that server (`localhost:11434` or `localhost:1234`) and does not leave this Mac.
+- With OpenAI, Claude, Gemini, or Groq, the text goes to that service's API, authenticated with the API key stored for it in the Keychain. Lore sends nothing to a cloud provider until the user confirms a dialog that names it.
+
+For the notes of one calendar event, a request contains exactly these fields:
+
+- The fixed instructions that ask for decisions, action items, and open questions
+- The event title
+- The event start and end time
+- For each Life Log utterance and memo inside the event's time range: its time, its kind (utterance or memo), and its text
+
+Recorded audio, the calendar name, attendees, text outside the event's time range, other days, dictation history, information about the frontmost app, and API keys are never sent. A calendar or a single event can be marked "do not send to AI". Text inside the time range of an excluded event, or of an event in an excluded calendar, is never sent, even when another event overlaps it.
+
+Requests are made only when an event ends or when the user asks for notes, never continuously. Settings shows how many requests Lore made today. Data sent to a cloud API is subject to the terms and the privacy policy of that service.
+
+Generated notes are stored in the database on this Mac with the provider, the model, the time, and the identifiers of their source utterances and memos. They are not synced between Macs. They are deleted individually, by "Delete Life Log", and by "Reset Lore…".
+
+## AI clients
+
+To review the Life Log with another AI, the user can also pass it to an AI client of their choice through the CLI or MCP. Where that client sends data, and under what terms, follows the client's settings.
+
+The CLI and the MCP server (`lore-mcp`) run on the Mac and return results only to the client connected through standard input and output. They can read generated notes, marked as generated. They make no network connection and never change the user's records. Like the app, opening the database can apply a pending migration, create a backup, and perform the one-time move of Koe data.
 
 ## Data stored on the Mac
 
@@ -37,6 +59,7 @@ Lore stores the following in `~/Library/Application Support/Lore/lore.sqlite`:
 - Results, errors, and processing times
 - Modes, common rules, and vocabulary
 - Life Log audio chunk records, timestamped utterances, text memos, and event snapshots
+- AI-generated notes and the events marked "do not send to AI"
 
 If you used the app under its old name Koe, the first launch moves `~/Library/Application Support/Koe/` to the Lore location, and copies the old Keychain items (service `dev.agatan.Koe`) to new items (service `dev.agatan.Lore`) before deleting the old ones. This migration happens entirely on the Mac and sends nothing.
 
@@ -51,8 +74,8 @@ The default retention of dictation history is forever. It can be changed to 30 d
 Settings > Privacy deletes the dictation history only, the whole Life Log, or everything:
 
 - **Dictation History** deletes transcripts and formatted text.
-- **Life Log** deletes utterances, memos, imported events, and stored audio.
-- **All Data ("Reset Lore…")** deletes history, backups, Life Log audio, utterances, memos, event snapshots, vocabulary, modes, common rules, downloaded whisper.cpp models and partial files, and legacy WhisperKit models. It also deletes every Keychain item: each API key, keys registered for the Life Log by older versions, and the sync key. Settings return to their defaults and sync is turned off. Files in the sync folder are not deleted.
+- **Life Log** deletes utterances, memos, imported events, stored audio, AI-generated notes, and AI event exclusions.
+- **All Data ("Reset Lore…")** deletes history, backups, Life Log audio, utterances, memos, event snapshots, AI-generated notes, AI event exclusions, vocabulary, modes, common rules, downloaded whisper.cpp models and partial files, and legacy WhisperKit models. It also deletes every Keychain item: each API key, keys registered for the Life Log by older versions, and the sync key. Settings return to their defaults and sync is turned off. Files in the sync folder are not deleted.
 
 When Lore is updated from an older version that stored to-do items, daily summaries, topics, or cloud AI token counts, it creates a backup immediately before the migration and then deletes that data from the database. That backup is also subject to the 7-snapshot retention and to the full reset.
 
@@ -61,7 +84,7 @@ When Lore is updated from an older version that stored to-do items, daily summar
 Only when "Sync" is enabled in Settings does Lore make the same text data available on several Macs. It is off by default.
 
 - Synced: Life Log utterance text, memos, dictation history (raw transcript, formatted text, status, mode instructions, the name and bundle ID of the app that was frontmost when recording started, engine and model, error, processing times), and vocabulary.
-- Not synced: recorded audio, API keys, settings, event snapshots, whisper.cpp models, backups, and modes.
+- Not synced: recorded audio, API keys, settings, event snapshots, AI-generated notes and AI event exclusions, whisper.cpp models, backups, and modes.
 - Lore writes only change files, encrypted on the Mac, into `Lore Sync/` inside the folder that the user chose (iCloud Drive, Dropbox, Syncthing, and so on). Lore itself makes no network connection. The folder provider transports the files.
 - Encryption uses AES-GCM with a 256-bit key. The first Mac generates the key as a "sync code", and each Mac stores it only in its own Keychain. It is not synced to iCloud Keychain. The folder provider, and any third party without the sync code, cannot read the file contents. The number, size, and modification time of the files, and a random identifier created per Mac, are visible without encryption.
 - Anyone who knows the sync code can read the contents of the folder. Do not give the sync code to anyone else. Enter it only on the Macs that join.
