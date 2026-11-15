@@ -231,6 +231,9 @@
 <li>"Refresh Events" in the Calendar settings explicitly reloads the events of the day currently selected in the timeline. The button is disabled while it runs. Afterward the timeline and the monthly activity are updated.</li>
 <li>Lore does not change an RSVP and offers no path into the Calendar app.</li>
 <li>"Never Record" calendars and "Do Not Record" events hold Life Log capture while they are in progress (section 4.1). An event row that holds capture shows a "Not Recorded" tag.</li>
+<li><strong>Last time.</strong> A repeating event that has not ended yet shows a "Last time" row with the date of its latest earlier occurrence that has recorded speech. The row appears on the event pinned in the mini window and on the event in the main window timeline, and disappears when the event ends. Selecting the date opens the main window on that day and highlights the first utterance of that occurrence. Occurrences are matched by the event identifier that the calendar shares across a repeating series, never by title. Only utterances recorded on this Mac carry that identifier, so an occurrence recorded only on another Mac does not count.</li>
+<li>When the earlier occurrence has AI notes, the row also lists up to three of its action items and open questions, action items first. The row only shows what is already stored and never sends a request. Life Log AI being off does not hide the date.</li>
+<li>The row is absent for an all-day event, for the first occurrence, for a series with no earlier recorded speech, and for an event that holds capture. For an event excluded from AI, or one in an excluded calendar, the row has the date only.</li>
 <li>In the monthly activity calendar, the day shown in the timeline is a filled circle: ink, or rose when that day is today. Today, when not selected, has a rose number. Each day has two density dots, one for events and one for speech. The header has previous month, next month, and "Today" buttons.</li>
 </ul>
 <h3>4.4 Life Log AI</h3>
@@ -443,6 +446,7 @@ lore notes [--from YYYY-MM-DD] [--to YYYY-MM-DD]</code></pre>
 <li>While a timed event of a "Never Record" calendar, or a timed event marked "Do Not Record", is in progress, no Life Log audio chunk is created, and recording resumes after the event if the recording intent remains.</li>
 <li>Ending an event with enough speech while Life Log AI is on with the automatic trigger produces exactly one note. Relaunching or refreshing the calendar produces no duplicate. An event that ended earlier the same day is handled at the next launch, pending transcription is waited for, and a note whose event moved or whose sources were deleted is marked and offers regeneration.</li>
 <li>Deleting the Life Log and "Reset Lore…" remove every AI note and AI event exclusion.</li>
+<li>A repeating event in progress whose earlier occurrence has recorded speech shows "Last time" with that date in the mini window and the timeline, with that occurrence's action items and open questions when it has notes. The first occurrence and an event that holds capture show nothing, and selecting the date opens that day.</li>
 </ol>
 </section>
 </main>

@@ -15,6 +15,13 @@ struct CalendarEventCard: View {
         var exclusions: LifeLogRecordingExclusions
         var setSkipped: (Bool) -> Void
     }
+    /// The "Last time" row of a repeating event. Shown until the event ends.
+    var lastTime: LastTime?
+
+    struct LastTime {
+        var value: EventLastTime
+        var open: () -> Void
+    }
     /// The AI notes and the "do not send to AI" toggle. Only the main window passes it.
     var ai: AI?
 
@@ -56,6 +63,11 @@ struct CalendarEventCard: View {
                     .font(LoreTheme.captionFont.monospacedDigit())
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
+                if let lastTime {
+                    TimelineView(.explicit([event.endsAt])) { _ in
+                        if event.endsAt > Date() { lastTimeRow(lastTime) }
+                    }
+                }
                 if let ai { ai.notes }
             }
             .padding(.leading, compact ? 4 : 6)
@@ -67,6 +79,32 @@ struct CalendarEventCard: View {
             recordingMenu
             aiMenu
         }
+    }
+
+    private func lastTimeRow(_ lastTime: LastTime) -> some View {
+        let prefix = "life-log.event-last-time-\(event.id)"
+        let day = LifeLogDateKey.date(from: lastTime.value.previous.occurrence.day)
+            .map { $0.loreFormatted(.dateTime.month(.abbreviated).day().weekday(.abbreviated)) } ?? lastTime.value.previous.occurrence.day
+        return VStack(alignment: .leading, spacing: 2) {
+            Button(action: lastTime.open) {
+                Label {
+                    Text("前回") + Text(verbatim: " · \(day)")
+                } icon: {
+                    Image(systemName: "clock.arrow.circlepath")
+                }
+            }
+            .buttonStyle(.link)
+            .help("前回の記録を開く")
+            .accessibilityIdentifier(prefix)
+            ForEach(Array(lastTime.value.followUps.enumerated()), id: \.offset) { index, item in
+                Text(verbatim: "· \(item.text)")
+                    .foregroundStyle(.secondary)
+                    .lineLimit(compact ? 1 : 2)
+                    .accessibilityIdentifier("\(prefix).item-\(index)")
+            }
+        }
+        .font(LoreTheme.captionFont)
+        .padding(.top, 3)
     }
 
     private func tag(_ title: LocalizedStringKey, color: Color) -> some View {
@@ -124,11 +162,12 @@ struct CurrentCalendarEventStrip: View {
     var events: [CalendarEventSnapshot]
     var selectedDate: Date
     var recording: (CalendarEventSnapshot) -> CalendarEventCard.Recording?
+    var lastTime: (CalendarEventSnapshot) -> CalendarEventCard.LastTime?
 
     var body: some View {
         TimelineView(.periodic(from: .now, by: 30)) { context in
             if Calendar.current.isDateInToday(selectedDate), let event = events.timedEventInProgress(at: context.date) {
-                CalendarEventCard(event: event, isCurrent: true, compact: true, recording: recording(event))
+                CalendarEventCard(event: event, isCurrent: true, compact: true, recording: recording(event), lastTime: lastTime(event))
                     .padding(.bottom, 6)
             }
         }
@@ -140,6 +179,18 @@ extension AppEnvironment {
     func eventRecording(_ event: CalendarEventSnapshot) -> CalendarEventCard.Recording {
         CalendarEventCard.Recording(exclusions: settings.lifeLogRecordingExclusions) { [weak self] skipped in
             self?.setLifeLogEventSkipped(skipped, event: event)
+        }
+    }
+
+    func eventLastTime(_ event: CalendarEventSnapshot) -> CalendarEventCard.LastTime? {
+        guard let value = lifeLog.day.lastTime(
+            for: event,
+            recordingExclusions: settings.lifeLogRecordingExclusions,
+            aiSettings: settings.lifeLogAI,
+            aiExcludedEventIDs: lifeLogAI.excludedEventIDs
+        ) else { return nil }
+        return CalendarEventCard.LastTime(value: value) { [weak self] in
+            Task { await self?.showLifeLogPreviousOccurrence(value.previous) }
         }
     }
 }

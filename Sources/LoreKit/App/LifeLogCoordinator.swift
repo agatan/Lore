@@ -914,6 +914,10 @@ public final class LifeLogCoordinator {
         await navigateToSource(date: LifeLogDateKey.date(from: day) ?? Date(), timelineItemID: "e-\(eventID)")
     }
 
+    public func showUtterance(id utteranceID: String, day: String) async {
+        await navigateToSource(date: LifeLogDateKey.date(from: day) ?? Date(), timelineItemID: "u-\(utteranceID)")
+    }
+
     /// Saves today's calendar snapshot for the AI trigger without moving the selected day.
     /// The caller checks calendar access first, so this never shows the permission prompt.
     public func saveTodayCalendarSnapshot(selectedCalendars: Set<String>, now: Date = Date()) async throws {

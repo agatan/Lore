@@ -128,8 +128,33 @@ public struct LifeLogStore: Sendable {
             let events = try Row.fetchAll(db, sql: "SELECT * FROM calendar_event_snapshots WHERE ends_at > ? AND starts_at < ?\(participationClause) ORDER BY starts_at", arguments: args).map(decodeEvent)
             let notes = try Row.fetchAll(db, sql: "SELECT * FROM generated_notes WHERE scope_day = ? ORDER BY range_start", arguments: [LifeLogDateKey.string(for: dateValue, calendar: calendar)])
                 .map { try decodeGeneratedNote($0, db: db) }
-            return LifeLogDay(utterances: utterances, dictations: dictations, memos: memos, calendarEvents: events, generatedNotes: notes)
+            var previous: [String: PreviousEventOccurrence] = [:]
+            for event in events where !event.isAllDay {
+                previous[event.id] = try previousOccurrence(of: event, db: db, calendar: calendar)
+            }
+            return LifeLogDay(utterances: utterances, dictations: dictations, memos: memos, calendarEvents: events,
+                              generatedNotes: notes, previousOccurrences: previous)
         }
+    }
+
+    /// The latest earlier day with speech under the same event identifier. Comparing with the start of
+    /// this occurrence, not of this day, keeps an event that crosses midnight from finding itself.
+    private func previousOccurrence(of event: CalendarEventSnapshot, db: Database, calendar: Calendar) throws -> PreviousEventOccurrence? {
+        guard let latest = try String.fetchOne(db, sql: """
+            SELECT started_at FROM life_log_utterances WHERE calendar_event_id = ? AND started_at < ?
+            ORDER BY started_at DESC LIMIT 1
+            """, arguments: [event.id, date(event.startsAt)]) else { return nil }
+        let latestStart = try parse(latest)
+        guard let interval = calendar.dateInterval(of: .day, for: latestStart),
+              let firstID = try String.fetchOne(db, sql: """
+                SELECT id FROM life_log_utterances WHERE calendar_event_id = ? AND started_at >= ? AND started_at <= ?
+                ORDER BY started_at LIMIT 1
+                """, arguments: [event.id, date(interval.start), latest]) else { return nil }
+        let occurrence = EventOccurrence(eventID: event.id, day: LifeLogDateKey.string(for: latestStart, calendar: calendar))
+        let notes = try Row.fetchOne(db, sql: "SELECT * FROM generated_notes WHERE kind = ? AND scope_key = ?",
+                                     arguments: [GeneratedNoteKind.eventNotes.rawValue, GeneratedNoteScope.event(occurrence).key])
+            .map { try decodeGeneratedNote($0, db: db) }
+        return PreviousEventOccurrence(occurrence: occurrence, firstUtteranceID: firstID, notes: notes)
     }
 
     public func activity(start: Date, end: Date, calendar: Calendar = .current, participatingOnly: Bool = false) async throws -> [String: LifeLogDayActivity] {

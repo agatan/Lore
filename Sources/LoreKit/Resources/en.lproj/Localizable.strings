@@ -662,3 +662,5 @@
 "AIの応答を読み取れませんでした" = "Could not read the AI response";
 "ライフログAIの処理に失敗しました" = "Life Log AI failed";
 "このカレンダーはAIに送らない設定です" = "This calendar is not sent to AI";
+"前回" = "Last time";
+"前回の記録を開く" = "Open the last occurrence";
