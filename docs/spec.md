@@ -168,6 +168,7 @@ Lore inserts the raw transcript unchanged when the formatted output is empty, is
 ### 4.3 Calendar
 
 - Lore reads the events of the selected calendars and saves a snapshot of the time, title, calendar name, all-day flag, and participation status.
+- The snapshot keeps one entry per occurrence, so every occurrence of a repeating event stays on its own day. When Lore reloads a day's events, an event that has not ended and is no longer on that day in the calendar, because it was moved or deleted, leaves the snapshot. An event that has ended keeps the entry it had.
 - By default, only events that the user accepted, or that have no RSVP, are shown and exported. The user can change this filter.
 - "Refresh Events" in the Calendar settings explicitly reloads the events of the day currently selected in the timeline. The button is disabled while it runs. Afterward the timeline and the monthly activity are updated.
 - Lore does not change an RSVP and offers no path into the Calendar app.
@@ -204,7 +205,7 @@ Life Log AI generates a small set of notes from the Life Log at fixed moments. I
 - With the manual trigger, Lore never generates on its own. An ended event that has no notes shows "Generate Notes" while Life Log AI is on.
 - Lore generates automatically only when all of these hold: Life Log AI is on, the trigger is automatic, the event is not all-day, it passes the participation filter of the Life Log settings, it ended today (an event that ends at midnight counts for the day it ended on, and an event that ended while the Mac slept or Lore was not running is handled at the next launch or wake on the same day), it has no notes yet, the user did not delete its notes, neither the event nor its calendar is excluded, and its range has at least 120 characters of utterance text. If audio captured before the event ended is not transcribed yet, Lore waits for it and checks again every 2 minutes. Audio whose transcription failed does not hold generation back.
 - Generation is idempotent per event occurrence, identified by the event identifier and the day it starts. Relaunching, waking, or refreshing the calendar never creates a second note. Regenerating replaces the note. Deleting the notes stops automatic generation for that occurrence. "Generate Notes" still works.
-- When the event is edited or moved after generation so that its start or end no longer matches the range the note was made from, or the event no longer exists in the snapshot, the note is marked "Event changed" and offers "Regenerate". When a source utterance or memo is deleted, the note is marked "Sources deleted" and offers "Regenerate". Lore never regenerates a marked note on its own. The calendar snapshot keeps one entry per event identifier, which a repeating event shares across its occurrences. When that entry describes another day's occurrence, Lore cannot check a note's range and does not mark it.
+- When the event is edited or moved after generation so that its start or end no longer matches the range the note was made from, or the event no longer exists in the snapshot, the note is marked "Event changed" and offers "Regenerate". When a source utterance or memo is deleted, the note is marked "Sources deleted" and offers "Regenerate". Lore never regenerates a marked note on its own.
 
 ### 4.5 Search and export
 
