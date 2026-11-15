@@ -625,7 +625,7 @@ public final class AppEnvironment {
         lifeLogCaptureHotkeys.update(binding: settings.lifeLogCaptureHotkey)
         lifeLogCaptureHotkeys.onEvent = { [weak self] event in
             guard case .released = event, let self else { return }
-            let enabled = !lifeLog.isCapturing
+            let enabled = !lifeLog.hasCaptureIntent
             setLifeLogCaptureEnabled(enabled)
         }
         lifeLogMiniWindowHotkeys.update(binding: settings.lifeLogMiniWindowHotkey)
