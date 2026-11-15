@@ -139,8 +139,5 @@ private struct LoreWindowRoot<Content: View>: View {
         content
             .environment(\.locale, env.settings.applicationLanguage.resolvedLocale())
             .loreWindow()
-            // Sidebarの選択やswitchはsystemの青ではなくLoreの灰色にする。
-            .tint(LoreTheme.control)
-            .accentColor(LoreTheme.control)
     }
 }

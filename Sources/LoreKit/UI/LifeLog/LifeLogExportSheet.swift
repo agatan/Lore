@@ -122,7 +122,6 @@ struct LifeLogExportSheet: View {
                     }
                 }
                 .buttonStyle(.borderedProminent)
-                .tint(LoreTheme.accent)
                 .disabled(!canExport)
             }
         }

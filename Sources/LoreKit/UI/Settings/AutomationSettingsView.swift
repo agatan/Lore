@@ -118,8 +118,7 @@ struct AutomationSettingsView: View {
                 .foregroundStyle(LoreTheme.success)
         case .notInstalled:
             Button("インストール", action: action)
-                .buttonStyle(.borderedProminent)
-                .tint(LoreTheme.accent)
+                .buttonStyle(.bordered)
                 .controlSize(.small)
         case .updateAvailable:
             Button("更新", action: action)
