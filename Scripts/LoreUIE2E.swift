@@ -177,6 +177,7 @@ private enum LoreUIE2E {
             try await runEmptyDayCUJ(appURL: appURL)
             try await runAISettingsCUJ(appURL: appURL)
             try await runOnboardingCUJ(appURL: appURL)
+            try await runEventNotesCUJ(appURL: appURL)
             terminateTestApp()
             print("✓ UI E2E: 4 CUJs passed")
         } catch {
@@ -299,6 +300,41 @@ private enum LoreUIE2E {
         guard !ui.exists(identifier: "mode.row.builtin.ai-agent") else {
             throw UIE2EError.assertion("廃止したAI Agentモードが残っています")
         }
+
+        app = try await launch(appURL, arguments: ["--lore-screenshot-demo", "--lore-ui-test-settings-life-log-ai"])
+        ui = AXDriver(pid: app.processIdentifier)
+        _ = try ui.waitFor(identifier: "life-log-ai.settings.root")
+        try ui.waitFor(text: "いまはオフなので、何も送りません。")
+        guard try ui.stringValue(identifier: "life-log-ai.requests-today") == "0" else {
+            throw UIE2EError.assertion("ライフログAIがオフなのにリクエストが数えられています")
+        }
+    }
+
+    @MainActor
+    private static func runEventNotesCUJ(appURL: URL) async throws {
+        print("CUJ 4: 予定の下に保存済みのAIノートを読み、元の発話へ移動し、書き出しに含める")
+        let app = try await launch(appURL, arguments: ["--lore-screenshot-demo"])
+        let ui = AXDriver(pid: app.processIdentifier)
+        let notes = "life-log.event-notes-demo-event-1"
+        _ = try ui.waitFor(identifier: notes)
+        _ = try ui.waitFor(identifier: "\(notes).generated-mark")
+        _ = try ui.waitFor(identifier: "\(notes).provider")
+        _ = try ui.waitFor(identifier: "life-log.inspector-ai-note-demo-event-1")
+        try ui.press(identifier: "\(notes).item-decisions-0")
+        try ui.waitFor(text: "検索とエクスポートが揃ったので、今日は初回体験の流れを確認します。")
+
+        try ui.press(identifier: "life-log.export-day")
+        _ = try ui.waitFor(identifier: "export.sheet")
+        guard try ui.stringValue(identifier: "export.include.ai-notes") == "オフ" else {
+            throw UIE2EError.assertion("AIノートが書き出しの初期状態で選択されています")
+        }
+        _ = try ui.waitForString(identifier: "export.preview") { !$0.contains("今日は初回体験の流れを確認する") }
+        try ui.press(identifier: "export.include.ai-notes")
+        _ = try ui.waitForString(identifier: "export.preview") {
+            $0.contains("今日は初回体験の流れを確認する") && $0.contains("AIが生成したノート")
+        }
+        try ui.press(identifier: "export.close")
+        terminateTestApp()
     }
 
     @MainActor

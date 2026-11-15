@@ -104,6 +104,7 @@ public final class AppSettings {
         /// 利用者が始めた一時停止。終了や再起動をまたいで再開時刻を保つ。
         public var lifeLogPause: LifeLogPause?
         public var lifeLogRecordingExclusions = LifeLogRecordingExclusions()
+        public var lifeLogAI = LifeLogAISettings()
 
         init() {}
 
@@ -157,6 +158,8 @@ public final class AppSettings {
             lifeLogRecordingExclusions = try container.decodeIfPresent(
                 LifeLogRecordingExclusions.self, forKey: .lifeLogRecordingExclusions
             ) ?? LifeLogRecordingExclusions()
+            lifeLogAI = (try? container.decodeIfPresent(LifeLogAISettings.self, forKey: .lifeLogAI))
+                .flatMap { $0 } ?? LifeLogAISettings()
         }
     }
 
@@ -310,6 +313,7 @@ public final class AppSettings {
     public var lifeLogRecordingExclusions: LifeLogRecordingExclusions { get { storage.lifeLogRecordingExclusions } set { storage.lifeLogRecordingExclusions = newValue; persist() } }
     public var lifeLogCalendarTitles: [String] { get { storage.lifeLogCalendarTitles } set { storage.lifeLogCalendarTitles = newValue; persist() } }
     public var lifeLogParticipatingEventsOnly: Bool { get { storage.lifeLogParticipatingEventsOnly } set { storage.lifeLogParticipatingEventsOnly = newValue; persist() } }
+    public var lifeLogAI: LifeLogAISettings { get { storage.lifeLogAI } set { storage.lifeLogAI = newValue; persist() } }
     /// 「Loreの全データを削除」で設定も初期状態へ戻す。
     public func resetAll() {
         storage = Storage()

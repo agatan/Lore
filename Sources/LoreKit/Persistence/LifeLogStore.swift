@@ -78,6 +78,9 @@ public struct LifeLogStore: Sendable {
                 try db.execute(sql: "DELETE FROM life_log_memos")
                 try db.execute(sql: "DELETE FROM calendar_event_snapshots")
                 try db.execute(sql: "DELETE FROM life_log_audio_chunks")
+                try db.execute(sql: "DELETE FROM generated_notes")
+                try db.execute(sql: "DELETE FROM life_log_ai_event_exclusions")
+                try db.execute(sql: "DELETE FROM life_log_ai_dismissed_scopes")
             }
         }
     }
@@ -123,7 +126,9 @@ public struct LifeLogStore: Sendable {
             let memos = try Row.fetchAll(db, sql: "SELECT * FROM life_log_memos WHERE created_at >= ? AND created_at < ? ORDER BY created_at", arguments: args).map(decodeMemo)
             let participationClause = participatingOnly ? " AND participation_status IN ('none', 'accepted')" : ""
             let events = try Row.fetchAll(db, sql: "SELECT * FROM calendar_event_snapshots WHERE ends_at > ? AND starts_at < ?\(participationClause) ORDER BY starts_at", arguments: args).map(decodeEvent)
-            return LifeLogDay(utterances: utterances, dictations: dictations, memos: memos, calendarEvents: events)
+            let notes = try Row.fetchAll(db, sql: "SELECT * FROM generated_notes WHERE scope_day = ? ORDER BY range_start", arguments: [LifeLogDateKey.string(for: dateValue, calendar: calendar)])
+                .map { try decodeGeneratedNote($0, db: db) }
+            return LifeLogDay(utterances: utterances, dictations: dictations, memos: memos, calendarEvents: events, generatedNotes: notes)
         }
     }
 
@@ -285,6 +290,117 @@ public struct LifeLogStore: Sendable {
         try await queue.write { db in
             try db.execute(sql: "DELETE FROM life_log_memos WHERE id=?", arguments: [id])
         }
+    }
+
+    // MARK: Life Log AI
+
+    /// One note per kind and scope. Regenerating replaces the stored note.
+    public func save(generatedNote value: GeneratedNote) async throws {
+        try await queue.write { db in
+            try db.execute(sql: """
+                INSERT INTO generated_notes (id, kind, scope_key, scope_day, event_id, range_start, range_end, provider, model,
+                  created_at, source_utterance_ids, source_memo_ids, content)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(kind, scope_key) DO UPDATE SET id=excluded.id, range_start=excluded.range_start,
+                range_end=excluded.range_end, provider=excluded.provider, model=excluded.model, created_at=excluded.created_at,
+                source_utterance_ids=excluded.source_utterance_ids, source_memo_ids=excluded.source_memo_ids, content=excluded.content
+                """, arguments: [value.id, value.kind.rawValue, value.scope.key, value.scope.day, value.scope.eventID,
+                                   date(value.rangeStart), date(value.rangeEnd), value.backend.rawValue, value.model,
+                                   date(value.createdAt), try PersistenceCoding.encode(value.sourceUtteranceIDs),
+                                   try PersistenceCoding.encode(value.sourceMemoIDs), try PersistenceCoding.encode(value.sections)])
+            try db.execute(sql: "DELETE FROM life_log_ai_dismissed_scopes WHERE scope_key = ?", arguments: [Self.dismissalKey(value.kind, value.scope)])
+        }
+    }
+
+    private static func dismissalKey(_ kind: GeneratedNoteKind, _ scope: GeneratedNoteScope) -> String { "\(kind.rawValue)|\(scope.key)" }
+
+    /// True after the user deleted the note of this scope. Automatic generation leaves it alone.
+    public func isGeneratedNoteDismissed(kind: GeneratedNoteKind, scope: GeneratedNoteScope) async throws -> Bool {
+        try await queue.read { db in
+            try Bool.fetchOne(db, sql: "SELECT 1 FROM life_log_ai_dismissed_scopes WHERE scope_key = ?", arguments: [Self.dismissalKey(kind, scope)]) ?? false
+        }
+    }
+
+    public func generatedNote(kind: GeneratedNoteKind, scope: GeneratedNoteScope) async throws -> GeneratedNote? {
+        try await queue.read { db in
+            try Row.fetchOne(db, sql: "SELECT * FROM generated_notes WHERE kind = ? AND scope_key = ?", arguments: [kind.rawValue, scope.key])
+                .map { try decodeGeneratedNote($0, db: db) }
+        }
+    }
+
+    /// Notes whose scope day falls in `[from, to]`, oldest first, with their current staleness.
+    public func generatedNotes(fromDay: String, throughDay: String) async throws -> [GeneratedNote] {
+        try await queue.read { db in
+            try Row.fetchAll(db, sql: "SELECT * FROM generated_notes WHERE scope_day >= ? AND scope_day <= ? ORDER BY range_start",
+                             arguments: [fromDay, throughDay])
+                .map { try decodeGeneratedNote($0, db: db) }
+        }
+    }
+
+    /// Deletes the note and remembers the deletion, so the automatic trigger does not send its text again.
+    public func deleteGeneratedNote(_ note: GeneratedNote) async throws {
+        try await queue.write { db in
+            try db.execute(sql: "DELETE FROM generated_notes WHERE id = ?", arguments: [note.id])
+            try db.execute(sql: "INSERT OR IGNORE INTO life_log_ai_dismissed_scopes (scope_key) VALUES (?)",
+                           arguments: [Self.dismissalKey(note.kind, note.scope)])
+        }
+    }
+
+    public func aiExcludedEventIDs() async throws -> Set<String> {
+        try await queue.read { db in Set(try String.fetchAll(db, sql: "SELECT event_id FROM life_log_ai_event_exclusions")) }
+    }
+
+    public func setAIExcluded(_ excluded: Bool, eventID: String) async throws {
+        try await queue.write { db in
+            if excluded {
+                try db.execute(sql: "INSERT OR IGNORE INTO life_log_ai_event_exclusions (event_id) VALUES (?)", arguments: [eventID])
+            } else {
+                try db.execute(sql: "DELETE FROM life_log_ai_event_exclusions WHERE event_id = ?", arguments: [eventID])
+            }
+        }
+    }
+
+    private func decodeGeneratedNote(_ r: Row, db: Database) throws -> GeneratedNote {
+        let kindValue: String = r["kind"]
+        let providerValue: String = r["provider"]
+        guard let kind = GeneratedNoteKind(rawValue: kindValue) else { throw PersistenceError.invalidStoredValue(column: "kind", value: kindValue) }
+        guard let backend = FormattingBackend(rawValue: providerValue) else { throw PersistenceError.invalidStoredValue(column: "provider", value: providerValue) }
+        guard let eventID: String = r["event_id"] else { throw PersistenceError.invalidStoredValue(column: "event_id", value: "NULL") }
+        let utteranceIDs = try PersistenceCoding.decode([String].self, from: r["source_utterance_ids"])
+        let memoIDs = try PersistenceCoding.decode([String].self, from: r["source_memo_ids"])
+        let rangeStart = try parse(r["range_start"])
+        let rangeEnd = try parse(r["range_end"])
+        let scopeDay: String = r["scope_day"]
+        let eventState: GeneratedNote.EventSnapshotState = try Row.fetchOne(db, sql: "SELECT * FROM calendar_event_snapshots WHERE id = ?", arguments: [eventID])
+            .map(decodeEvent)
+            .map { LifeLogDateKey.string(for: $0.startsAt) == scopeDay ? .occurrence($0) : .otherOccurrence } ?? .missing
+        let existingUtterances = try Self.count(db, table: "life_log_utterances", ids: utteranceIDs)
+        let existingMemos = try Self.count(db, table: "life_log_memos", ids: memoIDs)
+        return GeneratedNote(
+            id: r["id"],
+            kind: kind,
+            scope: .event(EventOccurrence(eventID: eventID, day: scopeDay)),
+            rangeStart: rangeStart,
+            rangeEnd: rangeEnd,
+            backend: backend,
+            model: r["model"],
+            createdAt: try parse(r["created_at"]),
+            sourceUtteranceIDs: utteranceIDs,
+            sourceMemoIDs: memoIDs,
+            sections: try PersistenceCoding.decode([GeneratedNoteSection].self, from: r["content"]),
+            staleReasons: GeneratedNote.staleReasons(
+                rangeStart: rangeStart,
+                rangeEnd: rangeEnd,
+                event: eventState,
+                missingSourceCount: utteranceIDs.count + memoIDs.count - existingUtterances - existingMemos
+            )
+        )
+    }
+
+    private static func count(_ db: Database, table: String, ids: [String]) throws -> Int {
+        guard !ids.isEmpty else { return 0 }
+        let placeholders = Array(repeating: "?", count: ids.count).joined(separator: ",")
+        return try Int.fetchOne(db, sql: "SELECT count(*) FROM \(table) WHERE id IN (\(placeholders))", arguments: StatementArguments(ids)) ?? 0
     }
 
     private func date(_ value: Date) -> String { PersistenceCoding.encode(date: value) }

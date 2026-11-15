@@ -26,6 +26,10 @@ enum DebugRecorder {
         let suffix = DebugSnapshotter.colorTheme == .dark ? "-dark" : ""
         do {
             try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+            if ProcessInfo.processInfo.arguments.contains("--lore-record-event-notes") {
+                try await recordEventNotes(env: env, to: directory.appending(path: "event-notes\(suffix).mp4"))
+                exit(0)
+            }
             try await recordDictation(env: env, to: directory.appending(path: "dictation\(suffix).mp4"))
             try await recordLifeLog(env: env, to: directory.appending(path: "life-log\(suffix).mp4"))
         } catch {
@@ -128,6 +132,48 @@ enum DebugRecorder {
             await settle(1.0)
         }
         env.lifeLog.applyPreviewCapture(capturing: false)
+    }
+
+    // MARK: Event notes
+
+    /// An ended event without notes, "Generate Notes" through the real service and the on-device model,
+    /// then a jump from an item to its source. The demo database's stored note is removed first.
+    private static func recordEventNotes(env: AppEnvironment, to url: URL) async throws {
+        guard let window = NSApp.windows.first(where: { $0.identifier?.rawValue == LoreWindow.main }) else {
+            throw CocoaError(.fileWriteUnknown, userInfo: [NSLocalizedDescriptionKey: "main windowが表示されていません"])
+        }
+        env.mainSection = .lifeLog
+        window.makeKeyAndOrderFront(nil)
+        await env.lifeLog.followCurrentDay()
+        guard let event = env.lifeLog.day.calendarEvents.first(where: { $0.id == "demo-event-1" }) else {
+            throw CocoaError(.fileWriteUnknown, userInfo: [NSLocalizedDescriptionKey: "demo eventがありません"])
+        }
+        if let note = env.lifeLog.day.eventNotes(for: event) { await env.lifeLogAI.deleteNote(note) }
+        let previous = env.settings.lifeLogAI
+        // The test bundle's defaults persist, and the UI E2E expects Life Log AI to be off.
+        defer { env.settings.lifeLogAI = previous }
+        var settings = previous
+        settings.isEnabled = true
+        settings.backend = .onDevice
+        env.updateLifeLogAI(settings)
+        await env.lifeLog.reload()
+        env.lifeLog.jumpToTimelineItem("e-\(event.id)")
+        await settle(1.5)
+
+        try await record(window: window, to: url) {
+            await settle(1.5)
+            let scope = GeneratedNoteScope.event(EventOccurrence(event))
+            do {
+                try await env.lifeLogAI.generate(kind: .eventNotes, scope: scope)
+            } catch {
+                FileHandle.standardError.write(Data("ノートの生成に失敗: \(error.localizedDescription)\n".utf8))
+            }
+            await settle(2.5)
+            if let source = env.lifeLog.day.eventNotes(for: event)?.sections.flatMap(\.items).first?.sources.first {
+                env.lifeLog.jumpToTimelineItem(source)
+            }
+            await settle(2.5)
+        }
     }
 
     // MARK: Recording

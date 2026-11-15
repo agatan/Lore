@@ -7,21 +7,25 @@ public enum LifeLogTextExporter {
         public var includesUtterances: Bool
         public var includesDictations: Bool
         public var includesMemos: Bool
+        /// Off by default: AI notes are derived text and join an export only when asked for.
+        public var includesAINotes: Bool
 
         public init(
             includesCalendarEvents: Bool = true,
             includesUtterances: Bool = true,
             includesDictations: Bool = true,
-            includesMemos: Bool = true
+            includesMemos: Bool = true,
+            includesAINotes: Bool = false
         ) {
             self.includesCalendarEvents = includesCalendarEvents
             self.includesUtterances = includesUtterances
             self.includesDictations = includesDictations
             self.includesMemos = includesMemos
+            self.includesAINotes = includesAINotes
         }
 
         public var hasSelection: Bool {
-            includesCalendarEvents || includesUtterances || includesDictations || includesMemos
+            includesCalendarEvents || includesUtterances || includesDictations || includesMemos || includesAINotes
         }
     }
 
@@ -65,6 +69,18 @@ public enum LifeLogTextExporter {
                     }
                 }
                 flushSpeech()
+            }
+        }
+
+        if options.includesAINotes {
+            lines += ["", "## AIが生成したノート"]
+            if day.generatedNotes.isEmpty {
+                lines.append("AIが生成したノートはありません。")
+            }
+            for note in day.generatedNotes {
+                let title = day.calendarEvents.first { $0.id == note.scope.eventID }?.title ?? "予定"
+                lines += ["", GeneratedNoteMarkdown.render(note, title: title, headingLevel: 3, calendar: calendar)
+                    .trimmingCharacters(in: .newlines)]
             }
         }
 

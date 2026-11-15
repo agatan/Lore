@@ -27,6 +27,8 @@ public final class AppEnvironment {
     public let lifeLog = LifeLogCoordinator(audioRoot: AppEnvironment.lifeLogAudioRoot)
     public let sync = SyncCoordinator()
     public private(set) var coordinator: DictationCoordinator!
+    public private(set) var lifeLogAI: LifeLogAIService!
+    @ObservationIgnored private let notifications = NotificationPresenter()
 
     public private(set) var database: LoreDatabase?
     public private(set) var modes: [Mode] = []
@@ -109,6 +111,29 @@ public final class AppEnvironment {
             settings.onboardingCompleted = false
             if Self.usesScreenshotDemoData { settings.lifeLogAudioStorageConfirmed = false }
         }
+        lifeLogAI = LifeLogAIService(dependencies: .init(
+            settings: { [weak self] in self?.settings.lifeLogAI ?? LifeLogAISettings() },
+            database: { [weak self] in self?.database },
+            engine: { [weak self] backend, model in
+                guard let self else { return FoundationModelsLlm() }
+                return engines.lifeLogAIEngine(backend: backend, model: model)
+            },
+            oldestUntranscribedAudio: { [weak self] in try await self?.lifeLog.oldestUntranscribedAudioStart() },
+            refreshTodayCalendar: { [weak self] in
+                guard let self, isCalendarGranted else { return }
+                try await lifeLog.saveTodayCalendarSnapshot(selectedCalendars: Set(settings.lifeLogCalendarTitles))
+            },
+            excludedCalendarEvents: { [weak self] interval, calendars in
+                guard let self, isCalendarGranted else { return [] }
+                return try await lifeLog.calendarEvents(in: interval, calendars: calendars)
+            },
+            participatingEventsOnly: { [weak self] in self?.settings.lifeLogParticipatingEventsOnly ?? true },
+            noteSaved: { [weak self] note, event, automatic in await self?.eventNotesSaved(note, event: event, automatic: automatic) }
+        ))
+        notifications.onOpenEvent = { [weak self] occurrence in
+            Task { @MainActor [weak self] in await self?.showLifeLogEvent(occurrence) }
+        }
+        lifeLog.onCalendarRefreshed = { [weak self] in self?.evaluateEventNotes() }
         wireHotkeys()
         wirePowerNotifications()
         followApplicationLanguage()
@@ -127,6 +152,47 @@ public final class AppEnvironment {
         case .light: NSAppearance(named: .aqua)
         case .dark: NSAppearance(named: .darkAqua)
         }
+    }
+
+    // MARK: Life Log AI
+
+    /// The screenshot demo and the UI test bundle never generate on their own and never notify,
+    /// so a test run makes no request.
+    private static var generatesAutomatically: Bool { !usesScreenshotDemoData && Bundle.main.bundleIdentifier == bundleIdentifier }
+
+    public func evaluateEventNotes() {
+        guard Self.generatesAutomatically, database != nil else { return }
+        Task { await lifeLogAI.evaluateEventNotes() }
+    }
+
+    public func updateLifeLogAI(_ value: LifeLogAISettings) {
+        var value = value
+        // A cloud confirmation belongs to one provider. Switching provider asks again.
+        if value.confirmedCloudBackend != value.backend { value.confirmedCloudBackend = nil }
+        let previous = settings.lifeLogAI
+        settings.lifeLogAI = value
+        if value.isEnabled, value.notifiesWhenEventNotesReady,
+           !previous.isEnabled || !previous.notifiesWhenEventNotesReady, Self.generatesAutomatically {
+            Task { await notifications.requestAuthorization() }
+        }
+        evaluateEventNotes()
+    }
+
+    public func showLifeLogEvent(_ occurrence: EventOccurrence) async {
+        mainSection = .lifeLog
+        onShowMainWindow?()
+        await lifeLog.showEvent(id: occurrence.eventID, day: occurrence.day)
+    }
+
+    private func eventNotesSaved(_ note: GeneratedNote, event: CalendarEventSnapshot, automatic: Bool) async {
+        if LifeLogDateKey.string(for: lifeLog.selectedDate) == note.scope.day { await lifeLog.reload() }
+        guard automatic, settings.lifeLogAI.notifiesWhenEventNotesReady, Self.generatesAutomatically,
+              case .event(let occurrence) = note.scope else { return }
+        await notifications.postEventNotesReady(
+            title: event.title,
+            body: String(lore: "AIのノートができました"),
+            occurrence: occurrence
+        )
     }
 
     /// coordinatorやengineが組み立てる文言も、Viewと同じ表示言語で作らせる。
@@ -153,6 +219,7 @@ public final class AppEnvironment {
                 self?.lifeLog.systemDidWake()
                 self?.applyLifeLogSchedule()
                 await self?.refreshLifeLogExclusionEvents()
+                self?.evaluateEventNotes()
             }
         })
         // 時計やtime zoneが変わると、次の切替時刻の計算が古くなる。
@@ -198,6 +265,8 @@ public final class AppEnvironment {
     }
 
     private func performBoot() async {
+        // Before the first await, so a click on a notification that launched Lore reaches the delegate.
+        if Self.generatesAutomatically { notifications.activate() }
         refreshPermissions()
 
         if Bundle.main.bundleIdentifier == Self.bundleIdentifier, !Self.usesScreenshotDemoData {
@@ -230,7 +299,10 @@ public final class AppEnvironment {
                     )
                 },
                 participatingEventsOnly: { [weak self] in self?.settings.lifeLogParticipatingEventsOnly ?? true },
-                audioProcessingCompleted: { [weak self] in await self?.purgeExpiredLifeLogAudio() }
+                audioProcessingCompleted: { [weak self] in
+                    await self?.purgeExpiredLifeLogAudio()
+                    self?.evaluateEventNotes()
+                }
             )
             lifeLog.selectInputDevice(uid: settings.lifeLogInputDeviceUID)
             try await database.modes.seedBuiltinsIfNeeded()
@@ -269,6 +341,8 @@ public final class AppEnvironment {
             applyLifeLogSchedule()
             startLifeLogExclusionRefresh()
         }
+        await lifeLogAI.configure()
+        evaluateEventNotes()
     }
 
     static var usesScreenshotDemoData: Bool {
@@ -334,6 +408,7 @@ public final class AppEnvironment {
         if arguments.contains("--lore-ui-test-settings-modes") { return .modes }
         if arguments.contains("--lore-ui-test-settings-calendar") { return .calendar }
         if arguments.contains("--lore-ui-test-settings-privacy") { return .privacy }
+        if arguments.contains("--lore-ui-test-settings-life-log-ai") { return .lifeLogAI }
 #endif
         return nil
     }
@@ -1068,6 +1143,7 @@ public final class AppEnvironment {
         do {
             try removeLifeLogAudioDirectory()
             try await database.lifeLog.deleteAll()
+            await lifeLogAI.dataWasDeleted()
             await lifeLog.reload()
             await lifeLog.loadActivity(containing: lifeLog.selectedDate)
             refreshLifeLogAudioSize()
@@ -1095,6 +1171,7 @@ public final class AppEnvironment {
             await sync.didDeleteAllData()
             settings.resetAll()
             await refreshLifeLogExclusionEvents()
+            await lifeLogAI.dataWasDeleted()
             engines.apply(
                 backend: settings.formattingBackend,
                 model: settings.model(for: settings.formattingBackend)

@@ -31,6 +31,8 @@ public final class LifeLogCoordinator {
     private let capture: ContinuousAudioCapture
     private let calendarProvider = CalendarProvider()
     private var database: LoreDatabase?
+    /// Called after an explicit calendar refresh of the selected day.
+    @ObservationIgnored public var onCalendarRefreshed: (() -> Void)?
     private var engines: EngineRegistry?
     private var vocabulary: @MainActor () -> [VocabularyEntry] = { [] }
     private var transcriptionLanguage: @MainActor () -> LanguagePreference = { .auto }
@@ -831,6 +833,7 @@ public final class LifeLogCoordinator {
             lastCalendarRefreshDay = LifeLogDateKey.string(for: selectedDate)
             await reload()
             await loadActivity(containing: selectedDate)
+            onCalendarRefreshed?()
         } catch { fail(error) }
     }
 
@@ -899,6 +902,44 @@ public final class LifeLogCoordinator {
         }) else { return }
         highlightedTimelineItemID = nearest.1
         sourceNavigationRevision += 1
+    }
+
+    /// Moves to an item of the selected day, such as the source of an AI note item.
+    public func jumpToTimelineItem(_ timelineItemID: String) {
+        highlightedTimelineItemID = timelineItemID
+        sourceNavigationRevision += 1
+    }
+
+    public func showEvent(id eventID: String, day: String) async {
+        await navigateToSource(date: LifeLogDateKey.date(from: day) ?? Date(), timelineItemID: "e-\(eventID)")
+    }
+
+    /// Saves today's calendar snapshot for the AI trigger without moving the selected day.
+    /// The caller checks calendar access first, so this never shows the permission prompt.
+    public func saveTodayCalendarSnapshot(selectedCalendars: Set<String>, now: Date = Date()) async throws {
+        guard let database, let interval = Calendar.current.dateInterval(of: .day, for: now) else { return }
+        let events = try await calendarProvider.events(start: interval.start, end: interval.end, selectedCalendars: selectedCalendars)
+        try await database.lifeLog.save(calendarEvents: events)
+        if Calendar.current.isDate(selectedDate, inSameDayAs: now) { await reload() }
+    }
+
+    /// Events of the given calendars, read from EventKit without saving a snapshot.
+    public func calendarEvents(in interval: DateInterval, calendars: Set<String>) async throws -> [CalendarEventSnapshot] {
+        guard !calendars.isEmpty else { return [] }
+        return try await calendarProvider.events(start: interval.start, end: interval.end, selectedCalendars: calendars)
+    }
+
+    /// The wall-clock start of the oldest captured audio whose utterances are not saved yet.
+    /// Failed chunks do not count: they wait for the next launch and must not block AI notes forever.
+    public func oldestUntranscribedAudioStart() async throws -> Date? {
+        guard let database else { return nil }
+        let liveIDs = Set(liveChunks.map(\.id))
+        let stored = try await database.lifeLog.pendingAudioChunks()
+            .filter { !liveIDs.contains($0.id) && $0.transcriptionState != .failed && $0.processingState != .failed }
+            .map(\.captureStartedAt)
+        // The burst in progress began up to about a second of pre-roll and the 250 ms onset earlier.
+        let live = liveSpeechStartedAt?.addingTimeInterval(-2)
+        return (stored + [live].compactMap { $0 }).min()
     }
 
     private func navigateToSource(date: Date, timelineItemID: String) async {

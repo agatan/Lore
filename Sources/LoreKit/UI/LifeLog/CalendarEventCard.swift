@@ -15,6 +15,15 @@ struct CalendarEventCard: View {
         var exclusions: LifeLogRecordingExclusions
         var setSkipped: (Bool) -> Void
     }
+    /// The AI notes and the "do not send to AI" toggle. Only the main window passes it.
+    var ai: AI?
+
+    struct AI {
+        var notes: AnyView
+        var isExcluded: Bool
+        var isCalendarExcluded: Bool
+        var setExcluded: (Bool) -> Void
+    }
 
     private var titleSize: CGFloat { compact ? LoreTheme.TextSize.callout : LoreTheme.TextSize.reading }
 
@@ -47,13 +56,17 @@ struct CalendarEventCard: View {
                     .font(LoreTheme.captionFont.monospacedDigit())
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
+                if let ai { ai.notes }
             }
             .padding(.leading, compact ? 4 : 6)
         }
         .padding(.trailing, compact ? 12 : 8)
         .fixedSize(horizontal: false, vertical: true)
         .contentShape(.rect)
-        .contextMenu { recordingMenu }
+        .contextMenu {
+            recordingMenu
+            aiMenu
+        }
     }
 
     private func tag(_ title: LocalizedStringKey, color: Color) -> some View {
@@ -75,6 +88,18 @@ struct CalendarEventCard: View {
             } else if !recording.exclusions.excludes(event) {
                 Button("この予定を記録しない") { recording.setSkipped(true) }
                     .accessibilityIdentifier("life-log.event.do-not-record")
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var aiMenu: some View {
+        if let ai {
+            if ai.isCalendarExcluded {
+                Button("このカレンダーはAIに送らない設定です") {}.disabled(true)
+            } else {
+                Button(ai.isExcluded ? "AIへの送信を許可" : "AIに送らない") { ai.setExcluded(!ai.isExcluded) }
+                    .accessibilityIdentifier("life-log.event.ai-exclusion")
             }
         }
     }

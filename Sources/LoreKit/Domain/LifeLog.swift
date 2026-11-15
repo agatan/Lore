@@ -166,13 +166,21 @@ public struct LifeLogDay: Sendable {
     public var dictations: [LifeLogDictation]
     public var memos: [LifeLogMemo]
     public var calendarEvents: [CalendarEventSnapshot]
+    /// AI notes whose scope is this day.
+    public var generatedNotes: [GeneratedNote]
 
     public init(utterances: [LifeLogUtterance] = [], dictations: [LifeLogDictation] = [], memos: [LifeLogMemo] = [],
-                calendarEvents: [CalendarEventSnapshot] = []) {
+                calendarEvents: [CalendarEventSnapshot] = [], generatedNotes: [GeneratedNote] = []) {
         self.utterances = utterances
         self.dictations = dictations
         self.memos = memos
         self.calendarEvents = calendarEvents
+        self.generatedNotes = generatedNotes
+    }
+
+    public func eventNotes(for event: CalendarEventSnapshot, calendar: Calendar = .current) -> GeneratedNote? {
+        let scope = GeneratedNoteScope.event(EventOccurrence(event, calendar: calendar))
+        return generatedNotes.first { $0.kind == .eventNotes && $0.scope == scope }
     }
 }
 
