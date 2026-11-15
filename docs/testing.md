@@ -1,61 +1,61 @@
-# テスト方針とCUJ
+# Test policy and user journeys
 
-Loreの自動テストは二層に分けます。
+Lore's automated tests have two layers.
 
-- `make test`: ドメイン状態遷移、永続化、音声・LLM境界、書き出し形式を高速に検証する。
-- `make ui-test`: 署名済みのLoreUITests.appをテスト専用インモリDBで起動し、macOS Accessibility APIで実画面を操作する。
+- `make test` quickly verifies domain state transitions, persistence, the speech and LLM boundaries, sync, and the export format.
+- `make ui-test` launches the signed `LoreUITests.app` on a test-only in-memory database and drives the real screens through the macOS Accessibility API.
 
-UI E2Eは内部のView構造ではなく、利用者が認識する操作とアクセシビリティ識別子だけに依存します。`LoreUITests.app`は本番と別のbundle ID、process instance、UserDefaultsドメインを持ち、常にインメモリDBを開きます。global hotkeyと権限監視を起動しないため、起動中の本番Loreのプロセス、設定、利用者DBに干渉しません。E2E runnerが終了するのはテスト用bundle IDだけで、本番の`Lore.app`を渡すと実行を拒否します。
+The UI E2E depends only on operations that a user can perceive and on accessibility identifiers, not on the internal view structure. `LoreUITests.app` has a bundle ID, a process instance, and a UserDefaults domain different from production, and it always opens an in-memory database. It starts neither global hotkeys nor permission monitoring, so it does not interfere with the process, settings, or user database of a running production Lore. The E2E runner terminates only the test bundle ID and refuses to run when it is given the production `Lore.app`.
 
-## 変更の進め方
+## How to make changes
 
-外部挙動を変える開発は先に `spec.md` と `spec.html`、module境界・永続model・外部送信・削除経路・主要windowの責務を変える開発は先に `design.md` と `design.html` を更新してペアレビューします。合意前は実装へ進みません。挙動を変えないリファクタリングでは、作業前に `make test` を通して基準線を作り、変更後に同じテストと影響するUI E2Eを実行します。
+A change to external behavior updates `spec.md` first. A change to module boundaries, the persisted model, data transmission, deletion paths, or the responsibilities of the main windows updates `design.md` first. Regenerate `spec.html` and `design.html` from the Markdown with `python3 Scripts/render-docs.py`. The updated documents count as approved, and implementation continues unless the user asks for a review pause, as [AGENTS.md](../AGENTS.md) states. For a refactoring that does not change behavior, pass `make test` first to set a baseline, then run the same tests and the affected UI E2E after the change.
 
-テスト数や行カバレッジを目的にせず、発話回収、監査履歴、送信同意、バックアップ、削除範囲などの不変条件を検証します。到達不能な試作機能を削除するときは、その機能だけを固定していたテストも一緒に削除します。
+The goal is neither the number of tests nor line coverage. Tests verify invariants: recovering speech, the audit history, consent to transmission, backups, and the scope of deletion. When an unreachable prototype feature is removed, the tests that only pinned that feature are removed with it.
 
-## CUJ
+## User journeys
 
-### CUJ 1: 一日の記録を確認して持ち出す
+### Journey 1: review a day and take it out
 
-1. Loreを開くとライフログが表示され、TODOと要約の表示はない。
-2. 予定一覧と検索から該当項目へ移動できる。
-3. 音声入力へ切り替え、履歴画面が表示される。
-4. ライフログへ戻り、「書き出す」を開く。
-5. 予定・メモが日別の書き出しプレビューまで届く。
-6. 含める項目を変更すると、選択状態とプレビューがともに更新される。
+1. Opening Lore shows the Life Log in an active main window of at least 1680×960 pt, with the record button, the voice memo button, the inspector toggle, and the day map. No to-do or summary view exists.
+2. Selecting an event in the day map moves the timeline to that event, and a search result moves to its memo.
+3. Switching to Dictation shows the history screen.
+4. Back in the Life Log, a memo typed in the main window appears in the timeline.
+5. "Export" opens, and events and memos reach the day export preview.
+6. Changing the included items updates both the selection state and the preview. Dictation is an independent item.
 
-### CUJ 2: 記録がない状態で操作する
+### Journey 2: operate with no records
 
-1. 空のデータで起動しても、記録の開始操作が表示される。
-2. 「書き出す」を開いて閉じられる。
+1. With empty data, the record button is still shown.
+2. "Export" opens and closes.
 
-### CUJ 3: 設定を確認する
+### Journey 3: check the settings
 
-1. プライバシー設定でこのMacの使用量を確認できる。
-2. カレンダー設定で予定の再取得操作を確認できる。
-3. ライフログ設定でボイスメモのホットキーを確認できる。
-4. モードではDefaultと通常モードが表示され、廃止したAI Agentは存在しない。
+1. The Privacy settings show the storage used on this Mac.
+2. The Calendar settings show the refresh action.
+3. The Life Log settings show the voice memo hotkey.
+4. Modes shows Default and Chat, and the removed AI Agent mode does not exist.
 
-今後リファクタリング前に追加する優先CUJは、ライフログ開始・停止と復旧、ミニウィンドウからのメモ、設定からの語彙更新です。マイクやOS権限を伴うものは、決定論的なUI E2Eと実機耐久試験を分けます。
+The next journeys to add before a refactoring are Life Log start, stop, and recovery, a memo from the mini window, and a vocabulary update from Settings. For anything that involves the microphone or OS permissions, deterministic UI E2E and endurance tests on a real machine are kept separate.
 
-## 実行
+## Running
 
 ```sh
 make test
 make ui-test
 ```
 
-`make ui-test`には実行元ターミナルのアクセシビリティ許可が必要です。失敗時は、システム設定の「プライバシーとセキュリティ > アクセシビリティ」で許可してから再実行します。
+`make ui-test` needs the Accessibility permission for the terminal that runs it. On failure, allow it in System Settings under Privacy & Security > Accessibility and run again.
 
-## 見た目の確認
+## Checking the look
 
-Debug buildの`LoreUITests.app`を`--lore-screenshot-demo --lore-snapshot <dir>`で起動すると、main（ライフログ・音声入力）、全設定section、mini windowを順に開き、各windowを`<dir>`へPNGで保存します。続けて、壁紙を模した背景の上に置いたHUDの各段階（録音開始、逐次text、整形中、完了、整形skip）とmenu bar panel、明暗のmenu barに並べた全状態のmenu barアイコン（`menu-bar-icons.png`）を保存して終了します。自process内のwindowだけをScreenCaptureKitで撮るため、画面収録の許可は不要です。`--lore-snapshot-appearance dark`（または`light`）を足すと外観を固定して撮ります。Release buildには含めません。
+Launching the debug build of `LoreUITests.app` with `--lore-screenshot-demo --lore-snapshot <dir>` opens the main window (Life Log and Dictation), every settings section, and the mini window in turn and saves each window to `<dir>` as PNG. It then saves each stage of the HUD on a wallpaper-like background (recording start, streaming text, formatting, done, formatting skipped), the menu bar panel, and the menu bar icon in every state on light and dark menu bars (`menu-bar-icons.png`), and quits. It captures only the windows of its own process with ScreenCaptureKit, so it needs no Screen Recording permission. Adding `--lore-snapshot-appearance dark` (or `light`) fixes the appearance. None of this is in release builds.
 
 ```sh
 make ui-test-app
 open -n -W build/LoreUITests.app --args --lore-screenshot-demo --lore-snapshot /tmp/lore-shots --lore-snapshot-appearance dark
 ```
 
-`--lore-demo-language en|ja|zh-Hans`を足すと、表示言語とdemo dataの文面をその言語に切り替えて撮ります（既定は日本語）。`--lore-record <dir>`は撮影の代わりに、決まった台本で音声入力（メッセージ欄へ整った文章が入るまで）とライフログ（話した文がタイムラインに並ぶまで）を動かし、自process内のwindowだけをmp4で収録します。台本は発話をdemo databaseへ書き足すため、`--lore-screenshot-demo`と一緒でなければ起動しません。
+Adding `--lore-demo-language en|ja|zh-Hans` switches the display language and the demo data text to that language (the default is Japanese). `--lore-record <dir>` records instead of taking screenshots. It plays a fixed script for dictation (until polished text lands in a message field) and for the Life Log (until spoken sentences line up on the timeline) and records only the windows of its own process as mp4. The script adds utterances to the demo database, so it launches only together with `--lore-screenshot-demo`.
 
-LP（`site/`）のスクリーンショットと動画は`make lp-media`で言語ごとに`site/assets/<言語>/`へ作り直します。収録した動画には、systemが信号機の位置へ描く収録中の印が入るため、`Scripts/patch-recording.swift`が同じwindowの静止画で覆ってから縮小します。画面がロックされているとScreenCaptureKitが取り込みを始められないため、ロックを解除して実行します。
+`make lp-media` regenerates the landing page (`site/`) screenshots and videos per language into `site/assets/<language>/`. A recorded video contains the recording indicator that the system draws at the traffic light position, so `Scripts/patch-recording.swift` covers it with a still of the same window before downscaling. ScreenCaptureKit cannot start capturing while the screen is locked, so unlock the screen before running it.

@@ -8,6 +8,7 @@ Keep Lore's implementation, external specification, and internal design aligned 
 
 - `docs/spec.md` and `docs/spec.html`: user-visible behavior and supported automation interfaces.
 - `docs/design.md` and `docs/design.html`: current targets, modules, runtime flows, persistence, and extension points.
+- The HTML versions are generated. Edit the Markdown and run `python3 Scripts/render-docs.py`.
 - `PRIVACY.md`: data storage and transmission boundaries.
 - Tests and production code: executable evidence. If they disagree with the documents, report the mismatch and align all affected artifacts in the same change.
 

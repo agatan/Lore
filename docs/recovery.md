@@ -1,22 +1,22 @@
-# バックアップと復旧
+# Backup and recovery
 
-Loreは構造化データを `~/Library/Application Support/Lore/Backups/` に保存します。`pre-migration-*.sqlite` はDB変更直前、`daily-*.sqlite` はその日の初回起動時のスナップショットです。直近7世代を保持します。ライフログ音声とKeychainのAPIキーはバックアップに含みません。
+Lore saves structured data in `~/Library/Application Support/Lore/Backups/`. `pre-migration-*.sqlite` is a snapshot taken immediately before a database change, and `daily-*.sqlite` is the snapshot of the first launch of a day. The 7 newest are kept. Life Log audio and the API keys in the Keychain are not part of a backup.
 
-## 旧名Koeからの移行
+## Migration from the old name Koe
 
-LoreはKoeから改名したアプリです。初回起動時に `~/Library/Application Support/Koe/` を `~/Library/Application Support/Lore/` へ移し、`koe.sqlite` を `lore.sqlite` へ改名します。移した後のバックアップも同じ `Backups/` に続けて保存され、Koe時代のスナップショットもそのまま復元に使えます（`lore.sqlite` という名前でコピーします）。
+Lore is the app that was renamed from Koe. On first launch it moves `~/Library/Application Support/Koe/` to `~/Library/Application Support/Lore/` and renames `koe.sqlite` to `lore.sqlite`. Later backups continue in the same `Backups/` folder, and snapshots from the Koe period can still be restored. Copy one under the name `lore.sqlite`.
 
-`Lore/` がすでにある状態で起動すると、Loreは `Koe/` を移さずに残し、menu barにその場所を表示します。Koe側のデータを使う場合は、Loreを終了し、`Lore/` を別の場所へ退避してから起動し直すと `Koe/` が移されます。移動に失敗した場合、LoreはDBを開かずに理由を表示し、`Koe/` はそのまま残ります。
+If `Lore/` already exists at launch, Lore leaves `Koe/` in place and shows its location in the menu bar panel. To use the Koe data, quit Lore, move `Lore/` somewhere else, and launch again. Lore then moves `Koe/`. The Koe settings are copied only once, so they are not copied again on that launch. If the move fails, Lore does not open the database and shows the reason, and `Koe/` stays as it was.
 
-## 復旧手順
+## Recovery steps
 
-1. Loreを終了します。起動中のDBへ復元しないでください。
-2. `~/Library/Application Support/Lore/` 全体を別の場所へコピーし、障害時点のデータを保全します。
-3. `Backups/` から、障害直前のスナップショットを一つ選びます。バージョン更新直後の障害では `pre-migration-*.sqlite` を優先します。
-4. 現在の `lore.sqlite`、`lore.sqlite-wal`、`lore.sqlite-shm` を削除せず別フォルダへ移動します。
-5. 選んだスナップショットを `lore.sqlite` という名前でコピーします。
-6. Loreを起動し、履歴、ライフログ、設定済みモードを確認します。
+1. Quit Lore. Do not restore into a database that is in use.
+2. Copy the whole `~/Library/Application Support/Lore/` folder somewhere else to preserve the data at the time of the failure.
+3. In `Backups/`, choose one snapshot from just before the failure. For a failure right after a version update, prefer `pre-migration-*.sqlite`.
+4. Move the current `lore.sqlite` to another folder without deleting it, together with any `lore.sqlite-journal`, `lore.sqlite-wal`, or `lore.sqlite-shm` file that exists.
+5. Copy the chosen snapshot under the name `lore.sqlite`.
+6. Launch Lore and check the history, the Life Log, and your modes.
 
-復元したDBより後に作られた構造化データは戻りません。ライフログ音声は元の `LifeLog/` に残るため、DBとの対応が不明な場合は手順2のコピーを保持したまま原因を調査します。復旧確認前に「全データ削除」を実行するとバックアップも削除されます。
+Structured data created after the restored snapshot does not come back. Life Log audio stays in the original `LifeLog/` folder. If its relation to the database is unclear, keep the copy from step 2 while you investigate. Running "Reset Lore…" before you confirm the recovery also deletes the backups.
 
-廃止したTODOと日次要約は、現在のLoreで起動するとmigrationで再び削除されます。それらを読み返す場合は、Loreへ復元せず `pre-migration-*.sqlite` を `sqlite3` などで直接開き、`life_log_todos` と `daily_summaries` を参照します。
+To-do items and daily summaries were removed from Lore, and launching the current Lore deletes them again in the migration. To read them, do not restore into Lore. Open `pre-migration-*.sqlite` directly, for example with `sqlite3`, and read `life_log_todos` and `daily_summaries`. Topics are stored inside `daily_summaries`.

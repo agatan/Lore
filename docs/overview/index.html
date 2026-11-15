@@ -1,83 +1,103 @@
 <!doctype html>
-<html lang="ja">
+<html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Lore — 仕様・設計オーバービュー</title>
+<title>Lore overview</title>
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
 
 <header class="hero">
-  <p class="kicker">macOS voice input</p>
-  <h1>Lore <span class="hero-sub">— 話した内容を、使える文章へ</span></h1>
-  <p class="lead">音声認識は Mac 上で実行。文章の仕上げはオンデバイスが既定で、必要なときだけローカルまたはクラウドLLMを選べます。</p>
+  <p class="kicker">macOS voice app</p>
+  <h1>Lore <span class="hero-sub">Dictation and a life log that stay on your Mac</span></h1>
+  <p class="lead">Lore types what you say into any app and keeps your speech, memos, and calendar events on one timeline per day. Speech recognition runs on the Mac. Summaries and to-do lists are left to the AI you choose, through the CLI or MCP.</p>
   <div class="chips">
     <span class="chip">macOS 26+ / Apple Silicon</span>
-    <span class="chip">Swift ネイティブ</span>
-    <span class="chip">オンデバイス音声認識</span>
-    <span class="chip chip-accent">失敗しても発話を失わない</span>
+    <span class="chip">Native Swift</span>
+    <span class="chip">On-device speech recognition</span>
+    <span class="chip chip-accent">Never lose what was said</span>
   </div>
-  <p class="doc-links">詳細: <a href="../spec.html">外部仕様(HTML)</a> / <a href="../spec.md">外部仕様(Markdown)</a> / <a href="../design.html">内部設計(HTML)</a> / <a href="../design.md">内部設計(Markdown)</a> / <a href="../../PRIVACY.md">データ取り扱い</a></p>
+  <p class="doc-links">Details: <a href="../spec.html">External specification (HTML)</a> / <a href="../spec.md">External specification (Markdown)</a> / <a href="../design.html">Internal design (HTML)</a> / <a href="../design.md">Internal design (Markdown)</a> / <a href="../../PRIVACY.md">Data handling</a></p>
 </header>
 
 <nav id="toc">
-  <a href="#flow">動作フロー</a>
-  <a href="#features">主要機能</a>
-  <a href="#privacy">プライバシー</a>
-  <a href="#arch">設計</a>
+  <a href="#flow">Flows</a>
+  <a href="#features">Features</a>
+  <a href="#privacy">Privacy</a>
+  <a href="#arch">Design</a>
 </nav>
 
 <main>
 <section id="flow">
-  <h2>動作フロー</h2>
+  <h2>Flows</h2>
+  <h3>Dictation</h3>
   <div class="pipeline">
-    <div class="step"><b>ホットキー</b><small>トグル / push-to-talk</small></div>
+    <div class="step"><b>Hotkey</b><small>Toggle / push-to-talk</small></div>
     <div class="arrow">→</div>
-    <div class="step"><b>録音・認識</b><small>Apple SpeechAnalyzer</small></div>
+    <div class="step"><b>Record and recognize</b><small>SpeechAnalyzer or whisper.cpp</small></div>
     <div class="arrow">→</div>
-    <div class="step step-save"><b>生テキスト保存</b><small>後段より先に永続化</small></div>
+    <div class="step step-save"><b>Save raw text</b><small>Persisted before later stages</small></div>
     <div class="arrow">→</div>
-    <div class="step step-accent"><b>文章整形</b><small>オンデバイス / ローカル / クラウド</small></div>
+    <div class="step step-accent"><b>Format</b><small>On-device / local / cloud</small></div>
     <div class="arrow">→</div>
-    <div class="step"><b>一括挿入</b><small>失敗時はクリップボードへ</small></div>
+    <div class="step"><b>Insert</b><small>Clipboard on failure</small></div>
   </div>
-  <p class="note">整形に失敗したら生の文字起こしを使用し、挿入に失敗したら結果をクリップボードへ残します。</p>
+  <p class="note">If formatting fails, Lore inserts the raw transcript. If insertion fails, the result stays on the clipboard.</p>
+  <h3>Life Log</h3>
+  <div class="pipeline">
+    <div class="step"><b>Record</b><small>Manual, hotkey, Shortcuts, or schedule</small></div>
+    <div class="arrow">→</div>
+    <div class="step step-save"><b>Save recovery audio</b><small>Every 30 seconds, on the Mac</small></div>
+    <div class="arrow">→</div>
+    <div class="step"><b>Detect speech bursts</b><small>Silence and noise are skipped</small></div>
+    <div class="arrow">→</div>
+    <div class="step step-accent"><b>Recognize</b><small>From the stored audio</small></div>
+    <div class="arrow">→</div>
+    <div class="step"><b>Timeline</b><small>With memos and calendar events</small></div>
+  </div>
+  <p class="note">Audio that fails to transcribe is kept and reprocessed at the next launch.</p>
 </section>
 
 <section id="features">
-  <h2>主要機能</h2>
+  <h2>Features</h2>
   <div class="grid">
-    <div class="card"><h3>アプリ別モード</h3><p>録音開始時の前面アプリからモードを選び、用途に合う指示で文章を整えます。</p></div>
-    <div class="card"><h3>共通ルールと語彙</h3><p>全モードに共通する方針と固有名詞を分けて管理し、変更箇所を明確にします。</p></div>
-    <div class="card"><h3>追跡可能な履歴</h3><p>生テキスト、結果、モード、指示、エンジン、モデル、処理時間を保存します。</p></div>
+    <div class="card"><h3>Modes per app</h3><p>Lore picks a mode from the frontmost app when recording starts and formats the text with instructions that fit the use.</p></div>
+    <div class="card"><h3>Common rules and vocabulary</h3><p>Rules for every mode and your own terms are managed separately from the mode instructions.</p></div>
+    <div class="card"><h3>Traceable history</h3><p>Each dictation keeps the raw text, the result, the mode, the instructions, the engines, and the timings.</p></div>
+    <div class="card"><h3>Day timeline</h3><p>Speech, dictations, memos, and events in time order, with search, a monthly calendar, and a floating mini window.</p></div>
+    <div class="card"><h3>Voice memos</h3><p>A hotkey or a button turns a spoken note into a memo on today's timeline.</p></div>
+    <div class="card"><h3>CLI and MCP</h3><p>Read-only access to days, ranges, search, and Markdown export for the AI client you choose.</p></div>
+    <div class="card"><h3>Sync between Macs</h3><p>Optional. Encrypted change files in a folder you choose carry text data between your Macs.</p></div>
   </div>
 </section>
 
 <section id="privacy">
-  <h2>プライバシー境界</h2>
+  <h2>Privacy boundary</h2>
   <div class="grid">
-    <div class="card"><h3>録音音声</h3><p>処理中のメモリだけで扱い、保存も外部送信もしません。</p></div>
-    <div class="card"><h3>オンデバイス整形</h3><p>既定値です。文字起こしと指示文は Mac の外へ出ません。</p></div>
-    <div class="card"><h3>クラウド整形</h3><p>明示的に選んだ場合だけ、今回の文字起こし、共通ルール、モード指示、語彙を選択先へ送信します。</p></div>
-    <div class="card"><h3>履歴分析</h3><p>クラウドの選択にかかわらず、過去履歴の分析は常にオンデバイスで行います。</p></div>
+    <div class="card"><h3>Dictation audio</h3><p>Held only in memory while it is processed. Never stored and never sent.</p></div>
+    <div class="card"><h3>Life Log audio</h3><p>Stored on the Mac only after consent, for recovery, and deleted after transcription by default. Never sent.</p></div>
+    <div class="card"><h3>On-device formatting</h3><p>The default. Transcripts and instructions do not leave the Mac.</p></div>
+    <div class="card"><h3>Cloud formatting</h3><p>Only when you select it: the current transcript, the common rules, the mode instructions, and the vocabulary go to the selected provider.</p></div>
+    <div class="card"><h3>Life Log records</h3><p>Lore never sends them to an LLM or the cloud. You decide which AI client reads them.</p></div>
   </div>
 </section>
 
 <section id="arch">
-  <h2>設計</h2>
+  <h2>Design</h2>
   <div class="layers">
-    <div class="layer"><b>UI</b><span>メニューバー / HUD / 設定 / 履歴</span></div>
-    <div class="layer layer-core"><b>Domain</b><span>口述セッション / モード / 共通ルール / 語彙 / 整形ポリシー</span></div>
-    <div class="layer"><b>Engines</b><span>SpeechAnalyzer / Foundation Models / Remote LLM</span></div>
-    <div class="layer"><b>System</b><span>録音 / ホットキー / ペースト挿入 / Keychain / macOS 権限</span></div>
-    <div class="layer"><b>Persistence</b><span>GRDB / SQLite / FTS5</span></div>
+    <div class="layer"><b>UI</b><span>Menu bar / HUD / main and mini windows / settings / history</span></div>
+    <div class="layer"><b>App</b><span>Dictation, Life Log, and sync coordinators / settings</span></div>
+    <div class="layer layer-core"><b>Domain</b><span>Sessions / modes / common rules / vocabulary / formatting policy / speech segmentation / schedule</span></div>
+    <div class="layer"><b>Engines</b><span>SpeechAnalyzer / whisper.cpp / Foundation Models / remote LLMs</span></div>
+    <div class="layer"><b>System</b><span>Recording / hotkeys / paste insertion / Keychain / calendar / macOS permissions</span></div>
+    <div class="layer"><b>Persistence and Sync</b><span>GRDB / SQLite / FTS5 / encrypted change files</span></div>
   </div>
-  <p class="note">状態遷移と監査記録をドメイン層に置き、OS、DB、ネットワーク、UIの詳細から守ります。</p>
+  <p class="note">State transitions and the audit record live in the domain layer, away from the details of the OS, the database, the network, and the UI.</p>
 </section>
 </main>
 
-<footer>Lore — MIT License</footer>
+<footer>Lore, MIT License</footer>
 <script src="script.js"></script>
 </body>
 </html>

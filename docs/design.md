@@ -1,16 +1,16 @@
-# Lore 内部設計リファレンス
+# Lore internal design reference
 
-本書は現在のコードをモジュール単位で俯瞰するための実装リファレンスです。[HTML版](design.html) と同じ範囲を扱います。利用者から見える契約は [spec.md](spec.md) / [spec.html](spec.html)、データ取り扱いは [PRIVACY.md](../PRIVACY.md) を参照してください。
+This document maps the current code, module by module. The [HTML version](design.html) is generated from this file. For the contract that users see, read [spec.md](spec.md). For data handling, read [PRIVACY.md](../PRIVACY.md).
 
-## 1. ビルドターゲットと依存関係
+## 1. Build targets and dependencies
 
-| Target / Product | Entry point | 役割 |
+| Target / Product | Entry point | Role |
 |---|---|---|
-| `Lore` / `Lore.app` | `Sources/Lore/main.swift`, `Sources/Lore/AppIntents.swift` | SwiftUIアプリとApp Intents |
-| `LoreCLI` / `lore-cli` | `Sources/LoreCLI/main.swift` | 標準入出力・ファイル・クリップボード向けCLI |
+| `Lore` / `Lore.app` | `Sources/Lore/main.swift`, `Sources/Lore/AppIntents.swift` | SwiftUI app and App Intents |
+| `LoreCLI` / `lore-cli` (installed as `lore`) | `Sources/LoreCLI/main.swift` | CLI for standard output, files, and the clipboard |
 | `LoreMCP` / `lore-mcp` | `Sources/LoreMCP/main.swift` | stdio JSON-RPC MCP server |
-| `LoreKit` | `Sources/LoreKit/` | ドメイン、ユースケース、OS/AI/DBアダプタ、UI |
-| `LoreKitTests` | `Tests/LoreKitTests/` | Swift Testingによる単体・統合テスト |
+| `LoreKit` | `Sources/LoreKit/` | Domain, use cases, OS, AI, and database adapters, UI, and localized resources |
+| `LoreKitTests` | `Tests/LoreKitTests/` | Unit and integration tests with Swift Testing |
 
 ```text
 Lore ─────┐
@@ -18,231 +18,273 @@ LoreCLI ──┼──> LoreKit ──> GRDB / whisper.cpp
 LoreMCP ──┘
 ```
 
-外部依存はGRDB Swift Packageと公式whisper.cpp XCFrameworkです。`Domain`、`App`、`Engines`などは単一の`LoreKit` target内の論理モジュールであり、import境界としては強制されません。
+The external dependencies are the GRDB Swift package (7.9.0 or later) and the official whisper.cpp XCFramework (release b4938, pinned by checksum). `Domain`, `App`, `Engines`, and the others are logical modules inside the single `LoreKit` target. Nothing enforces them as import boundaries. `LoreKit/Resources/` holds the `en`, `ja`, and `zh-Hans` string tables. `make app` copies the CLI and MCP server into `Lore.app/Contents/Helpers/` as `lore` and `lore-mcp`.
 
-## 2. LoreKitのモジュール一覧
+## 2. LoreKit modules
 
-| Path | 主要型 | 現在の責務 |
+| Path | Main types | Responsibility |
 |---|---|---|
-| `Domain/` | `SessionDraft`, `SessionRecord`, `Mode`, `FormattingPolicy`, `LifeLogDay`, `LifeLogMemo`, `LifeLogSchedule` | 永続化やUIに依存しない状態、値、遷移、整形規則 |
-| `App/` | `AppEnvironment`, `DictationCoordinator`, `LifeLogCoordinator`, `AppSettings` | composition rootと二つの実行パイプライン |
-| `Engines/` | `SttEngine`, `SpeechAnalyzerStt`, `WhisperCppStt`, `LlmEngine`, `EngineRegistry` | 音声認識、local model管理、LLMの共通境界とprovider実装 |
-| `Persistence/` | `LoreDatabase`, `HistoryStore`, `LifeLogStore`, `ModeStore`, `VocabularyStore` | GRDB schema、migration、query、backup |
-| `System/` | `AudioCapture`, `ContinuousAudioCapture`, `TextInserter`, `HotkeyMonitor`, `CalendarProvider`, `SecretStore` | AVFoundation、Accessibility、EventKit、Keychain等のmacOS境界 |
-| `Analysis/` | `AdaptiveSpeechSegmenter`, `LifeLogTextExporter` | 発話burst境界、外部向けテキスト生成 |
-| `Automation/` | `LoreAutomationService` | CLIとMCPが共有する日一覧・期間取得・日別export・検索・memo追加ユースケース |
-| `Sync/` | `SyncCode`, `SyncFileFormat`, `SyncEngine`, `SyncCoordinator` | 暗号化した変更fileによるMac間同期 |
-| `UI/` | `LoreApp`, `LoreWindowPresenter`, `MainWindowView`, `LifeLogWindow`, `HistoryBrowserView`, settings views, HUD | app lifecycle、window所有、SwiftUI表示・操作 |
+| `Domain/` | `SessionDraft`, `SessionRecord`, `Mode`, `ModeResolver`, `BuiltinModes`, `FormattingPolicy`, `FormattingBackend`, `HotkeyGestureInterpreter`, `VocabularyEntry`, `LifeLogDay`, `LifeLogMemo`, `LifeLogSchedule`, `LifeLogScheduleController`, `LifeLogTimelineLayout`, `AdaptiveSpeechSegmenter`, `SpeechBurstEvidence`, `WhisperInputPolicy`, `TranscriptText` | State, values, transitions, and policies that depend on neither persistence nor UI |
+| `App/` | `AppEnvironment`, `DictationCoordinator`, `LifeLogCoordinator`, `AppSettings`, `ApplicationLanguage` | Composition root and the two runtime pipelines |
+| `Engines/` | `SttEngine`, `SpeechAnalyzerStt`, `WhisperCppStt`, `LlmEngine`, `FoundationModelsLlm`, `RemoteLlm`, `GroqLlm`, `EngineRegistry` | Common boundaries and provider implementations for speech recognition, local model management, and LLMs |
+| `Persistence/` | `LoreDatabase`, `HistoryStore`, `LifeLogStore`, `ModeStore`, `SharedRulesStore`, `VocabularyStore`, `MetaStore`, `SyncStore`, `LegacyKoeMigration` | GRDB schema, migrations, queries, backups, and the one-time Koe migration |
+| `System/` | `AudioCapture`, `ContinuousAudioCapture`, `AudioDevices`, `TextInserter`, `HotkeyMonitor`, `HotkeyBinding`, `FrontmostAppObserver`, `Permissions`, `CalendarProvider`, `SecretStore`, `SoundPlayer`, `LoginItem`, `AppRelauncher`, `AutomationIntegrationManager` | macOS boundaries: AVFoundation, Accessibility, EventKit, Keychain, login item, and the CLI and Agent Skill installers |
+| `Analysis/` | `LifeLogTextExporter` | Text generation for export |
+| `Automation/` | `LoreAutomationService` | Read-only use cases shared by the CLI and MCP: day list, range, day export, and search |
+| `Sync/` | `SyncCode`, `SyncFileFormat`, `SyncEngine`, `SyncCoordinator` | Sync between Macs through encrypted change files |
+| `UI/` | `LoreApp`, `LoreWindowPresenter`, `MainWindowView`, `LifeLogWindow`, `HistoryBrowserView`, settings views, HUD | App lifecycle, window ownership, and SwiftUI views |
 
-## 3. プロセス構成と起動
+## 3. Processes and launch
 
-`LoreApp`は`MenuBarExtra`を常設します。`LoreApplicationDelegate`はwindow sceneの生成有無に依存せずruntimeを起動し、`LoreWindowPresenter`がメイン、設定、ライフログミニの各windowを一意に所有します。Main windowは1680×960 ptで生成します。Presenterはwindowを表示してkey windowにした後、activation policyの切替がwindow serverへ反映されるまで短く待ち、activeになるまで最大1秒だけactivateを再要求します。通常起動を含む明示的な表示要求では対象windowを前面にします。UI、menu、hotkeyは`AppEnvironment`の同じ表示actionを呼び、同種windowを重複生成しません。`AppEnvironment`は`@MainActor @Observable`のcomposition rootで、設定、DB、engine、hotkey、二つのcoordinator、画面投影用stateを所有します。
+`LoreApp` keeps a permanent `MenuBarExtra`. `LoreApplicationDelegate` starts the runtime whether or not a window scene exists, and `LoreWindowPresenter` is the single owner of the main, settings, and Life Log mini windows. The main window is created at 1680×960 pt, the settings window at 980×720 pt, and the mini window at 460×620 pt. After the presenter shows a window and makes it key, it waits briefly for the activation policy change to reach the window server and requests activation again for at most 1 second until the app is active. `WindowActivation` switches the app to the regular activation policy while any Lore window is open and back to accessory when the last one closes, so the Dock icon exists only while a window is open. The UI, the menus, and the hotkeys call the same show actions on `AppEnvironment` and never create a second window of a kind. `AppEnvironment` is the `@MainActor @Observable` composition root. It owns the settings, the database, the engines, the hotkeys, the three coordinators (`DictationCoordinator`, `LifeLogCoordinator`, `SyncCoordinator`), and the state projected to the screens.
 
-起動時の主要順序は次です。
+The launch order is:
 
-1. `AppSettings`と`EngineRegistry`を生成する。
-2. `LoreDatabase.openDefault()`でDBを開き、必要ならbackup、migration、builtin mode seedを行う。
-3. mode、共通ルール、語彙、履歴を読み込む。
-4. 保持期間を超えた履歴とライフログ音声を削除する。
-5. engine設定と4本のglobal hotkeyを反映する。
-6. `LifeLogCoordinator.configure`後、保留audio chunkをバックグラウンド再処理する。
-7. UI test用の明示的なsettings遷移がなければ`mainSection = .lifeLog`としてmain windowを開く。
+1. Creating `AppEnvironment` builds `AppSettings` (after `LegacyKoeMigration.migrateDefaults`) and `EngineRegistry`.
+2. The app delegate shows the main window with `mainSection = .lifeLog`, or the settings section that a UI test requested, and then calls `boot()`.
+3. `boot()` refreshes permissions and moves legacy Koe Keychain items.
+4. `LoreDatabase.openDefault()` moves the Koe folder if needed, backs up, and migrates.
+5. `LifeLogCoordinator.configure` runs and starts reprocessing pending audio chunks in the background.
+6. Built-in modes and the common rules are seeded. Modes, rules, vocabulary, and history are loaded.
+7. History and Life Log audio beyond their retention are deleted.
+8. `SyncCoordinator.configure` runs.
+9. The four global hotkeys and the permission watcher start, the login item state is read, and the engine selection is applied.
+10. The Life Log schedule is evaluated.
 
-起動時の`captureRequested`は必ず`false`です。保存設定から以前のruntime記録意図を復元せず、保留chunkの再処理だけを行います。UI、hotkey、App Intentからの明示操作と、有効な自動記録scheduleだけが新しい記録意図を作ります。
+`captureRequested` is always `false` at launch. Lore does not restore an earlier runtime recording intent from saved settings. It only reprocesses pending chunks. Only an explicit action from the UI, a hotkey, or an App Intent, or an enabled schedule, creates a new recording intent.
 
-自動記録は三層に分けます。`Domain/LifeLogSchedule`は曜日・開始分・終了分だけを持つ値で、`window(containing:)`と`nextTransition(after:)`をCalendar経由で計算します（日付またぎとDSTを含む）。`Domain/LifeLogScheduleController`は「scheduleが開始した記録か」「手動停止で抑止中の時間帯の開始時刻」だけを状態に持つ純粋な状態機械で、現在時刻と記録意図から開始・停止・何もしないを決めます。`AppEnvironment`は起動完了、設定変更、wake、`NSSystemClockDidChange`、`NSSystemTimeZoneDidChange`で評価し、次の切替時刻までsleepする単一の`Task`を張り直します。Polling loopは使いません。手動の開始・停止は`setLifeLogCaptureEnabled`から状態機械へ通知し、scheduleの開始は同じcapture遷移を`bySchedule`で通します。録音audio保存への同意がなければscheduleは開始せず、bannerで手動開始を案内します。
+Scheduled recording has three layers. `Domain/LifeLogSchedule` is a value with only the weekdays, the start minute, and the end minute. It computes `window(containing:)` and `nextTransition(after:)` through `Calendar`, including windows that cross midnight and DST. `Domain/LifeLogScheduleController` is a pure state machine whose only state is whether the schedule started the recording and the start of the window that a manual stop suppressed. From the current time and the recording intent it decides to start, stop, or do nothing. `AppEnvironment` evaluates it at the end of boot, on a settings change, on wake, and on `NSSystemClockDidChange` and `NSSystemTimeZoneDidChange`, and replaces a single `Task` that sleeps until the next switch time. There is no polling loop. A manual start or stop notifies the state machine in `setLifeLogCaptureEnabled`, and a scheduled start or stop calls the same `applyLifeLogCapture` transition directly, so it does not count as a user change. Without consent to store audio, the schedule does not start and a banner asks for a manual start.
 
-`LifeLogWindow`と`LifeLogMiniWindow`は表示開始時に`LifeLogCoordinator.followCurrentDay()`で今日を読み込み、初回だけtimeline末尾へscrollします。以後のreloadや認識結果追加では閲覧位置を動かしません。
+`LifeLogWindow` and `LifeLogMiniWindow` load today through `LifeLogCoordinator.followCurrentDay()` when they appear and scroll to the end of the timeline once.
 
-App終了時はApp delegateが進行中操作をinterruptし、音声writerのcommitと必要なDB保存を短時間だけ待ちます。確定済みaudio chunkを次回起動時の再処理対象にすることで終了時間と復旧可能性を両立します。20秒のdeadlineはOS応答不能時の最終保険です。
+On quit, the app delegate interrupts operations in progress and waits briefly for the audio writer commit and the required database writes. The Life Log stop has its own 3-second timeout. Committed chunks are reprocessed at the next launch, which keeps quit fast and the data recoverable. The 20-second deadline is the last resort for an unresponsive OS.
 
-## 4. 音声入力パイプライン
+## 4. Dictation pipeline
 
-実装の中心は`DictationCoordinator`です。
+`DictationCoordinator` is the center of the implementation.
 
 ```text
 Hotkey/UI
-  -> target app・mode・rules・vocabulary・engineをSessionContextへ固定
+  -> fix target app, mode, rules, vocabulary, and engine in SessionContext
   -> AudioCapture + dictation SttEngine (SpeechAnalyzerStt / WhisperCppStt)
-  -> raw transcriptをSessionRecord(interrupted)として保存
+  -> save raw transcript as SessionRecord(interrupted)
   -> FormattingPolicy + LlmEngine
   -> TextInserter
   -> completed / fallback / clipboard_only / failed / cancelled
 ```
 
-- 短押しと長押しの解釈は`HotkeyGestureInterpreter`、対象アプリは`FrontmostAppObserver`、mode選択は`ModeResolver`が担当します。
-- `HotkeyMonitor`は文字keyを含む組み合わせを`RegisterEventHotKey`で標準event dispatcherへnon-exclusive登録します。macOS 26でdispatcherから通知されないことがあるOptionのみ（Option+Shiftを含む）の文字keyは、`CGPreflightListenEventAccess`で入力監視権限を確認して`CGEventTap`も併用します。`pressStart`を単一の押下状態として二経路をdeduplicateし、最初の押下と離上だけをdomain eventにします。同じtapで修飾キー単体と録音中Escを扱います。四つのmonitorは独立して開始します。
-- `SessionDraft`がrecording、recognizing、formatting、insertingの進捗と計測値を保持し、永続化可能な`SessionRecord`へ確定します。
-- STT確定後、LLMを呼ぶ前にraw transcriptを保存します。
-- LLMのtimeout、利用不可、出力検証エラーではraw transcriptを挿入対象にします。
-- `TextInserter`はclipboardを退避して対象アプリへpasteし、失敗時は結果をclipboardに残します。
-- 通常の音声入力はaudio fileを作りません。
-- `DictationCoordinator`のcapture destinationは通常音声入力とボイスメモの二つです。ボイスメモは同じ`AudioCapture`、STT、HUDを使いますが、`SessionDraft`、LLM、`HistoryStore`、`TextInserter`を通らず、確定した生textを`LifeLogCoordinator.addMemo`へ一度だけ渡します。
-- `AppEnvironment`はボイスメモ開始前に`LifeLogCoordinator.suspendForVoiceMemo`の完了を待ち、終了結果にかかわらず`resumeAfterVoiceMemo`を呼びます。これにより同じ音声をlife-log utteranceとして生成するcapture区間そのものを作りません。
-- `LifeLogMemoComposer`の音声ボタンとglobal hotkeyはどちらも`AppEnvironment.toggleVoiceMemo`を呼びます。UIは`isPreparingVoiceMemo`と`DictationCoordinator.isVoiceMemoRecording`だけを投影し、排他制御やmemo保存をViewへ持ち込みません。
+- `HotkeyGestureInterpreter` interprets short and long presses, `FrontmostAppObserver` supplies the target app, and `ModeResolver` selects the mode.
+- `HotkeyMonitor` registers a combination that includes a letter key with `RegisterEventHotKey`, non-exclusively, on the standard event dispatcher. On macOS 26 the dispatcher sometimes does not report letter keys combined with Option only (including Option+Shift). For those, the monitor requires both `AXIsProcessTrusted` and `CGPreflightListenEventAccess` and also uses a `CGEventTap`. It deduplicates the two paths with `pressStart` as the single pressed state and turns only the first press and release into domain events. The same tap handles modifier-only hotkeys and Esc while the coordinator is busy. The four monitors start independently.
+- `SessionDraft` holds the progress and measurements of recording, recognizing, formatting, and inserting, and is finalized into a persistable `SessionRecord`.
+- The raw transcript is saved after speech recognition finishes and before the LLM is called.
+- `FormattingPolicy` builds the request: the system prompt is the common rules, then the mode instructions, then the vocabulary table, and the user message is the transcript inside `<transcript>` tags. The mode's language goes only to the speech recognition hint. `Mode.llmModel` is persisted but the pipeline does not read it. The model always comes from the global setting.
+- `FormattingPolicy` rejects an output that is empty, has a length ratio to the input outside 0.3 to 2.0 (checked for inputs of 12 characters or more), contains a leakage marker, or has a character-bigram overlap with the input below 0.15. On rejection, timeout, or an unavailable engine, the raw transcript becomes the text to insert, and the record stores the formatting engine as `none` with the reason in `error`.
+- `TextInserter` saves the clipboard, pastes into the target app, and restores the clipboard. On failure it leaves the result on the clipboard.
+- Dictation never creates an audio file.
+- `DictationCoordinator` has two capture destinations, dictation and voice memo. A voice memo uses the same `AudioCapture`, speech recognition, and HUD, but skips `SessionDraft`, the LLM, `HistoryStore`, and `TextInserter`, and passes the final raw text to `LifeLogCoordinator.addMemo` exactly once.
+- Before a voice memo starts, `AppEnvironment` awaits `LifeLogCoordinator.suspendForVoiceMemo`, and it calls `resumeAfterVoiceMemo` whatever the outcome. So the capture span that would produce the same audio as a Life Log utterance never exists.
+- The voice button of `LifeLogMemoComposer` and the global hotkey both call `AppEnvironment.toggleVoiceMemo`. The UI projects only `isPreparingVoiceMemo` and `DictationCoordinator.isVoiceMemoRecording`. Exclusion and memo saving stay out of the views.
+- After 10 minutes idle, `EngineRegistry.unloadDictationEngines` releases the dictation whisper.cpp state, the SpeechAnalyzer engine, and the current LLM, and clears the cached capture format.
 
-## 5. ライフログパイプライン
+## 5. Life Log pipeline
 
-`LifeLogCoordinator`は音声入力と状態を共有せず、専用の`ContinuousAudioCapture`で音声を耐久化します。Life Log STTはadaptiveな発話burstごとのrolling previewと確定jobとして選択engineを実行します。
+`LifeLogCoordinator` shares no state with dictation and persists audio through its own `ContinuousAudioCapture`. Life Log speech recognition runs the selected engine as a rolling preview per adaptive speech burst and as a final job.
 
 ```text
 capture request
-  -> 30秒単位の .partial を同一directoryの .m4a へcommit
-  -> LifeLogAudioChunkをDBへ保存
-  -> input signalからadaptiveな発話burst rangeを確定
-  -> durable audio rangeをSTT jobで遅延認識しtimestamp付きutteranceを保存
-  -> calendar snapshotとの任意関連付け
-  -> timelineと月間activityを再読込
+  -> commit a 30-second .partial to an .m4a in the same directory
+  -> save LifeLogAudioChunk to the database
+  -> finalize the adaptive speech burst range from the input signal
+  -> recognize the durable audio range in a deferred job and save timestamped utterances
+  -> optional association with the calendar snapshot
+  -> reload the timeline and monthly activity
 ```
 
-ライフログから要約、話題、TODOを生成するLLM経路は持ちません。振り返りや作業整理は外部の汎用AIがCLI/MCPの日別exportと検索を読む前提で、Loreはsource of truthの記録、検索、書き出しだけを担います。
+There is no LLM path that generates summaries, topics, or to-do items from the Life Log. Review and organizing are left to an external general-purpose AI that reads the day export and search through the CLI or MCP. Lore only records the source of truth, searches it, and exports it.
 
-- 初回開始前にローカルaudio保存への明示同意が必要です。
-- Audio chunkは復旧・保持の単位です。30秒ごと、またはburst確定時にcommitし、burst rangeがchunkをまたぐ場合も対応する全chunkのcommit後に一つの確定job入力として扱います。
-- `AdaptiveSpeechSegmenter`はcaptureやSTT adapterから独立したdomain policyです。入力にはUI表示用の対数正規化levelではなく`AudioCapture.rootMeanSquare(of:)`の線形RMSを使います。開始直後の1秒をbackground noise floorの校正に使い、非発話中も緩やかに更新します。約-50 dBFSの絶対下限に加えてnoise floorからの差と倍率を満たす入力が250ms継続した場合だけburstを始め、微小noiseや一定のbackground noiseをjobにしません。Burst内の累積有声時間が30秒未満なら1.5秒、30秒以上なら1秒の連続無音でflushします。Flush時は累積有声時間0.5秒以上かつ有声比率20%以上を`SpeechBurstEvidence`の不変条件とし、満たさない候補はSTTとcheckpointへ渡しません。連続入力でもburstのwall timeが5分に達したら安全flushします。
-- Flush後は参照する全audio rangeのcommitを待ってからjobを開始します。Recognition結果のtimestampはcapture開始時刻へaudio offsetを加えて導出し、処理開始時刻やmodel内部clockを正本にしません。Vocabularyは録音session開始時にsnapshot化し、途中の設定変更を混ぜません。保存audioの再処理では最新の有効語彙を使います。
-- 音声入力と重なる区間もraw audioと認識済みutteranceを保存します。読み取り時は音声入力の実録音区間（`startedAt`から`audioDurationMs`）を使って重複を解決し、成功した`SessionRecord`をtimeline、検索、exportの正本として、重なるlife-log utteranceをそれらのprojectionから除外します。cancelled/failed sessionは正本にせず、life-log utteranceを残します。この優先順位はUIや個別adapterではなくdomainの共通projectionに置きます。
-- 未処理・失敗chunkは保存状態を持ち、起動後に古い順で再処理します。保存済み`peakLevel`はUI用の正規化levelのまま保持し、その尺度で約-50 dBFS未満の明確な無音chunkを除外します。それ以外も保存audioを線形RMSで同じ`AdaptiveSpeechSegmenter`へ戻してから、有効なburstだけを個別にSTTへ渡します。30秒chunk全体や無音区間をLarge modelへ入力しません。
-- Audio保持policyは「処理後削除」を既定とし、「7日」「30日」を選択可能にします。削除可能なのは`transcription_state = transcribed`かつ`processing_state = extracted`のchunkだけです。`processing_state = extracted`は発話の保存まで完了したことを表し、旧版の派生処理状態名を保存互換のため流用します。「処理後削除」は両状態の保存完了後、「7日」「30日」はさらに`capture_ended_at`から指定日数の経過後にfileを削除します。DBのchunk metadataと発話は削除しません。
-- `LifeLogStore`が処理状態と保持policyから削除可能なaudio URLを決定し、`AppEnvironment`はその結果だけをfile systemから削除します。Policy変更時と起動時に同じuse caseを実行し、未処理・失敗chunkを期間だけで削除しない不変条件を一か所に置きます。
-- `ContinuousAudioCapture`は実際のaudio writerの開始・停止を`onRunningChanged`で通知し、`LifeLogCoordinator.isCapturing`だけを全UIの実録音状態へ投影します。音声構成変更時はwriterを安全にcommitし、同じprocessの`captureRequested`が残り、sleepまたはボイスメモによる一時停止中でなければbackoff付きで新しい入力構成へ再接続します。マイク権限拒否だけは再試行しません。確定済みburst jobはcapture再接続と独立して継続・再試行します。
-- calendarはEventKitから選択calendarの最小snapshotだけを保存します。設定画面の手動再取得も`LifeLogCoordinator.refreshCalendar`を通し、選択日のsnapshot保存、timeline再読込、月間activity更新を一つのuse caseとして実行します。発話との関連付けは前後2分を許容します。
-- sleep前にstreamを閉じ、記録意図が残る場合だけwake後にbackoff付きで再接続します。
+- Before the first start, the user must explicitly consent to local audio storage.
+- An audio chunk is the unit of recovery and retention. It is committed every 30 seconds or when a burst ends. When a burst range spans chunks, the job input is formed after all of those chunks are committed.
+- `AdaptiveSpeechSegmenter` is a domain policy independent of capture and of the speech recognition adapters. Its input is the linear RMS from `AudioCapture.rootMeanSquare(of:)`, not the log-normalized level shown in the UI. It calibrates the background noise floor during the first second and keeps updating it slowly while nobody speaks. A burst starts only when the input satisfies the absolute floor of about -50 dBFS and the difference and ratio against the noise floor for 250 ms, so faint or steady background noise produces no job. A burst flushes after 1.5 seconds of continuous silence when its voiced time is under 30 seconds and after 1 second at 30 seconds or more. `SpeechBurstEvidence` holds the invariant that a flushed burst has at least 0.5 seconds of voiced time and a voiced ratio of at least 20%. A candidate that fails it reaches neither speech recognition nor a checkpoint. A burst is flushed for safety when its wall time reaches 5 minutes.
+- After a flush, the job starts only when every audio range it refers to is committed. Result timestamps are the capture start time plus the audio offset, never the processing start time or a clock inside the model. The vocabulary is snapshotted when the recording session starts. Reprocessing of stored audio uses the latest enabled vocabulary.
+- Spans that overlap dictation still store raw audio and recognized utterances. On read, the actual recording span of the dictation (`startedAt` plus `audioDurationMs`) resolves the duplication: a successful `SessionRecord` is authoritative for the timeline, search, and export, and overlapping Life Log utterances are excluded from those projections. A canceled or failed session is not authoritative and the Life Log utterances remain. This priority lives in one shared domain projection, not in the UI or in an adapter.
+- Unprocessed and failed chunks carry a stored state and are reprocessed oldest first after launch. The stored `peakLevel` keeps the UI's normalized scale, and on that scale chunks that are clearly silent (below about -50 dBFS) or shorter than 1 second are skipped. The rest go back through the same `AdaptiveSpeechSegmenter` as linear RMS, and only valid bursts are passed to speech recognition one by one. A whole 30-second chunk or a silent span never enters a large model.
+- The audio retention policy defaults to deleting after transcription and offers 7 and 30 days. Only a chunk with `transcription_state = transcribed` and `processing_state = extracted` can be deleted. `processing_state = extracted` means that saving the utterances is complete. The name is reused from an older derived-processing state to stay compatible with stored data. "Delete After Transcription" deletes the file once both states are saved. The day options also wait until the given days have passed since `capture_ended_at`. The chunk metadata and the utterances in the database are not deleted. `AppSettings` still decodes an unlimited value saved by an older version, and the picker shows it as a legacy entry.
+- `LifeLogStore` decides the deletable audio URLs from the processing state and the retention policy, and `AppEnvironment` only removes those files. The same use case runs on a policy change and at launch, so the invariant that unprocessed and failed chunks are never deleted by age alone lives in one place.
+- `ContinuousAudioCapture` reports the real start and stop of the audio writer through `onRunningChanged`, and only `LifeLogCoordinator.isCapturing` is projected to every UI as the actual recording state. On an audio configuration change it commits the writer safely. If `captureRequested` of the same process remains and capture is not paused for sleep or a voice memo, it reconnects to the new input configuration with backoff. Only a denied microphone permission is not retried. Finalized burst jobs continue and retry independently of capture reconnection.
+- The calendar stores a minimal snapshot of the selected calendars from EventKit. The manual refresh in Settings also goes through `LifeLogCoordinator.refreshCalendar`, which saves the snapshot of the selected day, reloads the timeline, and updates the monthly activity as one use case. Association with utterances allows 2 minutes before and after.
+- The stream is closed before sleep and reconnects with backoff after wake only if the recording intent remains.
 
-## 6. Engine構成
+## 6. Engines
 
-`EngineRegistry`は音声入力・ボイスメモ用とライフログのpreview・確定job用の`SttEngine`を、それぞれ`SpeechAnalyzerStt`または`WhisperCppStt`から選びます。セッションとjobは開始時のengineを最後まで使います。`LlmEngine`は音声入力の整形にだけ選びます。
+`EngineRegistry` selects a `SttEngine` for dictation and voice memos, and another for Life Log previews and final jobs, each from `SpeechAnalyzerStt` or `WhisperCppStt`. A session or job uses the engine it started with until it ends. `LlmEngine` is selected only for dictation formatting.
 
-| STT | 実装 | Model | Audio送信 |
+| Speech recognition | Implementation | Model | Audio sent |
 |---|---|---|---|
-| Apple SpeechAnalyzer | `SpeechAnalyzerStt` | macOS管理 | なし |
-| whisper.cpp deferred | `WhisperCppStt` | Loreがlocal downloadを管理するaccuracy優先のcurated GGML model | なし |
+| Apple SpeechAnalyzer | `SpeechAnalyzerStt` | Managed by macOS | None |
+| whisper.cpp, deferred | `WhisperCppStt` | Curated GGML models whose local download Lore manages | None |
 
-`WhisperCppStt`はLarge v3 Turbo Q5_0 574 MBを既定とし、accuracy優先の非Turbo Large v3 Q5_0も選べるmodel catalog、download、cancel、SHA-256検証、削除を一つの境界に置きます。GGML重みは`WhisperModelCache`がfileごとにprocess内で一つだけloadし、全stateが手放した時点で解放します。`EngineRegistry`は音声入力用とライフログ用に別の`WhisperCppStt`を持ち、それぞれが自分の推論stateを所有するため、両用途の推論は互いを待ちません。同じstateでの推論と結果読取りはactorとstate handleの排他で直列実行します。実行中jobは自分のstateと重みを保持して完了まで使います。音声入力は`captureFormat`で録音を待たせずにstateの準備を開始し、10分のidle後に音声入力用stateだけを解放します。ライフログ用stateは記録停止の完了時に解放します。Download完了だけでは推論stateをloadしません。音声は前後の無音を`WhisperInputPolicy`で除いてから渡し、segment offsetへ除いた長さを加えて保存audioのoffsetと一致させます。語彙promptは同じpolicyで並び順を保ってtoken上限へ収め、prompt全体の写しだけのsegmentを除きます。公式XCFrameworkのC APIをprocess内から直接呼び、GGML modelをMetalとCPUで実行します。Core ML modelとANE specialization、Homebrewや外部CLIへの依存は持ちません。Decode時はspecial tokenを出力せず、engine境界でcontrol/timestamp tokenと、独立した文として現れる既知の定型hallucination「ご視聴ありがとうございました」を除去してからdomain eventへ渡します。後続する実発話は保持し、Read/UI側の補正や既存dataの自動書換えは持ちません。Model取得通信に音声、文字起こし、利用者dataを含めません。
+`WhisperCppStt` puts the model catalog, download, cancel, SHA-256 verification, and deletion behind one boundary. The catalog is Large v3 Turbo Q5_0 (574 MB, the default), Large v3 Q5_0 (1.08 GB), and Small Q5_1 (190 MB).
 
-`LifeLogCoordinator`は`SpeechBurstEvidence`が有効になった発話だけを対象に、発話検出から1.5秒後、前のpreviewが完了していれば1.5秒ごとに直近5秒のsnapshotを同じ`SttEngine`へ渡し、結果をephemeralな`liveTranscript`としてだけ公開します。実行中previewへ新しいsnapshotを重ねず、burst確定時はpreviewのcancel完了後に最終認識を優先します。Preview失敗は記録済みaudioの再処理状態を変更せずlogへ残し、最終認識の失敗だけをchunkのfailureとして扱います。有効なburst確定時だけ`ContinuousAudioCapture`へcheckpointを要求し、writer queue上の入力を原子的にcommitして次のfileを開始します。確定結果は対象audioのcommit callbackを待ってからtimestamp付きで保存します。Checkpoint後は定期rotationを30秒後へ再設定し、同時rotationによる空chunkを作りません。
+- `WhisperModelCache` loads the GGML weights once per file in the process and frees them when every state lets go.
+- `EngineRegistry` holds separate `WhisperCppStt` instances for dictation and for the Life Log. Each owns its inference state, so the two uses do not wait for each other. Inference and result reads on one state run serially through the actor and the state handle. A running job keeps its state and weights until it completes.
+- Dictation starts preparing the state from `captureFormat` without delaying recording. The Life Log state is released when recording has stopped. A finished download alone does not load an inference state.
+- `WhisperInputPolicy` trims leading and trailing silence before the audio is passed, and the trimmed length is added back to segment offsets so they match the stored audio. The same policy fits the vocabulary prompt into the token limit in list order and removes a segment that only repeats the whole prompt.
+- The engine calls the C API of the official XCFramework in process and runs the GGML model on Metal and the CPU. It has no Core ML model, no ANE specialization, and no dependency on Homebrew or an external CLI.
+- Decoding emits no special tokens. At the engine boundary, control and timestamp tokens and the known boilerplate hallucination "ご視聴ありがとうございました", when it appears as a standalone sentence, are removed before the result becomes a domain event. Real speech that follows is kept. There is no correction on the read or UI side and no automatic rewrite of existing data.
+- The model download request to Hugging Face carries no audio, transcript, or user data.
 
-Main/mini timelineはそれぞれ、scroll geometryから末尾が見えているかを保持します。初回と追従中のitem追加だけ末尾へscrollし、利用者操作またはsource navigationで末尾を離れた場合は追従を停止します。末尾へ戻った時だけ追従を再開し、更新のたびに過去の閲覧位置を奪いません。
+`LifeLogCoordinator` previews only speech whose `SpeechBurstEvidence` became valid. Starting 1.5 seconds after speech is detected, and every 1.5 seconds while the previous preview has finished, it passes a snapshot of the latest 5 seconds to the same `SttEngine` and publishes the result only as the ephemeral `liveTranscript`. It never stacks a new snapshot on a running preview, and when the burst ends, the final recognition takes priority after the preview's cancellation completes. A preview failure is logged without changing the reprocessing state of recorded audio. Only a final recognition failure counts as a chunk failure. Only a valid burst end asks `ContinuousAudioCapture` for a checkpoint, which atomically commits the input on the writer queue and starts the next file. The final result is saved with timestamps after the commit callback of the audio it refers to. After a checkpoint, the periodic rotation is reset to 30 seconds later, so a simultaneous rotation never creates an empty chunk.
 
-| Backend | 実装 | 接続先 | Mac外への文字送信 |
+The main and mini timelines each track from scroll geometry whether the end is visible. They scroll to the end only for the first display and for items added while following. When a user action or source navigation leaves the end, following stops. It resumes only on return to the end.
+
+| Backend | Implementation | Endpoint | Text leaves the Mac |
 |---|---|---|---|
-| Apple Foundation Models | `FoundationModelsLlm` | OS内蔵 | なし |
-| Ollama | `RemoteLlm` | `http://localhost:11434/v1` | なし |
-| LM Studio | `RemoteLlm` | `http://localhost:1234/v1` | なし |
-| OpenAI | `RemoteLlm` | provider API | あり、明示選択時のみ |
-| Anthropic | `RemoteLlm` | provider API | あり、明示選択時のみ |
-| Gemini | `RemoteLlm` | provider API | あり、明示選択時のみ |
-| Groq | `GroqLlm` | Groq API | あり、明示選択時のみ |
+| Apple Foundation Models | `FoundationModelsLlm` | Built into the OS | No |
+| Ollama | `RemoteLlm` | `http://localhost:11434/v1` | No |
+| LM Studio | `RemoteLlm` | `http://localhost:1234/v1` | No |
+| OpenAI | `RemoteLlm` | `api.openai.com/v1/responses`, with `store: false` | Yes, only when explicitly selected |
+| Anthropic | `RemoteLlm` | `api.anthropic.com/v1/messages` | Yes, only when explicitly selected |
+| Gemini | `RemoteLlm` | `generativelanguage.googleapis.com/v1beta` | Yes, only when explicitly selected |
+| Groq | `GroqLlm` | `api.groq.com/openai/v1` | Yes, only when explicitly selected |
 
-`FormattingPrompt`はsystem、user、期待出力長だけを持つtext変換の要求です。`GroqLlm`を含む全providerは温度0とprovider既定の推論量で文章変換し、推論を出すmodelの`<think>`部分はadapter境界で除去します。
+`FormattingPrompt` is a text transformation request with only a system text and a user text. Gemini, Groq, and the OpenAI-compatible local servers run at temperature 0. Foundation Models uses greedy sampling and derives its response budget from the input length. The OpenAI and Anthropic requests set no temperature. For a model that emits reasoning, the adapter boundary removes the `<think>` part. Each provider also has a model listing call that the settings page uses to check the connection.
 
-API keyは`SecretStore`を通してKeychainへ保存します。旧版のライフログ用keyは読み出さず、全削除の対象としてだけ列挙します。
+API keys go to the Keychain through `SecretStore`. Lore never reads the Life Log keys of older versions. It lists them only as targets of the full reset.
 
-## 7. 永続化
+## 7. Persistence
 
-DBは`~/Library/Application Support/Lore/lore.sqlite`です。`DatabaseQueue`を使い、foreign keyを有効化します。
+The database is `~/Library/Application Support/Lore/lore.sqlite`. It uses a GRDB `DatabaseQueue` with foreign keys enabled.
 
-| Store | 主なtable |
+| Store | Main tables |
 |---|---|
 | `HistoryStore` | `sessions`, `sessions_fts` |
-| `ModeStore` | `modes` |
-| `SharedRulesStore` | `meta` |
+| `ModeStore` | `modes`, and seeding markers in `meta` |
+| `SharedRulesStore`, `MetaStore` | `meta` |
 | `VocabularyStore` | `vocabulary` |
-| `LifeLogStore` | `life_log_audio_chunks`, `calendar_event_snapshots`, `life_log_utterances`, `life_log_memos`と各FTS |
+| `LifeLogStore` | `life_log_audio_chunks`, `calendar_event_snapshots`, `life_log_utterances`, `life_log_memos`, and their FTS tables |
 | `SyncStore` | `sync_control`, `sync_outbox`, `sync_versions`, `sync_cursors` |
 
-名前付きmigrationは`v1`から`v11`です。`v9-remove-todo-summary-usage`はTODO、日次要約、token集計、会話区切りのtableとFTSを削除し、`life_log_utterances`を`conversation_id`なしで作り直してFTSを再構築します。削除前の内容はmigration直前backupに残ります。`v10-sync`は同期用tableとtriggerを追加し、`life_log_utterances.audio_chunk_id`をNULL許容へ作り直します（7.1）。`v11-remove-vocab-suggestions`は履歴からの語彙候補を廃止したため`vocab_suggestions`を削除します。候補から登録済みの語彙（`source = suggested`）は`vocabulary`に残します。履歴、発話、memoの日本語部分一致にはFTS5 trigramを使います。Codable値と配列はJSON、日時はISO 8601文字列で保存します。
+The named migrations run from `v1` to `v11`.
 
-旧名Koeからの移行は`Persistence/LegacyKoeMigration`に閉じ込め、旧名（`dev.agatan.Koe`、`Koe/`、`koe.sqlite`、`koe.settings.v1`）はこのfileとそのtestだけが知ります。`LoreDatabase.openDefault()`はDBを開く前（既存のmigration直前backupより前）に`migrateApplicationSupport`を呼び、旧folderだけがあれば同じvolume内のrenameで`Lore/`へ移してから`koe.sqlite`と`-wal`/`-shm`/`-journal`を`lore.sqlite`側へ改名します（本体を最後に移すため、途中で止まっても次回続きから改名します）。新旧両方があれば混ぜずに`.leftLegacyInPlace`を返し、`AppEnvironment`が`dataMigrationIssue`としてmenu barに出します。移動が失敗したら例外をそのまま返してDBを開きません（空DBを作ると次回「両方ある」状態になり旧dataへ戻れなくなるため）。保存audioの`local_path`は絶対pathなので、`LifeLogStore.rewriteAudioPaths`が開くたびに旧folder配下を指す行だけを新folderへ付け替えます（該当がなければ書きません）。backup名は`pre-migration-*`/`daily-*`でapp名を含まないため、移した後もそのまま7世代の数に入ります。設定は`AppEnvironment.settings`の生成前に`migrateDefaults`が旧domainを一度だけ写し（設定JSONの鍵は`lore.settings.v1`へ改名、新domainに設定があれば写さない、`lore.migratedFromKoe`で再実行しない）、Keychainは起動直後に`SecretStore.migrateLegacyKoeService`が旧serviceの各accountを新serviceへ写してから旧itemを消します。写せなかったaccountは旧itemを残し、理由を`dataMigrationIssue`に出します。CLI/MCPは`LoreAutomationService.openDefault()`で設定とfolderの移行を同じ手順で行い、Keychainには触れません。UI test bundleとscreenshot demoは移行しません。
+- `v9-remove-todo-summary-usage` drops the tables and FTS for to-do items (`life_log_todos`), daily summaries (`daily_summaries`), token counts (`llm_usage_events`), and conversation breaks (`life_log_conversations`), recreates `life_log_utterances` without `conversation_id`, and rebuilds its FTS. The earlier content stays in the pre-migration backup.
+- `v10-sync` adds the sync tables and triggers and recreates `life_log_utterances` with a nullable `audio_chunk_id` (section 7.1).
+- `v11-remove-vocab-suggestions` drops `vocab_suggestions` because suggestions from history were removed. Vocabulary that was registered from a suggestion (`source = suggested`) stays in `vocabulary`.
 
-既存DBを開くと、未適用migrationの直前に`Backups/pre-migration-*.sqlite`を作ります。migrationがなくても1日1回`Backups/daily-*.sqlite`を作り、両種を合わせて更新日時が新しい7ファイルを保持します。backupはGRDBのonline backupで整合した単一SQLiteへ固定します。全データ削除はDB内利用者データ、保存audio、whisper.cpp modelと途中download、旧WhisperKit model、backupを削除します。
+Substring search over history, utterances, and memos uses FTS5 trigram for queries of three or more characters and `LIKE` for shorter ones. Codable values and arrays are stored as JSON and dates as ISO 8601 strings.
 
-## 7.1 Mac間同期
+The migration from the old name Koe is confined to `Persistence/LegacyKoeMigration`. Only that file and its tests know the old names (`dev.agatan.Koe`, `Koe/`, `koe.sqlite`, `koe.settings.v1`).
 
-`Sync/`は利用者が選んだfolderを経由するMac間同期です。Loreはnetworkへ接続せず、folderの提供元が運ぶ暗号化fileだけを読み書きします。
+- `LoreDatabase.openDefault()` calls `migrateApplicationSupport` before it opens the database, which is also before the pre-migration backup. If only the old folder exists, it renames it to `Lore/` within the same volume and then renames `koe.sqlite` and its `-wal`, `-shm`, and `-journal` files to the `lore.sqlite` names. The main file moves last, so an interrupted run continues the renames next time.
+- If both folders exist, it does not merge and returns `.leftLegacyInPlace`. `AppEnvironment` shows it in the menu bar panel as `dataMigrationIssue`.
+- If the move fails, the error propagates and the database is not opened. Creating an empty database would produce the "both exist" state on the next launch and block the way back to the old data.
+- The `local_path` of stored audio is absolute, so `LifeLogStore.rewriteAudioPaths` repoints the rows under the old folder to the new folder on every open, and writes nothing when no row matches.
+- Backup names are `pre-migration-*` and `daily-*` with no app name, so moved backups still count toward the 7 kept.
+- `migrateDefaults` copies the old defaults domain once before `AppEnvironment.settings` is created. It renames the settings JSON key to `lore.settings.v1`, does not copy when the new domain already has settings, and uses `lore.migratedFromKoe` to never run again.
+- `SecretStore.migrateLegacyKoeService` runs right after launch. It copies each account of the old Keychain service to the new service and then deletes the old item. A value already in the new service is not overwritten. An account that cannot be copied keeps its old item, and the reason appears in `dataMigrationIssue`.
+- The CLI and MCP run the same settings and folder migration in `LoreAutomationService.openDefault()` and never touch the Keychain. The UI test bundle and the screenshot demo do not migrate.
 
-- **変更の記録**: `v10-sync`が`life_log_utterances`、`life_log_memos`、`sessions`、`vocabulary`のINSERT/UPDATE/DELETE triggerを作り、`sync_control`の`enabled=1`かつ`suppressed=0`の間だけ`sync_outbox(entity, record_id, changed_at)`へ記録します。CLI/MCPは読み取り専用のため、別processからの書き込みはありません。保持期間による削除、一括削除、全data削除、他のMacからの適用は`suppressed=1`の同じtransaction内で行い、outboxへ載せません。
-- **書き出し**: `SyncEngine.export`はoutboxを読み、行が残っていれば現在の列値をupsert、無ければtombstoneにしたbatchを作ります。`<folder>/Lore Sync/devices/<device-id>/<10桁seq>.loresync`へ一時fileを書いてrenameし、その後のtransactionで、書き出し時と`changed_at`が同じoutbox行だけを消して`sync_versions`へ版を記録します。seqはDBの次番号と既存file最大値+1の大きい方で、file書込後のcrashでも番号を再利用しません。
-- **取り込み**: 自分以外のdevice directoryを`sync_cursors`の次seqから連番で読みます。復号・検証・適用とcursor更新を1 transactionで行い、失敗したfileで止めて同じdeviceの後続を待たせます。iCloud Driveの`.icloud` placeholderはdownloadを要求して次回へ回します。
-- **競合**: 版は`(changed_at, device_id)`の辞書順で比較し、新しい方だけを適用します（後勝ち）。未書き出しのoutbox行も自分の版として比較に含めます。Tombstoneも`sync_versions`に`deleted=1`で残し、古いupsertで復活させません。
-- **列の範囲**: 発話は`id`、時刻、`text`だけを送り、他のMacでは`audio_chunk_id`と`calendar_event_id`をNULLで保存します。このため`v10-sync`は`life_log_utterances.audio_chunk_id`をNULL許容へ作り直し、FTSを再構築します。履歴は`sessions`の全列、語彙は`vocabulary`の全列、memoは全列です。Audio、calendar snapshot、mode、設定、API keyは対象外です。
-- **file形式**: `LORESYNC` magic、format version 1 byte、header JSON長(UInt32 big endian)、header JSON（`device`, `seq`）、AES-GCM combined box（nonce 12 byte + 暗号文 + tag 16 byte）。Magicからheader JSONまでをassociated dataとして認証します。平文はLZFSE圧縮したbatch JSONです。`Lore Sync/keycheck.loresync`は既知の平文を同じ鍵で封じたfileで、参加時に同期コードを検証します。
-- **鍵と状態**: 256-bit鍵は`SecretStore`の`sync.key`（non-synchronizable generic password）に同期コード文字列として保存します。同期コードは鍵32 byteとSHA-256先頭2 byteをRFC 4648 base32にして4文字ずつ区切ったものです。Device ID、folder bookmark、次seq、最終同期時刻、最後のerrorは`sync_control`の1行に置き、全data削除と同期解除で消します。
-- **実行契機**: `SyncCoordinator`(`@MainActor`)はoutboxの変更をGRDBの`DatabaseRegionObservation`で受けて5秒debounceで書き出し、起動時、app activation、120秒timer、「今すぐ同期」で書き出しと取り込みを行います。取り込みで行が変わった場合は履歴、語彙、life logを再読込します。
+Opening an existing database creates `Backups/pre-migration-yyyyMMdd-HHmmss.sqlite` immediately before pending migrations. Without a migration it creates `Backups/daily-yyyyMMdd.sqlite` once per day. A backup is staged as a hidden file and renamed, and the 7 most recently modified files of both kinds are kept. A backup is a GRDB online backup, which fixes a consistent single SQLite file. A backup failure throws before the migration starts. The CLI and MCP open the database through the same path, so they also migrate and back up.
 
-## 8. 設定、秘密、プロセス間同期
+The full reset (`AppEnvironment.deleteAllApplicationData`) stops capture, then removes the Life Log audio directory, the whisper.cpp models and partial downloads, the legacy WhisperKit models, every Keychain account (`SecretStore.deleteAll`), and the backups. `LoreDatabase.deleteAllUserData` then resets sync and deletes utterances, memos, event snapshots, audio chunks, sessions, vocabulary, modes, and `meta` in one transaction. Finally the settings are reset to defaults and the built-in modes and common rules are seeded again.
 
-- `AppSettings.Storage`はsuite `dev.agatan.Lore`のUserDefaults key `lore.settings.v1`へJSONで保存します。
-- `ApplicationLanguage`は`system`、`en`、`ja`、`zh-Hans`の閉じた値として保存し、既定は`system`です。`system`はmacOSの優先言語から最初の対応localeを選び、なければ`en`へ解決します。`zh-Hant`は`zh-Hans`へ暗黙変換しません。既存設定にfieldがなければ`system`で補完し、GRDB migrationは追加しません。
-- 整形のprovider/modelは音声入力だけの設定です。通常音声入力、ライフログcapture、mini window、ボイスメモのhotkey、自動記録schedule（`lifeLogSchedule`、既定は無効）、保持期間、calendar filterをここに入れます。廃止したライフログ用provider、prompt、要約間隔のkeyは読み捨て、保存し直した時点で消えます。Mini windowは常時手前を不変条件とし、表示levelの設定は持ちません。Color themeも設定として保持せず、`LoreTheme`の固定brand tokenを使います。
-- `dictationSttBackend`と`lifeLogSttBackend`は用途ごとのengine選択です。whisper.cpp modelは両用途で共有し、保存keyは共有化前の`lifeLogWhisperModel`を維持します。`LifeLogTranscriptionLanguage`はライフログ設定だけに置き、音声入力はmodeの言語設定を使います。認識言語の既定値`applicationLanguage`は`ApplicationLanguage`を`ja`、`en`、`zh-Hans`の固定hintへ解決し、明示的な`auto`も選べます。Runtimeの`captureRequested`は設定として永続化しません。GGML model本体と途中downloadは`Application Support/Lore/Models/WhisperCpp/`へ置き、全データ削除に含めます。
-- `AppEnvironment`の設定から解決した`Locale`を全SwiftUI表示へ注入します。localization resourceの開発言語と欠損keyのfallbackは英語です。表示言語はUI shellだけのvariation pointで、ライフログ設定が明示する`applicationLanguage`解決以外はSTT locale、mode、prompt、保存data、export、CLI/MCP contractへ伝播させません。
-- View以外で組み立てる利用者向け文言（error、状態表示、notice）は`String(lore:)`で同じ`Localizable.strings`から引きます。`AppEnvironment`が設定の表示言語を`LoreLocalization`へ写すため、SwiftUIへ注入した`Locale`と同じ言語になります。作った時点の言語で文字列になり、履歴へ残す理由もその言語のまま保存します。ログ、LLMへ送るprompt、CLI/MCPの機械向け出力は翻訳しません。`LocalizationCoverageTests`が三言語のkey・format specifierの一致と、UI/Appの日本語literalがkeyにあることを検査します。
-- API keyはUserDefaultsやDBには入れずKeychainへ保存します。
+## 7.1 Sync between Macs
 
-## 9. UIとwindow対応
+`Sync/` implements sync between Macs through a folder that the user chooses. Lore does not connect to the network. It only reads and writes encrypted files that the folder provider transports.
 
-| Scene / View | 内容 |
+- **Recording changes.** `v10-sync` creates INSERT, UPDATE, and DELETE triggers on `life_log_utterances`, `life_log_memos`, `sessions`, and `vocabulary`. They record into `sync_outbox(entity, record_id, changed_at)` only while `sync_control` has `enabled = 1` and `suppressed = 0`. The CLI and MCP do not write user records, so no other process feeds the outbox. Deletion by retention period, the two bulk deletions, and applying changes from another Mac run inside one transaction with `suppressed = 1` and never reach the outbox. The full reset calls `SyncStore.reset` first, which disables sync and empties the outbox.
+- **Export.** `SyncEngine.export` reads the outbox and builds a batch of at most 1000 records: an upsert with the current column values when the row still exists, a tombstone when it does not. It writes a temporary file and renames it to `<folder>/Lore Sync/devices/<device-id>/<10-digit seq>.loresync`. In the following transaction it deletes only the outbox rows whose `changed_at` is unchanged since the export and records the versions in `sync_versions`. The sequence number is the larger of the next number in the database and the highest existing file number plus 1, so a crash after the file write never reuses a number.
+- **Import.** For every device directory except its own (directories named with a UUID, in sorted order), Lore reads files in sequence from the next number in `sync_cursors`. Decryption, verification, applying, and the cursor update happen in one transaction. A failing file stops the import for that device and makes its later files wait. For an iCloud Drive `.icloud` placeholder, Lore requests the download and continues at the next sync.
+- **Conflicts.** Versions compare lexicographically as `(changed_at, device_id)`, and only the newer one is applied (last writer wins). Outbox rows that are not exported yet count as this Mac's version in the comparison. Tombstones stay in `sync_versions` with `deleted = 1` so an older upsert cannot revive the row.
+- **Columns.** An utterance sends only `id`, the times, and `text`. Another Mac stores it with `audio_chunk_id` and `calendar_event_id` as NULL, which is why `v10-sync` makes `life_log_utterances.audio_chunk_id` nullable and rebuilds the FTS. History sends every column of `sessions`, vocabulary every column of `vocabulary`, and memos every column. Audio, calendar snapshots, modes, settings, and API keys are out of scope.
+- **File format.** The `LORESYNC` magic, a 1-byte format version, the header JSON length (UInt32 big endian), the header JSON (`device`, `seq`), and an AES-GCM combined box (12-byte nonce, ciphertext, 16-byte tag). Everything from the magic through the header JSON is authenticated as associated data. The plaintext is the batch JSON compressed with LZFSE. `Lore Sync/keycheck.loresync` seals a known plaintext with the same key and verifies the sync code on join.
+- **Key and state.** The 256-bit key is stored as the sync code string in `SecretStore` under `sync.key`, a generic password that is not synchronizable. The sync code is the 32 key bytes plus the first 2 bytes of their SHA-256, encoded in RFC 4648 base32 without padding and grouped by 4 characters with hyphens. Decoding ignores case, whitespace, and hyphens. The device ID, folder bookmark, next sequence number, last sync time, and last error live in the single row of `sync_control`. Turning off sync and the full reset clear that row and empty `sync_outbox`, `sync_versions`, and `sync_cursors`.
+- **Triggers for running.** `SyncCoordinator` (`@MainActor`) observes outbox changes with GRDB `DatabaseRegionObservation` and exports after a 5-second debounce. It exports and imports at launch, on app activation, on a 120-second timer, and on "Sync Now". When an import changed rows, it reloads the history, the vocabulary, and the Life Log.
+
+## 8. Settings and secrets
+
+- `AppSettings.Storage` is saved as JSON under the UserDefaults key `lore.settings.v1` in the suite `dev.agatan.Lore`.
+- `ApplicationLanguage` is stored as the closed set `system`, `en`, `ja`, `zh-Hans`, with `system` as the default. `system` picks the first supported locale among the macOS preferred languages and resolves to `en` when there is none. `zh-Hant` is never converted to `zh-Hans`. A missing field in existing settings is filled with `system`, with no GRDB migration.
+- The formatting provider and model are settings for dictation only. The same storage holds the dictation, Life Log capture, mini window, and voice memo hotkeys, the hold threshold (default 500 ms), the formatting timeout (default 6 seconds), the scheduled recording schedule (`lifeLogSchedule`, off by default), the retention periods, and the calendar filter. Keys of the removed Life Log provider, prompt, and summary interval are ignored on read and disappear at the next save. The mini window is always in front as an invariant and has no window level setting. There is no color theme setting either. `LoreTheme` provides fixed brand tokens.
+- `dictationSttBackend` and `lifeLogSttBackend` select the engine per use. The whisper.cpp model is shared by both, and its storage key remains `lifeLogWhisperModel` from before it was shared. `LifeLogTranscriptionLanguage` exists only in the Life Log settings, and dictation uses the mode's language. The default recognition language `applicationLanguage` resolves `ApplicationLanguage` to a fixed hint of `ja`, `en`, or `zh-Hans`, and an explicit `auto` is also available. The runtime `captureRequested` is never persisted as a setting. GGML model files and partial downloads live in `Application Support/Lore/Models/WhisperCpp/` and are part of the full reset.
+- `AppEnvironment` injects the `Locale` resolved from the settings into every SwiftUI view. The development language of the localization resources and the fallback for a missing key are English. The display language is a variation point of the UI shell only. Except for the `applicationLanguage` resolution that the Life Log setting names explicitly, it does not reach the speech recognition locale, modes, prompts, stored data, exports, or the CLI and MCP contracts.
+- User-facing text that is built outside a view (errors, status text, notices) comes from the same `Localizable.strings` through `String(lore:)`. `AppEnvironment` copies the display language setting into `LoreLocalization`, so it matches the `Locale` injected into SwiftUI. Such a string is in the language that was active when it was created, and a reason stored in the history stays in that language. Logs, prompts sent to an LLM, and machine-facing CLI and MCP output are not translated. `LocalizationCoverageTests` checks that the three languages have the same keys and format specifiers and that every Japanese literal in UI and App code has a key.
+- API keys are stored in the Keychain, never in UserDefaults or the database.
+
+## 9. UI and windows
+
+| Scene / View | Content |
 |---|---|
-| `LoreTheme` | app iconと同じ3色でtokenを定義する。`accent`は墨（dark modeでは白に近い色へ反転し、上の文字は`onAccent`）で操作・選択・強調、`recording`はiconの点のroseで録音中・今日・現在時刻だけ、`event`は予定の灰色、`success`/`warning`/`danger`は状態だけに使う。発話・memo・音声入力は色でなく記号で分ける。Sidebarの選択、menu、switchなどsystemのcontrolは、墨を広い面で塗ると白文字や黒文字との差が強すぎて読みにくいため、墨より明るい灰色の`control`で塗る。Windowの`tint`と`Resources/Assets.xcassets`の`AccentColor`（`make app`が`actool`でcompileし、`Info.plist`の`NSAccentColorName`で指す）がこの色を指す。墨の`accent`は主操作のbuttonなど、明示して塗る所だけに使う。Sidebarの記号は機能の色の角丸tile（`SidebarIcon`）に白で載せ、ライフログ・カレンダーは`lifeLogTint`（藍）、音声入力・AI整形・mode・語彙は`dictationTint`（青）、一般・プライバシーは`generalTint`（灰）、同期・連携は`connectTint`（青緑）にする。機能の色はこのtileにだけ使い、roseは使わない。Viewや設定からpaletteを差し替えない。色は一色の面で塗り、gradient、光彩、色付きの影、光の帯（shimmer）は使わず、処理中は不透明度の明滅（`breathing`）で示す。文字の大きさは`TextSize`の段（micro 10 / caption 11 / callout 12 / body 13 / reading 14 / headline 15 / title 17 / metric 26 / display 28）だけを使い、rounded書体は大見出し・数値・wordmark、等幅は同期コードやprompt等の機械向けの文字に限る。角丸は`smallCornerRadius` 6 / `cardCornerRadius` 10 / `panelCornerRadius` 14 / `floatingCornerRadius` 24の4段。Glassは浮くもの(HUD、menu、main/miniの`LifeLogComposerBar`)だけに使い、sidebarとtoolbarはsystemの素材に任せる。設定sectionは`panelSurface`の淡い塗りと細い罫線で区切る。大見出しは`titleFont`（28 pt bold rounded）の1段だけ足す。`SettingsCard`は行の間へ罫線を自動で入れ、各画面は`Divider`を置かない |
-| `MenuBarPanel` | 用途別quick action。Tabで隠さず、ライフログと音声入力を同じ文法の二枚のcardに並べる。各cardは左に丸い主操作（ライフログは`LifeLogRecordButton`、音声入力は同じ直径のmic/停止button）、右に状態と補足、区切り線の下に行き先を置く。ライフログcardは記録状態と自動記録の時刻（なければ今日の件数）、今日のmain/mini window入口、音声入力cardはhotkey、直前結果、履歴入口、mode menuを持つ。共通footerは設定と終了だけに限定する。行き先はglass buttonによるtext rasterizationを避け、plain button内にsystem fontを直接描画する |
-| `MenuBarLabel` | 音声入力のphase、入力level、ライフログcapture状態。どの状態でも`MenuBarStatusIcon`がapp iconと同じ「L.」を描き、状態は「.」の色だけで示す。録音中（音声入力またはライフログ）はrose、処理中は「L」と同じ色の輪、完了はmint、整形skip・clipboardのみ・失敗はgold、ライフログ再接続中はgoldの輪。音声入力の状態をライフログより優先する。入力level表示が有効な録音中は「.」が直近の入力levelで膨らむ。状態がない時はtemplate画像にしてmenu barの明暗をsystemに任せ、色がある時は「L」を`labelColor`で描く |
-| `MainWindowView` | `NavigationSplitView`。全高sidebarの上部navigation rowで`lifeLog` / `history`を切り替え、`lifeLog`表示中だけnavigationの下へ`MonthActivityCalendar`を置く。Windowは`.fullSizeContentView`と`.unified` toolbarで、sidebarがtraffic lightを含む全高のsystem素材になる。初回はonboarding、通常起動は`lifeLog`を開く |
-| `LifeLogWindow` | 中央のtimelineと右の`.inspector`（`LifeLogDayInspector`）。Timeline本体はevent/utterance/dictation/memoを一列の時刻順で表示し、column headerを持たない。日付選択時はsnapshotを再取得し、inspectorとtimelineを同じ`LifeLogDay`から更新する。検索buttonは`Command-F`も受け、発話・音声入力・memoの検索結果だけをtimeline itemへ移動する。表示開始時だけ今日を読み込んで末尾へscrollし、その後のreloadでは閲覧位置を保つ。Calendarは`MainWindowView`のsidebarに置く。Timelineは約680 ptの列をwindow中央に置き、scrollする大見出し（「今日」、日付と曜日、記録状態、終日の予定）から始まる。Inspector切替/検索/書き出しはwindow toolbarの`ToolbarItemGroup`に置く。Main windowはAppKit windowにhostしたviewでSwiftUIのsceneを持たず`SceneStorage`が値を保てないため、inspectorの表示は`AppStorage`に残す。記録がない日は、timelineの縦線の位置に`TimelineRowFrame`で案内の一行を置く。行の並び、予定区間の線の色、空き時間はUIから独立した`LifeLogTimelineLayout`が決め、`CalendarEventCard`と`TimelineEntryRow`は共通の`TimelineRail`の上に描く。最下部は`safeAreaInset`で浮かせた`LifeLogComposerBar`で、scroll edge effectがtimelineとの境界を作る |
-| `LifeLogCaptureControl` | Menu barのcapture状態と開始・停止操作。状態のsymbol、文言、semantic colorは`LifeLogCaptureStatus`で一か所に決め、main/miniの`LifeLogComposerBar`と共有する。停止中は「記録を開始」の墨色の丸とroseの点、記録開始意図がある間は「停止」のrose。停止中は状態の補足文を重ねない。録音と文字起こしの内部Boolの中間状態を文言へ直接投影せず、利用者向け状態を安定させる。自動記録が有効なら、scheduleが始めた記録中は終了時刻、停止中は次の開始時刻を補足に出す |
-| `LifeLogScheduleSettingsView` | ライフログ設定の「自動記録」card。有効化、曜日capsule、開始・終了時刻を`AppEnvironment.updateLifeLogSchedule`へ渡し、次の時間帯を補足に示す |
-| `LifeLogTranscriptionProgressRow` | `LifeLogCoordinator.activeTranscriptionStartedAt`がある間だけMain/miniの`LifeLogComposerBar`直上へ浮いた一行として表示し、認識対象audio長、1秒ごとの処理経過時間、明滅する状態語で実際のSTT job実行中を示す。発話burstの確定待ちや録音状態は表現しない |
-| `LifeLogExportSheet` | 表示開始時のdate/dayをsnapshotとして保持し、cancel可能なbackground taskで人間向けMarkdownを一度だけ生成する。previewは折り返し可能な上限付きtextとし、完全版をcopy/fileへ再利用する。生成中と書込中はprogressを表示し、MainActorではclipboardとpanel操作だけを行う |
-| `LifeLogSearchSheet` | 横断検索。結果の印と色を`TimelineEntryRow`と揃え（発話は灰の波形、音声入力は墨色のkeyboard、memoは墨色のpencil）、一致した語を`AttributedString`で強調する。選択中の結果は入力欄の`onKeyPress`で↑↓に動かし、`onSubmit`で開く |
-| `ModesSettingsView` | 共通ruleとmodeの編集。Scrollせず、settings windowの高さに固定した中で指示文の入力欄だけを伸縮させる。入力欄は理想の高さを小さく取り、長い指示文でもpaneがwindowより高くならない |
-| `HistoryBrowserView` | 音声入力履歴の一覧column（toolbar検索）と、大見出しの時刻から始まる詳細。詳細は読みやすい幅で中央に置き、入力した文章を本文として大きく、文字起こしを補助として示す。かかった時間は話し終わってから挿入までを文字起こし・整形・入力の帯に分ける。コピー、削除 |
-| `LifeLogMiniWindow` | title barを隠し、予定、utterance、dictation、memoを一列の時刻順で表示する。`CurrentCalendarEventStrip`をtimeline上部へ固定し、表示時は今日を読み込んで末尾へscrollする。Window全体を`VisualEffectBackground`の半透明素材で描き、Mainと同じ`LifeLogComposerBar`を最下部へ浮かせる。`AppEnvironment`がwindow levelを常に`.floating`、collection behaviorを`.canJoinAllSpaces`と`.fullScreenAuxiliary`に固定し、利用者がclose操作またはtoggle hotkeyを使うまで非表示にしない。`HotkeyMonitor`は成立したkey-downを保持し、対応するkey-upだけでreleaseを通知するため、修飾キーなしの同じ文字入力はtoggleしない |
-| `LifeLogComposerBar` | main/mini windowの最下部に浮かぶglass capsule。左端の記録button（停止中はapp iconと同じ墨色の丸とroseの点、記録意図がある間はroseの停止記号）と状態text、続いて`LifeLogMemoComposer`を並べる。Memoを受け付けない過去日は記録操作と状態だけを持つ |
-| `LifeLogMemoComposer` | main/mini windowで共有するchat形式のmemo入力。空白を除外し、送信済みtextをclearして`LifeLogCoordinator.addMemo`へ渡す。送信と音声は同じ直径の円形controlにし、音声ボタンは`AppEnvironment.toggleVoiceMemo`と同じactionを受け、準備中、録音中、別処理中の状態だけを描画する |
-| `TimelineEntryRow` | main/miniで共有する1行。Memoだけはhoverの編集buttonかdouble-clickでinline編集し、空文字を除いて`LifeLogCoordinator.updateMemo`へ渡す。作成時刻は変えない。左の時刻列と`TimelineRail`の印（発話は点、memo・音声入力は記号）を持つ |
-| `LifeLogDayInspector` | Inspector「概要」。話した時間（発話のstart〜endの合計）と件数、`LifeLogDayMap`を表示する。Day mapは`LifeLogDayMapLayout`が決めた時間範囲（記録と予定を含み最低9〜18時）を高さに合わせて縦に割り、時刻目盛り、記録の印、重なりを列に分けた予定block、今日の現在時刻線を描く。予定blockと任意の位置のclickは`LifeLogCoordinator.jumpToTime`へ渡す |
-| `LifeLogCalendarSettingsView` | calendar選択、参加filter、選択日の予定を明示的に再取得する操作と進行状態 |
-| `SyncSettingsView` | 共通の「同期」section。新しく始める（folder選択→同期コード表示）、同期コードで参加、状態・最終同期・error、今すぐ同期、確認つきの同期コード再表示、同期の解除 |
-| `SettingsWindowView` | Sidebarは見出しのない4つの塊（一般・privacy／ライフログ・calendar／音声入力・AI整形・mode・語彙／同期・連携）。一般は表示言語、ログイン時の起動、`PermissionsCard`（マイク、アクセシビリティ、必要な場合の入力監視、calendarの状態と「許可する」）。Privacyはデータフォルダ、Lore dataの合計使用量、項目ごとの削除。連携は`lore-mcp`のpathとClaude Code用登録commandのcopy、CLI、Agent Skill。音声入力とライフログの文字起こしcardは、選んだengineの準備状態（Apple音声認識modelのdownloadかwhisper.cpp model）をその場で示す。各設定行は操作列を共通幅で確保し、Pickerなど可変幅controlの右端を揃える |
-| `WhisperModelSettingsView` | 音声入力とライフログで共有するcurated local modelを列挙し、選択、download進捗・cancel・再試行・削除・使用中状態を表示する。両方の設定画面で同じviewを使う |
-| `DismissibleNoticeBanner` | 継続可能なmessageと明示的な`×`を表示する。Dismiss actionは表示stateだけをclearし、capture requestやretry taskを変更しない |
-| `HudController` / `HudView` | 通常音声入力またはボイスメモのrecordingから終了までの一時表示。普段は高さ44 ptのglass capsuleで、左から状態の印（録音中は入力levelで脈打つrose、処理中は回る弧、終了時は結果の記号）、録音中は波形と経過時間・それ以外は状態の語、mode、escを並べる。逐次textや終了時の補足があるとcapsuleの上へ本文の段が伸び、角の丸い板へ形を変える。逐次textは末尾の約100字だけを見せる。入力deviceはtooltipに置く |
+| `LoreTheme` | Tokens in the three colors of the app icon. `accent` is ink (near white in dark mode, with `onAccent` text on it) for explicitly filled primary actions. `recording` is the rose of the icon's dot, only for recording, today, and the current time. `event` is the gray of events. `success`, `warning`, and `danger` are only for status. Utterances, memos, and dictations differ by symbol, not color. System controls such as the sidebar selection, menus, and switches use `control`, a gray lighter than ink, because ink on a wide surface contrasts too hard with its text. The window `tint` and the `AccentColor` in `Resources/Assets.xcassets` (compiled by `make app` with `actool` and named by `NSAccentColorName` in `Info.plist`) point to that color. Sidebar symbols are white on a rounded tile (`SidebarIcon`) in the feature color: `lifeLogTint` (indigo) for Life Log and Calendar, `dictationTint` (blue) for Dictation, AI Formatting, Modes, and Vocabulary, `generalTint` (gray) for General and Privacy, and `connectTint` (teal) for Sync and Integrations. Feature colors appear only on these tiles. Views and settings never replace the palette. Surfaces are flat colors with no colored gradients, glows, colored shadows, or shimmer, and work in progress is shown by pulsing opacity (`breathing`). Text sizes come only from the `TextSize` scale (micro 10, caption 11, callout 12, body 13, reading 14, headline 15, title 17, metric 26, display 28). The rounded typeface is for large titles, numbers, and the wordmark, and monospace is for machine-facing text such as the sync code and prompts. Corner radii have four steps: `smallCornerRadius` 6, `cardCornerRadius` 10, `panelCornerRadius` 14, `floatingCornerRadius` 24. Glass is for floating elements (the HUD, the menu bar panel, the `LifeLogComposerBar`, notice banners, and the backend tiles in AI Formatting). The sidebar and toolbar use system materials. A settings section is separated by the pale fill of `panelSurface` and a hairline. `SettingsCard` inserts row separators itself, so screens place no `Divider` |
+| `MenuBarPanel` | A 340 pt panel with a header, two cards in the same grammar, notices, and a footer. No tabs. Each card has a round primary button on the left (`LifeLogRecordButton` for the Life Log, a mic or stop button of the same diameter for dictation), the state and a caption on the right, and destinations under a separator. The Life Log card shows the recording state and the scheduled time (or today's counts when stopped with no schedule caption) and links to today in the main window and to the mini window. The dictation card shows the hotkey keycap, copies the last text, opens the history, and has the mode menu. Notices cover permissions, the Koe migration, and database errors. The footer has only Settings and Quit. Destinations are plain buttons that draw the system font directly, which avoids the text rasterization of glass buttons |
+| `MenuBarLabel` | Dictation phase, input level, and Life Log capture state. `MenuBarStatusIcon` always draws the "L." of the app icon, and only the color of the dot shows state: rose while recording (dictation or Life Log), a ring in the color of the "L" while processing, mint when done, gold for skipped formatting, clipboard only, or failure, and a gold ring while the Life Log reconnects. Dictation state takes priority. While dictation records with the input level display enabled, the dot grows with the recent input level. With no state, the icon is a template image and the system handles light and dark. With a color, the "L" is drawn in `labelColor` |
+| `MainWindowView` | `NavigationSplitView`. The navigation rows at the top of the full-height sidebar switch between `lifeLog` and `history`, and `MonthActivityCalendar` sits under the navigation only while `lifeLog` is shown. The window uses `.fullSizeContentView` and a `.unified` toolbar, so the sidebar is a full-height system material that includes the traffic lights. The minimum size is 1080×680 pt. The first run shows onboarding. A normal launch opens `lifeLog` |
+| `LifeLogWindow` | The center timeline and the right `.inspector` (`LifeLogDayInspector`). The timeline shows events, utterances, dictations, and memos in one column in time order with no column header. On date selection it reloads the snapshot and updates the inspector and the timeline from the same `LifeLogDay`. The search button also accepts `Command-F`, and only utterance, dictation, and memo results jump to a timeline item. It loads today and scrolls to the end only when it appears. The timeline column is at most 720 pt (`readableTimelineWidth`), centered, and starts with a scrolling large header: the small label ("Today", or the year), the date and weekday, the recording chip, and all-day events. The floating bar below is 40 pt narrower. Inspector toggle, search, and export are a `ToolbarItemGroup` in the window toolbar. The main window is a view hosted in an AppKit window with no SwiftUI scene, so `SceneStorage` cannot keep values and the inspector visibility is kept in `AppStorage`. On a day with no records, a `TimelineRowFrame` puts one guidance line at the rail position. `LifeLogTimelineLayout`, independent of the UI, decides the row order, the rail color inside event spans, and the gaps of 1 hour or more. `CalendarEventCard` and `TimelineEntryRow` draw on the shared `TimelineRail`. The bottom is a `LifeLogComposerBar` floated with `safeAreaInset`, with the Life Log error notice above it, and the scroll edge effect forms the boundary with the timeline |
+| `LifeLogCaptureStatus`, `LifeLogRecordButton` | `LifeLogCaptureStatus` decides the symbol, wording, and semantic color of the capture state in one place, for the menu bar panel and the `LifeLogComposerBar`. `LifeLogRecordButton` is the round button: an ink circle with a rose dot while stopped, a rose stop symbol while a recording intent exists. It has no visible text, only a tooltip and an accessibility label. The intermediate states of the internal recording and transcription flags are not projected into the wording, which keeps the user-facing state stable. With scheduled recording enabled, the caption shows the end time during a scheduled recording and the next start time while stopped |
+| `LifeLogScheduleSettingsView` | The "Scheduled Recording" card in the Life Log settings. It passes the enabled flag, the weekday capsules, and the start and end times to `AppEnvironment.updateLifeLogSchedule` and shows the current window's end or the next window, with a caption when the window ends on the next day |
+| `LifeLogTranscriptionProgressRow` | A floating row directly above the `LifeLogComposerBar` in the main and mini windows, shown while `LifeLogCoordinator.liveActivityStartedAt` is set. While speech is heard it shows "Listening", the input audio length, and the rolling live transcript in up to two lines. After the burst ends it shows "Transcribing" and the processing time, updated every second |
+| `LifeLogExportSheet` | Keeps the date and day at the time it appeared as a snapshot and generates the human-readable Markdown once in a cancelable background task. The preview is wrappable text with an upper limit, and the full version is reused for copy and file. It shows progress during generation and writing and does only clipboard and panel work on the MainActor |
+| `LifeLogSearchSheet` | Cross-record search. A result has a symbol for its kind (a gray waveform for an utterance, an ink keyboard for a dictation, an ink pencil for a memo) and highlights the match with `AttributedString`. The field's `onKeyPress` moves the selection with the arrow keys and `onSubmit` opens it |
+| `ModesSettingsView` | Editing of the common rules and modes: add, edit, duplicate, delete, and restore default content. It does not scroll. Inside the fixed height of the settings window, only the instruction field stretches. The field has a small ideal height, so a long instruction never makes the pane taller than the window |
+| `HistoryBrowserView` | The dictation history list column with toolbar search, and a detail that starts with a large time heading. The detail is a readable centered column: the entered text large as the body, the transcript as supporting text, pills for the app, mode, trigger, and engines, and the instructions that were used. The time taken, from the end of speech to insertion, is split into transcription, formatting, and text entry bands. Copy and delete |
+| `LifeLogMiniWindow` | Hides the title bar and shows events, utterances, dictations, and memos in one column in time order. `CurrentCalendarEventStrip` is pinned above the timeline, and it loads today and scrolls to the end when shown. The whole window is the translucent material of `VisualEffectBackground`, with the same `LifeLogComposerBar` as the main window floating at the bottom. `AppEnvironment` fixes the window level to `.floating` and the collection behavior to `.canJoinAllSpaces` and `.fullScreenAuxiliary`, and never hides the window until the user closes it or uses the toggle hotkey. `HotkeyMonitor` keeps the accepted key-down and reports a release only for the matching key-up, so typing the same letter without modifiers does not toggle it |
+| `LifeLogComposerBar` | The glass capsule floating at the bottom of the main and mini windows. From the left: `LifeLogRecordButton`, the state text, and `LifeLogMemoComposer`. On a past day, which accepts no memo, it has only the record button and the state |
+| `LifeLogMemoComposer` | The chat-style memo input shared by the main and mini windows. It rejects whitespace-only text, clears the sent text, and passes it to `LifeLogCoordinator.addMemo`. Send and voice are circles of the same diameter. The voice button calls the same action as `AppEnvironment.toggleVoiceMemo` and draws only the preparing, recording, and busy states |
+| `TimelineEntryRow` | One row shared by the main and mini windows. Only a memo is edited inline, from the hover edit button or a double-click. It rejects empty text and passes the change to `LifeLogCoordinator.updateMemo`. The creation time does not change. It has the time column on the left and the mark on the `TimelineRail` (a dot for an utterance, a symbol for a memo or dictation) |
+| `LifeLogDayInspector` | The inspector. It shows the talk time (the sum of utterance start-to-end spans), the counts, and "By Hour" (`LifeLogDayMap`). `LifeLogDayMapLayout` decides the time range (covering the records and events, at least 9:00 to 18:00), and the map divides it vertically to fit the height and draws hour ticks, record marks, event blocks with overlaps in columns, and today's current-time line. A click on an event block or any position goes to `LifeLogCoordinator.jumpToTime` |
+| `MonthActivityCalendar` | The monthly calendar in the sidebar. The selected day is a filled circle (`accent`, or `recording` when it is today), today is a rose number, and each day has an event density dot and a speech density dot. The header has previous, next, and "Today" buttons |
+| `LifeLogCalendarSettingsView` | Calendar selection, the participation filter, and the explicit refresh of the selected day's events with its progress |
+| `SyncSettingsView` | The Sync section. Start a new sync (choose a folder, then show the sync code), join with a sync code, state, last sync, and error, "Sync Now", showing the sync code again after confirmation, and turning sync off |
+| `SettingsWindowView` | The sidebar has four untitled groups: General and Privacy, Life Log and Calendar, Dictation, AI Formatting, Modes, and Vocabulary, and Sync and Integrations. General has the display language, launch at login, and `PermissionsCard` (microphone, Accessibility, Input Monitoring when a hotkey needs it, and calendar, each with its state and "Allow"). Privacy has the data folder, the total storage used by Lore data, and the three deletions. Integrations has the `lore-mcp` path and a copyable registration command for Claude Code, the CLI, and the Agent Skill. The transcription cards for dictation and the Life Log show the readiness of the selected engine in place (the Apple speech model download or the whisper.cpp model). Each settings row reserves a common width for its control so the right edges of pickers and other variable-width controls align |
+| `WhisperModelSettingsView` | Lists the curated local models shared by dictation and the Life Log, with selection, download progress, cancel, retry, delete, and the in-use state. Both settings pages use the same view |
+| `NoticeBanner` | A message that allows continued operation, with an explicit `×` when `onDismiss` is set. The dismiss action only clears display state and changes neither the capture request nor a retry task |
+| `HudController` / `HudView` | The temporary display from recording to the end of a dictation or voice memo, at the bottom center of the screen that has the pointer. Normally it is a glass capsule 44 pt high. From the left: the state mark (rose that pulses with the input level while recording, a rotating arc while processing, a result symbol at the end), the waveform and elapsed time while recording or the state word otherwise, the mode, and esc. When there is streaming text or a closing note, a body row grows above the capsule and the shape becomes a rounded board. Streaming text shows only its last 96 characters. The input device is in the tooltip |
 
-## 10. 自動化境界
+## 10. Automation boundary
 
-LifeLogTextExporterは90秒未満の連続発話を別種の表示項目で区切ってまとめます。LifeLogExportSheetはプレビューもbackgroundで4,000文字に制限します。timelineの予定rowは淡い塗りと左端の色帯で発話と区別します。
+`LifeLogTextExporter` merges consecutive utterances less than 90 seconds apart into one paragraph unless another kind of item separates them. The timeline itself keeps one row per utterance. `LifeLogExportSheet` limits the preview to 4,000 characters, also in the background.
 
-`LoreAutomationService`がCLIとMCPで共有され、記録がある日の一覧、期間の構造化項目、日別export、横断検索を読み取り専用で提供します。期間取得は画面と同じ`LifeLogStore.day`を日ごとに読み、音声入力優先の発話projectionと参加中予定filterをそのまま使います。Loreへの書き込みは提供しません。App Intentsは`AppEnvironment.boot()`の完了後にcapture開始・終了だけを実行します。開始Actionはマイクを扱うためforeground mode、終了Actionはbackground modeです。Shortcutsからの実行にはmacOSが検証できるbundle署名が必要なため、buildは有効な`Apple Development` identityを自己署名より優先します。公開コマンドとtool schemaは外部仕様に列挙します。
+The CLI and MCP share `LoreAutomationService`. It provides the list of days with records, the structured entries of a range, the day export, and cross-record search, all read-only with respect to user records. The range read uses the same `LifeLogStore.day` as the screen for each day, so the dictation-first utterance projection and the participation filter apply unchanged. It offers no write to Lore. Opening the database still runs migrations and backups (section 7).
 
-## 11. 並行実行とエラー表示
+App Intents run only the capture start and stop after `AppEnvironment.boot()` completes. The start action uses foreground mode because it handles the microphone, and the stop action uses background mode. Running from Shortcuts needs a bundle signature that macOS can verify, so the build prefers a valid `Apple Development` identity over a self-signed one. The public commands and tool schemas are listed in the external specification.
 
-- UI stateとcoordinatorは`@MainActor`に固定します。
-- EventKit読込は`CalendarProvider` actor、DB操作はGRDB `DatabaseQueue`で直列化します。
-- STT/LLM protocolとdomain値は`Sendable`を基本とし、長時間処理は`Task`で所有・cancelします。
-- 回復可能な失敗は履歴status、画面のmessage、MCPの`isError`、CLIのstderr/exit 1のいずれかへ出します。本文、API key、語彙はlogへ出しません。
+`AutomationIntegrationManager` installs the CLI as a symlink at `~/.local/bin/lore` and copies the Agent Skill to `~/.agents/skills/lore` with a managed marker and a symlink from `~/.claude/skills/lore`. It never overwrites a file that it does not manage.
 
-## 12. 変更時の影響範囲
+## 11. Concurrency and error reporting
 
-| 変更 | 最初に確認する場所 | 同時に更新するもの |
+- UI state and the coordinators are fixed to `@MainActor`.
+- EventKit reads are serialized by the `CalendarProvider` actor and database operations by the GRDB `DatabaseQueue`.
+- The speech recognition and LLM protocols and the domain values are `Sendable` by default, and long work is owned and canceled as a `Task`.
+- A recoverable failure goes to one of: the history status, a message on screen, `isError` in MCP, or stderr and exit 1 in the CLI. Text content, API keys, and vocabulary never go to the log.
+
+## 12. Impact map for changes
+
+| Change | Look here first | Update together |
 |---|---|---|
-| provider追加 | `FormattingBackend`, `EngineRegistry`, `ModelsSettingsView`, `SecretStore` | privacy表示、engine tests、spec/design |
-| Life Log発話burst・STT変更 | `AdaptiveSpeechSegmenter`, `LifeLogCoordinator`, `SttEngine` | background noise floor校正、0.5秒/20% gate、1.5/1秒tier、1.5秒preview、5秒rolling window、無音時STTなし、5分flush、chunk跨ぎoffset、語彙snapshot、再試行test、`swift test` |
-| Whisper model管理変更 | `EngineRegistry`, `WhisperCppStt`, settings | download失敗/cancel/検証、job中削除防止、全削除、privacy、`swift test`、`make ui-test` |
-| 永続model変更 | `Domain`, `LoreDatabase.migrator`, 対応Store | migration test、backup/delete test、design |
-| dictation状態変更 | `SessionDraft`, `DictationCoordinator`, `HistoryStore` | HUD/history、state tests、spec/design |
-| 音声入力とlife-logの重複解決 | domainの共通projection, `LifeLogStore`, search/export | 成功・cancel・失敗・時間境界test、`make ui-test`、spec/design |
-| 公開自動化変更 | `LoreAutomationService`, CLI/MCP/AppIntents | tool schema/help、spec.md/spec.html |
-| 主要window変更 | `LoreApp`, 対応View, `AppEnvironment` | `make ui-test`、spec/design |
-| life-log timeline表示変更 | `LifeLogWindow`, `LifeLogMiniWindow`, `MonthActivityCalendar` | 初回だけのscroll、予定を含む一列timeline、calendarの今日/選択表現、UI test、spec/design |
-| 日別export変更 | `LifeLogTextExporter`, `LifeLogExportSheet`, CLI/MCP | 音声入力の独立選択、人間向けMarkdown、background生成、snapshot整合、`swift test`、`make ui-test`、spec/design |
-| global hotkeyの対イベント | `HotkeyMonitor` | 登録型hotkeyのmodifier変換と競合分離、修飾キーなしの同一文字key-upを素通しする回帰test、`swift test` |
-| menu bar状態表示変更 | `MenuBarLabel`, `DictationCoordinator`, `LifeLogCoordinator` | 状態別表示test、`make ui-test`、spec/design |
-| 音声構成変更時の再接続 | `ContinuousAudioCapture`, `LifeLogCoordinator` | retry policyと一時停止状態test、`swift test`、spec/design |
-| life-log audio保持policy | `AppSettings`, `LifeLogStore`, `AppEnvironment`, `LifeLogSettingsView` | 処理成功・未処理・失敗・7日/30日境界test、`swift test`、spec/design |
-| ボイスメモ | `DictationCoordinator`, `LifeLogCoordinator`, `AppEnvironment`, `AppSettings` | memoのみを作るdestination test、hotkey/UI test、spec/design |
-| 同期対象・形式変更 | `SyncEngine`, `SyncStore`, `v10-sync` trigger, `SyncFileFormat` | 暗号・改ざん・途中file、後勝ち、tombstone、suppress、cursor test、PRIVACY、spec/design |
-| calendar手動再取得 | `LifeLogCoordinator`, `LifeLogCalendarSettingsView` | 再取得中UI、`make ui-test`、spec/design |
+| Adding a provider | `FormattingBackend`, `EngineRegistry`, `ModelsSettingsView`, `SecretStore` | Privacy text, engine tests, spec and design |
+| Life Log speech burst or recognition | `AdaptiveSpeechSegmenter`, `LifeLogCoordinator`, `SttEngine` | Noise floor calibration, the 0.5 s and 20% gate, the 1.5 s and 1 s tiers, the 1.5 s preview, the 5 s rolling window, no recognition on silence, the 5-minute flush, offsets across chunks, the vocabulary snapshot, retry tests, `swift test` |
+| Whisper model management | `EngineRegistry`, `WhisperCppStt`, settings | Download failure, cancel, and verification, no deletion during a job, the full reset, privacy, `swift test`, `make ui-test` |
+| Persisted model | `Domain`, `LoreDatabase.migrator`, the matching store | Migration test, backup and delete tests, design |
+| Dictation state | `SessionDraft`, `DictationCoordinator`, `HistoryStore` | HUD and history, state tests, spec and design |
+| Dictation and Life Log deduplication | The shared domain projection, `LifeLogStore`, search and export | Success, cancel, failure, and time boundary tests, `make ui-test`, spec and design |
+| Public automation | `LoreAutomationService`, CLI, MCP, App Intents | Tool schema and help, `Resources/Skills/lore/SKILL.md`, spec |
+| Main windows | `LoreApp`, the matching view, `AppEnvironment` | `make ui-test`, spec and design |
+| Life Log timeline display | `LifeLogWindow`, `LifeLogMiniWindow`, `MonthActivityCalendar` | Scroll only on first display, the one-column timeline with events, today and selection in the calendar, UI test, spec and design |
+| Day export | `LifeLogTextExporter`, `LifeLogExportSheet`, CLI, MCP | Independent selection of dictation, human-readable Markdown, background generation, snapshot consistency, `swift test`, `make ui-test`, spec and design |
+| Global hotkey press and release pairing | `HotkeyMonitor` | Modifier conversion and conflict isolation of registered hotkeys, the regression test that lets a bare key-up of the same letter pass, `swift test` |
+| Menu bar state display | `MenuBarLabel`, `DictationCoordinator`, `LifeLogCoordinator` | Per-state display tests, `make ui-test`, spec and design |
+| Reconnection on audio configuration change | `ContinuousAudioCapture`, `LifeLogCoordinator` | Retry policy and paused-state tests, `swift test`, spec and design |
+| Life Log audio retention policy | `AppSettings`, `LifeLogStore`, `AppEnvironment`, `LifeLogSettingsView` | Tests for success, unprocessed, failed, and the 7 and 30 day boundaries, `swift test`, spec and design |
+| Voice memo | `DictationCoordinator`, `LifeLogCoordinator`, `AppEnvironment`, `AppSettings` | The destination test that creates only a memo, hotkey and UI tests, spec and design |
+| Sync targets or format | `SyncEngine`, `SyncStore`, the `v10-sync` triggers, `SyncFileFormat` | Tests for encryption, tampering, partial files, last writer wins, tombstones, suppression, and cursors, PRIVACY, spec and design |
+| Manual calendar refresh | `LifeLogCoordinator`, `LifeLogCalendarSettingsView` | UI during refresh, `make ui-test`, spec and design |
 
-## 13. テスト配置
+## 13. Tests
 
-`Tests/LoreKitTests`はdomain、formatting、engine、persistence、life log、automationを対象にします。同期は`SyncTests`が、同期コードとfileの暗号（違う鍵、改ざん、途中まで、新形式）と、2つのin-memory DBと一時folderによる往復（memo・履歴・語彙・発話、後勝ち、tombstone、保持期間と一括削除の非伝播、初回snapshot、読めないfileでのcursor停止、番号の非再利用、解除）、`v10-sync` migrationを検証します。`AdaptiveSpeechSegmenter`はbackground noiseの校正と追従、一定noiseだけではjobを作らないこと、相対的な発話levelが250ms続けば開始すること、30秒未満/以上の有声境界で1.5/1秒へ切り替わること、5分で安全flushすることをclock非依存のdomain testで固定します。統合testはwhisper.cppのpreview cadence、chunkをまたぐaudio offset timestamp、録音session開始時の語彙snapshot、失敗後の保存audio再処理を検証します。`make ui-test`は本番と別のbundle IDを持つ署名済み`LoreUITests.app`を別process instanceとして起動し、`Scripts/LoreUIE2E.swift`から主要CUJを検証します。UI test bundleは常に専用UserDefaultsとインメモリDBを使い、global hotkeyと権限監視を起動しません。E2E runnerは専用bundle ID以外のappを終了せず、本番bundle IDを指定された場合は実行を拒否します。詳細な実行方法とE2E契約は[testing.md](testing.md)を参照してください。
+`Tests/LoreKitTests` covers the domain, formatting, engines, persistence, the Life Log, automation, localization, and the Koe migration.
+
+- `SyncTests.swift` verifies the sync code and file encryption (wrong key, tampering, partial file, newer format), round trips between two in-memory databases through a temporary folder (memos, history, vocabulary, utterances, last writer wins, tombstones, no propagation of retention and bulk deletions, the initial snapshot, the cursor stopping at an unreadable file, no reuse of numbers, turning off), and the `v10-sync` migration.
+- The `AdaptiveSpeechSegmenter` tests fix, without a clock, the calibration and tracking of background noise, that steady noise alone creates no job, that a relative speech level sustained for 250 ms starts a burst, the switch between 1.5 and 1 second at the 30-second voiced boundary, and the 5-minute safety flush.
+- `LifeLogTests` also covers the whisper.cpp preview cadence and that unprocessed audio stays in the queue after a restart.
+- `LegacyKoeMigrationTests` covers the folder, settings, and Keychain migration.
+
+`make ui-test` launches the signed `LoreUITests.app`, which has a bundle ID different from production, as a separate process and verifies the main user journeys from `Scripts/LoreUIE2E.swift`. The UI test bundle always uses its own UserDefaults and an in-memory database and starts neither global hotkeys nor permission monitoring. The E2E runner terminates only the dedicated bundle ID and refuses to run when given the production bundle ID. See [testing.md](testing.md) for how to run the tests and for the E2E contract.

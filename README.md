@@ -1,127 +1,130 @@
 # Lore
 
-macOS 専用の音声入力アプリです。口述入力と、自分の発話・予定・メモを一日の時間軸に残す **ライフログ** を提供します。要約やTODOの整理はLoreでは行わず、CLI/MCPで好きなAIへ渡します。
+Lore is a voice app for macOS. It provides dictation, and a **Life Log** that keeps what you say, your calendar events, and your memos on one timeline per day. Lore does not summarize or extract to-do items. You hand the records to the AI of your choice through the CLI or MCP.
 
-音声認識と既定の文章整形は Mac 上で動作します。口述音声は保存しません。ライフログを明示的に有効にした場合だけ、再処理可能な音声チャンクをMac内へ保存します。音声は外部へ送信しません。詳しくは [データ取り扱い](PRIVACY.md) を参照してください。
+Speech recognition and the default text formatting run on the Mac. Dictation audio is never stored. Only when you explicitly enable the Life Log does Lore save reprocessable audio chunks on the Mac. Audio is never sent anywhere. For details, see [Data handling](PRIVACY.md).
 
-- 外部仕様: [Markdown](docs/spec.md) / [HTML](docs/spec.html)
-- 内部設計: [Markdown](docs/design.md) / [HTML](docs/design.html)
-- 概要: [docs/overview/index.html](docs/overview/index.html)
+- External specification: [Markdown](docs/spec.md) / [HTML](docs/spec.html)
+- Internal design: [Markdown](docs/design.md) / [HTML](docs/design.html)
+- Overview: [docs/overview/index.html](docs/overview/index.html)
 
-## 必要環境
+## Requirements
 
-- macOS 26 (Tahoe) 以降
+- macOS 26 (Tahoe) or later
 - Apple Silicon
-- Xcode 26 以降
+- Xcode 26 or later
 
-## ビルドと起動
+## Build and run
 
 ```bash
 make run
 ```
 
-権限は `.app` に対して付与されるため、開発中も実行ファイルを直接起動せず `make run` を使います。
+macOS grants permissions to the `.app`, so during development use `make run` and do not launch the executable directly.
 
-| コマンド | 内容 |
+| Command | What it does |
 |---|---|
-| `make run` | ビルドして `Lore.app` を起動 |
-| `make app` | `Lore.app` の組み立てまで実行 |
-| `make test` | ユニットテストを実行 |
-| `make ui-test` | 主要CUJを実アプリで操作するUI E2Eを実行 |
-| `make install` | Release ビルドを `/Applications` へ配置 |
-| `make stop` | 起動中の Lore を終了 |
+| `make run` | Builds and launches `Lore.app` |
+| `make app` | Assembles and signs `Lore.app` |
+| `make tools` | Builds only the CLI and the MCP server into `build/tools/` |
+| `make test` | Runs the unit tests |
+| `make ui-test` | Runs the UI E2E that drives the main user journeys in the real app |
+| `make install` | Places a release build in `/Applications` |
+| `make stop` | Quits the running Lore |
+| `make lp-media` | Regenerates the landing page screenshots and videos in `site/assets/` |
 
-テスト対象のCUJと実行条件は [テスト方針](docs/testing.md) にまとめています。
+The tested user journeys and the conditions for running them are in the [test policy](docs/testing.md).
 
-### 初回に必要な許可
+### Permissions
 
-1. **マイク** — 音声認識に使用します。
-2. **アクセシビリティ** — ホットキーの監視とテキスト挿入に使用します。
+1. **Microphone**: used for dictation and Life Log recording.
+2. **Accessibility**: used to detect hotkeys and to insert text.
+3. **Input Monitoring**: needed only when a hotkey is Option plus a letter key.
+4. **Calendar**: optional. Shows your events in the Life Log.
 
-### アクセシビリティの許可が毎回外れるとき
+### When the Accessibility permission is lost on every build
 
-有効なApple Development証明書がKeychainにあれば、buildはそれを優先して使います。macOS ShortcutsのApp Intentを実行するには、Apple DevelopmentまたはDeveloper IDによる検証可能な署名が必要です。
+If the Keychain has a valid Apple Development certificate, the build prefers it. Running the App Intents from macOS Shortcuts requires a verifiable signature from Apple Development or Developer ID.
 
-Apple Development証明書がない環境では、ad-hoc署名より許可を維持しやすい固定の自己署名証明書を作れます。自己署名ではShortcutsのApp Intentは実行できません。
+Without an Apple Development certificate, you can create a fixed self-signed certificate, which keeps permissions better than ad-hoc signing. A self-signed build cannot run the App Intents from Shortcuts.
 
 ```bash
 make dev-cert
 ```
 
-許可が壊れた場合は、次のコマンドでこのアプリの登録だけをリセットできます。
+If the permissions are broken, this command resets the registrations of this app only:
 
 ```bash
 make reset-permissions
 ```
 
-## 使い方
+## Usage
 
-- **右 ⌥ を短く押す** — 録音を開始・停止します。
-- **右 ⌥ を押し続ける** — push-to-talk として動作します。
-- **録音中に Esc** — 挿入を取り消します。認識済みの文字があれば履歴に残します。
+- **Press Right ⌥ briefly** to start and stop recording.
+- **Hold Right ⌥** for push-to-talk.
+- **Press Esc** to cancel. Text that was already recognized stays in the history.
 
-音声入力のホットキーと長押し閾値に加え、ライフログの記録開始・停止とミニウィンドウ表示切り替えのホットキーも設定画面で変更できます。
+The other default hotkeys are ⌃⌥L to start and stop Life Log recording, ⌃⌥M to show and hide the mini window, and ⌃⌥V for a voice memo. Settings changes every hotkey and the hold duration.
 
-「設定 > ライフログ > 自動記録」で曜日と時間帯（例: 平日 9:00〜19:00）を決めると、その間だけライフログを自動で記録します。Mac miniのような常時起動のMacで、決まった時間だけ記録したい場合に使います。時間帯の終わりに止まるのは自動で始めた記録だけで、手動で始めた記録はそのまま続きます。時間帯の途中で手動停止した場合は、次の時間帯まで再開しません。
-macOSのショートカットAppには「ライフログを開始」「ライフログを終了」を公開します。終了アクションは最終文字起こしと保存の完了を待ちます。
+In Settings > Life Log > Scheduled Recording, choose days and a time window (for example weekdays 9:00 to 19:00) and Lore records the Life Log only during that window. This suits an always-on Mac, such as a Mac mini, that should record only at fixed hours. At the end of the window only a recording that started automatically stops. A recording that you started yourself continues. If you stop recording inside a window, it does not resume until the next window.
 
-日別の書き出しはライフログ画面、CLI、MCPから行えます。予定・発話・音声入力・メモを個別に選び、時系列で区別できるMarkdownにします。
+Lore exposes "Start Life Log" and "Stop Life Log" to the macOS Shortcuts app. The stop action waits for the final transcription and saving to finish.
+
+A day can be exported from the Life Log screen, the CLI, and MCP. You select events, speech, dictation, and memos individually, and the result is chronological Markdown.
 
 ## CLI / MCP
 
-より細かい自動化向けに、同じDB・エクスポート定義を使うCLIとstdio MCPサーバーがあります。
+For finer automation there is a CLI and a stdio MCP server that use the same database and export definition.
 
-Loreの「設定 > 連携」からCLIとAgent Skillをインストールできます。CLIは`~/.local/bin/lore`からLore.app内の実体へリンクするため、PATHやシェル設定を書き換えず、アプリの更新と同時に更新されます。Agent Skillは`~/.agents/skills/lore`へ配置し、Claudeからも同じ内容を参照します。
+Settings > Integrations installs the CLI and the Agent Skill. The CLI is a link from `~/.local/bin/lore` to the binary inside Lore.app, so it changes neither `PATH` nor your shell settings and updates together with the app. The Agent Skill goes to `~/.agents/skills/lore`, and Claude reads the same content through a link.
 
 ```sh
 lore export day --date 2026-08-29 --include speech,memos
-lore search "レセコン"
+lore search "billing"
 lore days --from 2026-08-01
 lore range --from 2026-08-25 --to 2026-08-29 --include speech,memos
 ```
 
-`/Applications/Lore.app/Contents/Helpers/lore-mcp` は標準入出力のMCPサーバーです。記録がある日の一覧（`life_log_days`）、期間の項目をJSONで取る`life_log_range`、日別Markdownの`life_log_export`、横断検索の`life_log_search`を公開します。どれも読み取り専用です。Loreのメモは声で素早く残す下書きと割り切り、振り返り・要約・TODO整理や、雑なメモを清書して別のメモアプリやタスク管理へ転記する作業はMCPクライアント側のAIに任せます。サーバーはMac内のDBを読むだけです。
+`/Applications/Lore.app/Contents/Helpers/lore-mcp` is a standard input/output MCP server. It exposes the list of days with records (`life_log_days`), the entries of a range as JSON (`life_log_range`), the day Markdown (`life_log_export`), and cross-record search (`life_log_search`). None of them changes your records. A Lore memo is a rough draft captured quickly by voice. Review, summaries, to-do extraction, and rewriting rough memos into another notes or task app are left to the AI on the MCP client side. The server only reads the database on the Mac.
 
 ```sh
 claude mcp add lore -- /Applications/Lore.app/Contents/Helpers/lore-mcp
 ```
 
-開発中にCLIとMCPだけを組み立てる場合は`make tools`を使います。
+## Sync between Macs
 
-## Mac間の同期
+Settings > Sync shares Life Log speech, memos, dictation history, and vocabulary between several Macs. Recorded audio, API keys, and settings are not synced.
 
-「設定 > 同期」から、複数のMacでライフログの発話・メモ・音声入力履歴・語彙を共有できます。録音音声、APIキー、設定は同期しません。
+1. On the first Mac, choose "Start a new sync" and select a folder that your other Macs can also see, such as iCloud Drive, Dropbox, or Syncthing. Write down the sync code that is shown.
+2. On each additional Mac, choose "Join with a sync code", enter the code, and select the same folder.
 
-1. 1台目で「新しく同期を始める」を選び、iCloud Drive・Dropbox・Syncthingなど他のMacからも見えるフォルダを指定します。表示される同期コードを控えます。
-2. 2台目以降で「同期コードで参加」を選び、同期コードを入力して同じフォルダを指定します。
+Lore writes only change files, encrypted on the Mac, into `Lore Sync/` inside the folder. Lore itself makes no network connection, and the folder provider cannot read the contents. When the same item changes on several Macs, the later change wins.
 
-Loreはフォルダ内の `Lore Sync/` に、Mac内で暗号化した変更ファイルだけを書きます。Lore自身は通信せず、フォルダの提供元は中身を読めません。同じ項目を複数のMacで変えた場合は、後から変えた方を採用します。
+## Text formatting
 
-## 文章の仕上げ
+- **On this Mac**: Apple Foundation Models by default, or a local Ollama or LM Studio server. Text data is not sent to an external service.
+- **Cloud**: OpenAI, Claude, Gemini, or Groq. Only when you select one does Lore send the dictation transcript, the instructions, and your vocabulary to it. Life Log records and recorded audio are never sent. API keys are stored in the macOS Keychain.
 
-- **このMac内** — 既定のApple Foundation Modelsに加え、ローカルで起動したOllamaまたはLM Studioを選べます。文字データを外部サービスへ送りません。
-- **クラウド** — OpenAI、Claude、Gemini、Groqを選べます。利用者が選んだ場合だけ、口述の文字起こしと指示を選択先へ送ります。ライフログの記録は送りません。録音音声は送りません。APIキーはmacOS Keychainに保存します。
+Whichever you choose, Lore inserts the raw transcript when formatting fails.
 
-どの方式でも、整形に失敗した場合は生の文字起こしを挿入します。
-
-## 構成
+## Structure
 
 ```text
 Sources/LoreKit/
-├── Domain/        セッション状態、モード、整形ルール、語彙
-├── Engines/       SpeechAnalyzer、WhisperKit、Foundation Models、クラウド／ローカルLLM
-├── System/        ホットキー、録音、挿入、Keychain、macOS 統合
-├── Persistence/   GRDB / SQLite による履歴・設定データ
-├── Sync/          暗号化した変更ファイルによるMac間同期
-├── Analysis/      発話区間の切り出しと書き出し用テキスト
-├── App/           状態機械の駆動と依存関係の組み立て
-└── UI/            メニューバー、HUD、設定、履歴
+├── Domain/        Session state, modes, formatting policy, vocabulary, speech segmentation, schedule
+├── Engines/       SpeechAnalyzer, whisper.cpp, Foundation Models, cloud and local LLMs
+├── System/        Hotkeys, recording, insertion, Keychain, macOS integration
+├── Persistence/   History, Life Log, modes, and sync state on GRDB / SQLite
+├── Sync/          Sync between Macs through encrypted change files
+├── Analysis/      Text generation for export
+├── Automation/    Read-only use cases shared by the CLI and MCP
+├── App/           Coordinators, settings, and the composition root
+└── UI/            Menu bar, HUD, main and mini windows, settings, history
 ```
 
-中心となる不変条件は「発話を失わない」ことです。STT 確定後の文字起こしを先に永続化してから整形・挿入へ進み、整形失敗時は生テキストへ、挿入失敗時はクリップボードへ退避します。ライフログでは30秒ごとの復旧用音声を保存しながら入力signalから発話区間を切り出し、適応的な無音境界で後追い認識します。入力障害時は保存済み音声から再開し、利用者が記録を有効にしている間は自動再接続します。
+The central invariant is "never lose what was said". After speech recognition finishes, Lore persists the transcript first and only then formats and inserts. It falls back to the raw text when formatting fails and to the clipboard when insertion fails. The Life Log saves recovery audio every 30 seconds, detects speech spans from the input signal, and recognizes them afterward at adaptive silence boundaries. After an input failure it resumes from the stored audio, and it reconnects automatically while recording is enabled.
 
-構造化データは起動時に `~/Library/Application Support/Lore/Backups/` へSQLiteスナップショットとして保存します。未適用のDBマイグレーションがある場合は変更前に必ず作成し、通常時は1日1回、直近7世代を保持します。
-復元が必要な場合は、Loreを停止して元DBを退避してから [バックアップと復旧](docs/recovery.md) の手順を実行します。
+Structured data is saved as SQLite snapshots in `~/Library/Application Support/Lore/Backups/` at launch. A snapshot is always taken before a pending database migration, and otherwise once per day. The 7 newest are kept. To restore, quit Lore, move the current database aside, and follow [Backup and recovery](docs/recovery.md).
 
 ## License
 

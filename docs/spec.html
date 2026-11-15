@@ -1,491 +1,389 @@
 <!doctype html>
-<html lang="ja">
+<html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Lore 外部仕様</title>
+<title>Lore external specification</title>
 <link rel="stylesheet" href="reference.css">
 </head>
 <body>
+<!-- Generated from spec.md by Scripts/render-docs.py. Edit the Markdown, not this file. -->
 <header>
 <p class="eyebrow">External specification</p>
-<h1>Lore 外部仕様</h1>
-<p class="lead">利用者、macOS Shortcuts、CLI、MCP clientから観測できる現在の製品契約です。画面、設定、保存、障害時挙動、automation interfaceを一つにまとめています。</p>
+<h1>Lore external specification</h1>
+<div class="lead">
+<p>This document is the source of truth for the behavior that users and automation clients can observe. The <a href="spec.html">HTML version</a> is generated from this file. For internal structure, see <a href="design.html">design.md</a>. For data handling, see <a href="../PRIVACY.md">PRIVACY.md</a>.</p>
+</div>
 <p class="links">
-<a href="spec.md">Markdown版</a>
-<a href="design.html">内部設計</a>
+<a href="spec.md">Markdown source</a>
+<a href="design.html">Internal design</a>
 <a href="../PRIVACY.md">Privacy</a>
-<a href="recovery.md">復旧手順</a>
+<a href="recovery.md">Recovery</a>
+<a href="testing.md">Testing</a>
 </p>
 </header>
 <nav>
-<a href="#environment">環境</a>
-<a href="#onboarding">初回起動</a>
-<a href="#dictation">音声入力</a>
-<a href="#lifelog">Life log</a>
-<a href="#ui">UI</a>
-<a href="#data">Data</a>
-<a href="#sync">同期</a>
-<a href="#shortcuts">Shortcuts</a>
+<a href="#environment-and-product-boundary">Environment and product boundary</a>
+<a href="#first-launch-and-permissions">First launch and permissions</a>
+<a href="#dictation">Dictation</a>
+<a href="#life-log">Life Log</a>
+<a href="#screens-and-settings">Screens and settings</a>
+<a href="#storage-backup-and-deletion">Storage, backup, and deletion</a>
+<a href="#macos-shortcuts-app-intents">macOS Shortcuts / App Intents</a>
 <a href="#cli">CLI</a>
 <a href="#mcp">MCP</a>
-<a href="#failures">障害時</a>
-<a href="#acceptance">受入条件</a>
+<a href="#behavior-on-failure">Behavior on failure</a>
+<a href="#acceptance-criteria">Acceptance criteria</a>
 </nav>
 <main>
-<section id="environment">
-<h2>1. 動作環境と製品境界</h2>
+<section id="environment-and-product-boundary">
+<h2>1. Environment and product boundary</h2>
 <table>
 <thead>
-<tr>
-<th>項目</th>
-<th>仕様</th>
-</tr>
+<tr><th>Item</th><th>Specification</th></tr>
 </thead>
 <tbody>
-<tr>
-<td>OS / CPU</td>
-<td>macOS 26以降 / Apple Silicon</td>
-</tr>
-<tr>
-<td>形態</td>
-<td>Menu bar常駐app。Dockには常駐しない</td>
-</tr>
-<tr>
-<td>必須権限</td>
-<td>録音にmicrophone、cursor位置への挿入にaccessibility、Option+文字keyのhotkeyに入力監視</td>
-</tr>
-<tr>
-<td>任意権限</td>
-<td>Life logへ予定を表示するcalendar</td>
-</tr>
-<tr>
-<td>STT</td>
-<td>音声入力・ボイスメモとlife logで個別に、Apple SpeechAnalyzerかlocal downloadしたwhisper.cpp GGML modelを選択。whisper.cppは音声入力では停止後の一括認識、life logでは発話burstの遅延認識。Cloud STTなし</td>
-</tr>
-<tr>
-<td>既定LLM</td>
-<td>Apple Foundation Models。Mac外へ送信しない</td>
-</tr>
-<tr>
-<td>表示言語</td>
-<td>システム設定、英語、日本語、簡体字中国語から選択可能。既定はシステム設定。変えると開いているwindowと日付の表記もその場で切り替わる</td>
-</tr>
-<tr>
-<td>同期</td>
-<td>任意。利用者が選んだfolderへ、Mac内で暗号化した文字dataだけを置いて複数のMac間で共有する（<a href="#sync">6.1</a>）</td>
-</tr>
+<tr><td>OS</td><td>macOS 26 or later</td></tr>
+<tr><td>CPU</td><td>Apple Silicon</td></tr>
+<tr><td>Form</td><td>Menu bar app. Lore appears in the Dock and the app switcher only while one of its windows is open</td></tr>
+<tr><td>Required permissions</td><td>Microphone. Accessibility for hotkey detection and for inserting text at the cursor. Input Monitoring for hotkeys made of Option plus a letter key</td></tr>
+<tr><td>Optional permission</td><td>Calendar, to show events in the Life Log</td></tr>
+<tr><td>Speech recognition</td><td>Chosen separately for dictation and voice memos, and for the Life Log: Apple SpeechAnalyzer or a locally downloaded whisper.cpp GGML model. With whisper.cpp, dictation is recognized in one pass after recording stops, and the Life Log is recognized per speech burst after the burst ends</td></tr>
+<tr><td>Default text formatting</td><td>On-device processing with Apple Foundation Models</td></tr>
+<tr><td>Display language</td><td>System Settings, English, Japanese, or Simplified Chinese. The default is System Settings. A change applies to open windows and date formats immediately</td></tr>
+<tr><td>Storage</td><td>SQLite, UserDefaults, Keychain, and Life Log audio files, all on the Mac</td></tr>
+<tr><td>Sync</td><td>Optional. Lore places text data, encrypted on the Mac, in a folder that the user chooses, and other Macs read it from there (section 6.1)</td></tr>
 </tbody>
 </table>
-<p>対象外はmacOS以外、任意の音声fileの一括文字起こし、音声commandによるapp操作、通常の音声入力audioの保存、cloud STTです。</p>
+<p>Out of scope: platforms other than macOS, batch transcription of arbitrary audio files, voice commands that operate apps, storing dictation audio, and cloud speech recognition.</p>
 </section>
-<section id="onboarding">
-<h2>2. 初回起動と権限</h2>
+<section id="first-launch-and-permissions">
+<h2>2. First launch and permissions</h2>
 <ul>
-<li>初回はwindow全体を使うonboardingで、life log、音声入力、ボイスメモの三つの機能、マイク・アクセシビリティ・任意のcalendar権限とそれぞれの許可状況、保存範囲を説明します。</li>
-<li>設定の「一般」には各権限の状態を並べ、未許可の項目には「許可する」を置きます。まだ尋ねていない権限はシステムのダイアログを出し、一度拒否された権限はシステム設定の該当箇所を開きます。</li>
-<li>通常起動ではmenu bar常駐に加えてmain windowを開き、life logを選択した状態で表示します。</li>
-<li>アプリ名をKoeからLoreへ変えました。Lore（bundle ID <code>dev.agatan.Lore</code>）の初回起動時は、旧Koe（<code>dev.agatan.Koe</code>）のdataを一度だけ引き継ぎます。<code>~/Library/Application Support/Koe/</code>を<code>~/Library/Application Support/Lore/</code>へ移してDB fileを<code>lore.sqlite</code>へ改名し、保存audioの参照先も付け替えます。設定は旧Koeの値を写し、Lore側にすでに設定があれば写しません。Keychainに保存したAPI keyと同期の鍵は新しい保存先へ写してから旧itemを消します。Lore側のfolderがすでにある場合は混ぜずに旧folderを残し、menu barに残した場所を表示します。folderを移せない場合はDBを開かず、理由を表示します（旧dataはそのまま残ります）。macOSの権限（microphone、accessibility、入力監視、calendar）とlogin itemはbundle IDごとのため、Loreで改めて許可・設定します。CLIは<code>lore</code>、MCP serverは<code>lore-mcp</code>になり、AIクライアントへ登録し直します。CLI/MCPが先に起動した場合も、同じ手順でdataを移します。</li>
-<li>前回processの記録開始意図は復元しません。Life log記録は起動後の明示的なUI、hotkey、Shortcuts操作か、利用者が有効にした自動記録の時間帯でだけ開始します（4章）。</li>
-<li>Microphone権限がなければ録音できず、accessibility権限がなければ対象appへ挿入できません。Option+文字keyのhotkeyは入力監視権限がなければ開始しません。Calendar権限は音声入力には不要です。</li>
-<li>Life logの初回開始前に30秒単位の復旧用audioをMac内へ保存する明示同意が必要です。同意前のShortcuts開始はLoreを開くようerrorを返します。</li>
+<li>The first launch shows a full-window onboarding. It explains the three features (Life Log, dictation, voice memo), the microphone, Accessibility, and optional calendar permissions with their current state, and what Lore stores.</li>
+<li>A normal launch keeps the menu bar item and also opens the main window with the Life Log selected.</li>
+<li>Lore was renamed from Koe. On its first launch, Lore (bundle ID <code>dev.agatan.Lore</code>) takes over the data of Koe (<code>dev.agatan.Koe</code>) once:
+<ul>
+<li>It moves <code>~/Library/Application Support/Koe/</code> to <code>~/Library/Application Support/Lore/</code>, renames the database file to <code>lore.sqlite</code>, and repoints stored audio paths.</li>
+<li>It copies the Koe settings unless Lore already has settings.</li>
+<li>It copies each API key and the sync key in the Keychain to the new service and then deletes the old item. A value that Lore already holds is not overwritten.</li>
+<li>If the Lore folder already exists, Lore does not merge. It leaves the Koe folder in place and shows its location in the menu bar panel.</li>
+<li>If the folder cannot be moved, Lore does not open the database and shows the reason. The Koe data stays where it was.</li>
+<li>macOS permissions and the login item belong to the bundle ID, so the user grants them again for Lore.</li>
+<li>The CLI is now <code>lore</code> and the MCP server is <code>lore-mcp</code>. AI clients must be registered again. If the CLI or MCP server starts before the app, it performs the same folder and settings migration.</li>
+</ul>
+</li>
+<li>Lore does not restore the recording intent of the previous process. Life Log recording starts only from an explicit action in the UI, a hotkey, or Shortcuts, or inside a scheduled recording window that the user enabled (section 4.1).</li>
+<li>Without the microphone permission, Lore cannot record. Without the Accessibility permission, Lore cannot insert text, cannot detect a modifier-only hotkey such as the default Right Option, and cannot detect Esc. A hotkey made of Option plus a letter key also needs Input Monitoring.</li>
+<li>Dictation does not need the calendar permission. Settings &gt; General lists each permission with its state and an "Allow" button for the ones not granted. The Input Monitoring row appears only when a hotkey needs it. For the microphone and the calendar, the button shows the system dialog the first time and opens System Settings after a denial. For Accessibility and Input Monitoring, the button requests access and opens System Settings.</li>
+<li>The first time the Life Log starts, Lore asks the user to confirm that it saves recovery audio in 30-second chunks on the Mac. If Shortcuts starts the Life Log before this consent, the action returns an error that asks the user to open Lore and confirm.</li>
 </ul>
 </section>
 <section id="dictation">
-<h2>3. 音声入力</h2>
-<h3>操作と認識</h3>
-<div class="grid">
-<article class="card">
-<h3>Hotkey</h3>
-<p>既定は右Option。短押しはtoggle、500ms以上の長押しはpush-to-talk。Escでcancelします。</p>
-<p>文字keyを含むhotkeyはmacOSの標準event dispatcherへ個別登録します。macOS 26でdispatcherから通知されないことがあるOptionのみ（Option+Shiftを含む）の文字keyは、利用者が入力監視を許可した場合にinput event監視も併用し、先に届いた一組の押下・離上だけを採用します。修飾キー単体と録音中Escもinput event監視を使います。Secure Input中はinput event監視と対象appへのpasteがmacOSに遮断されます。一つの登録失敗や権限不足でほかのhotkeyを停止しません。</p>
-</article>
-<article class="card">
-<h3>状態表示</h3>
-<p>録音、認識、整形、挿入、完了/失敗をHUDとmenu barへ表示。効果音、HUD、level表示は設定できます。</p>
-</article>
-<article class="card">
-<h3>Audio</h3>
-<p>通常の音声入力とボイスメモは既定でApple SpeechAnalyzerへstreamします。設定でwhisper.cppを選ぶと録音開始と並行してmodelを準備し、停止後に録音全体をMac内で一括認識します。この場合、録音中の暫定textは表示しません。</p>
-<p>whisper.cppへ渡す音声は前後の無音（約-50 dBFS未満）を0.5秒の余白を残して除き、有声区間を検出できない場合は全体を渡します。停止後の確定待ちは30秒に録音時間を加えた長さを上限とします。有効な語彙の表記は並び順のまま約200 token以内のpromptとして渡し、2語以上のprompt全体をそのまま読み上げただけのsegmentは結果から除きます。</p>
-<p>Life logも音声入力とは別にSpeechAnalyzerまたはlocal download済みwhisper.cpp GGML modelを選び、連続録音から検出した発話burstを認識します。比較的大きいlocal modelでも入力確認を待たせないよう、発話中は暫定textを表示し、発話確定後にtimestamp付きの最終結果へ置き換えます。</p>
-</article>
-</div>
-<p>起動直後に入力signalの線形RMSでbackground noise floorを校正し、非発話中も更新します。約-50 dBFSの絶対下限、noise floorに対する十分な差と倍率が短時間継続した場合だけ発話burstを開始します。累積有声時間0.5秒未満、または有声比率20%未満の候補は生活音・無音として破棄し、whisper.cpp、最終STT、burst checkpointを起動しません。Whisper.cpp選択時は有効な発話の開始から1.5秒後、前の暫定認識が完了していれば1.5秒ごとに直近5秒を暫定認識します。累積有声時間が30秒未満なら1.5秒、30秒以上なら1秒の連続無音で確定し、wall time 5分でも安全確定します。暫定textはDBへ保存せず、永続化済みaudioによる最終認識だけを正本にします。</p>
-<p>whisper.cpp modelは音声入力とlife logで共通の選択です。どちらの設定からも進捗と失敗理由を表示してdownloadのcancel、再試行、削除ができます。完了前のmodelは認識に利用できず、life logの記録・処理中または音声入力の処理中は削除できません。</p>
-<p>whisper.cppが無音・環境音から生成する既知の定型文「ご視聴ありがとうございました」は、独立した文として認識された場合に限り表示・保存しません。同じsegmentに続く実発話は残します。</p>
-<h3>Mode、rule、語彙</h3>
+<h2>3. Dictation</h2>
+<h3>3.1 Controls</h3>
 <ul>
-<li>録音開始時の前面appからmodeを決め、session中は固定します。手動固定を優先します。</li>
-<li>Modeは名前、bundle ID pattern、指示、言語、任意modelを持ち、CRUDと並べ替えができます。</li>
-<li>共通ruleは全modeへ適用します。同梱の共通ruleとmodeの指示は、表示言語や話す言語に関わらず英語で書き、整形結果は発話と同じ言語で返して翻訳しません。未編集の共通rule・Default modeは同梱内容の更新に追従し、編集済みの内容は変えません。</li>
-<li>語彙は表記、任意の読み、誤認識pattern、有効/無効を持ち、STT hintと文章処理へ反映します。</li>
-
+<li>The default hotkey is Right Option.</li>
+<li>A short press toggles recording. A long press is push-to-talk and stops on release. The default long-press threshold is 500 ms, adjustable from 150 to 1000 ms.</li>
+<li>A hotkey that includes a letter key is registered with the standard macOS hotkey dispatcher. On macOS 26 the dispatcher sometimes does not report letter keys combined with Option only (including Option+Shift). For those, Lore also watches input events when the user grants Input Monitoring, and it uses only the first press and release pair that arrives. Modifier-only hotkeys and Esc also use input event monitoring. While Secure Input is on, macOS blocks input event monitoring and pasting into the target app. A registration failure or missing permission for one hotkey does not stop the others.</li>
+<li>Lore refuses to assign the same key to two actions.</li>
+<li>The menu bar panel can also start and stop dictation. Only one dictation runs at a time.</li>
+<li>Esc cancels the dictation in any active phase: recording, transcribing, formatting, or inserting. If text was already recognized, it stays in the history as <code>cancelled</code>. System sleep also cancels an active dictation or voice memo.</li>
+<li>The HUD and the menu bar icon show recording, transcribing, formatting, inserting, and the result. Settings can turn the HUD, the sound effects, and the input level display on or off.</li>
 </ul>
-<h3>文章処理先</h3>
-<p>文章処理は音声入力の整形だけに使います。Life logのtextは文章処理へ渡しません。</p>
+<h3>3.2 Recognition, modes, and vocabulary</h3>
+<ul>
+<li>By default, dictation and voice memos stream to Apple SpeechAnalyzer and the HUD shows provisional text. When the user selects whisper.cpp, Lore prepares the model while recording starts and recognizes the whole recording on the Mac after it stops. In that case no provisional text appears during recording. Dictation audio is never written to a file or the database and is never sent anywhere.</li>
+<li>Before audio goes to whisper.cpp, Lore trims leading and trailing silence (below about -50 dBFS) and keeps a 0.5-second margin. If it detects no voiced span, it passes the whole recording. The wait for the final result after stopping is at most 30 seconds plus the recording length.</li>
+<li>Lore passes the enabled vocabulary spellings to whisper.cpp in their list order as a prompt of about 200 tokens at most. A segment that only repeats a whole prompt of two or more words is treated as an echo generated from silence and is removed.</li>
+<li>The whisper.cpp models are Whisper Large v3 Turbo Q5_0 (574 MB, the default), Whisper Large v3 Q5_0 (1.08 GB), and Whisper Small Q5_1 (190 MB). Dictation and the Life Log share one selected model. Both settings pages list the models and show download progress and failure reasons, and the user can cancel, retry, or delete a download. A model cannot be used before its download completes. It cannot be deleted while the Life Log is recording or processing, or while dictation is processing.</li>
+<li>The Life Log selects its engine separately from dictation. Section 4.1 describes how it detects and recognizes speech.</li>
+<li>The known boilerplate that whisper.cpp generates from silence or ambient sound, "ご視聴ありがとうございました", is neither shown nor saved when it is recognized as a standalone sentence. Real speech that follows in the same segment is kept.</li>
+<li>Lore picks the mode once from the frontmost app when recording starts and keeps it for that session. A manually pinned mode takes priority over automatic selection. The pin lasts until Lore quits.</li>
+<li>A mode has a name, target bundle ID patterns (<code>*</code> is a wildcard), formatting instructions, and a language (automatic, Japanese, English, or Simplified Chinese). The user can create, edit, duplicate, and delete modes, and restore a built-in mode to its shipped content. The built-in modes are Default, Chat, Mail / Docs, Memo, and Commit / PR. Default cannot be deleted and serves apps that match no other mode.</li>
+<li>The common rules apply to every mode. The shipped common rules and mode instructions are written in English regardless of the display language or the spoken language. The formatted result is returned in the language that was spoken and is not translated. The common rules and each built-in mode follow updates to the shipped content while the user has not edited them. Edited content is never changed, and a built-in mode that the user deleted stays deleted.</li>
+<li>A vocabulary entry has a spelling, an optional reading, misrecognition patterns, and an enabled flag. Entries feed the speech recognition hint and the formatting instructions.</li>
+</ul>
+<h3>3.3 Text formatting</h3>
+<p>Formatting applies only to dictation. Life Log text is never passed to formatting.</p>
 <table>
 <thead>
-<tr>
-<th>Backend</th>
-<th>送信</th>
-</tr>
+<tr><th>Option</th><th>Where the text goes</th></tr>
 </thead>
 <tbody>
-<tr>
-<td>Apple Foundation Models</td>
-<td>Mac内</td>
-</tr>
-<tr>
-<td>Ollama</td>
-<td>
-<code>localhost:11434</code>
-</td>
-</tr>
-<tr>
-<td>LM Studio</td>
-<td>
-<code>localhost:1234</code>
-</td>
-</tr>
-<tr>
-<td>OpenAI / Anthropic / Gemini / Groq</td>
-<td>明示選択時だけproviderへ文字dataを送信</td>
-</tr>
+<tr><td>Apple Foundation Models</td><td>Processed on the Mac</td></tr>
+<tr><td>Ollama</td><td>Sent to <code>localhost:11434</code></td></tr>
+<tr><td>LM Studio</td><td>Sent to <code>localhost:1234</code></td></tr>
+<tr><td>OpenAI / Anthropic / Gemini / Groq</td><td>Text data is sent to the provider that the user explicitly selected</td></tr>
 </tbody>
 </table>
-<p>Cloudへ送るのは今回の文字起こし、共通rule、mode指示、有効な語彙です。録音audio、過去履歴、前面app情報、API keyはprompt dataに含めません。</p>
-<h3>挿入と履歴</h3>
-<div class="flow">
-<div class="step">STT確定</div>
-<div class="arrow">→</div>
-<div class="step">Rawを履歴保存</div>
-<div class="arrow">→</div>
-<div class="step">文章処理</div>
-<div class="arrow">→</div>
-<div class="step">録音開始時のappへpaste</div>
-</div>
+<p>A cloud request contains the current transcript, the common rules, the mode instructions, and the enabled vocabulary. Recorded audio, past history, the frontmost app name and bundle ID, and API keys are never part of the prompt. The request is a text transformation, not a question to answer.</p>
+<p>Lore inserts the raw transcript unchanged when the formatted output is empty, is abnormally short or long compared with the input, shows signs of leaked instructions, or does not match what was said, and when the provider times out or returns an error. The default timeout is 6 seconds, adjustable from 2 to 20 seconds. The history entry then shows that formatting was skipped and why.</p>
+<h3>3.4 Insertion and history</h3>
 <ul>
-<li>整形のtimeout、provider error、異常出力ではraw transcriptを使います。</li>
-<li>Clipboardを一時退避し、paste成功後に復元します。失敗時は結果をclipboardへ残します。</li>
-<li>履歴は対象app、modeと指示、provider/model、raw/result、status、error、処理時間を表示します。</li>
-<li>Statusは<code>interrupted</code>、<code>completed</code>、<code>cancelled</code>、<code>failed</code>、<code>fallback</code>、<code>clipboard_only</code>です。</li>
-<li>日本語部分一致検索、copy、個別/一括削除、保持日数設定があり、現在の保存件数を確認できます。</li>
+<li>Lore pastes the result in one operation at the cursor of the app that was frontmost when recording started.</li>
+<li>Lore saves the existing clipboard first and restores it after a successful paste. If it cannot insert (no Accessibility permission, Secure Input, or the target app cannot be brought back to the front), it leaves the result on the clipboard and notifies the user.</li>
+<li>After speech recognition finishes, Lore saves the raw text to the history before formatting starts.</li>
+<li>A history entry shows the date and time, target app, mode, trigger (toggle, hold, or manual), speech recognition engine, formatting engine, raw text, result, status, error, the time taken by each stage, and the full instructions that were sent to the model with the vocabulary count.</li>
+<li>The statuses are <code>interrupted</code>, <code>completed</code>, <code>cancelled</code>, <code>failed</code>, <code>fallback</code>, and <code>clipboard_only</code>.</li>
+<li>The user can search raw text and results by substring, copy a result again, delete one entry, and delete all entries.</li>
+<li>History retention is forever (the default), 30 days, 90 days, or 1 year. Settings shows the current number of stored entries.</li>
 </ul>
-<h3>ボイスメモ</h3>
+<h3>3.5 Voice memo</h3>
 <ul>
-<li>専用global hotkey、main windowとmini windowのmemo入力欄にある音声ボタンは、いずれも押すたびに録音開始・停止を切り替え、認識した生textを今日のlife-log memoとして保存します。文章整形、前面appへの挿入、通常の音声入力履歴への保存は行いません。</li>
-<li>Memo入力欄の音声ボタンは、開始準備中をprogress表示、録音中をapp iconの点と同じrose色とpulse animationで示し、通常の音声入力など別の音声処理中は新規開始できません。</li>
-<li>Life log記録中は現在の復旧用audio chunkを確定してcaptureを一時停止し、ボイスメモの完了、cancel、失敗後に記録開始意図が残っている場合だけ自動再開します。</li>
-<li>一回のボイスメモはmemo一件だけを作り、通常の音声入力履歴やlife-log utteranceへ同じ内容を追加しません。</li>
+<li>The dedicated global hotkey (default ⌃⌥V) and the voice button in the memo field of the main and mini windows each toggle recording on every press. The recognized raw text is saved as a memo in today's Life Log. A voice memo is not formatted, not inserted into the frontmost app, and not saved to the dictation history.</li>
+<li>A voice memo uses the dictation speech recognition engine with automatic language detection. Esc cancels it.</li>
+<li>The voice button shows a progress indicator while it prepares, and the rose color of the app icon's dot with a pulse while it records. It cannot start while another voice process, such as dictation, is running.</li>
+<li>If a voice memo starts while the Life Log is recording, Lore commits the current recovery audio chunk and pauses Life Log capture. After the memo completes, is canceled, or fails, the Life Log resumes only if the user's recording intent is still in place.</li>
+<li>Because of this exclusive boundary, one voice memo creates exactly one memo and adds nothing to the dictation history or to the Life Log utterances.</li>
 </ul>
 </section>
-<section id="lifelog">
-<h2>4. Life log</h2>
-<h3>継続記録</h3>
+<section id="life-log">
+<h2>4. Life Log</h2>
+<h3>4.1 Recording</h3>
 <ul>
-<li>通常の音声入力と独立し、同時利用できます。Menu bar、main window、専用hotkey、Shortcutsから開始・停止します。</li>
-<li>App起動時は停止状態から始まり、前回終了時に記録中だったことを理由には開始しません。自動記録の時間帯の中で起動した場合だけ、自動記録として開始します。同じprocess内のsleep復帰やdevice再接続は、残っている記録意図に従って再開します。</li>
-<li>設定の「自動記録」を有効にすると、選んだ曜日の開始時刻から終了時刻までlife logを自動で記録します。既定は無効、月〜金、9:00〜18:00です。終了時刻が開始時刻以前なら日付をまたぐ一つの時間帯として扱い、開始日の曜日に属します。
+<li>The Life Log starts and stops independently of dictation, and both can run at the same time.</li>
+<li>The user controls it from the menu bar panel, the main window, the mini window, a dedicated global hotkey (default ⌃⌥L), and macOS Shortcuts.</li>
+<li>The app starts in the stopped state. It does not start recording because the previous process was recording. Only a launch inside a scheduled recording window starts recording, as a scheduled recording. After wake from sleep or an input device reconnection, recording resumes only for a recording intent that remains in the same process.</li>
+<li>When "Scheduled Recording" is enabled in Settings, Lore records the Life Log from the start time to the end time on the selected days. The defaults are off, Monday to Friday, 9:00 to 18:00. If the end time is not later than the start time, the window crosses midnight and belongs to the day it starts on.
 <ul>
-<li>時間帯に入った時、またはapp起動・sleep復帰・設定変更の時点で時間帯の中にいる場合は、記録していなければ開始します。</li>
-<li>時間帯を出た時は、自動記録が開始した記録だけを停止します。利用者がUI、hotkey、Shortcutsで開始した記録は自動では停止しません。</li>
-<li>時間帯の途中で利用者が停止した場合、その時間帯の残りでは再開せず、次の時間帯から自動記録を再開します。</li>
-<li>録音audio保存への初回同意がない場合は自動開始せず、一度手動で開始して同意するようbannerで案内します。マイク権限がない場合は手動開始と同じ失敗表示になり、自動で再試行しません。</li>
-<li>設定画面は次の自動開始・停止時刻を示します。自動記録中の状態表示は「自動記録中・18:00まで」のように終了時刻を、自動記録の待機中は「次の自動記録 9:00」のように次の開始時刻を示します。</li>
-<li>時刻判定はMacのcalendarとtime zoneに従い、時計やtime zoneの変更、sleep復帰で次の切替時刻を計算し直します。</li>
-</ul></li>
-<li>Life logの全画面とmenu barは、実際のaudio writerの稼働状態を同じ記録状態として表示します。実際に録音している間もmenu barのLore icon本体はmonochromeで表示し、右下の小さなrose色badgeだけを着色します。開始準備中、停止中、再接続待ちではbadgeを外し、それぞれを録音中とは表示しません。</li>
-<li>音声入力との同時利用中も、復旧可能なlife-log audioの記録は中断しません。音声入力が成功した区間はそのraw transcriptを正本とし、同じ録音時間帯にlife log側で認識した発話はtimeline、検索、書き出しへ重複して出しません。音声入力がcancelまたは失敗した場合は、life log側の発話を残します。</li>
-<li>選択したinput deviceから記録し、30秒ごとに復旧用<code>.m4a</code>をMac内へ確定します。Audioをcloud STTへ送ることはありません。</li>
-<li>Audio chunkは耐久化・復旧単位です。30秒ごとに加えて発話burst確定時にも現在のchunkを原子的に閉じるため、最終認識は次の定期確定を待ちません。持続near-silenceだけではjobを作りません。</li>
-<li>Main windowとmini windowは有効な発話と判定した時点からlive行を表示し、「発話中」、入力audio長、rolling暫定textを更新します。発話確定後は「文字起こし中」と処理経過時間へ切り替え、最終結果をtimelineへ保存したら消します。</li>
-<li>Main windowとmini windowのtimelineは初回に最新項目を表示し、末尾にいる間だけ新しい項目へ自動追従します。過去へのscrollや検索・予定からの移動では追従を止め、末尾へ戻ると再開します。</li>
-<li>Life logの認識言語は「表示言語に合わせる」「自動判定」「日本語」「English」「简体中文」から選べ、既定は表示言語に合わせます。この設定はlife logだけに適用します。</li>
-<li>whisper.cppのcontrol tokenとtimestamp tokenはengine境界で除去します。過去のtextを表示時に補正しません。</li>
-<li>whisper.cppの既定modelはWhisper Large v3 Turbo Q5_0 (574 MB)です。非TurboのLarge v3 Q5_0も選べます。</li>
-<li>保存済みaudioは文字起こしが成功し、発話をDBへ保存するまで必ず保持します。既定の「処理後削除」では成功直後にaudioだけを削除し、保存済みの発話は残します。設定は「処理後削除」「7日」「30日」から選べます。</li>
-<li>7日または30日を選んだ場合も、未処理・失敗chunkは期間を超えて保持し、次回起動後の再処理に使います。保持期間を短く変更したときは、新しい条件を満たす処理済みaudioを削除します。</li>
-<li>一時中断と既定マイクの切替・接続解除などの音声構成変更では、現在のchunkを確定して自動再接続します。Sleep前にも閉じ、記録意図が残ればwake後に再開します。マイク権限拒否だけは自動再試行しません。</li>
-<li>App終了時は進行中操作を割り込み、復旧用audioの確定と必要なDB保存だけを短時間待ちます。未完了chunkは次回起動時に再処理します。</li>
+<li>On entering a window, or when the app launches, wakes, or the setting changes inside a window, Lore starts recording if it is not recording.</li>
+<li>On leaving a window, Lore stops only a recording that the schedule started. A recording that the user started from the UI, a hotkey, or Shortcuts is not stopped automatically.</li>
+<li>If the user stops recording inside a window, Lore does not resume in the rest of that window. Scheduled recording resumes from the next window.</li>
+<li>Without the first-time consent to save audio, the schedule does not start. A banner asks the user to start manually once and consent. Without the microphone permission, the failure is shown as for a manual start and is not retried automatically.</li>
+<li>Settings shows the next window. While a scheduled recording runs, the status shows the end time, as in "Scheduled · until 18:00". While waiting, it shows the next start time, as in "Next scheduled 9:00".</li>
+<li>Time checks follow the Mac's calendar and time zone. Lore recalculates the next switch time after a clock change, a time zone change, or wake from sleep.</li>
 </ul>
-<h3>日別表示とCalendar</h3>
-<p>通常起動時とmain windowのlife logを開いた時は今日を表示し、dataの読込後にtimeline最下部へ一度だけscrollします。Mini windowも同様です。その後の認識結果や予定の追加では閲覧位置を奪いません。</p>
-<div class="grid">
-<article class="card">
-<h3>Month</h3>
-<p>予定と発話activityを日単位で表示します。</p>
-</article>
-<article class="card">
-<h3>Timeline</h3>
-<p>Main windowは全高の半透明sidebarを持つsplit viewで、sidebar上部の「ライフログ」「音声入力」で表示を切り替えます。Life log表示中は三列です。Sidebarはnavigationの下に月間activity calendarを置きます。中央は選択日のtimelineで、読みやすい幅の列をwindow中央に置き、先頭に大きな日付と曜日、今日なら「今日」と記録状態、終日の予定を表示します。右のinspector「概要」は話した時間、発話・メモ・音声入力の件数と、予定のblockと記録の印を時刻の縦軸へ並べた一日の流れを表示し、予定blockや一日の流れの位置を選ぶとtimelineのその時刻へ移動します。今日なら現在時刻の線を引きます。Inspectorはtoolbarのbuttonで隠せ、表示状態は次回も保ちます。記録がない日は件数の代わりに記録がないことだけを示し、過去日で予定も記録もなければ一日の流れを出しません。記録がない日のtimelineは、縦線の位置に記録の始め方（今日）または記録がないこと（過去日）を一行で示します。検索と書き出しのbuttonもwindow toolbarに置きます。Timeline paneは時刻の予定、発話、音声入力、text memoを一列の時刻順で表示し、column headerは置きません。時刻の右に縦の線を通し、各行は線上の印で種類を示します（発話は小さな点、メモと音声入力は記号、予定は輪）。予定の開始から終了までに入る区間は線を予定の色で塗り、予定の行は件名と長さ・calendar名を表示します。前の項目から1時間以上空いた所には空いた時間を示します。日付を選ぶとinspectorとtimelineを更新します。検索buttonまたはCommand-Fで横断検索を開き、発話、音声入力、memoは対象項目へ移動します。検索結果は種類をtimelineと同じ印と色で示し、一致した語を強調し、日付と時刻を添えます。入力欄から手を離さずに↑↓で結果を選び、Returnで開けます。Mini windowも予定と記録を一列表示します。Main windowとmini windowの最下部にはtimelineの上に浮かぶ一本のcapsule barを置き、左端に記録の開始・停止buttonと記録状態、続いてmemo入力、音声memo、送信を並べます。Timelineはbarの下までscrollでき、最後の行も隠れません。Main windowの入力欄は今日を選択中だけ表示し、過去日のbarは記録操作と状態だけを持ちます。</p>
-<p>Loreのmemoは声や短い入力で素早く残す下書きです。本格的な清書や別のメモアプリ・タスク管理への転記は、MCPやCLIで読み出した外部AIが行います。Lore側は誤字直し程度の編集だけを提供します。</p>
-<p>Main windowとmini windowのmemoは、hover時の編集buttonまたは本文のdouble-clickでその場で編集できます。Returnで保存、Option-Returnで改行、Escで取り消します。空の本文は保存せず、memoの作成時刻は変わりません。削除はmain windowのhover時の削除buttonで行います。Main windowのtimelineは本文を読みやすい幅（約800 pt）に抑えます。</p>
-</article>
-<article class="card">
-<h3>予定との関連</h3>
-<p>発話と予定の関連は前後2分のずれを許容します。</p>
-</article>
-<article class="card">
-<h3>Calendar</h3>
-<p>選択calendarの最小snapshotを読取専用で保存。既定は参加済み/RSVPなしだけを表示・書き出しの対象にします。Calendar設定の「予定を再取得」は現在timelineで選択中の日を読み直し、timelineと月間activityを更新します。月間activity calendarではtimelineで表示中の日をprimary colorの円で塗り、それ以外の今日はprimary colorの数字で示します。</p>
-</article>
-</div>
-<h3>AIへの受け渡し</h3>
-<p>Loreはlife logから要約、話題、TODOを生成しません。振り返りや作業の整理は、利用者が選んだ汎用AIへCLIまたはMCPで日別の記録を渡して行います。Life logの発話、memo、予定はLoreからLLMやcloudへ送信しません。</p>
-<h3>検索と書き出し</h3>
-<p>発話は90秒未満の間隔で別の表示項目がなければ時刻範囲付きの段落に統合します。プレビューは4,000文字、出力は全文です。Day領域は縦スクロールでき、予定は背景の塗りなしの線と文字で表現します。</p>
-<p>Life-log発話、通常の音声入力、memoを横断検索します。日別exportではcalendar、life-log発話、通常の音声入力、memoを個別選択できます。ボイスメモはmemoとして扱います。出力は日付見出しと時系列の箇条書きからなる人間向けMarkdownで、機械用英大文字tagは使いません。画面表示時のsnapshotからUI thread外で生成し、準備中はprogressを表示して画面操作や音声処理をblockしません。</p>
+</li>
+<li>Every Life Log view and the menu bar icon show the same recording state, taken from whether the audio writer is actually running. The menu bar icon is the "L." of the app icon, and only its dot shows state: rose while recording (dictation or Life Log), a ring in the icon's own color while processing, mint when a dictation completed, gold when formatting was skipped, the result is on the clipboard only, or the dictation failed, and a gold ring while the Life Log is reconnecting. Dictation state takes priority over Life Log state. With no state to show, the icon is a template image.</li>
+<li>While dictation runs at the same time, the recoverable Life Log audio keeps recording. For a span where dictation succeeded, the dictation's raw transcript is authoritative, and the utterances that the Life Log recognized in the same span do not appear in the timeline, search, or export. If the dictation was canceled or failed, the Life Log utterances remain.</li>
+<li>The user can choose the input device. While recording, Lore commits a recovery <code>.m4a</code> on the Mac every 30 seconds and whenever a speech burst ends. Audio is never sent to a cloud speech service.</li>
+<li>An audio chunk is the unit of durability and recovery. Because the chunk closes when a burst ends, final recognition does not wait for the next periodic commit. Recognition runs per adaptive speech burst, and sustained near-silence is not transcribed.</li>
+<li>Speech onset uses the linear RMS of the input signal, not the level shown in the UI. Lore calibrates a background noise floor during the first second and keeps updating it while nobody speaks. A burst starts only when the input stays above an absolute floor of about -50 dBFS and sufficiently above the noise floor, by both difference and ratio, for 250 ms. A burst ends after 1.5 seconds of continuous silence when it holds less than 30 seconds of voiced audio, after 1 second when it holds 30 seconds or more, and after 5 minutes of wall time as a safety limit.</li>
+<li>A candidate with less than 0.5 seconds of voiced audio, or with a voiced ratio below 20% of the burst, is discarded as household noise or silence. Lore runs no preview, no final recognition, and no chunk checkpoint for it.</li>
+<li>With whisper.cpp selected, Lore shows provisional text while the user speaks: starting 1.5 seconds after valid speech begins, it recognizes the latest 5 seconds every 1.5 seconds, as long as the previous preview has finished. Provisional text is only for confirming input. It is never saved to the database, timeline, search, or export. Only the final recognition of persisted audio is authoritative.</li>
+<li>When a valid burst ends, Lore commits the current recovery chunk atomically and runs the final recognition after the audio it refers to is persisted. Utterance timestamps are restored from the recording start time and the audio offset. The vocabulary is captured when the recording session starts and stays fixed until it ends. Reprocessing of stored audio uses the same speech detection and the latest enabled vocabulary.</li>
+<li>When the main or mini window detects valid speech, it shows a live row separate from the recording state. The row first shows "Listening" and the length of the input audio, and updates the rolling text whenever a preview returns. After the burst ends, it switches to "Transcribing" and the elapsed processing time, and disappears when the final result is saved to the timeline.</li>
+<li>The timeline in the main and mini windows shows the latest item when first displayed and follows new utterances, memos, and events only while the user stays at the bottom. If the user scrolls back or jumps to an item from search or an event, following stops. It resumes when the user returns to the bottom.</li>
+<li>The Life Log recognition language is "Match Display Language" (the default), "Detect Automatically", Japanese, English, or Simplified Chinese. When the display language is "System Settings", the resolved supported language is used. This setting applies only to the Life Log and does not affect dictation, voice memos, or modes.</li>
+<li>whisper.cpp control tokens and timestamp tokens are removed from results at the engine boundary and are never saved. Lore does not correct or rewrite text that was saved in the past.</li>
+<li>Stored audio is always kept until transcription succeeds and the utterances are saved to the database. With the default "Delete After Transcription", Lore deletes only the audio right after success and keeps the utterances. The options are "Delete After Transcription", "7 Days", and "30 Days". A value stored by an older version that is outside these options is shown as a legacy entry.</li>
+<li>With 7 or 30 days, unprocessed and failed chunks are still kept beyond the period and are reprocessed after the next launch. When the user shortens the retention, Lore deletes the processed audio that meets the new condition.</li>
+<li>On a temporary interruption or an audio configuration change, such as switching or disconnecting the default microphone, Lore commits the current chunk and reconnects automatically. It also closes the stream safely before sleep and resumes after wake if the recording intent remains. Only a lost microphone permission is not retried.</li>
+<li>When the app quits, Lore interrupts operations in progress and waits briefly only for the recovery audio commit and the required database writes. A stored chunk that did not finish is reprocessed at the next launch.</li>
+</ul>
+<h3>4.2 Day view</h3>
+<ul>
+<li>The main window is a split view with a full-height translucent sidebar. "Life Log" and "Dictation" at the top of the sidebar switch the content. The Life Log is the default.</li>
+<li>The Life Log view has three columns:
+<ul>
+<li>The sidebar puts a monthly activity calendar under the navigation.</li>
+<li>The center is the timeline of the selected day, a readable column centered in the window. It starts with a large date and weekday, a small label above them ("Today" in rose for today, the year for other days), a recording chip while today is being recorded, and the all-day events.</li>
+<li>The right inspector shows the talk time, the counts of utterances, memos, and dictations, and "By Hour", a vertical time axis with event blocks and record marks. Selecting an event block or a position on the axis moves the timeline to that time. Today has a current-time line. The "Overview" toolbar button hides and shows the inspector, and the choice is kept for the next launch.</li>
+</ul>
+</li>
+<li>A day with no records shows only that fact instead of the counts. A past day with neither events nor records shows no "By Hour". On such a day, the timeline shows one line at the rail position: how to start recording (today) or that nothing was recorded (a past day).</li>
+<li>The search and export buttons are also in the window toolbar.</li>
+<li>On a normal launch and whenever the Life Log is opened in the main window, Lore shows today and scrolls once to the latest item at the bottom after the data loads. The mini window does the same when it opens. Later recognition results and events do not take over the reading position, except for the follow behavior at the bottom described in section 4.1.</li>
+<li>The timeline shows timed events, utterances, dictations, and text memos in one column in time order, with no column header. A vertical rail runs to the right of the times, and each row has a mark on the rail for its kind: a small dot for an utterance, a symbol for a memo or a dictation, and a ring for an event. Each utterance is its own row. Inside an event's start-to-end span, the rail takes the event color, and the event row shows the title, the duration, and the calendar name. An event in progress has a "Now" tag. Where one hour or more passed since the previous item, the timeline shows the length of the gap. Events have no fill.</li>
+<li>Selecting a date reloads the events of that day and updates both the inspector and the timeline.</li>
+<li>The toolbar search button or <code>Command-F</code> opens cross-record search. A result shows its kind with a symbol, highlights the matching text, and has the date and time. The user selects a result with the up and down arrow keys without leaving the field and opens it with Return. Selecting an utterance, dictation, or memo result opens that day and moves to the item.</li>
+<li>The mini window shows events, utterances, dictations, and memos in one column in time order and pins the event in progress today above the timeline. It has no standard title bar and no all-day events. It stays in front, across Spaces and over full-screen apps, until the user closes it. Its toggle hotkey (default ⌃⌥M) acts only on a matching press and release that include the configured modifiers. Typing the same letter key alone does not open or close it.</li>
+<li>At the bottom of the main and mini windows, one capsule bar floats above the timeline. From the left it has the record button, the recording state, a chat-style memo field, the voice memo button, and the send button. A sent memo appears in today's timeline immediately. The send and voice buttons are circles of the same diameter. The timeline scrolls under the bar, and the bar does not hide the last row. To keep current memos out of past days, the main window shows the memo field only while today is selected. On a past day, the bar has only the record button and the state.</li>
+<li>A voice memo is added to today's timeline as the same kind of memo as typed input.</li>
+<li>A Lore memo is a rough draft captured quickly by voice or short typing. Careful rewriting, and copying into another notes or task app, is the job of an external AI that reads the records through MCP or the CLI. Lore itself offers only light editing for fixing typos.</li>
+<li>A memo in the main or mini window can be edited in place with the edit button that appears on hover or with a double-click on the text. Return saves, Option-Return inserts a line break, and Esc cancels. An empty text is not saved, and the memo's creation time does not change. Deleting uses the delete button that appears on hover in the main window.</li>
+<li>The main window timeline column is at most 720 pt wide, including the time column and the rail, so rows do not stretch on a wide window.</li>
+<li>While the recording intent continues, the status text does not follow internal transcription starts and stops. It shows stable user-facing states: recording, starting, paused, reconnecting, and stopped.</li>
+<li>An utterance is associated with an event within a tolerance of 2 minutes before and after.</li>
+<li>A recording that crosses midnight is distributed to the actual days. If the view is following today, it switches to the new day.</li>
+</ul>
+<h3>4.3 Calendar</h3>
+<ul>
+<li>Lore reads the events of the selected calendars and saves a snapshot of the time, title, calendar name, all-day flag, and participation status.</li>
+<li>By default, only events that the user accepted, or that have no RSVP, are shown and exported. The user can change this filter.</li>
+<li>"Refresh Events" in the Calendar settings explicitly reloads the events of the day currently selected in the timeline. The button is disabled while it runs. Afterward the timeline and the monthly activity are updated.</li>
+<li>Lore does not change an RSVP and offers no path into the Calendar app.</li>
+<li>In the monthly activity calendar, the day shown in the timeline is a filled circle: ink, or rose when that day is today. Today, when not selected, has a rose number. Each day has two density dots, one for events and one for speech. The header has previous month, next month, and "Today" buttons.</li>
+</ul>
+<h3>4.4 Handing off to AI</h3>
+<p>Lore does not generate summaries, topics, or to-do items from the Life Log. For review and organizing work, the user passes the daily records to a general-purpose AI of their choice through the CLI or MCP. Lore does not send Life Log utterances, memos, or events to an LLM or to the cloud.</p>
+<h3>4.5 Search and export</h3>
+<ul>
+<li>Search covers Life Log utterances, dictations, and memos with substring matching.</li>
+<li>A day export selects calendar events, Life Log utterances, dictations, and memos individually. Voice memos are included with memos.</li>
+<li>An export is human-readable Markdown with the date as the heading. It lists events, utterances, dictations, and memos as readable chronological bullets. It contains no machine-oriented uppercase tags or raw metadata.</li>
+<li>In an export, consecutive utterances less than 90 seconds apart, with no other item between them, are merged into one paragraph with a time range.</li>
+<li>The export sheet treats the data at the time it opened as a snapshot and builds the preview off the UI thread. While it prepares, it shows progress and does not block selection changes, closing the sheet, or other voice processing. The preview shows the first 4,000 characters. The export contains everything.</li>
+<li>The UI exports to the clipboard or a file. The CLI exports to standard output, the clipboard, or a file.</li>
+</ul>
 </section>
-<section id="ui">
-<h2>5. 画面と設定</h2>
-<p>Loreの配色はapp iconと同じ墨・白・roseの3色に固定し、color theme切替設定は持ちません。主操作は墨色（dark modeでは白に近い色）、sidebarの選択やswitchなど広い面は墨より明るい灰色、roseは録音中・今日・現在時刻など「いま」を示す所だけ、予定は色を持たない灰色で示します。成功、警告、失敗だけが別の色を持ち、全画面で同じ意味に使います。Main windowと設定のsidebarでは、機能ごとの落ち着いた色（ライフログは藍、音声入力は青、一般は灰、同期・連携は青緑）の角丸tileに記号を載せます。</p>
-<p>表示言語は「システム設定」「English」「日本語」「简体中文」から選べ、選択は再起動後も保持します。「システム設定」はmacOSの優先言語から最初の対応言語を使い、対応言語がない場合は英語へfallbackします。繁体字中国語を簡体字中国語へ暗黙に置き換えません。変更はmenu bar、各windowの内容、onboarding、settings、HUD、dialog、noticeへ直ちに反映します。Life logの認識言語で「表示言語に合わせる」を明示的に選んだ場合だけSTT hintへ使います。</p>
+<section id="screens-and-settings">
+<h2>5. Screens and settings</h2>
+<p>Lore's colors are fixed to the three colors of the app icon: ink, white, and rose. There is no color theme setting. Primary actions are ink (near white in dark mode). Wide surfaces such as the sidebar selection and switches are a gray lighter than ink. Rose marks only "now": recording, today, and the current time. Events are a colorless gray. Only success, warning, and failure have other colors, with the same meaning on every screen. In the sidebars of the main window and Settings, each symbol sits on a rounded tile in a calm color for its feature: indigo for the Life Log, blue for dictation, gray for general, and teal for sync and integrations.</p>
+<p>The display language is "System Settings", English, 日本語, or 简体中文, and the choice persists across launches. "System Settings" uses the first supported language among the macOS preferred languages and falls back to English when none is supported. Traditional Chinese is not silently replaced with Simplified Chinese. A change applies immediately to the menu bar, window contents, onboarding, Settings, the HUD, dialogs, and notices. The display language reaches speech recognition only when the Life Log recognition language is explicitly "Match Display Language". It does not change dictation, voice memos, modes, prompts, stored text, search, export content, or the machine-facing CLI and MCP interfaces.</p>
 <table>
 <thead>
-<tr>
-<th>場所</th>
-<th>公開機能</th>
-</tr>
+<tr><th>Place</th><th>Features</th></tr>
 </thead>
 <tbody>
-<tr>
-<td>Menu bar</td>
-<td>Life log/音声入力の用途別quick action。Life logは記録切替、今日の画面、mini window、音声入力は録音、mode、直前結果、履歴を各tab内にまとめ、共通footerは設定と終了だけを置く。「今日を開く」「ミニウィンドウ」はsystem fontを直接描画するcompact buttonとする</td>
-</tr>
-<tr>
-<td>Main window</td>
-<td>通常起動時に前面のkey windowとして1680×960 ptで開き、全高のsidebar（navigation、calendar）、中央のtimeline、右のinspector「概要」の三列を表示する。Life logの今日を選択してtimelineの最新位置を表示。最下部の浮いたbarから手入力・音声memoの追加と記録操作を行い、inspectorの表示切替・検索・書き出しはwindow toolbarに置く。音声入力履歴は一覧と詳細で表示し、詳細は中央の読みやすい幅に置く</td>
-</tr>
-<tr>
-<td>Mini window</td>
-<td>Life log状態、今日のtimelineへの手入力・音声memo追加。一度開いたら明示的に閉じるまで、ほかのapp、desktop Space、full-screen Spaceより手前に表示し続ける。記録操作は最下部の浮いたbarに置く。窓全体を半透明の素材で描く</td>
-</tr>
-<tr>
-<td>Settings: 共通</td>
-<td>一般（表示言語を含む）、語彙、privacy（保存場所、このMacの使用量、削除）、同期、連携</td>
-</tr>
-<tr>
-<td>Settings: 音声入力</td>
-<td>Hotkey、文字起こしengine・whisper.cpp model、feedback、履歴、AI整形、mode</td>
-</tr>
-<tr>
-<td>Settings: Life log</td>
-<td>記録・mini window・ボイスメモhotkey、自動記録の曜日と時間帯、input device、STT engine・認識言語・whisper.cpp model、audio保持、calendar再取得</td>
-</tr>
+<tr><td>Menu bar panel</td><td>Two cards, with no tabs. The Life Log card has the record button, the recording state with the scheduled time (or today's counts), and links to open today and the mini window. The dictation card has the record button, the hotkey, a button to copy the last text, a link to the history, and the mode menu. Notices for permissions, the Koe migration, and database errors appear below the cards. The footer has only Settings and Quit</td></tr>
+<tr><td>Main window</td><td>Opens on a normal launch as the frontmost key window at 1680×960 pt (minimum 1080×680). Three columns: full-height sidebar (navigation, calendar), timeline, and inspector. Shows today's Life Log at the latest position. Hosts onboarding, the Life Log with the floating bar for typed and voice memos and recording control, and the dictation history (list and detail). Inspector toggle, search, and export are in the window toolbar. The history detail is a readable centered column</td></tr>
+<tr><td>Mini window</td><td>Life Log state, today's timeline, and typed and voice memos. Once opened it stays in front of other apps, desktop Spaces, and full-screen Spaces until closed. Recording control is in the floating bar at the bottom. The whole window uses a translucent material</td></tr>
+<tr><td>Settings: General, Privacy</td><td>General has the display language, launch at login, and permissions. Privacy has the data folder, the storage used on this Mac, and deletion</td></tr>
+<tr><td>Settings: Life Log, Calendar</td><td>Life Log has the recording, mini window, and voice memo hotkeys, scheduled recording days and time window, input device, speech recognition engine, recognition language, whisper.cpp model, and audio retention. Calendar has calendar selection, the participation filter, and "Refresh Events"</td></tr>
+<tr><td>Settings: Dictation, AI Formatting, Modes, Vocabulary</td><td>Dictation has the hotkey and hold duration, speech recognition engine and whisper.cpp model, display and sounds, and history retention. AI Formatting has the backend, model, API key, connection check, and wait time. Modes has the common rules and modes. Vocabulary has the entries</td></tr>
+<tr><td>Settings: Sync, Integrations</td><td>Sync is described in section 6.1. Integrations has the MCP server path with a copyable registration command for Claude Code, the CLI installer, and the Agent Skill installer</td></tr>
 </tbody>
 </table>
-<p>Main window、mini window、menu barのlife-log状態表示は同じ記録操作を共有します。停止中の開始操作は墨色の丸にroseの点を置いた録音記号と「録音を開始」、記録開始意図がある間の停止操作はroseの停止記号と「録音を停止」を表示します。再接続中やボイスメモによる一時停止中も、停止操作は同じroseの外観を保ちます。</p>
-<p>音声構成変更や処理失敗など、継続操作を妨げないmessageはdismiss可能なbannerとして表示し、右端の<code>×</code>で閉じられます。閉じる操作はmessageだけを消し、記録開始意図、自動再接続、保存済みdataには影響しません。</p>
-<p>Privacy設定には、履歴、life log、保存audio、whisper.cpp modelを含むLore dataのこのMac上の合計使用量を表示します。</p>
+<p>The Privacy settings show the total storage that Lore data uses on this Mac, including history, Life Log, stored audio, and whisper.cpp models.</p>
+<p>The Life Log state in the main window, the mini window, and the menu bar panel share one record button. While stopped, the button is an ink circle with a rose dot. While a recording intent exists, it is a rose stop symbol, and it keeps the rose look while reconnecting or paused for a voice memo. The button has no visible text. Its tooltip and accessibility label are "Start Life Log Recording" and "Stop Life Log Recording". The text beside it is the state: "Life Log Stopped", "Starting Life Log", "Life Log Recording", "Reconnecting Life Log", or "Life Log Paused".</p>
+<p>A message that does not prevent continued operation, such as an audio configuration change or a processing failure, appears as a dismissible banner with <code>×</code> at its right edge. Dismissing removes only the message. It does not affect the recording intent, automatic reconnection, or stored data.</p>
+<p>The CLI installer links <code>~/.local/bin/lore</code> to the CLI inside Lore.app, so it changes neither the shell settings nor <code>PATH</code>. The Agent Skill is placed in <code>~/.agents/skills/lore</code> and linked from <code>~/.claude/skills/lore</code>. Neither installer overwrites a file that Lore does not manage.</p>
 </section>
-<section id="data">
-<h2>6. 保存、backup、削除</h2>
+<section id="storage-backup-and-deletion">
+<h2>6. Storage, backup, and deletion</h2>
 <table>
 <thead>
-<tr>
-<th>Data</th>
-<th>保存先</th>
-<th>既定保持</th>
-</tr>
+<tr><th>Data</th><th>Location</th><th>Default retention</th></tr>
 </thead>
 <tbody>
-<tr>
-<td>履歴、mode、語彙、life log</td>
-<td>
-<code>Application Support/Lore/lore.sqlite</code>
-</td>
-<td>履歴は無期限</td>
-</tr>
-<tr>
-<td>Life-log audio</td>
-<td>Application Support配下</td>
-<td>文字起こしの成功後に削除。7日または30日へ変更可能</td>
-</tr>
-<tr>
-<td>設定</td>
-<td>UserDefaults</td>
-<td>app data削除まで</td>
-</tr>
-<tr>
-<td>whisper.cpp model</td>
-<td><code>Application Support/Lore/Models/WhisperCpp/</code></td>
-<td>個別削除または全data削除まで</td>
-</tr>
-<tr>
-<td>API key</td>
-<td>macOS Keychain</td>
-<td>個別削除まで</td>
-</tr>
-<tr>
-<td>同期の鍵</td>
-<td>macOS Keychain（このMacだけ。iCloud Keychainへは同期しない）</td>
-<td>同期の解除または全data削除まで</td>
-</tr>
-<tr>
-<td>同期の変更file</td>
-<td>利用者が選んだfolderの<code>Lore Sync/</code></td>
-<td>Loreは削除しない。利用者がfolderごと管理する</td>
-</tr>
-<tr>
-<td>DB backup</td>
-<td>
-<code>Application Support/Lore/Backups/</code>
-</td>
-<td>最新7file</td>
-</tr>
+<tr><td>History, modes, common rules, vocabulary, Life Log</td><td><code>~/Library/Application Support/Lore/lore.sqlite</code></td><td>History is kept forever. The rest follows each setting</td></tr>
+<tr><td>Life Log audio</td><td><code>~/Library/Application Support/Lore/LifeLog/</code></td><td>Deleted after transcription succeeds. Can be changed to 7 or 30 days</td></tr>
+<tr><td>whisper.cpp models</td><td><code>~/Library/Application Support/Lore/Models/WhisperCpp/</code></td><td>Until the user deletes one, or resets Lore</td></tr>
+<tr><td>General settings (including display language)</td><td>App UserDefaults</td><td>Until the user resets Lore</td></tr>
+<tr><td>API keys</td><td>macOS Keychain</td><td>Until the user replaces one, or resets Lore</td></tr>
+<tr><td>Sync key</td><td>macOS Keychain (this Mac only, not synced to iCloud Keychain)</td><td>Until the user turns off sync, or resets Lore</td></tr>
+<tr><td>Sync change files</td><td><code>Lore Sync/</code> in the folder that the user chose</td><td>Lore never deletes them. The user manages the folder</td></tr>
+<tr><td>Database backups</td><td><code>~/Library/Application Support/Lore/Backups/</code></td><td>The 7 newest files</td></tr>
 </tbody>
 </table>
 <ul>
-<li>未適用migration直前と、同日重複なしの1日1回にDB backupを作ります。失敗時はmigrationしません。</li>
-<li>「全dataを削除」はDB内利用者data、保存audio、download済みwhisper.cpp model、途中download file、旧WhisperKit model、DB backupを削除します。設定とKeychainは画面に示す個別範囲に従います。</li>
-
-<li>TODO、日次要約、話題、cloud AIのtoken集計を保存していた旧版DBは、更新時のmigration直前backupを作ってからそれらのtableを削除します。発話、memo、予定、音声入力履歴は変更しません。旧版でlife log用に登録したAPI keyは読み出さず、「全dataを削除」でKeychainから消します。</li>
+<li>Lore backs up an existing database immediately before it applies pending migrations. On a normal launch it also backs up once per day.</li>
+<li>If the backup fails, the migration does not start.</li>
+<li>Settings &gt; Privacy has three deletions. Each asks for confirmation and cannot be undone.</li>
 </ul>
-<h3 id="sync">6.1 Mac間の同期</h3>
-<ul>
-<li>設定の「同期」から、複数のMacで同じ文字dataを使えます。既定は無効です。</li>
-<li>同期するのは、life logの発話text、memo（追加・編集・削除）、音声入力履歴（生text、整形結果、status、mode snapshot、対象app名・bundle ID、provider/model、error、時間）、語彙です。</li>
-<li>録音audio、API key、設定、予定の控え（各Macが自分のcalendarから読む）、whisper.cpp model、DB backup、modeは同期しません。他のMacから届いた発話は保存audioを持たず、予定との関連付けも持ちません。</li>
-<li>Loreは利用者が選んだfolder（iCloud Drive、Dropbox、Syncthingなど）の中の<code>Lore Sync/</code>へ、暗号化した変更fileだけを書きます。Lore自身はnetwork通信をせず、fileの運搬はfolderの提供元に任せます。</li>
-<li>暗号化はMac内でAES-GCM（256-bit鍵）を使って行います。鍵は最初のMacで生成して「同期コード」として表示し、ほかのMacではそのコードを入力して参加します。鍵は各MacのKeychainだけに保存し、folderの提供元は中身を読めません。同期コードは参加済みのMacの設定から確認操作のあと再表示できます。参加済みのMacをすべて失い同期コードも控えていない場合、folderの内容は誰も読めません。</li>
-<li>違う同期コードはfolder内の確認fileで検出し、参加を拒否します。読めない、改ざんされた、途中までしか届いていない、新しい形式の変更fileは取り込まず、理由を設定画面とlogに出して次回の同期で再試行します。そのfileより後の同じMacの変更も、順序を保つため取り込みを待ちます。</li>
-<li>変更は数秒後にまとめて書き出します。取り込みは起動時、Loreが前面に来た時、2分ごと、「今すぐ同期」で行います。iCloud Driveでまだ手元に無いfileはdownloadを要求し、届いた後の同期で取り込みます。</li>
-<li>同じ項目を複数のMacで変更した場合は、変更時刻が新しい方を採用します。削除も時刻付きで記録し、それより古い変更で復活しません。</li>
-<li>利用者が個別に行った削除（memo、音声入力履歴1件、語彙）はほかのMacにも反映します。履歴とaudioの保持期間による自動削除、「音声入力履歴をすべて削除」「ライフログを削除」「Loreを初期化」は、このMacのdataだけを消します。</li>
-<li>同期を有効にした時点でこのMacにある対象dataはすべて書き出します。</li>
-<li>「同期を解除」と「Loreを初期化」は、このMacの同期鍵と同期状態を消し、変更の書き出しと取り込みを止めます。folder内のfileは削除しません。</li>
-</ul>
-</section>
-<section id="shortcuts">
-<h2>7. macOS Shortcuts</h2>
-<p>Loreは下記のApp Intent ActionをShortcutsへ公開します。各ActionはLoreの起動とDB初期化完了を待ってから実行します。「ライフログを開始」はマイクを扱うためLoreをforegroundで起動し、「ライフログを終了」はbackgroundで実行します。</p>
 <table>
 <thead>
-<tr>
-<th>Action</th>
-<th>Contract</th>
-</tr>
+<tr><th>Row</th><th>What it deletes</th><th>What it keeps</th></tr>
 </thead>
 <tbody>
-<tr>
-<td>ライフログを開始</td>
-<td>冪等に開始。同意前はLoreを開くようerror</td>
-</tr>
-<tr>
-<td>ライフログを終了</td>
-<td>停止し、進行中の文字起こしと保存を待つ</td>
-</tr>
+<tr><td>Dictation History</td><td>Transcripts and formatted text</td><td>Vocabulary, Life Log, settings, Keychain</td></tr>
+<tr><td>Life Log</td><td>Utterances, memos, imported events, and stored audio</td><td>Dictation history, settings, Keychain</td></tr>
+<tr><td>All Data ("Reset Lore…")</td><td>History, Life Log, stored audio, vocabulary, modes, common rules, downloaded whisper.cpp models, partial downloads, legacy WhisperKit models, database backups, and every Keychain item (API keys, the sync key, and keys registered by older versions). Settings return to their defaults, sync is turned off, and the built-in modes and common rules are created again</td><td>Files in the sync folder</td></tr>
 </tbody>
 </table>
-<p>日別の書き出しはCLIまたはMCPから行います。</p>
+<ul>
+<li>A database from an older version that stored to-do items, daily summaries, topics, or cloud AI token counts is backed up immediately before migration, and then those tables are deleted. Utterances, memos, events, and dictation history are unchanged. API keys that an older version registered for the Life Log are never read and are removed from the Keychain by "Reset Lore…".</li>
+</ul>
+<h3>6.1 Sync between Macs</h3>
+<ul>
+<li>Settings &gt; Sync lets several Macs use the same text data. It is off by default.</li>
+<li>Synced: Life Log utterance text, memos (additions, edits, deletions), dictation history (raw text, formatted result, status, mode snapshot, target app name and bundle ID, engine and model, error, timings), and vocabulary.</li>
+<li>Not synced: recorded audio, API keys, settings, event snapshots (each Mac reads its own calendar), whisper.cpp models, database backups, and modes. An utterance that arrives from another Mac has no stored audio and no event association.</li>
+<li>Lore writes only encrypted change files into <code>Lore Sync/</code> inside the folder that the user chose (iCloud Drive, Dropbox, Syncthing, and so on). Lore itself makes no network connection. The folder provider transports the files.</li>
+<li>Encryption happens on the Mac with AES-GCM and a 256-bit key. The first Mac generates the key and shows it as a "sync code". Other Macs join by entering that code. The key is stored only in each Mac's Keychain, and the folder provider cannot read the contents. A joined Mac can show the sync code again from Settings after a confirmation. If every joined Mac is lost and the sync code was not written down, nobody can read the folder.</li>
+<li>A wrong sync code is detected with a check file in the folder, and joining is refused. A change file that is unreadable, tampered with, only partly delivered, or in a newer format is not imported. Lore shows the reason in Settings and in the log and retries at the next sync. Later changes from the same Mac wait behind that file to keep their order.</li>
+<li>Changes are written out together a few seconds after they happen. Import runs at launch, when Lore comes to the front, every 2 minutes, and on "Sync Now". For an iCloud Drive file that is not yet local, Lore requests the download and imports it in a later sync.</li>
+<li>When several Macs change the same item, the change with the newer timestamp wins. A deletion is also recorded with its time, and an older change does not bring the item back.</li>
+<li>Deletions that the user makes one at a time (a memo, one dictation history entry, a vocabulary entry) reach the other Macs. Automatic deletion by the history or audio retention period, "Delete History", "Delete Life Log", and "Reset Lore…" delete only this Mac's data.</li>
+<li>When sync is turned on, Lore writes out all the target data that this Mac already has.</li>
+<li>"Turn Off Sync" and "Reset Lore…" delete this Mac's sync key and sync state and stop writing and importing changes. They do not delete the files in the folder.</li>
+</ul>
+</section>
+<section id="macos-shortcuts-app-intents">
+<h2>7. macOS Shortcuts / App Intents</h2>
+<p>Lore exposes the following App Intent actions to Shortcuts. Each action waits for Lore to launch and for database initialization to finish before it runs. "Start Life Log" launches Lore in the foreground because it uses the microphone. "Stop Life Log" runs in the background.</p>
+<table>
+<thead>
+<tr><th>Action</th><th>Input / Output</th></tr>
+</thead>
+<tbody>
+<tr><td>Start Life Log</td><td>Starts recording, idempotently. Returns an error if the user has not consented to audio storage</td></tr>
+<tr><td>Stop Life Log</td><td>Stops recording and waits for the transcription and saving in progress</td></tr>
+</tbody>
+</table>
+<p>Day export is available from the CLI and MCP, not from Shortcuts.</p>
 </section>
 <section id="cli">
 <h2>8. CLI</h2>
-<p>Build productは<code>lore-cli</code>、配布/link後は<code>lore</code>です。失敗はstderrとexit status 1で返します。</p>
-<pre>lore export day [--date YYYY-MM-DD] [--include calendar,speech,voice-input,memos] [--clipboard|--output PATH]
-lore search "検索語" [--limit N]
+<p>The build product is named <code>lore-cli</code>. The installed and linked name is <code>lore</code>. On success the CLI writes to standard output. On failure it writes <code>lore: ...</code> to stderr and exits with status 1. <code>lore help</code>, <code>--help</code>, and <code>-h</code> print the usage.</p>
+<pre><code>lore export day [--date YYYY-MM-DD] [--include calendar,speech,voice-input,memos] [--clipboard|--output PATH]
+lore search &quot;query&quot; [--limit N]
 lore days [--from YYYY-MM-DD] [--to YYYY-MM-DD]
-lore range --from YYYY-MM-DD [--to YYYY-MM-DD] [--include calendar,speech,voice-input,memos]</pre>
-<p>
-<code>--clipboard</code>と<code>--output</code>は同時指定できません。<code>--output .</code>は既定filenameを現在directoryへ書きます。検索結果はtab区切りです。<code>days</code>と<code>range</code>はMCPの<code>life_log_days</code>、<code>life_log_range</code>と同じJSONを出します。CLIは読み取り専用です。</p>
+lore range --from YYYY-MM-DD [--to YYYY-MM-DD] [--include calendar,speech,voice-input,memos]</code></pre>
+<ul>
+<li><code>--clipboard</code> and <code>--output</code> cannot be combined. <code>--output .</code> writes the default file name, <code>Lore-LifeLog-YYYY-MM-DD.md</code>, into the current directory.</li>
+<li>An unknown <code>--include</code> value is an error.</li>
+<li>Search results are tab-separated lines, newest first. The default limit is 100.</li>
+<li><code>days</code> and <code>range</code> print the same JSON as the MCP tools <code>life_log_days</code> and <code>life_log_range</code>.</li>
+<li>The CLI never changes the user's records. Like the app, opening the database applies pending migrations with their backup, takes the daily backup, and performs the one-time Koe data migration.</li>
+</ul>
 </section>
 <section id="mcp">
 <h2>9. MCP</h2>
-<p>
-<code>lore-mcp</code>は1行1JSONのstdio JSON-RPC serverです。Protocol <code>2025-03-26</code>、server <code>1.0.0</code>。Tool errorはresponseの<code>isError: true</code>とtextで返します。</p>
+<p><code>lore-mcp</code> is a stdio JSON-RPC server that reads and writes one JSON object per line. The MCP protocol version is <code>2025-03-26</code> and the server version is <code>1.0.0</code>. It does not answer notifications. Protocol errors are JSON-RPC errors (<code>-32600</code> invalid request, <code>-32601</code> method not found, <code>-32602</code> invalid parameters). A failure inside a tool call is returned as a successful JSON-RPC response with <code>isError: true</code> and a text.</p>
 <table>
 <thead>
-<tr>
-<th>Tool</th>
-<th>Arguments</th>
-<th>結果</th>
-</tr>
+<tr><th>Tool</th><th>Arguments</th><th>Result</th></tr>
 </thead>
 <tbody>
-<tr>
-<td><code>life_log_days</code></td>
-<td><code>from?: YYYY-MM-DD</code>, <code>to?: YYYY-MM-DD</code>。省略時は今日までの30日間。最大366日</td>
-<td>記録がある日だけの配列。<code>day</code>、<code>utterances</code>、<code>dictations</code>、<code>memos</code>、<code>events</code>の件数と、timelineに残る発話の秒数<code>spokenSeconds</code></td>
-</tr>
-<tr>
-<td><code>life_log_range</code></td>
-<td><code>from: YYYY-MM-DD</code>, <code>to?: YYYY-MM-DD</code>（両端を含む。省略時は<code>from</code>の1日だけ。最大31日）, <code>include?: [calendar,speech,voice-input,memos]</code>（省略時はすべて）</td>
-<td>時刻順の項目配列。各項目は<code>id</code>、<code>kind</code>（<code>event</code>、<code>utterance</code>、<code>dictation</code>、<code>memo</code>）、<code>day</code>、<code>start</code>、任意の<code>end</code>、<code>text</code>。予定は<code>title</code>、<code>calendar</code>、<code>allDay</code>も持つ</td>
-</tr>
-<tr>
-<td><code>life_log_export</code></td>
-<td><code>date?: YYYY-MM-DD</code>, <code>include?: [calendar,speech,voice-input,memos]</code></td>
-<td>人間向けMarkdown</td>
-</tr>
-<tr>
-<td><code>life_log_search</code></td>
-<td><code>query: string</code>, <code>limit?: integer</code></td>
-<td><code>day</code>、<code>kind</code>、本文のtab区切り行</td>
-</tr>
+<tr><td><code>life_log_days</code></td><td><code>from?: YYYY-MM-DD</code>, <code>to?: YYYY-MM-DD</code>. <code>to</code> defaults to today and <code>from</code> defaults to 29 days before <code>to</code>. At most 366 days</td><td>An array with only the days that have records. Each has <code>day</code>, the counts <code>utterances</code>, <code>dictations</code>, <code>memos</code>, and <code>events</code>, and <code>spokenSeconds</code>, the seconds of utterances that remain in the timeline</td></tr>
+<tr><td><code>life_log_range</code></td><td><code>from: YYYY-MM-DD</code>, <code>to?: YYYY-MM-DD</code> (inclusive, defaults to the single day <code>from</code>, at most 31 days), <code>include?: [calendar,speech,voice-input,memos]</code> (defaults to all)</td><td>An array of entries in time order. Each has <code>id</code>, <code>kind</code> (<code>event</code>, <code>utterance</code>, <code>dictation</code>, <code>memo</code>), <code>day</code>, <code>start</code>, optional <code>end</code>, and <code>text</code>. Events also have <code>title</code>, <code>calendar</code>, and <code>allDay</code></td></tr>
+<tr><td><code>life_log_export</code></td><td><code>date?: YYYY-MM-DD</code>, <code>include?: [calendar,speech,voice-input,memos]</code></td><td>Human-readable Markdown</td></tr>
+<tr><td><code>life_log_search</code></td><td><code>query: string</code>, <code>limit?: integer</code> (minimum 1, default 100)</td><td>Tab-separated lines of <code>day</code>, <code>kind</code>, and text, newest first</td></tr>
 </tbody>
 </table>
 <ul>
-<li>時刻はISO8601のlocal時差付き文字列です。予定はlife log設定の参加中filterに従い、成功した音声入力と重なるlife-log発話は画面・書き出しと同じく除きます。</li>
-<li>MCPは読み取り専用です。Loreへの書き戻しは提供せず、読み出した発話やmemoを別のアプリへ清書・転記するのはMCP client側のAIの役割です。serverはMac内のDBを読むだけで、外部へ通信しません。</li>
+<li>Times are ISO 8601 strings with the local UTC offset. Events follow the participation filter of the Life Log settings. Life Log utterances that overlap a successful dictation are excluded, as on screen and in exports.</li>
+<li>MCP never changes the user's records and offers no write-back to Lore. Rewriting utterances or memos and copying them into another app is the job of the AI on the MCP client side. The server reads the database on the Mac and makes no network connection. Opening the database has the same maintenance effects as the CLI (section 8).</li>
 </ul>
 </section>
-<section id="failures">
-<h2>10. 障害時の外部挙動</h2>
-<div class="grid">
-<article class="card">
-<h3>STT</h3>
-<p>確定不能はfailed。SpeechAnalyzerのprocess再起動、whisper.cpp modelの未download・破損・容量不足など、engine別の復旧方法を案内します。</p>
-</article>
-<article class="card">
-<h3>LLM / Insert</h3>
-<p>整形失敗はrawへfallback。挿入失敗はclipboardへ結果を残します。</p>
-</article>
-<article class="card">
-<h3>DB</h3>
-<p>初期化、保存、検索、backup失敗を成功扱いせず、画面/CLI/MCP/logへ理由を出します。</p>
-</article>
-<article class="card">
-<h3>Life log</h3>
-<p>記録中断は有効中だけ再接続。停止timeoutでも保存済みaudioは次回再処理します。</p>
-</article>
-</div>
+<section id="behavior-on-failure">
+<h2>10. Behavior on failure</h2>
+<ul>
+<li>If speech recognition cannot produce a final result, the dictation becomes <code>failed</code> and Lore shows the reason. When SpeechAnalyzer reaches a state that needs a process restart, Lore shows the reason and relaunches itself. If that happens within the first 5 minutes after launch, Lore only shows the message, so it cannot loop. For a whisper.cpp model that is not downloaded, is corrupt, or does not fit on disk, the settings page shows how to recover.</li>
+<li>A formatting failure falls back to the raw transcript. An insertion failure leaves the result on the clipboard.</li>
+<li>A failure of database initialization, saving, search, or backup is never treated as success. Lore reports the reason on screen, through the CLI or MCP, or in the log.</li>
+<li>An interrupted Life Log capture reconnects automatically only while recording is enabled, and stored chunks are not lost.</li>
+<li>If the Shortcuts stop action times out, its error says that the stored audio will be reprocessed at the next launch.</li>
+</ul>
 </section>
-<section id="acceptance">
-<h2>11. 受け入れ条件</h2>
+<section id="acceptance-criteria">
+<h2>11. Acceptance criteria</h2>
 <ol>
-<li>オンデバイス構成では文字起こしと指示文がMac外へ送られない。</li>
-<li>Cloud構成は明示選択後だけ使われ、送信範囲を設定画面で確認できる。</li>
-<li>通常の音声入力audioは保存されず、life-log audioは同意後だけ保存される。</li>
-<li>整形失敗後もraw transcript、挿入失敗後もclipboardから内容を回収できる。</li>
-<li>履歴から当時のmode、指示、provider、model、結果、状態を確認できる。</li>
-<li>保留life-log chunkは再起動後に再処理される。</li>
-<li>Migration前backupと日次backupが作られ、合計7file以内に保たれる。</li>
-<li>CLI、MCP、Shortcutsの公開interfaceが本書と一致する。</li>
-<li>Life logの実録音中だけmenu barのmonochrome Lore icon右下にrose色badgeが表示され、停止または再接続待ちではbadgeなしへ戻る。</li>
-<li>Life log記録中に成功した音声入力は一件だけ表示・検索・書き出しへ現れる。Cancelまたは失敗した音声入力の時間帯はlife-log発話が失われない。</li>
-<li>Life logの発話、memo、予定はLoreからLLMやcloudへ送信されず、要約・話題・TODOは生成されない。</li>
-<li>Calendar設定から予定を再取得すると、現在選択日のsnapshot、timeline、月間activityが更新される。</li>
-<li>マイク切替などの音声構成変更後も、記録開始意図が残る限りlife-log captureが自動再開する。</li>
-<li>ボイスメモ一回につきmemoだけが一件作られ、通常の音声入力履歴とlife-log utteranceには同じ内容が追加されない。</li>
-<li>通常起動時にmain windowのlife-log画面が前面のkey windowとして開き、memo入力欄の音声ボタンは専用hotkeyと同じボイスメモを開始・停止する。</li>
-<li>「処理後削除」でも未処理・失敗chunkは残り、文字起こしが成功したaudioだけが削除される。</li>
-<li>通常起動時、main windowでlife logを開いた時、mini windowを開いた時は、今日のtimelineの最新項目が表示される。</li>
-<li>Timelineは予定・発話・音声入力・memoを時刻順に表示し、検索はCommand-Fでも開く。</li>
-<li>Mini windowはtitle barなしの一列timelineで予定と記録を時刻順に表示し、進行中の予定を上部へ固定する。明示的に閉じるまでSpace切替やfull-screen appの利用中も手前に残り、通常の文字入力ではtoggleされない。</li>
-<li>Main window、mini window、menu barの記録状態は実際のaudio writerの稼働状態から同期され、内部の文字起こし状態で文言をちらつかせない。Main/mini windowでは開始・停止をmemo入力欄と同じ浮いたbarの左端に配置する。</li>
-<li>継続可能なmessageは<code>×</code>で閉じられ、dismissしても自動再接続や記録開始意図は変わらない。</li>
-<li>月間calendarは表示中の日をprimary colorの円で塗り、それ以外の今日をprimary colorの数字で示す。</li>
-<li>TODO・要約・token集計を持つ旧版DBを開くと、migration直前backupを残してそれらを削除し、発話、memo、検索は引き続き使える。</li>
-<li>App起動時に前回processの記録開始意図を復元しない。自動記録が有効なら、時間帯の中での起動・復帰・時間帯の開始で記録を始め、時間帯の終了では自動記録が始めた記録だけを止める。時間帯の途中で手動停止した場合は次の時間帯まで再開しない。</li>
-<li>音声入力・ボイスメモとlife logは、それぞれSpeechAnalyzerまたはdownload済みwhisper.cpp modelを選べる。音声入力でwhisper.cppを選ぶと停止後に録音全体を一括認識し、modelは両用途で共有する。Download・cancel・再試行・削除・容量を設定で管理でき、audioはMac外へ送信しない。</li>
-<li>Life logは線形RMSが約-50 dBFS以上で、background noise floorに対する相対差も短時間継続した場合だけ認識jobを作る。Whisper.cppでは前のpreviewが完了している場合に限り、発話中に1.5秒cadence・直近5秒の暫定textを表示し、30秒未満の発話は1.5秒、30秒以上は1秒の無音でflushする。Burst確定時にaudioをcommitし、暫定textは永続化しない。</li>
-<li>累積有声時間0.5秒未満または有声比率20%未満の候補はpreview、最終STT、burst checkpointを開始せず、保存audioの再処理でも除外する。Main/mini timelineは末尾表示中だけ新しい項目へ追従し、末尾を離れた場合は追従を止める。</li>
-<li>whisper.cppの既知の定型hallucination「ご視聴ありがとうございました」は独立した文だけをengine境界で除外し、同じsegmentの実発話は保持する。</li>
-<li>同期を有効にした2台のMacは、folderに暗号化した変更fileだけを置いて発話text、memo、音声入力履歴、語彙を共有する。違う同期コードは拒否され、読めない変更fileは取り込まずに理由を表示し、後で届けば取り込む。個別削除は他のMacへ反映し、保持期間による削除と一括削除は反映しない。</li>
+<li>With the on-device configuration, neither transcripts nor instructions leave the Mac.</li>
+<li>A cloud configuration is used only after the user explicitly selects it, and Settings shows what is sent.</li>
+<li>Dictation audio is never stored. Life Log audio is stored only after consent.</li>
+<li>After a formatting failure the raw transcript is recoverable, and after an insertion failure the result is recoverable from the clipboard.</li>
+<li>The history shows the mode, instructions, engines, result, and status that applied at the time.</li>
+<li>Pending Life Log chunks are reprocessed after a restart.</li>
+<li>A pre-migration backup and a daily backup are created, and at most 7 backup files are kept in total.</li>
+<li>The public interfaces of the CLI, MCP, and Shortcuts match this document.</li>
+<li>The dot of the menu bar "L." icon is rose only while audio is actually being recorded, shows a gold ring while the Life Log reconnects, and has no color while stopped.</li>
+<li>A dictation that succeeds during Life Log recording appears exactly once in the timeline, search, and export. For the span of a canceled or failed dictation, the Life Log utterances are not lost.</li>
+<li>Life Log utterances, memos, and events are not sent from Lore to an LLM or the cloud, and no summaries, topics, or to-do items are generated.</li>
+<li>"Refresh Events" in the Calendar settings updates the snapshot of the currently selected day, the timeline, and the monthly activity.</li>
+<li>After an audio configuration change such as a microphone switch, Life Log capture resumes automatically as long as the recording intent remains.</li>
+<li>One voice memo creates exactly one memo, and the same content is added neither to the dictation history nor to the Life Log utterances.</li>
+<li>On a normal launch the Life Log screen of the main window opens as the frontmost key window, and the voice button in the memo field starts and stops the same voice memo as the dedicated hotkey.</li>
+<li>With "Delete After Transcription", unprocessed and failed chunks remain, and only audio whose transcription succeeded is deleted.</li>
+<li>On a normal launch, when the Life Log is opened in the main window, and when the mini window opens, the latest item of today's timeline is visible.</li>
+<li>The timeline is one column with no header and shows events, utterances, dictations, and memos in time order. Selecting a date updates the events and the timeline, and search also opens with <code>Command-F</code>.</li>
+<li>The mini window is a one-column timeline without a title bar, shows events and records in time order, and pins the event in progress at the top. It stays in front across Spaces and full-screen apps until closed, and ordinary typing does not toggle it.</li>
+<li>The recording state in the main window, the mini window, and the menu bar comes from the actual audio writer state and uses the same colors, symbols, and wording. In the main and mini windows, the record button is at the left end of the same floating bar as the memo field.</li>
+<li>A message that allows continued operation can be closed with <code>×</code>, and dismissing it changes neither automatic reconnection nor the recording intent.</li>
+<li>The monthly calendar fills the shown day with an ink circle, or a rose circle when that day is today, and shows today in rose when another day is shown.</li>
+<li>Opening a database from an older version with to-do items, summaries, or token counts leaves a pre-migration backup, deletes those tables, and keeps utterances, memos, and search working.</li>
+<li>The recording intent of the previous process is not restored at launch. With scheduled recording enabled, recording starts on launch or wake inside a window and at the start of a window, and only a recording that the schedule started stops at the end of the window. After a manual stop inside a window, recording does not resume until the next window.</li>
+<li>Dictation with voice memos, and the Life Log, each select SpeechAnalyzer or a downloaded whisper.cpp model. With whisper.cpp, dictation recognizes the whole recording after it stops, and both uses share one model. Settings shows the download, cancel, retry, and delete states and the sizes, and audio never leaves the Mac.</li>
+<li>The Life Log calibrates the background noise floor from linear RMS right after capture starts and keeps updating it from non-speech input. A burst starts only when the input stays above about -50 dBFS and sufficiently above the recent noise floor for a short time, so faint noise and steady air conditioning create no recognition job. With whisper.cpp, provisional text for the latest 5 seconds appears at a 1.5-second cadence while speaking, only when the previous preview has finished. A burst flushes after 1.5 seconds of silence under 30 seconds of speech and after 1 second at 30 seconds or more. Audio is committed when a burst ends, timestamps match the stored audio offset, provisional text is not persisted, and the vocabulary is the snapshot taken when the recording session started.</li>
+<li>A candidate with less than 0.5 seconds of voiced audio or a voiced ratio below 20% starts no preview, no final recognition, and no burst checkpoint, and is also excluded when stored audio is reprocessed. The main and mini timelines follow new items only while the bottom is visible, stop following after a scroll back or a jump to a source item, and resume at the bottom.</li>
+<li>The known whisper.cpp boilerplate hallucination "ご視聴ありがとうございました" is removed at the engine boundary only as a standalone sentence, and real speech in the same segment is kept.</li>
+<li>Two Macs with sync enabled share utterance text, memos, dictation history, and vocabulary by placing only encrypted change files in a folder. A different sync code is refused. An unreadable change file is not imported, its reason is shown, and it is imported when it arrives intact later. Individual deletions reach the other Mac. Deletions by retention period and bulk deletions do not.</li>
 </ol>
 </section>
 </main>
-<footer>細かなparameterと受け入れ条件は <a href="spec.md">Markdown版</a>、実装の配置は <a href="design.html">内部設計</a> を参照してください。</footer>
+<footer>Generated from <a href="spec.md">spec.md</a>.</footer>
 </body>
 </html>
