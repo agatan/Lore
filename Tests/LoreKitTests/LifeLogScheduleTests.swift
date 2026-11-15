@@ -87,7 +87,7 @@ struct LifeLogScheduleTests {
 }
 
 @Suite("ライフログ自動記録の判断")
-struct LifeLogScheduleControllerTests {
+struct LifeLogCaptureControllerTests {
     private var calendar: Calendar {
         var value = Calendar(identifier: .gregorian)
         value.timeZone = TimeZone(identifier: "Asia/Tokyo")!
@@ -102,7 +102,7 @@ struct LifeLogScheduleControllerTests {
 
     @Test("時間帯の開始で記録を始め、終了で自分が始めた記録だけを止める")
     func startsAndStopsOwnCapture() {
-        var controller = LifeLogScheduleController()
+        var controller = LifeLogCaptureController()
         #expect(controller.evaluate(schedule: schedule, now: date(8), hasCaptureIntent: false, calendar: calendar) == .none)
         #expect(controller.evaluate(schedule: schedule, now: date(9), hasCaptureIntent: false, calendar: calendar) == .start)
         #expect(controller.ownsCapture)
@@ -115,7 +115,7 @@ struct LifeLogScheduleControllerTests {
 
     @Test("手動で始めた記録は時間帯の終わりでも止めない")
     func manualCaptureIsNeverStopped() {
-        var controller = LifeLogScheduleController()
+        var controller = LifeLogCaptureController()
         controller.userChangedCapture(enabled: true, schedule: schedule, now: date(8), calendar: calendar)
         #expect(controller.evaluate(schedule: schedule, now: date(9), hasCaptureIntent: true, calendar: calendar) == .none)
         #expect(controller.evaluate(schedule: schedule, now: date(18), hasCaptureIntent: true, calendar: calendar) == .none)
@@ -123,7 +123,7 @@ struct LifeLogScheduleControllerTests {
 
     @Test("時間帯の途中で手動停止したら、その時間帯では再開せず次の時間帯で再開する")
     func manualStopSuppressesUntilNextWindow() {
-        var controller = LifeLogScheduleController()
+        var controller = LifeLogCaptureController()
         #expect(controller.evaluate(schedule: schedule, now: date(9), hasCaptureIntent: false, calendar: calendar) == .start)
         controller.userChangedCapture(enabled: false, schedule: schedule, now: date(10), calendar: calendar)
         #expect(!controller.ownsCapture)
@@ -134,16 +134,16 @@ struct LifeLogScheduleControllerTests {
 
     @Test("時間帯の中での起動や有効化では、記録していなければ始める")
     func startsWhenEnabledInsideWindow() {
-        var controller = LifeLogScheduleController()
+        var controller = LifeLogCaptureController()
         #expect(controller.evaluate(schedule: schedule, now: date(13), hasCaptureIntent: false, calendar: calendar) == .start)
-        var recording = LifeLogScheduleController()
+        var recording = LifeLogCaptureController()
         #expect(recording.evaluate(schedule: schedule, now: date(13), hasCaptureIntent: true, calendar: calendar) == .none)
         #expect(!recording.ownsCapture)
     }
 
     @Test("自動開始できなかった時間帯は終わるまで再試行しない")
     func failedStartIsNotRetriedInSameWindow() {
-        var controller = LifeLogScheduleController()
+        var controller = LifeLogCaptureController()
         #expect(controller.evaluate(schedule: schedule, now: date(9), hasCaptureIntent: false, calendar: calendar) == .start)
         controller.startFailed(schedule: schedule, now: date(9), calendar: calendar)
         #expect(controller.evaluate(schedule: schedule, now: date(10), hasCaptureIntent: false, calendar: calendar) == .none)
@@ -152,7 +152,7 @@ struct LifeLogScheduleControllerTests {
 
     @Test("無効化すると自分が始めた記録を止める")
     func disablingStopsOwnedCapture() {
-        var controller = LifeLogScheduleController()
+        var controller = LifeLogCaptureController()
         #expect(controller.evaluate(schedule: schedule, now: date(9), hasCaptureIntent: false, calendar: calendar) == .start)
         var disabled = schedule
         disabled.isEnabled = false
@@ -180,7 +180,7 @@ struct LifeLogScheduleEnvironmentTests {
 
         #expect(!env.lifeLog.hasCaptureIntent)
         #expect(!env.presentsLifeLogAudioConsent)
-        #expect(!env.lifeLogScheduleState.ownsCapture)
+        #expect(!env.lifeLogCaptureState.ownsCapture)
         #expect(env.lifeLog.errorMessage == String(lore: "自動記録を始められませんでした。録音の保存に同意するため、一度手動でライフログを開始してください"))
     }
 }

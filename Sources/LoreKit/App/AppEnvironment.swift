@@ -84,7 +84,7 @@ public final class AppEnvironment {
     @ObservationIgnored private var clockObservers: [any NSObjectProtocol] = []
     @ObservationIgnored private var scheduleTask: Task<Void, Never>?
     /// 自動記録の判断状態。表示（自動記録中か）にも使うため観測対象にする。
-    public private(set) var lifeLogScheduleState = LifeLogScheduleController()
+    public private(set) var lifeLogCaptureState = LifeLogCaptureController()
 
     public init() {
         Self.current = self
@@ -327,7 +327,7 @@ public final class AppEnvironment {
     /// UI、global hotkey、App Intentが共有するライフログ記録の状態遷移。
     /// 手動の開始・停止は自動記録の所有から外し、時間帯の途中の停止は次の時間帯まで再開しない。
     public func setLifeLogCaptureEnabled(_ enabled: Bool) {
-        lifeLogScheduleState.userChangedCapture(enabled: enabled, schedule: settings.lifeLogSchedule, now: Date())
+        lifeLogCaptureState.userChangedCapture(enabled: enabled, schedule: settings.lifeLogSchedule, now: Date())
         applyLifeLogCapture(enabled)
     }
 
@@ -395,15 +395,17 @@ public final class AppEnvironment {
         scheduleTask?.cancel()
         scheduleTask = nil
         let schedule = settings.lifeLogSchedule
-        switch lifeLogScheduleState.evaluate(schedule: schedule, now: now, hasCaptureIntent: lifeLog.hasCaptureIntent) {
+        switch lifeLogCaptureState.evaluate(schedule: schedule, now: now, hasCaptureIntent: lifeLog.hasCaptureIntent) {
         case .start:
             if settings.lifeLogAudioStorageConfirmed {
                 applyLifeLogCapture(true)
             } else {
                 // 同意画面を勝手に開かない。不在時に起きた時間帯の開始でwindowを奪わないため。
-                lifeLogScheduleState.startFailed(schedule: schedule, now: now)
+                lifeLogCaptureState.startFailed(schedule: schedule, now: now)
                 lifeLog.showNotice(String(lore: "自動記録を始められませんでした。録音の保存に同意するため、一度手動でライフログを開始してください"))
             }
+        case .resume:
+            applyLifeLogCapture(true)
         case .stop:
             applyLifeLogCapture(false)
         case .none:
@@ -424,7 +426,7 @@ public final class AppEnvironment {
         guard schedule.isEnabled else { return nil }
         let now = Date()
         if lifeLog.hasCaptureIntent {
-            guard lifeLogScheduleState.ownsCapture,
+            guard lifeLogCaptureState.ownsCapture,
                   let window = schedule.window(containing: now) else { return nil }
             return .recordingUntil(Self.scheduleTimeText(window.end, now: now))
         }
