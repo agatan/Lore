@@ -191,7 +191,7 @@ public final class AppEnvironment {
     }
 
     private func eventNotesSaved(_ note: GeneratedNote, event: CalendarEventSnapshot, automatic: Bool) async {
-        if LifeLogDateKey.string(for: lifeLog.selectedDate) == note.scope.day { await lifeLog.reload() }
+        await lifeLog.reload()
         guard automatic, settings.lifeLogAI.notifiesWhenEventNotesReady, Self.generatesAutomatically,
               case .event(let occurrence) = note.scope else { return }
         await notifications.postEventNotesReady(
@@ -515,8 +515,7 @@ public final class AppEnvironment {
 
     /// 今日のtimelineで進行中の、時刻のある予定。「予定が終わるまで」の一時停止に使う。
     public func currentLifeLogEvent(at now: Date = Date()) -> CalendarEventSnapshot? {
-        guard Calendar.current.isDate(lifeLog.selectedDate, inSameDayAs: now) else { return nil }
-        return lifeLog.day.calendarEvents.timedEventInProgress(at: now)
+        lifeLog.today.calendarEvents.timedEventInProgress(at: now)
     }
 
     public func setLifeLogEventSkipped(_ skipped: Bool, event: CalendarEventSnapshot) {

@@ -160,13 +160,12 @@ struct CalendarEventCard: View {
 /// 現在進行中の予定をscroll領域の外に置き、main / miniで同じ時刻判定を使う。
 struct CurrentCalendarEventStrip: View {
     var events: [CalendarEventSnapshot]
-    var selectedDate: Date
     var recording: (CalendarEventSnapshot) -> CalendarEventCard.Recording?
     var lastTime: (CalendarEventSnapshot) -> CalendarEventCard.LastTime?
 
     var body: some View {
         TimelineView(.periodic(from: .now, by: 30)) { context in
-            if Calendar.current.isDateInToday(selectedDate), let event = events.timedEventInProgress(at: context.date) {
+            if let event = events.timedEventInProgress(at: context.date) {
                 CalendarEventCard(event: event, isCurrent: true, compact: true, recording: recording(event), lastTime: lastTime(event))
                     .padding(.bottom, 6)
             }
@@ -182,8 +181,8 @@ extension AppEnvironment {
         }
     }
 
-    func eventLastTime(_ event: CalendarEventSnapshot) -> CalendarEventCard.LastTime? {
-        guard let value = lifeLog.day.lastTime(
+    func eventLastTime(_ event: CalendarEventSnapshot, in day: LifeLogDay) -> CalendarEventCard.LastTime? {
+        guard let value = day.lastTime(
             for: event,
             recordingExclusions: settings.lifeLogRecordingExclusions,
             aiSettings: settings.lifeLogAI,

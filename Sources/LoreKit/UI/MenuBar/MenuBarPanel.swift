@@ -88,7 +88,7 @@ struct MenuBarPanel: View {
 
     /// 停止中で自動記録の予定もない時は、今日どれだけ残したかを補足にする。
     private var todaySummary: LocalizedStringKey {
-        let summary = LifeLogDaySummary(day: env.lifeLog.day)
+        let summary = LifeLogDaySummary(day: env.lifeLog.today)
         return "今日 \(summary.utteranceCount)件の発話 · メモ \(summary.memoCount)件"
     }
 
