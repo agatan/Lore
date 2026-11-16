@@ -22,15 +22,15 @@ struct LifeLogPreviousOccurrenceTests {
                                                               text: "said \(id)", audioChunkID: nil, calendarEventID: eventID))
     }
 
-    private func note(eventID: String, day: String, actions: [String], questions: [String]) -> GeneratedNote {
+    private func note(eventID: String, day: String, commitments: [String], requests: [String]) -> GeneratedNote {
         GeneratedNote(
             kind: .eventNotes, scope: .event(EventOccurrence(eventID: eventID, day: day)),
             rangeStart: at(-7, 10), rangeEnd: at(-7, 10, 30), backend: .onDevice, model: "m", createdAt: at(-7, 11),
             sourceUtteranceIDs: [], sourceMemoIDs: [],
             sections: [
+                GeneratedNoteSection(kind: .commitments, items: commitments.map { GeneratedNoteItem(text: $0, sources: ["u-x"]) }),
+                GeneratedNoteSection(kind: .requests, items: requests.map { GeneratedNoteItem(text: $0, sources: ["u-x"]) }),
                 GeneratedNoteSection(kind: .decisions, items: [GeneratedNoteItem(text: "decided", sources: ["u-x"])]),
-                GeneratedNoteSection(kind: .actionItems, items: actions.map { GeneratedNoteItem(text: $0, sources: ["u-x"]) }),
-                GeneratedNoteSection(kind: .openQuestions, items: questions.map { GeneratedNoteItem(text: $0, sources: ["u-x"]) }),
             ]
         )
     }
@@ -81,18 +81,18 @@ struct LifeLogPreviousOccurrenceTests {
         #expect(day.previousOccurrences.isEmpty)
     }
 
-    @Test("The notes of the earlier occurrence give action items, then open questions, at most three")
+    @Test("The notes of the earlier occurrence give what the user took on, then what the user asked others for, at most three")
     func followUpsFromNotes() async throws {
         let db = try await LoreDatabase.inMemory()
         let sync = event("series", start: at(0, 10))
         try await db.lifeLog.save(calendarEvents: [sync])
         try await say(db, "last-week", at: at(-7, 10, 5), eventID: "series")
         let lastWeek = LifeLogDateKey.string(for: at(-7, 0), calendar: calendar)
-        try await db.lifeLog.save(generatedNote: note(eventID: "series", day: lastWeek, actions: ["a1", "a2"], questions: ["q1", "q2"]))
+        try await db.lifeLog.save(generatedNote: note(eventID: "series", day: lastWeek, commitments: ["c1", "c2"], requests: ["r1", "r2"]))
 
         let day = try await db.lifeLog.day(today, calendar: calendar)
         let lastTime = try #require(day.lastTime(for: sync, recordingExclusions: .init(), aiSettings: .init(), aiExcludedEventIDs: []))
-        #expect(lastTime.followUps.map(\.text) == ["a1", "a2", "q1"])
+        #expect(lastTime.followUps.map(\.text) == ["c1", "c2", "r1"])
         #expect(lastTime.previous.occurrence.day == lastWeek)
     }
 
@@ -103,7 +103,7 @@ struct LifeLogPreviousOccurrenceTests {
         try await db.lifeLog.save(calendarEvents: [sync])
         try await say(db, "last-week", at: at(-7, 10, 5), eventID: "series")
         let lastWeek = LifeLogDateKey.string(for: at(-7, 0), calendar: calendar)
-        try await db.lifeLog.save(generatedNote: note(eventID: "series", day: lastWeek, actions: ["a1"], questions: []))
+        try await db.lifeLog.save(generatedNote: note(eventID: "series", day: lastWeek, commitments: ["c1"], requests: []))
         let day = try await db.lifeLog.day(today, calendar: calendar)
 
         var skipped = LifeLogRecordingExclusions()

@@ -34,7 +34,7 @@ struct OvernightOccurrenceTests {
             kind: .eventNotes, scope: .event(EventOccurrence(eventID: "nightly", day: key(0))),
             rangeStart: tonight.startsAt, rangeEnd: tonight.endsAt, backend: .onDevice, model: "m", createdAt: at(1, 8),
             sourceUtteranceIDs: [], sourceMemoIDs: [],
-            sections: [GeneratedNoteSection(kind: .decisions, items: [GeneratedNoteItem(text: "decided", sources: ["u-x"])])]
+            sections: [GeneratedNoteSection(kind: .commitments, items: [GeneratedNoteItem(text: "decided", sources: ["u-x"])])]
         ))
 
         let day = try await db.lifeLog.day(today, calendar: calendar)

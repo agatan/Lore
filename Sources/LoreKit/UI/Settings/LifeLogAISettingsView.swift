@@ -16,7 +16,7 @@ struct LifeLogAISettingsView: View {
             SettingsCard(footnote: "オフの間は、ライフログの文章をどこにも送りません。") {
                 SettingsToggle(
                     title: "ライフログAI",
-                    caption: "予定が終わったときに、その時間の発話とメモから決定事項・やること・未解決の問いをまとめます。1日の終わりには、その日のまとめを作ります",
+                    caption: "予定が終わったときに、その時間の発話とメモから、自分が引き受けたこと・人に頼んだこと・自分が決めたことをまとめます。1日の終わりには、その日のまとめを作ります",
                     isOn: Binding(get: { value.isEnabled }, set: { enabled in
                         var next = value
                         next.isEnabled = enabled

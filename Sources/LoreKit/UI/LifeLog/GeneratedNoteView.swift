@@ -168,8 +168,8 @@ struct GeneratedNoteView: View {
     }
 
     private var emptyLabel: LocalizedStringKey {
-        if case .day = subject { return "まとめる決定事項・やること・残ったことはありませんでした" }
-        return "記録する決定事項・やること・未解決の問いはありませんでした"
+        if case .day = subject { return "まとめる引き受けたこと・頼んだこと・決めたことはありませんでした" }
+        return "引き受けたこと・頼んだこと・決めたことはありませんでした"
     }
 
     private func noteCard(_ note: GeneratedNote) -> some View {
@@ -272,7 +272,7 @@ struct GeneratedNoteView: View {
 
     private func sectionView(_ section: GeneratedNoteSection) -> some View {
         VStack(alignment: .leading, spacing: 4) {
-            Text(LocalizedStringKey(Self.title(section.kind, digest: kind == .dailyDigest)))
+            Text(LocalizedStringKey(Self.title(section.kind)))
                 .font(LoreTheme.sectionFont)
                 .foregroundStyle(.secondary)
             ForEach(Array(section.items.enumerated()), id: \.offset) { index, item in
@@ -281,7 +281,7 @@ struct GeneratedNoteView: View {
                 } label: {
                     HStack(alignment: .firstTextBaseline, spacing: 6) {
                         Text(verbatim: "•").foregroundStyle(.tertiary)
-                        (Text(verbatim: item.text) + (item.owner.map { Text(verbatim: "  ") + Text("担当: \($0)").foregroundStyle(.secondary) } ?? Text(verbatim: "")))
+                        (Text(verbatim: item.text) + (item.owner.map { Text(verbatim: "  ") + Text("相手: \($0)").foregroundStyle(.secondary) } ?? Text(verbatim: "")))
                             .multilineTextAlignment(.leading)
                             .wrapsFully(!isCompact)
                     }
@@ -298,13 +298,12 @@ struct GeneratedNoteView: View {
         }
     }
 
-    /// A digest calls open questions "things left open", because a day leaves more than questions open.
-    static func title(_ kind: GeneratedNoteSectionKind, digest: Bool = false) -> String {
+    static func title(_ kind: GeneratedNoteSectionKind) -> String {
         switch kind {
         case .summary: "この日のこと"
-        case .decisions: "決定事項"
-        case .actionItems: "やること"
-        case .openQuestions: digest ? "残ったこと" : "未解決の問い"
+        case .commitments: "自分が引き受けたこと"
+        case .requests: "人に頼んだこと"
+        case .decisions: "自分が決めたこと"
         }
     }
 

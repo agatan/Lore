@@ -148,9 +148,10 @@ public struct GeneratedNoteItem: Codable, Sendable, Hashable {
 public enum GeneratedNoteSectionKind: String, Codable, Sendable, CaseIterable {
     /// A few lines about what the day was about. Daily digest only.
     case summary
+    case commitments
+    /// What the user asked another person to do or answer. The item's owner is that person.
+    case requests
     case decisions
-    case actionItems = "action_items"
-    case openQuestions = "open_questions"
 }
 
 public struct GeneratedNoteSection: Codable, Sendable, Hashable {

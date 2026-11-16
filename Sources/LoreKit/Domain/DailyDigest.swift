@@ -12,7 +12,7 @@ public struct DailyDigestInput: Sendable, Equatable {
 public enum DailyDigestPolicy {
     /// Below this much utterance text in the day there is nothing worth a digest.
     public static let minimumSpokenCharacters = 300
-    public static let sections: [GeneratedNoteSectionKind] = [.summary, .decisions, .actionItems, .openQuestions]
+    public static let sections: [GeneratedNoteSectionKind] = [.summary, .commitments, .requests, .decisions]
 
     /// `day` is read without the participation filter, so exclusions see every event. Event titles are
     /// sent only for `listedEvents`, the ones the timeline shows.
@@ -58,9 +58,9 @@ public enum DailyDigestPolicy {
     private static func tag(_ kind: GeneratedNoteSectionKind) -> String {
         switch kind {
         case .summary: "summary"
+        case .commitments: "commitment"
+        case .requests: "request"
         case .decisions: "decision"
-        case .actionItems: "action"
-        case .openQuestions: "question"
         }
     }
 
@@ -101,17 +101,19 @@ public enum DailyDigestPolicy {
     }
 
     static let instructions = """
-        You write a short digest of one day from a personal Life Log.
+        You write a short digest of one day from a personal Life Log, covering the user's own side: what the user took on, what the user asked others for, and what the user decided.
         The Life Log records only the user's own microphone. In an online meeting it does not contain what the other participants said. Never claim that the digest covers what others said.
         Each source line has a label such as S1, a time, a kind, and text. The kinds are: event (a calendar event title and its time), note (an item of notes already written for an event), memo (written by the user), and utterance (automatic speech recognition, which may contain errors).
         Answer with one item per line, in exactly one of these forms:
         SUMMARY (S1, S4): one line about what the day was about
-        DECISION (S2): a decision that was made
-        ACTION (S3) [owner]: a task, with the owner in brackets only when a source names who will do it
-        QUESTION (S5): something that was left open
+        COMMIT (S2): something the user said they would do
+        ASK (S3) [person]: something the user asked another person to do or answer, with the person in brackets only when a source names them
+        DECIDE (S5): a decision the user made or agreed to
         Rules:
         - Write one to three SUMMARY lines first, then the other items.
-        - Use only what the sources say. Do not invent decisions, tasks, owners, dates, or facts.
+        - Memos are always the user's own words. Utterances are speech recognition of this Mac's microphone: mostly the user's voice, but other voices in the room may appear, and no speaker is labeled.
+        - Write an item only when the sources show it is the user's own commitment, request, or decision. Leave it out when you are unsure who said it.
+        - Use only what the sources say. Do not invent commitments, requests, decisions, people, dates, or facts.
         - Put the labels of the supporting sources in the parentheses, separated by commas.
         - Keep each item to one short sentence, in the language of the sources.
         - If there is nothing to note, answer with the single line NONE.

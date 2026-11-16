@@ -60,9 +60,9 @@ enum ScreenshotDemoData {
             sourceUtteranceIDs: ["demo-utterance-1"],
             sourceMemoIDs: [],
             sections: [
-                GeneratedNoteSection(kind: .decisions, items: [GeneratedNoteItem(text: copy.eventNote[0], sources: ["u-demo-utterance-1"])]),
-                GeneratedNoteSection(kind: .actionItems, items: [GeneratedNoteItem(text: copy.eventNote[1], owner: copy.me, sources: ["u-demo-utterance-1"])]),
-                GeneratedNoteSection(kind: .openQuestions, items: [GeneratedNoteItem(text: copy.eventNote[2], sources: ["u-demo-utterance-1"])]),
+                GeneratedNoteSection(kind: .commitments, items: [GeneratedNoteItem(text: copy.eventNote[0], sources: ["u-demo-utterance-1"])]),
+                GeneratedNoteSection(kind: .requests, items: [GeneratedNoteItem(text: copy.eventNote[1], owner: copy.asked, sources: ["u-demo-utterance-1"])]),
+                GeneratedNoteSection(kind: .decisions, items: [GeneratedNoteItem(text: copy.eventNote[2], sources: ["u-demo-utterance-1"])]),
             ]
         ))
 
@@ -95,9 +95,9 @@ enum ScreenshotDemoData {
                     GeneratedNoteItem(text: digest[0], sources: ["u-demo-utterance-1", "m-demo-memo-1"]),
                     GeneratedNoteItem(text: digest[1], sources: ["u-demo-utterance-4"]),
                 ]),
-                GeneratedNoteSection(kind: .decisions, items: [GeneratedNoteItem(text: digest[2], sources: ["u-demo-utterance-4"])]),
-                GeneratedNoteSection(kind: .actionItems, items: [GeneratedNoteItem(text: digest[3], owner: copy.me, sources: ["u-demo-utterance-5"])]),
-                GeneratedNoteSection(kind: .openQuestions, items: [GeneratedNoteItem(text: digest[4], sources: ["u-demo-utterance-2"])]),
+                GeneratedNoteSection(kind: .commitments, items: [GeneratedNoteItem(text: digest[2], sources: ["u-demo-utterance-4"])]),
+                GeneratedNoteSection(kind: .requests, items: [GeneratedNoteItem(text: digest[3], owner: copy.asked, sources: ["u-demo-utterance-2"])]),
+                GeneratedNoteSection(kind: .decisions, items: [GeneratedNoteItem(text: digest[4], sources: ["u-demo-utterance-5"])]),
             ]
         ))
         if ProcessInfo.processInfo.arguments.contains("--lore-demo-morning-digest") {
@@ -116,7 +116,7 @@ enum ScreenshotDemoData {
                 omittedSourceCount: 12,
                 sections: [
                     GeneratedNoteSection(kind: .summary, items: [GeneratedNoteItem(text: digest[5], sources: ["digest-yesterday"])]),
-                    GeneratedNoteSection(kind: .actionItems, items: [GeneratedNoteItem(text: digest[6], owner: copy.me, sources: ["digest-yesterday"])]),
+                    GeneratedNoteSection(kind: .commitments, items: [GeneratedNoteItem(text: digest[6], sources: ["digest-yesterday"])]),
                 ]
             ))
         }
@@ -149,7 +149,7 @@ enum ScreenshotDemoData {
     /// A weekly 1:1 in progress now, with last week's occurrence recorded and noted, for the "Last time" row.
     /// Behind its own flag so LP media, which do not control the clock, keep their layout.
     private static func seedRecurringEventInProgress(database: LoreDatabase, now: Date, calendar: Calendar, copy: DemoCopy) async throws {
-        let (title, said, firstAction, secondAction, question) = (copy.recurring[0], copy.recurring[1], copy.recurring[2], copy.recurring[3], copy.recurring[4])
+        let (title, said, firstCommitment, secondCommitment, request) = (copy.recurring[0], copy.recurring[1], copy.recurring[2], copy.recurring[3], copy.recurring[4])
         let start = now.addingTimeInterval(-10 * 60)
         let event = CalendarEventSnapshot(id: "demo-event-weekly", title: title, startsAt: start, endsAt: now.addingTimeInterval(20 * 60), calendarTitle: copy.calendar, participationStatus: .accepted)
         let lastWeek = calendar.date(byAdding: .day, value: -7, to: start) ?? start
@@ -174,11 +174,11 @@ enum ScreenshotDemoData {
             sourceUtteranceIDs: ["demo-weekly-last-week"],
             sourceMemoIDs: [],
             sections: [
-                GeneratedNoteSection(kind: .actionItems, items: [
-                    GeneratedNoteItem(text: firstAction, owner: copy.me, sources: ["u-demo-weekly-last-week"]),
-                    GeneratedNoteItem(text: secondAction, sources: ["u-demo-weekly-last-week"]),
+                GeneratedNoteSection(kind: .commitments, items: [
+                    GeneratedNoteItem(text: firstCommitment, sources: ["u-demo-weekly-last-week"]),
+                    GeneratedNoteItem(text: secondCommitment, sources: ["u-demo-weekly-last-week"]),
                 ]),
-                GeneratedNoteSection(kind: .openQuestions, items: [GeneratedNoteItem(text: question, sources: ["u-demo-weekly-last-week"])]),
+                GeneratedNoteSection(kind: .requests, items: [GeneratedNoteItem(text: request, sources: ["u-demo-weekly-last-week"])]),
             ]
         ))
     }
@@ -266,16 +266,18 @@ struct DemoCopy {
     var messageFrom: String
     var messageText: String
     var me: String
-    /// Decision, action item, and open question of the stored demo note.
+    /// The person the user asked in the demo requests.
+    var asked: String
+    /// Commitment, request, and decision of the stored demo note.
     var eventNote: [String]
-    /// Weekly 1:1 title, last week's utterance, two action items, and an open question.
+    /// Weekly 1:1 title, last week's utterance, two commitments, and a request.
     var recurring: [String]
     /// Back-to-back, overlapping, and declined titles of the `--lore-demo-busy-day` events.
     var busyDay: [String]
     /// Four memos from the weekly 1:1, oldest first. The row shows the newest three.
     var recurringMemos: [String]
-    /// Today's digest: two summary lines, a decision, an action item, and a thing left open.
-    /// Then yesterday's digest: a summary line and an action item.
+    /// Today's digest: two summary lines, a commitment, a request, and a decision.
+    /// Then yesterday's digest: a summary line and a commitment.
     var digest: [String]
     /// Descriptions of the three demo events and the weekly 1:1, each with a different join link.
     var eventDescriptions: [String]
@@ -323,16 +325,17 @@ struct DemoCopy {
         messageFrom: "Mika",
         messageText: "明日の1on1、時間大丈夫そうですか？",
         me: "自分",
-        eventNote: ["今日は初回体験の流れを確認する", "初回体験の流れを通しで確認する", "検索とエクスポートの次に何を見せるか"],
-        recurring: ["週次1on1", "評価面談の資料は金曜までに共有します。", "評価面談の資料を金曜までに共有する", "オンボーディング改善の進捗を確認する", "次の四半期の目標をどこまで広げるか"],
+        asked: "Aki",
+        eventNote: ["初回体験の流れを通しで確認する", "価格ページの文言を確認してもらう", "今日は初回体験の流れの確認を最優先にする"],
+        recurring: ["週次1on1", "評価面談の資料は金曜までに共有します。", "評価面談の資料を金曜までに共有する", "オンボーディング改善の進捗を確認する", "次の四半期の目標案を用意してもらう"],
         busyDay: ["顧客との定例", "採用の打ち合わせ", "全社ミーティング（辞退）"],
         recurringMemos: ["先週の評価の件、先に背景を聞く", "異動の希望は本人から切り出すのを待つ", "オンボーディングの遅れは人手の相談として出す", "来週までに目標案を自分から送る"],
         digest: [
             "初回体験の流れを確認し、オンボーディングで3つの機能を順に紹介することにした",
             "午後は設定画面の文言とデザインレビューの指摘を整理した",
-            "設定画面の文言は次のスプリントで見直す",
+            "設定画面の文言を次のスプリントで見直す",
+            "完了したタスクを後から戻せる場所の案を出してもらう",
             "次のベータでショートカットからの書き出しを試す",
-            "完了したタスクを後から戻せる場所をどう作るか",
             "リリース計画の前提をそろえ、ベータの配布日を金曜に決めた",
             "ベータの感想を集めるフォームを用意する",
         ],
@@ -374,16 +377,17 @@ struct DemoCopy {
         messageFrom: "Mika",
         messageText: "Does tomorrow's 1:1 still work for you?",
         me: "You",
-        eventNote: ["Today's focus is the first-run experience", "Walk through the first-run flow end to end", "What should come after search and export?"],
-        recurring: ["Weekly 1:1", "I'll share the review doc by Friday.", "Share the review doc by Friday", "Check progress on the onboarding fixes", "How far should next quarter's goals reach?"],
+        asked: "Aki",
+        eventNote: ["Walk through the first-run flow end to end", "Review the pricing page copy", "Make the first-run experience today's top priority"],
+        recurring: ["Weekly 1:1", "I'll share the review doc by Friday.", "Share the review doc by Friday", "Check progress on the onboarding fixes", "Bring a draft of next quarter's goals"],
         busyDay: ["Customer Sync", "Hiring Sync", "All-Hands (Declined)"],
         recurringMemos: ["Ask about the backstory of last week's review first", "Let them bring up the transfer request themselves", "Raise the onboarding delay as a staffing question", "Send my draft goals before next week"],
         digest: [
             "Walked through the first-run experience and settled on introducing the three core features in order",
             "In the afternoon, sorted out the settings wording and the design review feedback",
-            "Rework the settings screen wording next sprint",
+            "I'll rework the settings screen wording next sprint",
+            "Propose where finished tasks can come back from",
             "Try exporting from a shortcut in the next beta",
-            "How to give finished tasks a place to come back from",
             "Aligned the release plan and set Friday for the beta",
             "Prepare a form to collect beta feedback",
         ],
@@ -425,16 +429,17 @@ struct DemoCopy {
         messageFrom: "Mika",
         messageText: "明天的一对一时间还可以吗？",
         me: "我",
-        eventNote: ["今天先过一遍首次使用的流程", "从头到尾走一遍首次使用流程", "搜索和导出之后，接下来展示什么？"],
-        recurring: ["每周一对一", "评估资料我周五前发出来。", "周五前分享评估资料", "确认新手引导改进的进度", "下个季度的目标要定到多大？"],
+        asked: "Aki",
+        eventNote: ["从头到尾走一遍首次使用流程", "确认定价页面的文案", "把首次使用体验作为今天的重点"],
+        recurring: ["每周一对一", "评估资料我周五前发出来。", "周五前分享评估资料", "确认新手引导改进的进度", "请对方准备下个季度的目标草案"],
         busyDay: ["客户例会", "招聘沟通", "全员大会（已拒绝）"],
         recurringMemos: ["先问清楚上周评估的背景", "调岗的事等对方自己提", "把新手引导的延误作为人手问题提出来", "下周前我先发出目标草案"],
         digest: [
             "过了一遍首次使用流程，决定新手引导按顺序介绍三个核心功能",
             "下午整理了设置页面的文案和设计评审的意见",
-            "设置页面的文案下个迭代再改",
+            "我下个迭代重写设置页面的文案",
+            "提出完成的任务可以找回的位置方案",
             "下一个测试版试试用快捷键导出",
-            "完成的任务要放在哪里才能找回来",
             "对齐了版本规划，测试版定在周五发布",
             "准备收集测试版反馈的表单",
         ],

@@ -32,14 +32,14 @@ When the user turns it on in Settings > Life Log AI, Lore generates notes for ca
 
 For the notes of one calendar event, a request contains exactly these fields:
 
-- The fixed instructions that ask for decisions, action items, and open questions
+- The fixed instructions that ask what the user took on, asked others for, and decided
 - The event title
 - The event start and end time
 - For each Life Log utterance and memo inside the event's time range: its time, its kind (utterance or memo), and its text
 
 For the daily digest of one day, a request contains exactly these fields:
 
-- The fixed instructions that ask for a short summary, decisions, action items, and things left open
+- The fixed instructions that ask for a short summary and what the user took on, asked others for, and decided
 - The date
 - For each event of that day: its title, start time, and end time
 - The items of the event notes that Lore already generated for that day
