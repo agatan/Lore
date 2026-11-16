@@ -708,3 +708,6 @@
 "Googleカレンダーで開く" = "Open in Google Calendar";
 "Shift-Returnで改行" = "Shift-Return for a new line";
 "Returnで保存 · Shift-Returnで改行 · Escで取り消し" = "Return to save · Shift-Return for a new line · Esc to cancel";
+"すべて標準に戻す" = "Restore All Defaults";
+"共通ルールとすべてのモードを標準に戻しますか？" = "Restore the common rules and all modes to their defaults?";
+"編集した指示は出荷時の内容に戻り、追加したモードは削除されます。この操作は取り消せません。" = "Edited instructions return to their shipped content, and modes you added are deleted. You can’t undo this action.";

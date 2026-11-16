@@ -15,6 +15,7 @@ struct ModesSettingsView: View {
     @State private var draft: Mode?
     @State private var sharedDraft = ""
     @State private var showDeleteConfirm = false
+    @State private var showResetAllConfirm = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
@@ -116,6 +117,14 @@ struct ModesSettingsView: View {
                 .help("削除")
 
                 Spacer()
+
+                Button {
+                    showResetAllConfirm = true
+                } label: {
+                    Image(systemName: "arrow.counterclockwise")
+                }
+                .help("すべて標準に戻す")
+                .accessibilityIdentifier("modes.resetAll")
             }
             .buttonStyle(.bordered)
             .controlSize(.small)
@@ -133,6 +142,18 @@ struct ModesSettingsView: View {
                 }
             }
         } message: { Text("この操作は取り消せません。") }
+        .confirmationDialog(
+            "共通ルールとすべてのモードを標準に戻しますか？",
+            isPresented: $showResetAllConfirm
+        ) {
+            Button("すべて標準に戻す", role: .destructive) {
+                Task {
+                    await env.resetFormattingInstructions()
+                    selection = .sharedRules
+                    loadDraft()
+                }
+            }
+        } message: { Text("編集した指示は出荷時の内容に戻り、追加したモードは削除されます。この操作は取り消せません。") }
     }
 
     @ViewBuilder

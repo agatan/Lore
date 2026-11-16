@@ -138,6 +138,15 @@ public final class LoreDatabase: Sendable {
         }
     }
 
+    /// 整形の指示(共通ルールと全モード)を出荷時の状態へ一括で戻す。
+    /// ユーザーが作ったモードは消え、削除した同梱モードは戻る。履歴や語彙には触れない。
+    public func resetFormattingInstructions() async throws {
+        try await queue.write { db in
+            try ModeStore.resetAllToInitial(db: db)
+            try SharedRulesStore.reset(db: db)
+        }
+    }
+
     /// 設定(UserDefaults)と秘密(Keychain)以外の利用者データを一つのDB transactionで消す。
     public func deleteAllUserData() async throws {
         try await queue.write { db in

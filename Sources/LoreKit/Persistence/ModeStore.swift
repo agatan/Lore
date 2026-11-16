@@ -49,40 +49,49 @@ public struct ModeStore: Sendable {
     /// 判定には投入時に記録した「同梱プロンプトの写し」を使い、DB の内容がそれと一致していれば
     /// 未編集とみなす。写しが無い古い DB は一度だけ同梱内容に揃える(以降は編集が守られる)。
     public func seedBuiltinsIfNeeded() async throws {
-        try await queue.write { db in
-            for id in BuiltinModes.retiredModeIDs {
-                try db.execute(sql: "DELETE FROM modes WHERE id = ?", arguments: [id])
-                try db.execute(sql: "DELETE FROM meta WHERE key = ?", arguments: [Self.shippedPromptPrefix + id])
-            }
+        try await queue.write { db in try Self.seedBuiltins(db: db) }
+    }
 
-            let deleted = try Self.deletedShippedModeIDs(db: db)
-            let hasShippedRecords = try Self.hasShippedRecords(db: db)
+    static func seedBuiltins(db: Database) throws {
+        for id in BuiltinModes.retiredModeIDs {
+            try db.execute(sql: "DELETE FROM modes WHERE id = ?", arguments: [id])
+            try db.execute(sql: "DELETE FROM meta WHERE key = ?", arguments: [Self.shippedPromptPrefix + id])
+        }
 
-            for mode in BuiltinModes.all where !deleted.contains(mode.id) {
-                let storedPrompt = try String.fetchOne(
-                    db,
-                    sql: "SELECT prompt FROM modes WHERE id = ?",
-                    arguments: [mode.id]
-                )
+        let deleted = try Self.deletedShippedModeIDs(db: db)
+        let hasShippedRecords = try Self.hasShippedRecords(db: db)
 
-                if storedPrompt == nil {
-                    try Self.upsert(mode, db: db)
-                } else if let shipped = try Self.shippedPrompt(id: mode.id, db: db) {
-                    if shipped == storedPrompt, shipped != mode.prompt {
-                        try Self.updatePrompt(mode, db: db)
-                    }
-                } else if !hasShippedRecords, storedPrompt != mode.prompt {
-                    // 写しを持たない世代の DB。一度だけ同梱内容に合わせる。
+        for mode in BuiltinModes.all where !deleted.contains(mode.id) {
+            let storedPrompt = try String.fetchOne(
+                db,
+                sql: "SELECT prompt FROM modes WHERE id = ?",
+                arguments: [mode.id]
+            )
+
+            if storedPrompt == nil {
+                try Self.upsert(mode, db: db)
+            } else if let shipped = try Self.shippedPrompt(id: mode.id, db: db) {
+                if shipped == storedPrompt, shipped != mode.prompt {
                     try Self.updatePrompt(mode, db: db)
                 }
-
-                try db.execute(
-                    sql: "UPDATE modes SET is_builtin = ? WHERE id = ?",
-                    arguments: [mode.isBuiltin, mode.id]
-                )
-                try Self.recordShippedPrompt(mode, db: db)
+            } else if !hasShippedRecords, storedPrompt != mode.prompt {
+                // 写しを持たない世代の DB。一度だけ同梱内容に合わせる。
+                try Self.updatePrompt(mode, db: db)
             }
+
+            try db.execute(
+                sql: "UPDATE modes SET is_builtin = ? WHERE id = ?",
+                arguments: [mode.isBuiltin, mode.id]
+            )
+            try Self.recordShippedPrompt(mode, db: db)
         }
+    }
+
+    /// 全モードを出荷時の状態に戻す。ユーザーが作ったモードは消え、削除した同梱モードは戻る。
+    static func resetAllToInitial(db: Database) throws {
+        try db.execute(sql: "DELETE FROM modes")
+        try db.execute(sql: "DELETE FROM meta WHERE key = ?", arguments: [deletedShippedModeIDsKey])
+        try seedBuiltins(db: db)
     }
 
     public func resetToInitial(id: String) async throws -> Mode? {
