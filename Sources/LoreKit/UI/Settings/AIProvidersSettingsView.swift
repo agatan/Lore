@@ -93,6 +93,8 @@ struct AIProviderForm: View {
     var setModel: (String) -> Void
 
     @State private var modelDraft = ""
+    /// `modelDraft`を入力したときのプロバイダ。切り替え後に前のプロバイダの下書きを保存しないために持つ。
+    @State private var draftBackend: FormattingBackend?
     @State private var onDeviceAvailability: EngineAvailability = .ready
 
     var body: some View {
@@ -133,6 +135,7 @@ struct AIProviderForm: View {
     private func providerButton(_ option: FormattingBackend, icon: String) -> some View {
         Button {
             guard option != backend else { return }
+            commitPendingModel()
             select(option)
         } label: {
             VStack(spacing: 6) {
@@ -169,9 +172,10 @@ struct AIProviderForm: View {
                 .textFieldStyle(.roundedBorder)
                 .frame(width: 230)
                 .onSubmit(commitModel)
-                .onAppear { modelDraft = model }
-                .onChange(of: model) { modelDraft = model }
-                .onDisappear { if modelDraft != model { commitModel() } }
+                .onAppear(perform: resetDraft)
+                .onChange(of: model, resetDraft)
+                .onChange(of: backend, resetDraft)
+                .onDisappear { commitPendingModel() }
                 .accessibilityIdentifier("\(identifier).model")
         } else {
             Picker("", selection: Binding(get: { model }, set: setModel)) {
@@ -186,7 +190,8 @@ struct AIProviderForm: View {
     private var connectionCheck: some View {
         HStack(spacing: 10) {
             Button(env.checkingLlmBackend == backend ? "確認中…" : "接続を確認") {
-                Task { await env.checkLlmConnection(backend: backend, model: model) }
+                let checked = commitPendingModel() ?? model
+                Task { await env.checkLlmConnection(backend: backend, model: checked) }
             }
             .controlSize(.small)
             .disabled(env.checkingLlmBackend != nil || (backend.sendsTranscriptOffDevice && !env.storedApiKeys.contains(backend)))
@@ -221,11 +226,24 @@ struct AIProviderForm: View {
         }
     }
 
+    private func resetDraft() {
+        modelDraft = model
+        draftBackend = backend
+    }
+
     private func commitModel() {
         let trimmed = modelDraft.trimmingCharacters(in: .whitespacesAndNewlines)
         let next = trimmed.isEmpty ? backend.defaultModel : trimmed
         modelDraft = next
         if next != model { setModel(next) }
+    }
+
+    /// Returnを押す前に別の操作へ移っても、入力中のモデル名を今のプロバイダに保存する。保存したモデル名を返す。
+    @discardableResult
+    private func commitPendingModel() -> String? {
+        guard draftBackend == backend, modelDraft != model else { return nil }
+        commitModel()
+        return modelDraft
     }
 }
 
