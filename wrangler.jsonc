@@ -1,11 +1,15 @@
-// LP (site/) を Cloudflare Workers の静的アセットとして配信する。Worker のコードは持たない。
+// LP (site/) を Cloudflare Workers の静的アセットとして配信する。
+// Worker (worker/index.js) は英語版の入口だけで動き、初回訪問をブラウザの言語のページへ振り分ける。他のパスは静的アセットのまま。
 // デプロイは .github/workflows/site.yml が行う。
 {
   "name": "lore-site",
+  "main": "worker/index.js",
   "compatibility_date": "2026-11-01",
   "assets": {
     "directory": "./site",
-    "html_handling": "auto-trailing-slash"
+    "binding": "ASSETS",
+    "html_handling": "auto-trailing-slash",
+    "run_worker_first": ["/", "/index.html"]
   },
   "workers_dev": true,
   "preview_urls": true

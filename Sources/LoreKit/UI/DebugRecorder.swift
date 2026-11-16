@@ -271,8 +271,9 @@ enum DebugRecorder {
 
     // MARK: Recording
 
+    /// Real windows get the display language from `LoreApp`; a bare hosting view would fall back to the macOS language.
     private static func hostedWindow(_ view: some View, size: NSSize, identifier: String) -> NSWindow {
-        let hosting = NSHostingView(rootView: view.frame(width: size.width, height: size.height))
+        let hosting = NSHostingView(rootView: view.frame(width: size.width, height: size.height).environment(\.locale, LoreLocalization.locale))
         let window = NSWindow(contentRect: NSRect(origin: .zero, size: size), styleMask: [.borderless], backing: .buffered, defer: false)
         window.identifier = NSUserInterfaceItemIdentifier(identifier)
         window.contentView = hosting
