@@ -130,14 +130,13 @@ struct TimelineEntryRow: View {
                         .fill(Color.primary.opacity(0.04))
                         .strokeBorder(LoreTheme.accent.opacity(0.5), lineWidth: 1)
                 }
+                .memoShiftReturnInsertsNewline()
                 .onSubmit(save)
                 .onExitCommand(perform: cancelEditing)
                 .disabled(isSaving)
                 .accessibilityIdentifier(accessibilityPrefix.map { "\($0).editor" } ?? "")
             HStack(spacing: 10) {
-                Text("Returnで保存 · Option-Returnで改行 · Escで取り消し")
-                    .font(LoreTheme.captionFont)
-                    .foregroundStyle(.tertiary)
+                MemoKeyHint("Returnで保存 · Shift-Returnで改行 · Escで取り消し")
                 Spacer(minLength: 0)
                 Button("取り消す", action: cancelEditing)
                     .accessibilityIdentifier(accessibilityPrefix.map { "\($0).cancel" } ?? "")

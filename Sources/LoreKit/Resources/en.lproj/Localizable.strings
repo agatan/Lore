@@ -436,7 +436,6 @@
 "前の月" = "Previous Month";
 "次の月" = "Next Month";
 "メモを編集" = "Edit Note";
-"Returnで保存 · Option-Returnで改行 · Escで取り消し" = "Return to save · Option-Return for a new line · Esc to cancel";
 "取り消す" = "Cancel";
 "音声入力とライフログの録音に使います" = "Used to record Dictation and Life Log";
 "ホットキーの検知と、文章の入力に使います" = "Used to detect hotkeys and enter text";
@@ -708,3 +707,5 @@
 "参加用のリンクがある予定は、始まる10分前からミニウィンドウとメニューバーに「参加」ボタンを表示します。" = "For an event with a join link, the mini window and the menu bar show a Join button from 10 minutes before it starts.";
 "カレンダーで開く" = "Open in Calendar";
 "Googleカレンダーで開く" = "Open in Google Calendar";
+"Shift-Returnで改行" = "Shift-Return for a new line";
+"Returnで保存 · Shift-Returnで改行 · Escで取り消し" = "Return to save · Shift-Return for a new line · Esc to cancel";

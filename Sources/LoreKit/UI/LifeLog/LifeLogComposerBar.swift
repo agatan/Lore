@@ -11,6 +11,7 @@ struct LifeLogComposerBar: View {
     var accessibilityPrefix: String
     /// 過去日を表示中は現在のmemoを混ぜないよう、入力欄を出さない。
     var acceptsMemo: Bool
+    /// Mini windowでは入力欄の伸びる上限を低くし、timelineを読める高さを残す。
     var compact = false
 
     var body: some View {
@@ -34,23 +35,18 @@ struct LifeLogComposerBar: View {
         LifeLogCaptureStatus(lifeLog: env.lifeLog, scheduleCaption: env.lifeLogScheduleCaption)
     }
 
+    /// 上の段に記録の操作と状態、下の段に全幅のmemo欄を置く。memo欄は行が増えると上へ伸び、
+    /// 状態の段を押し上げる。Memoを受け付けない過去日は上の段だけになる。
     private var bar: some View {
-        HStack(alignment: .center, spacing: compact ? 8 : 10) {
-            LifeLogRecordButton(
-                lifeLog: env.lifeLog,
-                status: status,
-                accessibilityIdentifier: "\(accessibilityPrefix).capture-toggle"
-            ) {
-                env.setLifeLogCaptureEnabled(!env.lifeLog.hasCaptureIntent)
-            }
-            LifeLogPauseControl(env: env, accessibilityPrefix: accessibilityPrefix)
-            statusText
-                .frame(maxWidth: acceptsMemo ? (compact ? 150 : 176) : .infinity, alignment: .leading)
+        VStack(alignment: .leading, spacing: 2) {
+            controls
+                .padding(.trailing, 10)
             if acceptsMemo {
-                Divider().frame(height: 20)
+                Divider().padding(.leading, 6).padding(.trailing, 4)
                 LifeLogMemoComposer(
                     text: $memoDraft,
                     accessibilityPrefix: accessibilityPrefix,
+                    maxLines: compact ? 6 : 8,
                     isVoiceMemoRecording: env.coordinator.isVoiceMemoRecording,
                     isPreparingVoiceMemo: env.isPreparingVoiceMemo,
                     canToggleVoiceMemo: env.canToggleVoiceMemo,
@@ -62,9 +58,24 @@ struct LifeLogComposerBar: View {
             }
         }
         .padding(.leading, 7)
-        .padding(.trailing, acceptsMemo ? 6 : 16)
+        .padding(.trailing, 6)
         .padding(.vertical, 6)
         .glassEffect(.regular, in: RoundedRectangle(cornerRadius: LoreTheme.floatingCornerRadius, style: .continuous))
+    }
+
+    private var controls: some View {
+        HStack(alignment: .center, spacing: compact ? 8 : 10) {
+            LifeLogRecordButton(
+                lifeLog: env.lifeLog,
+                status: status,
+                accessibilityIdentifier: "\(accessibilityPrefix).capture-toggle"
+            ) {
+                env.setLifeLogCaptureEnabled(!env.lifeLog.hasCaptureIntent)
+            }
+            LifeLogPauseControl(env: env, accessibilityPrefix: accessibilityPrefix)
+            statusText
+                .frame(maxWidth: .infinity, alignment: .leading)
+        }
     }
 
     private var statusText: some View {
