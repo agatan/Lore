@@ -1194,6 +1194,15 @@ public final class AppEnvironment {
         }
     }
 
+    /// 共通ルールと全モードを出荷時の状態へ戻す。ユーザーが作ったモードは消える。
+    public func resetFormattingInstructions() async {
+        guard let database else { return }
+        guard await performDataOperation({ try await database.resetFormattingInstructions() }) else { return }
+        coordinator.pinnedModeID = nil
+        await reloadModes()
+        await reloadSharedRules()
+    }
+
     // MARK: 語彙
 
     public func reloadVocabulary() async {

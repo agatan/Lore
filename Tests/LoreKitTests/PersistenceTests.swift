@@ -596,3 +596,39 @@ struct RemoveVocabularySuggestionsMigrationTests {
             == ["unrelated", "vocab_analysis_last_run", "vocab_analysis_watermark"])
     }
 }
+
+@Suite("整形の指示を一括で出荷時の状態に戻す")
+struct FormattingInstructionsResetTests {
+    @Test("編集・追加・削除したモードと共通ルールが同梱内容に戻る")
+    func restoresShippedState() async throws {
+        let database = try await LoreDatabase.inMemory()
+        try await database.sharedRules.seedOrMigrate()
+
+        try await database.sharedRules.save("自分で書いたルール")
+        var edited = BuiltinModes.defaultMode
+        edited.prompt = "書き換えた指示"
+        try await database.modes.save(edited)
+        try await database.modes.delete(id: BuiltinModes.memo.id)
+        try await database.modes.save(Mode(name: "自作", bundleIDs: [], prompt: "自作の指示", sortOrder: 99))
+
+        try await database.resetFormattingInstructions()
+
+        let modes = try await database.modes.all()
+        #expect(modes.map(\.id) == BuiltinModes.all.map(\.id))
+        #expect(modes.map(\.prompt) == BuiltinModes.all.map(\.prompt))
+        #expect(try await database.sharedRules.current() == BuiltinSharedRules.text)
+
+        // 戻した後は未編集として扱われ、次の起動でも同梱内容のまま。
+        try await database.modes.seedBuiltinsIfNeeded()
+        try await database.sharedRules.seedOrMigrate()
+        #expect(try await database.modes.all().map(\.id) == BuiltinModes.all.map(\.id))
+    }
+
+    @Test("語彙と履歴には触れない")
+    func leavesVocabularyAlone() async throws {
+        let database = try await LoreDatabase.inMemory()
+        try await database.vocabulary.save(VocabularyEntry(surface: "Lore"))
+        try await database.resetFormattingInstructions()
+        #expect(try await database.vocabulary.all().map(\.surface) == ["Lore"])
+    }
+}

@@ -46,8 +46,12 @@ public struct SharedRulesStore: Sendable {
 
     /// 同梱内容に戻す。
     public func reset() async throws -> String {
-        try await save(BuiltinSharedRules.text)
+        try await queue.write { db in try Self.reset(db: db) }
         return BuiltinSharedRules.text
+    }
+
+    static func reset(db: Database) throws {
+        try set(BuiltinSharedRules.text, forKey: BuiltinSharedRules.key, db: db)
     }
 
     /// 同梱内容から変更されているか。UI に「標準の内容に戻す」を出すかの判断に使う。
