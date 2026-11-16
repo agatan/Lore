@@ -17,10 +17,11 @@ private final class SpyLlm: LlmEngine {
     }
 
     static let validResponse = """
-        DECISION (S1): Ship on Friday
-        ACTION (S2) [Aki]: Write the release note
-        ACTION (): Invented task
-        QUESTION (S99): Who reviews it?
+        DECIDE (S1): Ship on Friday
+        COMMIT (S2): Write the release note
+        ASK (S2) [Aki]: Review the pricing page copy
+        ASK (): Invented request
+        COMMIT (S99): Prepare the invoice
         """
 
     var prompts: [FormattingPrompt] { recorded.withLock { $0 } }
@@ -145,9 +146,9 @@ struct LifeLogAITests {
 
         #expect(note.items(.decisions).map(\.text) == ["Ship on Friday"])
         #expect(note.items(.decisions).first?.sources == ["u-u1"])
-        #expect(note.items(.actionItems).map(\.text) == ["Write the release note"])
-        #expect(note.items(.actionItems).first?.owner == "Aki")
-        #expect(note.items(.openQuestions).isEmpty, "an item citing an unknown label is dropped")
+        #expect(note.items(.requests).map(\.text) == ["Review the pricing page copy"])
+        #expect(note.items(.requests).first?.owner == "Aki")
+        #expect(note.items(.commitments).map(\.text) == ["Write the release note"], "an item citing an unknown label is dropped")
         #expect(note.sourceUtteranceIDs == ["u1"])
         #expect(note.sourceMemoIDs == ["m1"])
         #expect(note.backend == .ollama)
@@ -436,16 +437,52 @@ struct LifeLogAITests {
                     GeneratedNoteSource(label: "S2", kind: .memo, timelineID: "m-b", recordID: "b", at: Date(), text: "y")]
         let sections = try EventNotesPolicy.parse("""
             Here are the notes:
-            - DECISION (S1, S2): Keep the plan
-            ACTION (S2) [null]: Send the summary
-            QUESTION (S7): Unknown source
+            - COMMIT (S1, S2): Keep the plan
+            ASK (S2) [null]: Send the summary
+            DECIDE (S7): Unknown source
             """, sent: sent)
-        #expect(sections.first { $0.kind == .decisions }?.items.first?.sources == ["u-a", "m-b"])
-        #expect(sections.first { $0.kind == .actionItems }?.items.first?.owner == nil)
-        #expect(sections.first { $0.kind == .openQuestions }?.items.isEmpty == true)
+        #expect(sections.first { $0.kind == .commitments }?.items.first?.sources == ["u-a", "m-b"])
+        #expect(sections.first { $0.kind == .requests }?.items.first?.owner == nil)
+        #expect(sections.first { $0.kind == .decisions }?.items.isEmpty == true)
         #expect(try EventNotesPolicy.parse("NONE", sent: sent).allSatisfy(\.items.isEmpty))
         #expect(throws: GeneratedNoteResponse.ParseError.self) {
             try EventNotesPolicy.parse(#"{"decisions":[{"text": "x",sources":["S1"]}]"#, sent: sent)
+        }
+    }
+
+    @Test("COMMIT, ASK, and DECIDE become commitments, requests, and decisions in that order, and only ASK keeps the person")
+    func parsesTheUsersOwnSide() throws {
+        let sent = (1...3).map {
+            GeneratedNoteSource(label: "S\($0)", kind: .utterance, timelineID: "u-\($0)", recordID: "\($0)", at: Date(), text: "x")
+        }
+        let sections = try EventNotesPolicy.parse("""
+            DECIDE (S3) [Aki]: Go with the two-tier plan
+            ASK (S2) [Aki]: Review the pricing page copy
+            COMMIT (S1) [Aki]: Send the release notes draft by Thursday
+            """, sent: sent)
+        #expect(sections.map(\.kind) == [.commitments, .requests, .decisions])
+        #expect(sections.map { $0.items.map(\.text) } == [["Send the release notes draft by Thursday"], ["Review the pricing page copy"], ["Go with the two-tier plan"]])
+        #expect(sections.map { $0.items.first?.owner } == [nil, "Aki", nil])
+    }
+
+    @Test("The old DECISION, ACTION, and QUESTION lines are not recognized")
+    func rejectsTheOldTags() {
+        let sent = [GeneratedNoteSource(label: "S1", kind: .utterance, timelineID: "u-a", recordID: "a", at: Date(), text: "x")]
+        #expect(throws: GeneratedNoteResponse.ParseError.self) {
+            try EventNotesPolicy.parse("""
+                DECISION (S1): Keep the plan
+                ACTION (S1) [Aki]: Send the summary
+                QUESTION (S1): Who reviews it?
+                """, sent: sent)
+        }
+    }
+
+    @Test("The instructions tell the model that the user's voice is not guaranteed and that unsure items are left out")
+    func instructionsCarrySpeakerCaveat() {
+        for instructions in [EventNotesPolicy.instructions, DailyDigestPolicy.instructions] {
+            #expect(instructions.contains("other voices in the room may appear"))
+            #expect(instructions.contains("Leave it out when you are unsure who said it"))
+            #expect(instructions.contains("Memos are always the user's own words"))
         }
     }
 

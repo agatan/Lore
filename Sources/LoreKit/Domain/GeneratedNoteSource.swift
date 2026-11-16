@@ -75,7 +75,7 @@ public enum GeneratedNoteResponse {
         }
     }
 
-    private static var itemPattern: Regex<(Substring, Substring, Substring, Substring?, Substring)> { /^\W*(SUMMARY|DECISION|ACTION|QUESTION)\W*\(([^)]*)\)\s*(?:\[([^\]]*)\])?\s*[:：]\s*(.+)$/ }
+    private static var itemPattern: Regex<(Substring, Substring, Substring, Substring?, Substring)> { /^\W*(SUMMARY|COMMIT|ASK|DECIDE)\W*\(([^)]*)\)\s*(?:\[([^\]]*)\])?\s*[:：]\s*(.+)$/ }
 
     /// Drops every item without a label that was actually sent, and every item of a section kind the
     /// request did not ask for, so nothing untraceable is stored. An answer with no readable line and
@@ -91,9 +91,9 @@ public enum GeneratedNoteResponse {
             understood = true
             let kind: GeneratedNoteSectionKind = switch match.1 {
             case "SUMMARY": .summary
-            case "DECISION": .decisions
-            case "ACTION": .actionItems
-            default: .openQuestions
+            case "COMMIT": .commitments
+            case "ASK": .requests
+            default: .decisions
             }
             guard sections.contains(kind) else { continue }
             var seen = Set<String>()
@@ -102,7 +102,7 @@ public enum GeneratedNoteResponse {
                 .filter { seen.insert($0).inserted }
             let text = String(match.4).trimmingCharacters(in: .whitespaces)
             guard !sources.isEmpty, !text.isEmpty else { continue }
-            let owner = kind == .actionItems ? match.3.map { String($0).trimmingCharacters(in: .whitespaces) } : nil
+            let owner = kind == .requests ? match.3.map { String($0).trimmingCharacters(in: .whitespaces) } : nil
             items[kind, default: []].append(GeneratedNoteItem(
                 text: text,
                 owner: owner.flatMap { $0.isEmpty || ["null", "none", "owner"].contains($0.lowercased()) ? nil : $0 },

@@ -591,7 +591,13 @@
 /* Life Log AI */
 "オフの間は、ライフログの文章をどこにも送りません。" = "While it is off, Lore sends Life Log text nowhere.";
 "ライフログAI" = "Life Log AI";
-"予定が終わったときに、その時間の発話とメモから決定事項・やること・未解決の問いをまとめます。1日の終わりには、その日のまとめを作ります" = "When an event ends, Lore writes its decisions, action items, and open questions from the utterances and memos in that time. At the end of the day, it writes a digest of the day";
+"自分が引き受けたこと" = "What I Took On";
+"人に頼んだこと" = "What I Asked For";
+"自分が決めたこと" = "What I Decided";
+"相手: %@" = "Asked: %@";
+"引き受けたこと・頼んだこと・決めたことはありませんでした" = "Nothing you took on, asked for, or decided to note.";
+"まとめる引き受けたこと・頼んだこと・決めたことはありませんでした" = "Nothing you took on, asked for, or decided to sum up";
+"予定が終わったときに、その時間の発話とメモから、自分が引き受けたこと・人に頼んだこと・自分が決めたことをまとめます。1日の終わりには、その日のまとめを作ります" = "When an event ends, Lore lists what you took on, what you asked others for, and what you decided, from the utterances and memos in that time. At the end of the day, it writes a digest of the day";
 "プロバイダ" = "Provider";
 "AI整形でこのプロバイダに保存したAPIキーを使います" = "Uses the API key saved for this provider in AI Formatting";
 "AI整形を開く" = "Open AI Formatting";
@@ -621,18 +627,13 @@
 "このノートを削除しますか？" = "Delete These Notes?";
 "ノートを削除" = "Delete Notes";
 "元の発話やメモは削除されません。" = "The original utterances and memos are not deleted.";
-"記録する決定事項・やること・未解決の問いはありませんでした" = "No decisions, action items, or open questions to note.";
 "このMacのマイクの記録だけから作成しています。オンライン会議の他の参加者の発言は含まれません。" = "Made only from this Mac's microphone. What other participants said in an online meeting is not included.";
 "AIが生成" = "AI-generated";
 "Markdownでコピー" = "Copy as Markdown";
 "再生成" = "Regenerate";
 "予定の時間が変わったため、内容が古い可能性があります" = "The event changed, so these notes may be out of date";
 "元の発話またはメモが削除されています" = "Sources deleted";
-"担当: %@" = "Owner: %@";
 "元の記録へ移動" = "Go to the source";
-"決定事項" = "Decisions";
-"やること" = "Action Items";
-"未解決の問い" = "Open Questions";
 "AIノート" = "AI Notes";
 "内容が古い可能性があります" = "May be out of date";
 "AIのノートができました" = "AI notes are ready";
@@ -660,12 +661,10 @@
 "まとめを作成しています" = "Writing the digest";
 "まとめを削除" = "Delete Digest";
 "この日のまとめを削除しますか？" = "Delete This Day's Digest?";
-"まとめる決定事項・やること・残ったことはありませんでした" = "No decisions, action items, or open items to note";
 "プロバイダの入力上限に収めるため、%lld件の記録を省きました" = "%lld records were left out to fit the provider's input limit";
 "タイムラインで読む" = "Read in Timeline";
 "1日のまとめ" = "Daily Digest";
 "この日のこと" = "The Day";
-"残ったこと" = "Left Open";
 "昨日のまとめ" = "Yesterday's Digest";
 "昨日を開く" = "Open Yesterday";
 "記録の時間帯を設定している日は、その時間帯が終わったときに作ります。Macがスリープ中だったときやLoreが起動していなかったときは、次に起動したときに前日の分だけ作ります。" = "On days with a scheduled recording window, the digest is made when the window ends. If the Mac was asleep or Lore was not running, Lore makes only the previous day's digest at the next launch.";

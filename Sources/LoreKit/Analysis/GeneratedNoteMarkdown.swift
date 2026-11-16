@@ -20,10 +20,10 @@ public enum GeneratedNoteMarkdown {
         if note.staleReasons.contains(.sourcesDeleted) { lines.append("_元の発話またはメモが削除されています。_") }
         if note.omittedSourceCount > 0 { lines.append("_プロバイダの入力上限に収めるため、\(note.omittedSourceCount)件の記録を省きました。_") }
         if note.isEmpty {
-            lines += ["", "記録する決定事項・やること・未解決の問いはありませんでした。"]
+            lines += ["", "引き受けたこと・頼んだこと・決めたことはありませんでした。"]
         }
         for section in note.sections where !section.items.isEmpty {
-            lines += ["", "\(sub) \(sectionTitle(section.kind, digest: note.kind == .dailyDigest))"]
+            lines += ["", "\(sub) \(sectionTitle(section.kind))"]
             for item in section.items {
                 let owner = item.owner.map { "（\($0)）" } ?? ""
                 lines.append("- \(item.text.replacingOccurrences(of: "\n", with: " "))\(owner)")
@@ -33,12 +33,12 @@ public enum GeneratedNoteMarkdown {
         return lines.joined(separator: "\n")
     }
 
-    static func sectionTitle(_ kind: GeneratedNoteSectionKind, digest: Bool = false) -> String {
+    static func sectionTitle(_ kind: GeneratedNoteSectionKind) -> String {
         switch kind {
         case .summary: "この日のこと"
-        case .decisions: "決定事項"
-        case .actionItems: "やること"
-        case .openQuestions: digest ? "残ったこと" : "未解決の問い"
+        case .commitments: "自分が引き受けたこと"
+        case .requests: "人に頼んだこと"
+        case .decisions: "自分が決めたこと"
         }
     }
 

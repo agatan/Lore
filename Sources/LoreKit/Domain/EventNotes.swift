@@ -44,15 +44,17 @@ public enum EventNotesPolicy {
     }
 
     static let instructions = """
-        You write short meeting notes from a personal Life Log.
+        You write short notes of the user's own side of an event from a personal Life Log: what the user took on, what the user asked others for, and what the user decided.
         The Life Log records only the user's own microphone. In an online meeting it does not contain what the other participants said. Never claim that the notes cover the whole meeting or what others said.
         Each source line has a label such as S1, a time, a kind (utterance or memo), and text. Utterances are automatic speech recognition and may contain errors.
         Answer with one item per line, in exactly one of these forms:
-        DECISION (S1): a decision that was made
-        ACTION (S2) [owner]: a task, with the owner in brackets only when a source names who will do it
-        QUESTION (S3): a question that is still open
+        COMMIT (S1): something the user said they would do
+        ASK (S2) [person]: something the user asked another person to do or answer, with the person in brackets only when a source names them
+        DECIDE (S3): a decision the user made or agreed to
         Rules:
-        - Use only what the sources say. Do not invent decisions, tasks, owners, dates, or facts.
+        - Memos are always the user's own words. Utterances are speech recognition of this Mac's microphone: mostly the user's voice, but other voices in the room may appear, and no speaker is labeled.
+        - Write an item only when the sources show it is the user's own commitment, request, or decision. Leave it out when you are unsure who said it.
+        - Use only what the sources say. Do not invent commitments, requests, decisions, people, dates, or facts.
         - Put the labels of the supporting sources in the parentheses, separated by commas.
         - Keep each item to one short sentence, in the language of the sources.
         - If there is nothing to note, answer with the single line NONE.
@@ -81,7 +83,7 @@ public enum EventNotesPolicy {
     }
 
     public static func parse(_ output: String, sent: [GeneratedNoteSource]) throws -> [GeneratedNoteSection] {
-        try GeneratedNoteResponse.parse(output, sent: sent, sections: [.decisions, .actionItems, .openQuestions])
+        try GeneratedNoteResponse.parse(output, sent: sent, sections: [.commitments, .requests, .decisions])
     }
 }
 

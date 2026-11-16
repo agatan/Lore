@@ -370,10 +370,10 @@ private enum LoreUIE2E {
         guard try ui.stringValue(identifier: "export.include.ai-notes") == "オフ" else {
             throw UIE2EError.assertion("AIノートが書き出しの初期状態で選択されています")
         }
-        _ = try ui.waitForString(identifier: "export.preview") { !$0.contains("今日は初回体験の流れを確認する") }
+        _ = try ui.waitForString(identifier: "export.preview") { !$0.contains("今日は初回体験の流れの確認を最優先にする") }
         try ui.press(identifier: "export.include.ai-notes")
         _ = try ui.waitForString(identifier: "export.preview") {
-            $0.contains("今日は初回体験の流れを確認する") && $0.contains("AIが生成したノート")
+            $0.contains("今日は初回体験の流れの確認を最優先にする") && $0.contains("AIが生成したノート")
         }
         try ui.press(identifier: "export.close")
         terminateTestApp()
@@ -386,15 +386,15 @@ private enum LoreUIE2E {
         let ui = AXDriver(pid: app.processIdentifier)
         let digest = "life-log.daily-digest"
         _ = try ui.waitFor(identifier: digest)
-        for part in ["generated-mark", "provider", "copy", "regenerate", "delete", "item-summary-0", "item-decisions-0"] {
+        for part in ["generated-mark", "provider", "copy", "regenerate", "delete", "item-summary-0", "item-commitments-0", "item-requests-0", "item-decisions-0"] {
             _ = try ui.waitFor(identifier: "\(digest).\(part)")
         }
         _ = try ui.waitFor(identifier: "\(digest).compact")
         _ = try ui.waitFor(identifier: "\(digest).compact.item-summary-0")
-        guard !ui.exists(identifier: "\(digest).compact.item-decisions-0") else {
+        guard !ui.exists(identifier: "\(digest).compact.item-commitments-0") else {
             throw UIE2EError.assertion("inspectorのまとめに要約以外の項目が出ています")
         }
-        try ui.press(identifier: "\(digest).item-action_items-0")
+        try ui.press(identifier: "\(digest).item-decisions-0")
         try ui.waitFor(text: "次のベータではショートカットから書き出して、好きなLLMへ渡せることも試します。")
 
         try ui.press(identifier: "life-log.search")

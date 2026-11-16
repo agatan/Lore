@@ -15,9 +15,10 @@ private final class DigestSpy: LlmEngine {
     static let response = """
         SUMMARY (S1, S2): Planned the release and wrote the release note
         SUMMARY (): An invented line
-        DECISION (S2): Ship the beta on Friday
-        ACTION (S2) [Aki]: Write the release note
-        QUESTION (S99): Who reviews it?
+        DECIDE (S2): Ship the beta on Friday
+        COMMIT (S2): Write the release note
+        ASK (S2) [Aki]: Review the release note
+        COMMIT (S99): Prepare the invoice
         """
 
     var prompts: [FormattingPrompt] { recorded.withLock { $0 } }
@@ -254,9 +255,9 @@ struct DailyDigestTests {
 
         let digest = try #require(try await harness.digest(harness.today))
         #expect(digest.items(.summary).map(\.text) == ["Planned the release and wrote the release note"])
-        #expect(digest.items(.decisions).count == 1)
-        #expect(digest.items(.actionItems).first?.owner == "Aki")
-        #expect(digest.items(.openQuestions).isEmpty)
+        #expect(digest.items(.commitments).map(\.text) == ["Write the release note"])
+        #expect(digest.items(.requests).first?.owner == "Aki")
+        #expect(digest.items(.decisions).count == 1, "an item citing an unknown label is dropped from the commitments")
         #expect(digest.rangeStart == harness.today)
 
         let regenerated = try await harness.service.generate(kind: .dailyDigest, scope: harness.scope(harness.today))
@@ -347,7 +348,7 @@ struct DailyDigestTests {
         try await harness.database.lifeLog.save(generatedNote: GeneratedNote(
             kind: .eventNotes, scope: .event(EventOccurrence(event)), rangeStart: event.startsAt, rangeEnd: event.endsAt, backend: .ollama, model: "m",
             createdAt: event.endsAt, sourceUtteranceIDs: [], sourceMemoIDs: [],
-            sections: [GeneratedNoteSection(kind: .decisions, items: [GeneratedNoteItem(text: "Freeze the scope on Thursday", sources: ["u-u-in"])])]
+            sections: [GeneratedNoteSection(kind: .commitments, items: [GeneratedNoteItem(text: "Freeze the scope on Thursday", sources: ["u-u-in"])])]
         ))
 
         let results = try await harness.database.lifeLog.search("wrote the release")
@@ -372,7 +373,7 @@ struct DailyDigestTests {
         let service = LoreAutomationService(database: harness.database, settings: AppSettings(defaults: UserDefaults(suiteName: "lore-digest-\(UUID())")!))
         let entry = try #require(try await service.aiNotes(from: harness.today, to: harness.today).first { $0.kind == "daily_digest" })
         #expect(entry.generated && entry.eventId == nil && entry.omittedSources == 0)
-        #expect(entry.sections.map(\.kind) == ["summary", "decisions", "action_items", "open_questions"])
+        #expect(entry.sections.map(\.kind) == ["summary", "commitments", "requests", "decisions"])
         let json = try LifeLogJSON.encode([entry])
         #expect(json.contains("\"omittedSources\" : 0") && !json.contains("eventId"))
         #expect(try await service.search("wrote the release").map(\.kind.rawValue) == ["generated"])
@@ -429,7 +430,7 @@ struct DailyDigestMigrationTests {
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
         let legacy = try DatabaseQueue(path: url.path)
         try LoreDatabase.migrator.migrate(legacy, upTo: "v14-event-snapshot-per-occurrence")
-        let content = #"[{"kind":"decisions","items":[{"text":"Ship the beta on Friday","sources":["u-1"]}]},{"kind":"action_items","items":[{"text":"Aki writes the note","sources":["u-1"]}]}]"#
+        let content = #"[{"kind":"decisions","items":[{"text":"Ship the beta on Friday","sources":["u-1"]}]},{"kind":"requests","items":[{"text":"Aki writes the note","sources":["u-1"]}]}]"#
         try legacy.write { db in
             try db.execute(sql: """
                 INSERT INTO generated_notes (id, kind, scope_key, scope_day, event_id, range_start, range_end, provider, model,

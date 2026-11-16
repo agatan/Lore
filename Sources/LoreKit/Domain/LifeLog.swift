@@ -200,7 +200,7 @@ public struct LifeLogDay: Sendable {
         guard let notes = previous.notes, !aiSettings.excludes(event, excludedEventIDs: aiExcludedEventIDs) else {
             return EventLastTime(previous: previous, followUps: [], memos: memos)
         }
-        let followUps = notes.items(.actionItems) + notes.items(.openQuestions)
+        let followUps = notes.items(.commitments) + notes.items(.requests)
         return EventLastTime(previous: previous, followUps: Array(followUps.prefix(EventLastTime.maximumFollowUps)), memos: memos)
     }
 
@@ -237,7 +237,7 @@ public struct EventLastTime: Sendable, Hashable {
     public static let maximumMemos = 3
 
     public var previous: PreviousEventOccurrence
-    /// Action items, then open questions, of the earlier occurrence's notes.
+    /// What the user took on, then what the user asked others for, in the earlier occurrence's notes.
     public var followUps: [GeneratedNoteItem]
     /// The newest memos of the earlier occurrence, oldest first.
     public var memos: [LifeLogMemo]
