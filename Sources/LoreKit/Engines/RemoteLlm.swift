@@ -161,7 +161,7 @@ public final class RemoteLlm: LlmEngine {
     private func applyCredential(to request: inout URLRequest) throws {
         guard requiresApiKey else { return }
         guard let key = try apiKeySource(), !key.isEmpty else {
-            throw EngineError.notReady(String(lore: "\(providerName) のAPIキーが未設定です。利用するAI設定で登録してください"))
+            throw EngineError.notReady(String(lore: "\(providerName) のAPIキーが未設定です。設定 > AIプロバイダ で登録してください"))
         }
         switch api {
         case .anthropic: request.setValue(key, forHTTPHeaderField: "x-api-key")

@@ -234,7 +234,7 @@ struct LifeLogAITests {
         let session = URLSession(configuration: configuration)
         RecordingURLProtocol.reset()
         for backend in [FormattingBackend.ollama, .lmStudio] {
-            let engine = EngineRegistry().lifeLogAIEngine(backend: backend, model: backend.defaultModel, session: session)
+            let engine = EngineRegistry().standaloneEngine(backend: backend, model: backend.defaultModel, session: session)
             _ = try await engine.complete(prompt: FormattingPrompt(system: "s", user: "u"), timeout: .seconds(5))
         }
         let hosts = RecordingURLProtocol.hosts

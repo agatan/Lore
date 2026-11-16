@@ -172,7 +172,6 @@
 "処理" = "Processing";
 "音声入力とライフログで共通です" = "Shared by dictation and Life Log.";
 "発話、音声入力、メモを検索" = "Search speech, dictation, and notes";
-"キーチェーンに保存します" = "Stored in Keychain";
 
 /* Life log schedule */
 "自動記録" = "Scheduled Recording";
@@ -488,12 +487,12 @@
 "処理が結果を返しませんでした" = "The model didn’t return a result";
 "Groq の API キーが未設定です" = "No Groq API key is set";
 "Groq が空の応答を返しました" = "Groq returned an empty response";
-"Groq の API キーが未設定です。利用するAI設定で登録してください" = "No Groq API key is set. Add one in AI Formatting settings";
+"Groq の API キーが未設定です。設定 > AIプロバイダ で登録してください" = "No Groq API key is set. Add one in Settings > AI Providers";
 "Groq から想定外の応答を受け取りました" = "Received an unexpected response from Groq";
 "Groq が %lld を返しました%@" = "Groq returned %lld%@";
 "%@ のAPIキーが未設定です" = "No %@ API key is set";
 "%@ が空の応答を返しました" = "%@ returned an empty response";
-"%@ のAPIキーが未設定です。利用するAI設定で登録してください" = "No %@ API key is set. Add one in AI Formatting settings";
+"%@ のAPIキーが未設定です。設定 > AIプロバイダ で登録してください" = "No %@ API key is set. Add one in Settings > AI Providers";
 "%@ から想定外の応答を受け取りました" = "Received an unexpected response from %@";
 "%@ が %lld を返しました%@" = "%1$@ returned %2$lld%3$@";
 "音声モデルのダウンロード中です" = "Downloading the speech model";
@@ -502,7 +501,7 @@
 "音声モデルの状態を判定できません" = "Can’t determine the status of the speech model";
 "音声モデル(%@)を使えなくなりました。Lore を再起動してください" = "The speech model (%@) is no longer available. Restart Lore";
 "音声モデルのダウンロード中です。完了後に再試行してください" = "The speech model is downloading. Try again when it finishes";
-"音声モデル(%@)が未取得です。設定 > AI整形 から取得してください" = "The speech model (%@) hasn’t been downloaded. Download it in Settings > AI Formatting";
+"音声モデル(%@)が未取得です。設定 > 音声入力 から取得してください" = "The speech model (%@) hasn’t been downloaded. Download it in Settings > Dictation";
 "音声モデルの割り当てに失敗しました(%@)。予約できる言語は最大 %lld 個です" = "Couldn’t reserve the speech model (%@). Up to %lld languages can be reserved";
 "この Mac では SpeechAnalyzer を利用できません" = "SpeechAnalyzer isn’t available on this Mac";
 "設定から %@ を取得してください" = "Download %@ in Settings";
@@ -599,8 +598,6 @@
 "まとめる引き受けたこと・頼んだこと・決めたことはありませんでした" = "Nothing you took on, asked for, or decided to sum up";
 "予定が終わったときに、その時間の発話とメモから、自分が引き受けたこと・人に頼んだこと・自分が決めたことをまとめます。1日の終わりには、その日のまとめを作ります" = "When an event ends, Lore lists what you took on, what you asked others for, and what you decided, from the utterances and memos in that time. At the end of the day, it writes a digest of the day";
 "プロバイダ" = "Provider";
-"AI整形でこのプロバイダに保存したAPIキーを使います" = "Uses the API key saved for this provider in AI Formatting";
-"AI整形を開く" = "Open AI Formatting";
 "送信する内容" = "What Is Sent";
 "送るのは、決まった指示文、予定の件名と開始・終了時刻、予定の時間内にある発話とメモの時刻と本文だけです。1日のまとめでは、その日の予定の件名と時刻、作成済みの予定のノート、その日の発話とメモを送ります。録音した音声、カレンダー名、参加者、ほかの日の記録、音声入力の履歴、APIキーは送りません。" = "Only the fixed instructions, the event title with its start and end time, and the time and text of the utterances and memos inside the event are sent. For the daily digest, the titles and times of that day's events, the event notes already made, and that day's utterances and memos are sent. Recorded audio, calendar names, attendees, records from other days, dictation history, and API keys are never sent.";
 "今日のリクエスト" = "Requests Today";
@@ -711,3 +708,13 @@
 "すべて標準に戻す" = "Restore All Defaults";
 "共通ルールとすべてのモードを標準に戻しますか？" = "Restore the common rules and all modes to their defaults?";
 "編集した指示は出荷時の内容に戻り、追加したモードは削除されます。この操作は取り消せません。" = "Edited instructions return to their shipped content, and modes you added are deleted. You can’t undo this action.";
+"AIプロバイダ" = "AI Providers";
+"オン・オフ、送る内容、作成のタイミングは「ライフログAI」で設定します。オフの間は、ライフログの文章をどこにも送りません。" = "Turn it on or off, and choose what is sent and when notes are made, in Life Log AI. While it is off, no Life Log text is sent anywhere.";
+"ライフログAIを開く" = "Open Life Log AI";
+"キーはこのMacのキーチェーンに保存し、同期しません。1つのキーを音声入力の整形とライフログAIの両方で使います。" = "Keys are stored in this Mac’s Keychain and are not synced. One key serves both dictation formatting and Life Log AI.";
+"未登録" = "Not set";
+"音声入力の整形とライフログAIで選択中" = "Selected for dictation formatting and Life Log AI";
+"音声入力の整形で選択中" = "Selected for dictation formatting";
+"ライフログAIで選択中" = "Selected for Life Log AI";
+"APIキーとあわせて「AIプロバイダ」で選びます" = "Chosen in AI Providers, together with API keys";
+"AIプロバイダを開く" = "Open AI Providers";

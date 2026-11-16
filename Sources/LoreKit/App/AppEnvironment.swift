@@ -71,11 +71,15 @@ public final class AppEnvironment {
     public private(set) var speechAssetError: String?
     public private(set) var whisperProgress: Double?
     public private(set) var whisperError: String?
-    /// 選択中のクラウドにAPIキーが登録済みか。キーそのものは状態に持たない(NFR-2)。
-    public private(set) var hasLlmApiKey = false
-    public private(set) var llmModels: [String] = []
-    public private(set) var llmStatus: String?
-    public private(set) var isCheckingLlm = false
+    /// APIキーを登録済みのクラウドプロバイダ。キーそのものは状態に持たない(NFR-2)。
+    /// キーはプロバイダごとに1つで、整形とライフログAIが同じキーを使う。
+    public private(set) var storedApiKeys: Set<FormattingBackend> = []
+    public private(set) var apiKeyError: String?
+    /// 接続確認で取れたモデル一覧。プロバイダごとに持ち、整形とライフログAIで共有する。
+    public private(set) var llmModels: [FormattingBackend: [String]] = [:]
+    /// プロバイダごとの最後の接続確認の結果。
+    public private(set) var llmChecks: [FormattingBackend: LlmConnectionCheck] = [:]
+    public private(set) var checkingLlmBackend: FormattingBackend?
     /// エンジン別の実測レイテンシ。
     public private(set) var measuredLatencies = MeasuredLatencies()
 
@@ -125,7 +129,7 @@ public final class AppEnvironment {
             database: { [weak self] in self?.database },
             engine: { [weak self] backend, model in
                 guard let self else { return FoundationModelsLlm() }
-                return engines.lifeLogAIEngine(backend: backend, model: model)
+                return engines.standaloneEngine(backend: backend, model: model)
             },
             oldestUntranscribedAudio: { [weak self] in try await self?.lifeLog.oldestUntranscribedAudioStart() },
             refreshTodayCalendar: { [weak self] in
@@ -195,6 +199,14 @@ public final class AppEnvironment {
             Task { await notifications.requestAuthorization() }
         }
         evaluateLifeLogAI()
+    }
+
+    /// A change from Settings. A change that would start sending to a cloud provider the user has not
+    /// confirmed is not stored and comes back for the confirmation dialog.
+    public func applyLifeLogAIChange(_ next: LifeLogAISettings) -> LifeLogAISettings? {
+        if case .cloudConsentRequired = next.sendPermission { return next }
+        updateLifeLogAI(next)
+        return nil
     }
 
     public func showLifeLogEvent(_ occurrence: EventOccurrence) async {
@@ -482,7 +494,7 @@ public final class AppEnvironment {
     static var uiTestSettingsSection: SettingsSection? {
 #if DEBUG
         let arguments = ProcessInfo.processInfo.arguments
-        if arguments.contains("--lore-ui-test-settings-dictation") { return .models }
+        if arguments.contains("--lore-ui-test-settings-ai-providers") { return .aiProviders }
         if arguments.contains("--lore-ui-test-settings-life-log") { return .lifeLog }
         if arguments.contains("--lore-ui-test-settings-modes") { return .modes }
         if arguments.contains("--lore-ui-test-settings-calendar") { return .calendar }
@@ -1570,30 +1582,11 @@ public final class AppEnvironment {
         measuredLatencies = (try? await database.history.measuredLatencies(limit: 300)) ?? MeasuredLatencies()
     }
 
-    public func applyEngineChange(
-        checkCredentials: Bool = true,
-        resetConnectionState: Bool = false
-    ) async {
+    public func applyEngineChange(checkCredentials: Bool = true) async {
         applySttSelection()
         let backend = settings.formattingBackend
         engines.apply(backend: backend, model: settings.model(for: backend))
-        if resetConnectionState {
-            llmModels = []
-            llmStatus = nil
-        }
-        if checkCredentials {
-            do {
-                hasLlmApiKey = if let key = secretKey(for: backend) {
-                    try SecretStore.read(key)?.isEmpty == false
-                } else {
-                    true
-                }
-            } catch {
-                hasLlmApiKey = false
-                llmStatus = error.localizedDescription
-                LoreLog.engine.error("API キーの確認に失敗: \(error.localizedDescription, privacy: .public)")
-            }
-        }
+        if checkCredentials { refreshStoredApiKeys() }
         await engines.refreshSttAvailability()
         if checkCredentials || backend == .onDevice {
             await engines.refreshLlmAvailability()
@@ -1602,49 +1595,66 @@ public final class AppEnvironment {
 
     // MARK: 文章処理エンジン
 
-    /// API キーを Keychain に保存する(空文字なら削除)。値は保持しない。
-    public func setLlmApiKey(_ key: String) async {
-        guard let secretKey = secretKey(for: settings.formattingBackend) else { return }
-        llmStatus = nil
+    /// Keychainを読んで、どのクラウドプロバイダにキーがあるかだけを覚える。
+    public func refreshStoredApiKeys() {
+        apiKeyError = nil
+        var stored: Set<FormattingBackend> = []
+        for backend in FormattingBackend.allCases {
+            guard let key = Self.secretKey(for: backend) else { continue }
+            do {
+                if try SecretStore.read(key)?.isEmpty == false { stored.insert(backend) }
+            } catch {
+                apiKeyError = error.localizedDescription
+                LoreLog.engine.error("API キーの確認に失敗: \(error.localizedDescription, privacy: .public)")
+            }
+        }
+        storedApiKeys = stored
+    }
+
+    /// プロバイダのAPIキーを Keychain に保存する(空文字なら削除)。値は保持しない。
+    public func setApiKey(_ key: String, for backend: FormattingBackend) async {
+        guard let secretKey = Self.secretKey(for: backend) else { return }
+        apiKeyError = nil
         do {
             try SecretStore.write(key, for: secretKey)
         } catch {
-            llmStatus = error.localizedDescription
+            apiKeyError = error.localizedDescription
             LoreLog.engine.error("API キーの保存に失敗: \(error.localizedDescription, privacy: .public)")
             return
         }
-        llmModels = []
+        llmModels[backend] = nil
+        llmChecks[backend] = nil
         await applyEngineChange()
     }
 
-    /// キーとモデルが実際に通るかを 1 往復して確かめる。
+    /// キーとモデルが実際に通るかを 1 往復して確かめる。整形とライフログAIのどちらの選択にも使う。
     ///
     /// 整形は失敗しても生テキストにフォールバックするので、設定ミスは
     /// 「なんとなく仕上がらない」形でしか表に出ない。ここで明示的に確かめられるようにする。
-    public func checkLlmConnection() async {
-        guard !isCheckingLlm else { return }
-        isCheckingLlm = true
-        llmStatus = nil
-        defer { isCheckingLlm = false }
+    /// 単発のengineを使うので、整形に使っているモデルは変わらない。
+    public func checkLlmConnection(backend: FormattingBackend, model: String) async {
+        guard checkingLlmBackend == nil else { return }
+        checkingLlmBackend = backend
+        llmChecks[backend] = nil
+        defer { checkingLlmBackend = nil }
 
         do {
-            let backend = settings.formattingBackend
-            llmModels = try await engines.availableModels(for: backend)
-            let reply = try await engines.llm.complete(
+            llmModels[backend] = try await engines.availableModels(for: backend)
+            let reply = try await engines.standaloneEngine(backend: backend, model: model).complete(
                 prompt: FormattingPrompt(system: "入力をそのまま返してください。", user: "疎通確認"),
                 timeout: .seconds(20)
             )
-            llmStatus = reply.isEmpty
-                ? String(lore: "接続できましたが、応答が空でした")
-                : String(lore: "\(settings.model(for: backend)) に接続できました")
+            llmChecks[backend] = reply.isEmpty
+                ? LlmConnectionCheck(model: model, message: String(lore: "接続できましたが、応答が空でした"), succeeded: false)
+                : LlmConnectionCheck(model: model, message: String(lore: "\(model) に接続できました"), succeeded: true)
         } catch {
-            llmStatus = error.localizedDescription
+            llmChecks[backend] = LlmConnectionCheck(model: model, message: error.localizedDescription, succeeded: false)
             LoreLog.engine.error("LLM の疎通確認に失敗: \(error.localizedDescription, privacy: .public)")
         }
-        await engines.refreshLlmAvailability()
+        if backend == settings.formattingBackend { await engines.refreshLlmAvailability() }
     }
 
-    private func secretKey(for backend: FormattingBackend) -> SecretStore.Key? {
+    private static func secretKey(for backend: FormattingBackend) -> SecretStore.Key? {
         switch backend {
         case .openAI: .openAIApiKey
         case .anthropic: .anthropicApiKey
@@ -1686,4 +1696,11 @@ public final class AppEnvironment {
         guard let text = lastResultText else { return }
         TextInserter.copyToClipboard(text)
     }
+}
+
+/// 1つのプロバイダへの接続確認の結果。確認したモデルを持つので、モデルを変えたら古い結果だと分かる。
+public struct LlmConnectionCheck: Equatable, Sendable {
+    public var model: String
+    public var message: String
+    public var succeeded: Bool
 }

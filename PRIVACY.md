@@ -25,10 +25,10 @@ Data sent to a cloud API is subject to the terms and the privacy policy of that 
 
 Life Log AI is off by default. While it is off, Lore sends no Life Log text to any LLM or service.
 
-When the user turns it on in Settings > Life Log AI, Lore generates notes for calendar events and a daily digest with the provider chosen there. The choice is separate from dictation formatting.
+When the user turns it on in Settings > Life Log AI, Lore generates notes for calendar events and a daily digest with the provider chosen for Life Log AI in Settings > AI Providers. The choice is separate from dictation formatting.
 
 - With Apple Foundation Models, the text is processed on this Mac. With Ollama or LM Studio, it goes to the fixed localhost address of that server (`localhost:11434` or `localhost:1234`) and does not leave this Mac.
-- With OpenAI, Claude, Gemini, or Groq, the text goes to that service's API, authenticated with the API key stored for it in the Keychain. Lore sends nothing to a cloud provider until the user confirms a dialog that names it.
+- With OpenAI, Claude, Gemini, or Groq, the text goes to that service's API, authenticated with the API key stored for it in the Keychain. Lore sends nothing to a cloud provider until the user confirms a dialog that names it. The connection check in Settings > AI Providers is the only exception: when the user presses it, Lore sends a fixed test message and the stored API key to that provider. It sends no Life Log text.
 
 For the notes of one calendar event, a request contains exactly these fields:
 

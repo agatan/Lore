@@ -2,7 +2,7 @@ import SwiftUI
 
 public enum SettingsSection: String, CaseIterable, Identifiable, Hashable, Sendable {
     case common
-    case models
+    case aiProviders
     case privacy
     case sync
     case automation
@@ -18,7 +18,7 @@ public enum SettingsSection: String, CaseIterable, Identifiable, Hashable, Senda
     var title: String {
         switch self {
         case .common: "一般"
-        case .models: "AI整形"
+        case .aiProviders: "AIプロバイダ"
         case .privacy: "プライバシー"
         case .sync: "同期"
         case .automation: "連携"
@@ -34,7 +34,7 @@ public enum SettingsSection: String, CaseIterable, Identifiable, Hashable, Senda
     var symbol: String {
         switch self {
         case .common: "gearshape"
-        case .models: "cpu"
+        case .aiProviders: "cpu"
         case .privacy: "hand.raised"
         case .sync: "arrow.triangle.2.circlepath"
         case .automation: "link"
@@ -50,9 +50,9 @@ public enum SettingsSection: String, CaseIterable, Identifiable, Hashable, Senda
     /// Sidebarの塊ごとの機能の色。
     var tint: Color {
         switch self {
-        case .common, .privacy: LoreTheme.generalTint
+        case .common, .privacy, .aiProviders: LoreTheme.generalTint
         case .lifeLog, .calendar, .lifeLogAI: LoreTheme.lifeLogTint
-        case .dictation, .models, .modes, .vocabulary: LoreTheme.dictationTint
+        case .dictation, .modes, .vocabulary: LoreTheme.dictationTint
         case .sync, .automation: LoreTheme.connectTint
         }
     }
@@ -69,6 +69,7 @@ struct SettingsWindowView: View {
                 Section {
                     row(.common)
                     row(.privacy)
+                    row(.aiProviders)
                 }
                 Section {
                     row(.lifeLog)
@@ -77,7 +78,6 @@ struct SettingsWindowView: View {
                 }
                 Section {
                     row(.dictation)
-                    row(.models)
                     row(.modes)
                     row(.vocabulary)
                 }
@@ -129,7 +129,7 @@ struct SettingsWindowView: View {
     private var settingsPane: some View {
         switch env.settingsSection {
         case .common: GeneralSettingsView(env: env)
-        case .models: ModelsSettingsView(env: env)
+        case .aiProviders: AIProvidersSettingsView(env: env)
         case .privacy: PrivacySettingsView(env: env)
         case .sync: SyncSettingsView(env: env)
         case .automation: AutomationSettingsView()
