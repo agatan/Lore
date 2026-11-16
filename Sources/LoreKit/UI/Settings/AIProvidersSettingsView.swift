@@ -1,82 +1,143 @@
 import SwiftUI
 
-/// 音声入力の整形に使う接続先・モデル・APIキー。
-struct ModelsSettingsView: View {
+/// 設定 > AIプロバイダ。LLMの選択とAPIキーはすべてここで扱う。
+/// 音声入力の整形とライフログAIは同じ`AIProviderForm`で選ぶので、見た目も操作も揃う。
+struct AIProvidersSettingsView: View {
     var env: AppEnvironment
 
-    @State private var apiKeyDraft = ""
+    /// クラウドへの送信を新たに始めるライフログAIの変更。確認するまで何も保存しない。
+    @State private var pendingLifeLogAI: LifeLogAISettings?
 
     private var settings: AppSettings { env.settings }
-    private var backend: FormattingBackend { settings.formattingBackend }
+    private var formatting: FormattingBackend { settings.formattingBackend }
+    private var lifeLogAI: LifeLogAISettings { settings.lifeLogAI }
 
     var body: some View {
         LazyVStack(alignment: .leading, spacing: 20) {
-            privacyNotice
-            SettingsCard(title: "音声入力の整形", footnote: "ライフログの文字起こしは整形せず、外部にも送りません。") {
-                providerPicker
-                engineStatus
-                if backend != .onDevice {
-                    providerSettings
+            SettingsCard(title: "音声入力の整形", footnote: formattingFootnote) {
+                AIProviderForm(
+                    env: env,
+                    identifier: "ai-providers.formatting",
+                    backend: formatting,
+                    model: settings.model(for: formatting),
+                    select: { backend in
+                        settings.formattingBackend = backend
+                        Task { await env.applyEngineChange() }
+                    },
+                    setModel: { model in
+                        settings.setModel(model, for: formatting)
+                        Task { await env.applyEngineChange(checkCredentials: false) }
+                    }
+                )
+                SettingsRow(title: "整形を待つ時間", caption: "この時間を過ぎると整形をやめ、文字起こしをそのまま入力します。") {
+                    HStack(spacing: 10) {
+                        Slider(value: Binding(get: { Double(settings.formattingTimeoutMs) }, set: { settings.formattingTimeoutMs = Int($0) }), in: 2_000...20_000, step: 500).frame(width: 190)
+                        Text("\(String(format: "%.1f", Double(settings.formattingTimeoutMs) / 1_000)) 秒")
+                            .font(.system(size: LoreTheme.TextSize.caption)).monospacedDigit().foregroundStyle(.secondary)
+                    }
                 }
             }
-            timeoutCard
+
+            SettingsCard(title: "ライフログAI", footnote: "オン・オフ、送る内容、作成のタイミングは「ライフログAI」で設定します。オフの間は、ライフログの文章をどこにも送りません。") {
+                AIProviderForm(
+                    env: env,
+                    identifier: "ai-providers.life-log-ai",
+                    backend: lifeLogAI.backend,
+                    model: lifeLogAI.model,
+                    select: { backend in
+                        var next = lifeLogAI
+                        next.backend = backend
+                        next.model = backend.defaultModel
+                        pendingLifeLogAI = env.applyLifeLogAIChange(next)
+                    },
+                    setModel: { model in
+                        var next = lifeLogAI
+                        next.model = model
+                        pendingLifeLogAI = env.applyLifeLogAIChange(next)
+                    }
+                )
+                SettingsRow(title: "ライフログAI", caption: lifeLogAI.isEnabled ? "オン" : "オフ") {
+                    Button("ライフログAIを開く") { env.settingsSection = .lifeLogAI }.controlSize(.small)
+                }
+            }
+
+            APIKeysCard(env: env)
         }
+        .accessibilityIdentifier("ai-providers.settings.root")
+        .lifeLogAICloudConfirmation($pendingLifeLogAI, env: env)
         .task {
             await env.reloadMeasuredLatencies()
             await env.applyEngineChange(checkCredentials: !AppEnvironment.usesScreenshotDemoData)
         }
     }
 
-    private var privacyNotice: some View {
-        NoticeBanner(
-            title: backend.sendsTranscriptOffDevice
-                ? String(lore: "文字起こしを\(backend.displayName)に送ります")
-                : "このMacの中で処理します",
-            message: noticeMessage,
-            tint: backend.sendsTranscriptOffDevice ? LoreTheme.warning : LoreTheme.accent,
-            symbol: backend.sendsTranscriptOffDevice ? "exclamationmark.triangle.fill" : "lock.fill",
-            actionTitle: nil,
-            action: nil
-        )
-    }
-
-    private var noticeMessage: String {
-        if backend.sendsTranscriptOffDevice {
-            return "整形のため、その回の文字起こしと指示文、語彙を送ります。音声とライフログは送りません。"
+    private var formattingFootnote: String {
+        if formatting.sendsTranscriptOffDevice {
+            return String(lore: "整形のため、その回の文字起こしと指示文、語彙を送ります。音声とライフログは送りません。")
         }
-        if backend == .onDevice {
-            return "macOSに内蔵されたモデルで整形します。"
+        if formatting == .onDevice {
+            return String(lore: "macOSに内蔵されたモデルで整形します。")
         }
-        return "このMacで動いているローカルサーバーで整形します。"
+        return String(lore: "このMacで動いているローカルサーバーで整形します。")
     }
+}
 
-    private var providerPicker: some View {
+/// 1つの用途のプロバイダとモデル。整形とライフログAIで同じものを使う。
+struct AIProviderForm: View {
+    var env: AppEnvironment
+    /// accessibility identifierの接頭辞。
+    var identifier: String
+    var backend: FormattingBackend
+    var model: String
+    var select: (FormattingBackend) -> Void
+    var setModel: (String) -> Void
+
+    @State private var modelDraft = ""
+    @State private var onDeviceAvailability: EngineAvailability = .ready
+
+    var body: some View {
         VStack(alignment: .leading, spacing: 10) {
-            Text("このMac内").font(.system(size: LoreTheme.TextSize.caption, weight: .semibold)).foregroundStyle(.secondary)
+            providerGroup("このMac内", [(.onDevice, "apple.logo"), (.ollama, "shippingbox"), (.lmStudio, "desktopcomputer")])
+            providerGroup("クラウド", [(.openAI, "sparkles"), (.anthropic, "text.bubble"), (.gemini, "diamond"), (.groq, "bolt")])
+                .padding(.top, 4)
+        }
+        .padding(.vertical, 4)
+
+        HStack(alignment: .firstTextBaseline, spacing: 8) {
+            Text(verbatim: backend == .onDevice ? backend.displayName : "\(backend.displayName) / \(model)")
+                .font(.system(size: LoreTheme.TextSize.body, weight: .medium))
+                .accessibilityIdentifier("\(identifier).active")
+            Spacer()
+            availabilityLabel
+        }
+        .task(id: backend) {
+            guard backend == .onDevice else { return }
+            onDeviceAvailability = await env.engines.standaloneEngine(backend: .onDevice, model: model).availability()
+        }
+
+        if backend != .onDevice {
+            SettingsRow(title: "モデル", caption: localServerCaption) { modelControl }
+            connectionCheck
+        }
+    }
+
+    private func providerGroup(_ title: String, _ options: [(FormattingBackend, String)]) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(LocalizedStringKey(title)).font(.system(size: LoreTheme.TextSize.caption, weight: .semibold)).foregroundStyle(.secondary)
             HStack(spacing: 8) {
-                providerButton(.onDevice, icon: "apple.logo")
-                providerButton(.ollama, icon: "shippingbox")
-                providerButton(.lmStudio, icon: "desktopcomputer")
-            }
-            Text("クラウド").font(.system(size: LoreTheme.TextSize.caption, weight: .semibold)).foregroundStyle(.secondary).padding(.top, 4)
-            HStack(spacing: 8) {
-                providerButton(.openAI, icon: "sparkles")
-                providerButton(.anthropic, icon: "text.bubble")
-                providerButton(.gemini, icon: "diamond")
-                providerButton(.groq, icon: "bolt")
+                ForEach(options, id: \.0) { option, icon in providerButton(option, icon: icon) }
             }
         }
     }
 
     private func providerButton(_ option: FormattingBackend, icon: String) -> some View {
         Button {
-            settings.formattingBackend = option
-            apiKeyDraft = ""
-            Task { await env.applyEngineChange(resetConnectionState: true) }
+            guard option != backend else { return }
+            select(option)
         } label: {
             VStack(spacing: 6) {
                 Image(systemName: icon).font(.system(size: LoreTheme.TextSize.reading, weight: .medium))
-                Text(option.displayName).font(.system(size: LoreTheme.TextSize.caption, weight: .medium)).lineLimit(1)
+                Text(verbatim: option.displayName).font(.system(size: LoreTheme.TextSize.caption, weight: .medium)).lineLimit(1)
             }
             .frame(maxWidth: .infinity, minHeight: 48)
             .foregroundStyle(backend == option ? LoreTheme.accent : Color.primary)
@@ -96,100 +157,60 @@ struct ModelsSettingsView: View {
             )
         }
         .buttonStyle(.plain)
+        .accessibilityIdentifier("\(identifier).provider.\(option.rawValue)")
     }
 
-    private var engineStatus: some View {
-        HStack(alignment: .firstTextBaseline, spacing: 8) {
-            Text(activeModelName).font(.system(size: LoreTheme.TextSize.body, weight: .medium))
-            Spacer()
-            availabilityLabel(env.engines.llmAvailability, canInstall: false)
-        }
-    }
-
+    /// 接続確認でモデル一覧が取れたプロバイダは一覧から選び、それ以外は名前を入力する。
     @ViewBuilder
-    private var providerSettings: some View {
-        if backend.sendsTranscriptOffDevice {
-            SettingsRow(title: "APIキー", caption: env.hasLlmApiKey ? "キーチェーンに保存済み" : "キーチェーンに保存します") {
-                HStack(spacing: 8) {
-                    SecureField("API key", text: $apiKeyDraft).textFieldStyle(.roundedBorder).frame(width: 180).onSubmit(saveKey)
-                    Button("保存", action: saveKey).controlSize(.small)
-                        .disabled(apiKeyDraft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-                    if env.hasLlmApiKey {
-                        Button("削除") { Task { await env.setLlmApiKey("") } }.controlSize(.small)
-                    }
-                }
+    private var modelControl: some View {
+        let models = env.llmModels[backend] ?? []
+        if models.isEmpty {
+            TextField("", text: $modelDraft)
+                .textFieldStyle(.roundedBorder)
+                .frame(width: 230)
+                .onSubmit(commitModel)
+                .onAppear { modelDraft = model }
+                .onChange(of: model) { modelDraft = model }
+                .onDisappear { if modelDraft != model { commitModel() } }
+                .accessibilityIdentifier("\(identifier).model")
+        } else {
+            Picker("", selection: Binding(get: { model }, set: setModel)) {
+                ForEach(models.contains(model) ? models : [model] + models, id: \.self) { Text(verbatim: $0).tag($0) }
             }
+            .labelsHidden()
+            .frame(width: 230, alignment: .trailing)
+            .accessibilityIdentifier("\(identifier).model")
         }
+    }
 
-        SettingsRow(title: "モデル", caption: localServerCaption) {
-            if env.llmModels.isEmpty {
-                TextField("", text: modelBinding).textFieldStyle(.roundedBorder).frame(width: 230)
-            } else {
-                Picker("", selection: modelBinding) {
-                    ForEach(modelChoices, id: \.self) { Text($0).tag($0) }
-                }.labelsHidden().frame(width: 230, alignment: .trailing)
-            }
-        }
-
+    private var connectionCheck: some View {
         HStack(spacing: 10) {
-            Button(env.isCheckingLlm ? "確認中…" : "接続を確認") {
-                Task { await env.checkLlmConnection() }
+            Button(env.checkingLlmBackend == backend ? "確認中…" : "接続を確認") {
+                Task { await env.checkLlmConnection(backend: backend, model: model) }
             }
             .controlSize(.small)
-            .disabled(env.isCheckingLlm || (backend.sendsTranscriptOffDevice && !env.hasLlmApiKey))
-            if let status = env.llmStatus {
-                Text(status).font(.system(size: LoreTheme.TextSize.caption))
-                    .foregroundStyle(env.engines.llmAvailability.isReady ? LoreTheme.success : LoreTheme.danger)
+            .disabled(env.checkingLlmBackend != nil || (backend.sendsTranscriptOffDevice && !env.storedApiKeys.contains(backend)))
+            if let check = env.llmChecks[backend], check.model == model {
+                Text(verbatim: check.message).font(.system(size: LoreTheme.TextSize.caption))
+                    .foregroundStyle(check.succeeded ? LoreTheme.success : LoreTheme.danger)
                     .lineLimit(2)
             }
         }
     }
 
-    private var modelBinding: Binding<String> {
-        Binding(
-            get: { settings.model(for: backend) },
-            set: { value in
-                settings.setModel(value, for: backend)
-                Task { await env.applyEngineChange(checkCredentials: false) }
-            }
-        )
-    }
-
-    private var timeoutCard: some View {
-        SettingsCard(title: "待ち時間", footnote: "この時間を過ぎると整形をやめ、文字起こしをそのまま入力します。") {
-            SettingsRow(title: "整形を待つ時間") {
-                HStack(spacing: 10) {
-                    Slider(value: Binding(get: { Double(settings.formattingTimeoutMs) }, set: { settings.formattingTimeoutMs = Int($0) }), in: 2_000...20_000, step: 500).frame(width: 190)
-                    Text("\(String(format: "%.1f", Double(settings.formattingTimeoutMs) / 1_000)) 秒")
-                        .font(.system(size: LoreTheme.TextSize.caption)).monospacedDigit().foregroundStyle(.secondary)
-                }
-            }
-        }
-    }
-
+    /// クラウドはキーの有無、ローカルサーバーは接続確認で分かるので、ここではOS内蔵モデルだけを問い合わせる。
     @ViewBuilder
-    private func availabilityLabel(_ availability: EngineAvailability, canInstall: Bool) -> some View {
-        switch availability {
-        case .ready:
-            Label("使えます", systemImage: "checkmark.circle").font(.system(size: LoreTheme.TextSize.caption)).foregroundStyle(LoreTheme.success)
-        case .needsDownload(let reason):
-            HStack(spacing: 8) {
-                Text(reason).font(.system(size: LoreTheme.TextSize.caption)).foregroundStyle(LoreTheme.warning)
-                if canInstall { Button("取得") { Task { await env.installSpeechAssets() } }.controlSize(.small) }
-            }
-        case .unavailable(let reason):
+    private var availabilityLabel: some View {
+        if backend.sendsTranscriptOffDevice, !env.storedApiKeys.contains(backend) {
+            Text(String(lore: "\(backend.displayName) のAPIキーが未設定です"))
+                .font(.system(size: LoreTheme.TextSize.caption)).foregroundStyle(LoreTheme.warning)
+        } else if backend == .onDevice, case .unavailable(let reason) = onDeviceAvailability {
             Text(reason).font(.system(size: LoreTheme.TextSize.caption)).foregroundStyle(LoreTheme.danger).frame(maxWidth: 260)
+        } else if backend == .onDevice, case .needsDownload(let reason) = onDeviceAvailability {
+            Text(reason).font(.system(size: LoreTheme.TextSize.caption)).foregroundStyle(LoreTheme.warning)
+        } else {
+            Label("使えます", systemImage: "checkmark.circle").font(.system(size: LoreTheme.TextSize.caption)).foregroundStyle(LoreTheme.success)
         }
-    }
-
-    private var activeModelName: String {
-        backend == .onDevice ? "Apple Foundation Models" : "\(backend.displayName) / \(settings.model(for: backend))"
-    }
-
-    private var modelChoices: [String] {
-        let selected = settings.model(for: backend)
-        let models = env.llmModels
-        return models.contains(selected) ? models : [selected] + models
     }
 
     private var localServerCaption: String {
@@ -200,9 +221,68 @@ struct ModelsSettingsView: View {
         }
     }
 
-    private func saveKey() {
-        let key = apiKeyDraft
-        apiKeyDraft = ""
-        Task { await env.setLlmApiKey(key) }
+    private func commitModel() {
+        let trimmed = modelDraft.trimmingCharacters(in: .whitespacesAndNewlines)
+        let next = trimmed.isEmpty ? backend.defaultModel : trimmed
+        modelDraft = next
+        if next != model { setModel(next) }
+    }
+}
+
+/// クラウドプロバイダごとのAPIキー。どの用途が選んでいるかに関係なく、ここで登録・削除する。
+private struct APIKeysCard: View {
+    var env: AppEnvironment
+
+    @State private var drafts: [FormattingBackend: String] = [:]
+
+    private static let providers: [FormattingBackend] = FormattingBackend.allCases.filter(\.sendsTranscriptOffDevice)
+
+    var body: some View {
+        SettingsCard(title: "APIキー", footnote: "キーはこのMacのキーチェーンに保存し、同期しません。1つのキーを音声入力の整形とライフログAIの両方で使います。") {
+            ForEach(Self.providers) { backend in
+                SettingsRow(title: backend.displayName, caption: caption(for: backend)) {
+                    HStack(spacing: 8) {
+                        SecureField("API key", text: draft(backend))
+                            .textFieldStyle(.roundedBorder)
+                            .frame(width: 180)
+                            .onSubmit { save(backend) }
+                            .accessibilityIdentifier("ai-providers.api-key.\(backend.rawValue)")
+                        Button("保存") { save(backend) }
+                            .controlSize(.small)
+                            .disabled((drafts[backend] ?? "").trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                        if env.storedApiKeys.contains(backend) {
+                            Button("削除") { Task { await env.setApiKey("", for: backend) } }.controlSize(.small)
+                        }
+                    }
+                }
+            }
+            if let error = env.apiKeyError {
+                Text(verbatim: error).font(LoreTheme.captionFont).foregroundStyle(LoreTheme.danger)
+            }
+        }
+    }
+
+    private func caption(for backend: FormattingBackend) -> String {
+        var parts = [env.storedApiKeys.contains(backend) ? String(lore: "キーチェーンに保存済み") : String(lore: "未登録")]
+        let formatting = env.settings.formattingBackend == backend
+        let lifeLog = env.settings.lifeLogAI.backend == backend
+        switch (formatting, lifeLog) {
+        case (true, true): parts.append(String(lore: "音声入力の整形とライフログAIで選択中"))
+        case (true, false): parts.append(String(lore: "音声入力の整形で選択中"))
+        case (false, true): parts.append(String(lore: "ライフログAIで選択中"))
+        case (false, false): break
+        }
+        return parts.joined(separator: " · ")
+    }
+
+    private func draft(_ backend: FormattingBackend) -> Binding<String> {
+        Binding(get: { drafts[backend] ?? "" }, set: { drafts[backend] = $0 })
+    }
+
+    private func save(_ backend: FormattingBackend) {
+        let key = (drafts[backend] ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !key.isEmpty else { return }
+        drafts[backend] = nil
+        Task { await env.setApiKey(key, for: backend) }
     }
 }

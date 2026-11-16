@@ -1,13 +1,12 @@
 import SwiftUI
 
-/// Settings > Life Log AI. Every change goes through `AppEnvironment.updateLifeLogAI`, and a cloud
-/// provider takes effect only after the confirmation dialog.
+/// Settings > Life Log AI. Every change goes through `AppEnvironment.applyLifeLogAIChange`, and a cloud
+/// provider takes effect only after the confirmation dialog. The provider and model are chosen in AI Providers.
 struct LifeLogAISettingsView: View {
     var env: AppEnvironment
 
     /// A change that waits for the cloud confirmation. Nothing is stored until the user confirms.
     @State private var pending: LifeLogAISettings?
-    @State private var modelDraft = ""
 
     private var value: LifeLogAISettings { env.settings.lifeLogAI }
 
@@ -24,33 +23,13 @@ struct LifeLogAISettingsView: View {
                     })
                 )
                 .accessibilityIdentifier("life-log-ai.enabled")
-                SettingsRow(title: "プロバイダ") {
-                    Picker("", selection: Binding(get: { value.backend }, set: { backend in
-                        var next = value
-                        next.backend = backend
-                        next.model = backend.defaultModel
-                        apply(next)
-                    })) {
-                        ForEach(FormattingBackend.allCases) { backend in
-                            Text(verbatim: backend.displayName).tag(backend)
-                        }
-                    }
-                    .labelsHidden()
-                    .frame(width: 220)
-                    .accessibilityIdentifier("life-log-ai.provider")
-                }
-                if value.backend != .onDevice {
-                    SettingsRow(title: "モデル") {
-                        TextField("", text: $modelDraft)
-                            .textFieldStyle(.roundedBorder)
-                            .frame(width: 220)
-                            .onSubmit(commitModel)
-                            .accessibilityIdentifier("life-log-ai.model")
-                    }
-                }
-                if value.backend.sendsTranscriptOffDevice {
-                    SettingsRow(title: "APIキー", caption: "AI整形でこのプロバイダに保存したAPIキーを使います") {
-                        Button("AI整形を開く") { env.settingsSection = .models }
+                SettingsRow(title: "プロバイダ", caption: "APIキーとあわせて「AIプロバイダ」で選びます") {
+                    HStack(spacing: 10) {
+                        Text(verbatim: value.backend == .onDevice ? value.backend.displayName : "\(value.backend.displayName) / \(value.model)")
+                            .font(LoreTheme.bodyFont)
+                            .foregroundStyle(.secondary)
+                            .accessibilityIdentifier("life-log-ai.provider")
+                        Button("AIプロバイダを開く") { env.settingsSection = .aiProviders }.controlSize(.small)
                     }
                 }
             }
@@ -157,26 +136,10 @@ struct LifeLogAISettingsView: View {
         .accessibilityIdentifier("life-log-ai.settings.root")
         .toggleStyle(.switch)
         .task {
-            modelDraft = value.model
             env.refreshPermissions()
             if env.isCalendarGranted { await env.lifeLog.loadCalendars() }
         }
-        .onChange(of: value.backend) { modelDraft = value.model }
-        .onDisappear { if modelDraft != value.model, value.backend != .onDevice { commitModel() } }
-        .alert(
-            Text("\(pending?.backend.displayName ?? "")へ送信しますか？"),
-            isPresented: Binding(get: { pending != nil }, set: { if !$0 { pending = nil } })
-        ) {
-            Button("送信を許可") {
-                guard var next = pending else { return }
-                next.confirmedCloudBackend = next.backend
-                env.updateLifeLogAI(next)
-                pending = nil
-            }
-            Button("キャンセル", role: .cancel) { pending = nil }
-        } message: {
-            Text("予定が終わるたびに、その時間の発話とメモの本文を\(pending?.backend.displayName ?? "")のAPIへ送ります。1日のまとめでは、その日の発話とメモも送ります。音声は送りません。データはそのサービスの規約に従って扱われます。")
-        }
+        .lifeLogAICloudConfirmation($pending, env: env)
     }
 
     private var destination: String {
@@ -216,20 +179,7 @@ struct LifeLogAISettingsView: View {
         }
     }
 
-    private func commitModel() {
-        let trimmed = modelDraft.trimmingCharacters(in: .whitespacesAndNewlines)
-        var next = value
-        next.model = trimmed.isEmpty ? value.backend.defaultModel : trimmed
-        modelDraft = next.model
-        apply(next)
-    }
-
-    /// A change that would start sending to a cloud provider the user has not confirmed waits for the dialog.
     private func apply(_ next: LifeLogAISettings) {
-        if next.isEnabled, next.backend.sendsTranscriptOffDevice, next.confirmedCloudBackend != next.backend {
-            pending = next
-        } else {
-            env.updateLifeLogAI(next)
-        }
+        pending = env.applyLifeLogAIChange(next)
     }
 }

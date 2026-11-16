@@ -22,7 +22,7 @@ The test bundle isolates the **database**, not the filesystem or Keychain. These
 | `life-log.capture-toggle` / `life-log-mini.capture-toggle` (start recording) | records the mic and writes audio chunks into the **real** `Lore/LifeLog/` folder, orphaned from the in-memory DB |
 | `privacy.delete-life-log` then confirm | deletes the **real** `Lore/LifeLog/` audio folder |
 | `privacy.reset` ("Loreを初期化…") then confirm | deletes real life-log audio, real Whisper models and **all Lore Keychain secrets (API keys)** |
-| Saving an API key in Settings > AI整形 | writes into the real Keychain service |
+| Saving an API key in Settings > AIプロバイダ | writes into the real Keychain service |
 | `onboarding.start-life-log` | starts life-log capture once the audio-storage question has been answered (same effect as the capture toggle) |
 | Export sheet "コピー" | overwrites the user's clipboard (ask first) |
 
@@ -44,7 +44,7 @@ $V launch --demo         # demo data, main window on ライフログ; waits unti
 |---|---|---|
 | `--demo` | `--lore-screenshot-demo` | today's demo events, utterances, memos, one dictation (all Japanese copy by default) |
 | `--empty` | `--lore-ui-test-empty` | in-memory DB with no records (still has built-in modes) |
-| `--settings <privacy\|calendar\|life-log\|life-log-ai\|modes\|dictation>` | `--lore-ui-test-settings-<x>` | opens the Settings window on that section instead of the main window; `dictation` opens AI整形 (`models`), not 音声入力; ready = `settings.section.privacy` |
+| `--settings <privacy\|calendar\|life-log\|life-log-ai\|modes\|ai-providers>` | `--lore-ui-test-settings-<x>` | opens the Settings window on that section instead of the main window; ready = `settings.section.privacy` |
 | `--lang <en\|ja\|zh-Hans>` | `--lore-demo-language <x>` | language of the demo **data** only; the UI language is the persisted setting (see Gotchas) |
 | `--ready <id>` | — | override the ready identifier |
 | any other argument | passed through | e.g. `--lore-screenshot-onboarding --ready onboarding.next` shows onboarding (see `features/onboarding.md`) |

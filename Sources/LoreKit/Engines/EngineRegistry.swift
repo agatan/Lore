@@ -82,8 +82,9 @@ public final class EngineRegistry {
         }
     }
 
-    /// A fresh engine for one Life Log AI request, so its model never changes the formatting model.
-    public func lifeLogAIEngine(backend: FormattingBackend, model: String, session: URLSession = .shared) -> any LlmEngine {
+    /// A fresh engine for one Life Log AI request or one connection check in Settings,
+    /// so neither changes the formatting model.
+    public func standaloneEngine(backend: FormattingBackend, model: String, session: URLSession = .shared) -> any LlmEngine {
         switch backend {
         case .onDevice: onDeviceLlm
         case .groq: GroqLlm(model: model, session: session)

@@ -174,7 +174,7 @@ func launch(_ appPath: String, _ extra: [String]) async throws {
         case "--demo": arguments.append("--lore-screenshot-demo")
         case "--empty": arguments.append("--lore-ui-test-empty")
         case "--settings":
-            guard let section = iterator.next() else { throw fail("--settings needs privacy|calendar|life-log|life-log-ai|modes|dictation") }
+            guard let section = iterator.next() else { throw fail("--settings needs privacy|calendar|life-log|life-log-ai|modes|ai-providers") }
             arguments.append("--lore-ui-test-settings-\(section)")
             ready = "settings.section.privacy"
         case "--lang":
