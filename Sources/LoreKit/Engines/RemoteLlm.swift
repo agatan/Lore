@@ -36,7 +36,17 @@ public final class RemoteLlm: LlmEngine {
     }
 
     public var modelName: String? { model.withLock { $0 } }
-    public var inputCharacterBudget: Int { 24_000 }
+    /// Japanese text takes about one token per character, so each budget leaves room for the response
+    /// and tokenizer variance below the smallest context window of the provider's current models.
+    /// A local server's context depends on the model the user loaded, so it stays small.
+    public var inputCharacterBudget: Int {
+        switch api {
+        case .anthropic: 150_000
+        case .openAI: 150_000
+        case .gemini: 600_000
+        case .openAICompatible: 24_000
+        }
+    }
 
     public func apply(model newValue: String) {
         let trimmed = newValue.trimmingCharacters(in: .whitespacesAndNewlines)

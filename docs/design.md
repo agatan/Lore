@@ -202,6 +202,8 @@ The main and mini timelines each track from scroll geometry whether the end is v
 | Gemini | `RemoteLlm` | `generativelanguage.googleapis.com/v1beta` | Yes, only when explicitly selected |
 | Groq | `GroqLlm` | `api.groq.com/openai/v1` | Yes, only when explicitly selected |
 
+`LlmEngine.inputCharacterBudget` is the most system and user text, in characters, that one request may carry. Callers that choose their own input size, the Life Log AI requests, cut their input to it. It is sized for Japanese at about one token per character, which overcounts the ASCII label, time, and kind of each source line, below the smallest context window of each provider's current models: Anthropic and OpenAI 150,000 (200k-token and 400k-token models), Gemini 600,000 (1M-token models), Groq and the local servers 24,000 (Groq's per-minute token limits and the context of whatever model is loaded locally), and Foundation Models 2,200.
+
 `FormattingPrompt` is a text transformation request with only a system text and a user text. Gemini, Groq, and the OpenAI-compatible local servers run at temperature 0. Foundation Models uses greedy sampling and derives its response budget from the input length. The OpenAI and Anthropic requests set no temperature. For a model that emits reasoning, the adapter boundary removes the `<think>` part. Each provider also has a model listing call that the settings page uses to check the connection.
 
 API keys go to the Keychain through `SecretStore`. Lore never reads the Life Log keys of older versions. It lists them only as targets of the full reset.
