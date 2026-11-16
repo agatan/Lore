@@ -2,9 +2,13 @@ import SwiftUI
 
 struct LifeLogMemoComposer: View {
     private let actionDiameter: CGFloat = 28
+    /// 1行の入力欄は上下の余白を含めて約31pt。これを超えたら折り返しか改行で2行以上になっている。
+    private let singleLineHeight: CGFloat = 40
 
     @Binding var text: String
     var accessibilityPrefix: String
+    /// これを超える行数は入力欄の中でscrollする。
+    var maxLines: Int
     var isVoiceMemoRecording: Bool
     var isPreparingVoiceMemo: Bool
     var canToggleVoiceMemo: Bool
@@ -12,18 +16,31 @@ struct LifeLogMemoComposer: View {
     var onToggleVoiceMemo: () -> Void
     var onSend: (String) -> Void
 
+    @State private var isMultiline = false
+
     var body: some View {
         HStack(alignment: .bottom, spacing: 4) {
-            // 入力欄は浮いたbar自体を枠として使い、二重の枠を描かない。
-            TextField("メモを追加…", text: $text, axis: .vertical)
-                .textFieldStyle(.plain)
-                .font(.system(size: LoreTheme.TextSize.body))
-                .lineLimit(1...5)
-                .padding(.horizontal, 4)
-                .padding(.vertical, 7)
-                .frame(maxWidth: .infinity)
-                .onSubmit(send)
-                .accessibilityIdentifier("\(accessibilityPrefix).memo-input")
+            VStack(alignment: .leading, spacing: 0) {
+                // 入力欄は浮いたbar自体を枠として使い、二重の枠を描かない。
+                TextField("メモを追加…", text: $text, axis: .vertical)
+                    .textFieldStyle(.plain)
+                    .font(.system(size: LoreTheme.TextSize.body))
+                    .lineLimit(1...maxLines)
+                    .padding(.horizontal, 4)
+                    .padding(.vertical, 7)
+                    .onGeometryChange(for: Bool.self) { $0.size.height > singleLineHeight } action: { isMultiline = $0 }
+                    .memoShiftReturnInsertsNewline()
+                    .onSubmit(send)
+                    .accessibilityIdentifier("\(accessibilityPrefix).memo-input")
+                // 複数行を書き始めた時だけ、送信と改行のkeyを示す。1行の間は出さない。
+                if isMultiline {
+                    MemoKeyHint("Shift-Returnで改行")
+                        .padding(.horizontal, 4)
+                        .padding(.bottom, 4)
+                        .accessibilityIdentifier("\(accessibilityPrefix).memo-hint")
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
             voiceMemoButton
             Button(action: send) {
                 ZStack {
