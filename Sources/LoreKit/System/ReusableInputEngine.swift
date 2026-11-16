@@ -23,12 +23,13 @@ final class ReusableInputEngine {
         let engine = AVAudioEngine()
         self.engine = engine
         deviceID = currentDevice
+        let engineID = ObjectIdentifier(engine)
         configurationObserver = NotificationCenter.default.addObserver(
             forName: .AVAudioEngineConfigurationChange,
             object: engine,
             queue: nil
         ) { [weak self] _ in
-            Task { @MainActor in self?.invalidate(engine) }
+            Task { @MainActor in self?.invalidate(engineID) }
         }
         return engine
     }
@@ -50,8 +51,8 @@ final class ReusableInputEngine {
     }
 
     /// 録音中なら各captureが停止と再接続を担うため、ここでは次回の取得で作り直す印だけを付ける。
-    private func invalidate(_ changed: AVAudioEngine) {
-        guard engine === changed else { return }
+    private func invalidate(_ changed: ObjectIdentifier) {
+        guard let engine, ObjectIdentifier(engine) == changed else { return }
         deviceID = nil
     }
 }
