@@ -38,7 +38,7 @@ public enum AudioDevices {
         public var errorDescription: String? { switch self { case .notFound: String(lore: "選択した入力デバイスが見つかりません"); case .cannotSelect(let status): String(lore: "入力デバイスを選択できません (\(Int(status)))") } }
     }
 
-    private static func defaultInputDevice() -> AudioDeviceID? {
+    static func defaultInputDevice() -> AudioDeviceID? {
         var address = AudioObjectPropertyAddress(
             mSelector: kAudioHardwarePropertyDefaultInputDevice,
             mScope: kAudioObjectPropertyScopeGlobal,
