@@ -49,11 +49,13 @@ public struct GeneratedNoteSource: Sendable, Equatable {
         ranges.contains { $0.lowerBound < max(end, start.addingTimeInterval(0.001)) && start < $0.upperBound }
     }
 
+    /// Utterances are most lines of a day, so they carry no kind word and the time has no seconds;
+    /// the prompt says that a line without a kind is an utterance.
     func line(timeZone: TimeZone) -> String {
-        let clock = Self.formatter("HH:mm:ss", timeZone: timeZone)
-        let time = end.map { "\(Self.formatter("HH:mm", timeZone: timeZone).string(from: at))-\(Self.formatter("HH:mm", timeZone: timeZone).string(from: $0))" }
-            ?? clock.string(from: at)
-        return "\(label) [\(time)] \(kind.rawValue): \(text.replacingOccurrences(of: "\n", with: " "))\n"
+        let clock = Self.formatter("HH:mm", timeZone: timeZone)
+        let time = end.map { "\(clock.string(from: at))-\(clock.string(from: $0))" } ?? clock.string(from: at)
+        let kindPrefix = kind == .utterance ? "" : "\(kind.rawValue): "
+        return "\(label) \(time) \(kindPrefix)\(text.replacingOccurrences(of: "\n", with: " "))\n"
     }
 
     static func formatter(_ format: String, timeZone: TimeZone) -> DateFormatter {

@@ -46,7 +46,7 @@ public enum EventNotesPolicy {
     static let instructions = """
         You write short notes of the user's own side of an event from a personal Life Log: what the user took on, what the user asked others for, and what the user decided.
         The Life Log records only the user's own microphone. In an online meeting it does not contain what the other participants said. Never claim that the notes cover the whole meeting or what others said.
-        Each source line has a label such as S1, a time, a kind (utterance or memo), and text. Utterances are automatic speech recognition and may contain errors.
+        Each source line has a label such as S1, a time, and text. A memo, written by the user, starts its text with "memo:". Every other line is an utterance: automatic speech recognition, which may contain errors.
         Answer with one item per line, in exactly one of these forms:
         COMMIT (S1): something the user said they would do
         ASK (S2) [person]: something the user asked another person to do or answer, with the person in brackets only when a source names them
