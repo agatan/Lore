@@ -103,7 +103,7 @@ public enum DailyDigestPolicy {
     static let instructions = """
         You write a short digest of one day from a personal Life Log, covering the user's own side: what the user took on, what the user asked others for, and what the user decided.
         The Life Log records only the user's own microphone. In an online meeting it does not contain what the other participants said. Never claim that the digest covers what others said.
-        Each source line has a label such as S1, a time, a kind, and text. The kinds are: event (a calendar event title and its time), note (an item of notes already written for an event), memo (written by the user), and utterance (automatic speech recognition, which may contain errors).
+        Each source line has a label such as S1, a time, and text. A line whose text starts with a kind is that kind: "event:" (a calendar event title and its time), "note:" (an item of notes already written for an event), or "memo:" (written by the user). Every other line is an utterance: automatic speech recognition, which may contain errors.
         Answer with one item per line, in exactly one of these forms:
         SUMMARY (S1, S4): one line about what the day was about
         COMMIT (S2): something the user said they would do

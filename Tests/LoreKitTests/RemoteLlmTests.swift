@@ -5,6 +5,33 @@ import Testing
 
 @Suite(.serialized)
 struct RemoteLlmTests {
+    @Test("クラウドの入力予算はプロバイダの文脈長に合わせ、ローカルサーバーは小さく保つ")
+    func inputBudgets() {
+        #expect(EngineRegistry.makeRemote(.anthropic).inputCharacterBudget == 150_000)
+        #expect(EngineRegistry.makeRemote(.openAI).inputCharacterBudget == 150_000)
+        #expect(EngineRegistry.makeRemote(.gemini).inputCharacterBudget == 600_000)
+        #expect(EngineRegistry.makeRemote(.ollama).inputCharacterBudget == 24_000)
+        #expect(EngineRegistry.makeRemote(.lmStudio).inputCharacterBudget == 24_000)
+    }
+
+    @Test("発話の多い一日でもClaudeとOpenAIのダイジェストは発話を省かない")
+    func busyDayFitsCloudBudget() {
+        // A busy day seen in real use: about 1,800 utterances of about 30 characters.
+        let base = Date(timeIntervalSince1970: 1_800_000_000)
+        let sources = (0..<1_800).map { index in
+            GeneratedNoteSource(kind: .utterance, timelineID: "u-\(index)", recordID: "\(index)",
+                                at: base.addingTimeInterval(Double(index) * 20), text: String(repeating: "発", count: 30))
+        }
+        let input = DailyDigestInput(day: "2027-01-15", sources: GeneratedNoteSource.labeled(sources), spokenCharacters: 54_000)
+        for backend in [FormattingBackend.anthropic, .openAI] {
+            let budget = EngineRegistry.makeRemote(backend).inputCharacterBudget
+            let (prompt, sent, omitted) = DailyDigestPolicy.prompt(for: input, characterBudget: budget)
+            #expect(omitted == 0)
+            #expect(sent.count == sources.count)
+            #expect(prompt.system.count + prompt.user.count <= budget)
+        }
+    }
+
     @Test("OpenAIはResponses APIを使い保存を無効にする")
     func openAIRequest() async throws {
         RemoteStub.respond { request in

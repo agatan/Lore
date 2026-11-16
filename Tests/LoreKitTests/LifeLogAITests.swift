@@ -431,6 +431,18 @@ struct LifeLogAITests {
         #expect(try LifeLogJSON.encode(entries).contains("\"generated\" : true"))
     }
 
+    @Test("A source line is label, minute, and text, and only kinds other than utterance name their kind")
+    func sourceLine() {
+        let utc = TimeZone(identifier: "UTC")!
+        let at = Date(timeIntervalSince1970: 1_800_000_045)
+        let line = { (kind: GeneratedNoteSource.Kind, end: Date?) in
+            GeneratedNoteSource(label: "S7", kind: kind, timelineID: "t", recordID: "r", at: at, end: end, text: "a\nb").line(timeZone: utc)
+        }
+        #expect(line(.utterance, nil) == "S7 08:00 a b\n")
+        #expect(line(.memo, nil) == "S7 08:00 memo: a b\n")
+        #expect(line(.event, at.addingTimeInterval(3_600)) == "S7 08:00-09:00 event: a b\n")
+    }
+
     @Test("The parser reads one item per line, accepts NONE, and rejects an unreadable answer")
     func parser() throws {
         let sent = [GeneratedNoteSource(label: "S1", kind: .utterance, timelineID: "u-a", recordID: "a", at: Date(), text: "x"),
