@@ -5,11 +5,13 @@ on:
     branches: [main]
     paths:
       - "site/**"
+      - "worker/**"
       - "wrangler.jsonc"
       - ".github/workflows/site.yml"
   pull_request:
     paths:
       - "site/**"
+      - "worker/**"
       - "wrangler.jsonc"
       - ".github/workflows/site.yml"
   workflow_dispatch:

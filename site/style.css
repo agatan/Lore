@@ -90,10 +90,19 @@ header.top .wrap { display: flex; align-items: center; gap: 24px; height: 60px; 
 nav.links { display: flex; gap: 22px; margin-left: auto; font-size: 14px; }
 nav.links a, .lang a { text-decoration: none; color: var(--muted); }
 nav.links a:hover, .lang a:hover { color: var(--ink); }
-.lang { display: flex; align-items: center; font-size: 13px; flex: none; }
-.lang ul { display: flex; gap: 2px; list-style: none; margin: 0; padding: 2px; border: 1px solid var(--line); border-radius: 999px; }
-.lang a { display: block; padding: 3px 10px; border-radius: 999px; white-space: nowrap; }
-.lang a[aria-current="page"] { background: var(--surface); color: var(--ink); font-weight: 600; }
+.lang { position: relative; flex: none; font-size: 13px; }
+.lang summary { display: flex; align-items: center; gap: 5px; padding: 4px 6px; border-radius: 6px; color: var(--muted); cursor: pointer; list-style: none; }
+.lang summary::-webkit-details-marker { display: none; }
+.lang summary:hover, .lang[open] summary { color: var(--ink); }
+.lang ul {
+  position: absolute; right: 0; top: calc(100% + 6px); min-width: 132px;
+  list-style: none; margin: 0; padding: 4px;
+  background: var(--bg); border: 1px solid var(--line); border-radius: 10px;
+  box-shadow: 0 8px 24px rgb(0 0 0 / 0.12);
+}
+.lang a { display: block; padding: 6px 10px; border-radius: 6px; white-space: nowrap; }
+.lang a:hover { background: var(--surface); }
+.lang a[aria-current="page"] { color: var(--ink); font-weight: 600; }
 
 .btn {
   display: inline-flex; align-items: center; gap: 8px;
@@ -214,7 +223,6 @@ footer .wrap { display: flex; gap: 12px 24px; flex-wrap: wrap; justify-content: 
   :root { --gutter: 16px; }
   header.top .wrap { gap: 12px; }
   header.top .btn { display: none; }
-  .lang a { padding: 3px 8px; }
   .hero { padding-top: 48px; }
   .stage { margin-top: 44px; }
   .closing { padding: 104px 0 88px; }

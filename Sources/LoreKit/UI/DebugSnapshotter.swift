@@ -147,14 +147,13 @@ enum DebugSnapshotter {
         case .simplifiedChinese: "用快捷键导出"
         default: "ショートカットからの書き出し"
         }
-        let locale = env.settings.applicationLanguage.resolvedLocale()
-        try await captureHosted(LifeLogSearchSheet(env: env, initialQuery: query).background(.background).environment(\.locale, locale),
+        try await captureHosted(LifeLogSearchSheet(env: env, initialQuery: query).background(.background),
                                 as: "digest-search", into: directory)
         presenter.showSettings(.lifeLogAI)
         await settle(1)
         try await capture(LoreWindow.settings, as: "digest-settings", into: directory)
         if let yesterday = morning {
-            try await captureHosted(MorningDigestSheet(env: env, digest: yesterday).background(.background).environment(\.locale, locale),
+            try await captureHosted(MorningDigestSheet(env: env, digest: yesterday).background(.background),
                                     as: "digest-morning", into: directory)
         }
     }
@@ -205,10 +204,8 @@ enum DebugSnapshotter {
         presenter.toggleLifeLogMini()
         await settle(1.5)
         try await capture(LoreWindow.lifeLogMini, as: "mini-meeting-join", into: directory)
-        // `LoreApp` gives the real panel the display language; a hosted copy needs it too.
         try await captureHosted(
             MenuBarPanel(env: env)
-                .environment(\.locale, env.settings.applicationLanguage.resolvedLocale())
                 .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
                 .padding(40)
                 .background(SnapshotWallpaper()),
@@ -264,8 +261,9 @@ enum DebugSnapshotter {
         coordinator.applyPreviewState(phase: .idle)
     }
 
+    /// Real windows get the display language from `LoreApp`; a bare hosting view would fall back to the macOS language.
     private static func captureHosted(_ view: some View, as name: String, into directory: URL) async throws {
-        let hosting = NSHostingView(rootView: view)
+        let hosting = NSHostingView(rootView: view.environment(\.locale, LoreLocalization.locale))
         let size = hosting.fittingSize
         let window = NSWindow(contentRect: NSRect(origin: .zero, size: size), styleMask: [.borderless], backing: .buffered, defer: false)
         window.identifier = NSUserInterfaceItemIdentifier("lore.snapshot.\(name)")
