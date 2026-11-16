@@ -27,7 +27,7 @@ public final class ContinuousAudioCapture {
     public var inputDeviceUID: String?
 
     private let root: URL
-    private var engine: AVAudioEngine?
+    private let inputEngine = ReusableInputEngine()
     private var continuation: AsyncStream<AudioChunk>.Continuation?
     private var resampler: Resampler?
     private var writer: DurableAudioChunkWriter?
@@ -45,7 +45,7 @@ public final class ContinuousAudioCapture {
         guard Permissions.isMicrophoneGranted else { throw Failure.microphoneDenied }
         try AudioDevices.selectInput(uid: inputDeviceUID)
 
-        let engine = AVAudioEngine()
+        let engine = inputEngine.acquire()
         let input = engine.inputNode
         let inputFormat = input.outputFormat(forBus: 0)
         guard inputFormat.sampleRate > 0, inputFormat.channelCount > 0 else { throw Failure.noInputDevice }
@@ -66,13 +66,12 @@ public final class ContinuousAudioCapture {
         engine.mainMixerNode.outputVolume = 0
         engine.prepare()
         do { try engine.start() } catch {
-            input.removeTap(onBus: 0)
+            inputEngine.discard()
             continuation.finish()
             writer.cancel()
             throw error
         }
 
-        self.engine = engine
         self.continuation = continuation
         self.resampler = resampler
         self.writer = writer
@@ -119,11 +118,7 @@ public final class ContinuousAudioCapture {
         rotationTask = nil
         if let configurationObserver { NotificationCenter.default.removeObserver(configurationObserver) }
         configurationObserver = nil
-        if let engine {
-            engine.inputNode.removeTap(onBus: 0)
-            engine.stop()
-        }
-        engine = nil
+        inputEngine.stop()
         continuation?.finish()
         continuation = nil
         resampler = nil

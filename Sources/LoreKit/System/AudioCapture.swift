@@ -27,7 +27,7 @@ public final class AudioCapture {
         }
     }
 
-    private var engine: AVAudioEngine?
+    private let inputEngine = ReusableInputEngine()
     private var chunkContinuation: AsyncStream<AudioChunk>.Continuation?
     private var levelContinuation: AsyncStream<Float>.Continuation?
     private var capturedFrames: AVAudioFramePosition = 0
@@ -53,7 +53,7 @@ public final class AudioCapture {
         stop()
 
         let target = requested ?? AudioFormats.canonical
-        let engine = AVAudioEngine()
+        let engine = inputEngine.acquire()
         let input = engine.inputNode
         let inputFormat = input.outputFormat(forBus: 0)
         guard inputFormat.sampleRate > 0, inputFormat.channelCount > 0 else {
@@ -94,13 +94,12 @@ public final class AudioCapture {
         do {
             try engine.start()
         } catch {
-            input.removeTap(onBus: 0)
+            inputEngine.discard()
             chunkContinuation.finish()
             levelContinuation.finish()
             throw error
         }
 
-        self.engine = engine
         self.chunkContinuation = chunkContinuation
         self.levelContinuation = levelContinuation
         self.resampler = resampler
@@ -113,11 +112,7 @@ public final class AudioCapture {
 
     /// 停止 = ストリームの終了。エンジン側はこれを「録音停止」として受け取り最終確定に進む。
     public func stop() {
-        if let engine {
-            engine.inputNode.removeTap(onBus: 0)
-            engine.stop()
-        }
-        engine = nil
+        inputEngine.stop()
         if let resampler {
             capturedFrames = resampler.producedFrames
             lastChunkCount = resampler.chunkCount
