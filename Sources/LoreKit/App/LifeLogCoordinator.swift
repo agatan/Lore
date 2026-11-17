@@ -1004,6 +1004,9 @@ public final class LifeLogCoordinator {
             today = Calendar.current.isDateInToday(selectedDate)
                 ? day
                 : try await database.lifeLog.day(Date(), participatingOnly: participatingOnly)
+            var seen = Set<String>()
+            let unreadable = (day.unreadableNotes + today.unreadableNotes).filter { seen.insert($0.id).inserted }
+            if !unreadable.isEmpty { fail(UnreadableGeneratedNotesError(notes: unreadable)) }
         } catch { fail(error) }
     }
 

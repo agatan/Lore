@@ -171,6 +171,29 @@ public enum GeneratedNoteStaleReason: String, Codable, Sendable, Hashable, CaseI
     case sourcesDeleted = "sources_deleted"
 }
 
+/// A stored note row that failed to decode. Saving a note for the same scope replaces the row.
+public struct UnreadableGeneratedNote: Sendable, Hashable {
+    public var id: String
+    public var scopeKey: String
+    public var reason: String
+
+    public init(id: String, scopeKey: String, reason: String) {
+        self.id = id
+        self.scopeKey = scopeKey
+        self.reason = reason
+    }
+}
+
+public struct UnreadableGeneratedNotesError: LocalizedError, Sendable {
+    public var notes: [UnreadableGeneratedNote]
+
+    public init(notes: [UnreadableGeneratedNote]) { self.notes = notes }
+
+    public var errorDescription: String? {
+        String(lore: "読み込めないAIノートが\(notes.count)件あります。ノートを作り直すと置き換わります。")
+    }
+}
+
 public struct GeneratedNote: Identifiable, Sendable, Hashable {
     public var id: String
     public var kind: GeneratedNoteKind
