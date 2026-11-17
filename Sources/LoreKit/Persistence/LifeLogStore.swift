@@ -144,20 +144,22 @@ public struct LifeLogStore: Sendable {
             let memos = try Row.fetchAll(db, sql: "SELECT * FROM life_log_memos WHERE created_at >= ? AND created_at < ? ORDER BY created_at", arguments: args).map(decodeMemo)
             let participationClause = participatingOnly ? Self.attendingOnlyClause : ""
             let events = try Row.fetchAll(db, sql: "SELECT * FROM calendar_event_snapshots WHERE ends_at > ? AND starts_at < ?\(participationClause) ORDER BY starts_at", arguments: args).map(decodeEvent)
+            var unreadable: [UnreadableGeneratedNote] = []
             let notes = try Row.fetchAll(db, sql: "SELECT * FROM generated_notes WHERE scope_day = ? ORDER BY range_start", arguments: [LifeLogDateKey.string(for: dateValue, calendar: calendar)])
-                .map { try decodeGeneratedNote($0, db: db) }
+                .compactMap { try decodeGeneratedNote($0, db: db, unreadable: &unreadable) }
             var previous: [EventOccurrence: PreviousEventOccurrence] = [:]
             for event in events where !event.isAllDay {
-                previous[EventOccurrence(event, calendar: calendar)] = try previousOccurrence(of: event, db: db, calendar: calendar)
+                previous[EventOccurrence(event, calendar: calendar)] = try previousOccurrence(of: event, db: db, calendar: calendar, unreadable: &unreadable)
             }
             return LifeLogDay(utterances: utterances, dictations: dictations, memos: memos, calendarEvents: events,
-                              generatedNotes: notes, previousOccurrences: previous)
+                              generatedNotes: notes, previousOccurrences: previous, unreadableNotes: unreadable)
         }
     }
 
     /// The latest earlier day with speech under the same event identifier. Comparing with the start of
     /// this occurrence, not of this day, keeps an event that crosses midnight from finding itself.
-    private func previousOccurrence(of event: CalendarEventSnapshot, db: Database, calendar: Calendar) throws -> PreviousEventOccurrence? {
+    private func previousOccurrence(of event: CalendarEventSnapshot, db: Database, calendar: Calendar,
+                                    unreadable: inout [UnreadableGeneratedNote]) throws -> PreviousEventOccurrence? {
         guard let latest = try String.fetchOne(db, sql: """
             SELECT started_at FROM life_log_utterances WHERE calendar_event_id = ? AND started_at < ?
             ORDER BY started_at DESC LIMIT 1
@@ -171,7 +173,7 @@ public struct LifeLogStore: Sendable {
         let occurrence = EventOccurrence(eventID: event.id, day: LifeLogDateKey.string(for: latestStart, calendar: calendar))
         let notes = try Row.fetchOne(db, sql: "SELECT * FROM generated_notes WHERE kind = ? AND scope_key = ?",
                                      arguments: [GeneratedNoteKind.eventNotes.rawValue, GeneratedNoteScope.event(occurrence).key])
-            .map { try decodeGeneratedNote($0, db: db) }
+            .flatMap { try decodeGeneratedNote($0, db: db, unreadable: &unreadable) }
         let memos = try previousMemos(of: event, containing: latestStart, db: db)
         return PreviousEventOccurrence(occurrence: occurrence, firstUtteranceID: firstID, notes: notes, memos: memos)
     }
@@ -477,6 +479,25 @@ public struct LifeLogStore: Sendable {
                 try db.execute(sql: "DELETE FROM life_log_ai_event_exclusions WHERE event_id = ?", arguments: [eventID])
             }
         }
+    }
+
+    /// Decodes a note for the day view. A row whose stored values do not decode is collected instead of
+    /// failing the day. Database errors still throw.
+    private func decodeGeneratedNote(_ r: Row, db: Database, unreadable: inout [UnreadableGeneratedNote]) throws -> GeneratedNote? {
+        do {
+            return try decodeGeneratedNote(r, db: db)
+        } catch let error as DecodingError {
+            unreadable.append(unreadableNote(r, error))
+        } catch let error as PersistenceError {
+            unreadable.append(unreadableNote(r, error))
+        }
+        return nil
+    }
+
+    private func unreadableNote(_ r: Row, _ error: Error) -> UnreadableGeneratedNote {
+        let note = UnreadableGeneratedNote(id: r["id"], scopeKey: r["scope_key"], reason: String(describing: error))
+        LoreLog.persistence.error("AIノートを読み込めません: \(note.id, privacy: .public) \(note.scopeKey, privacy: .public) \(note.reason, privacy: .public)")
+        return note
     }
 
     private func decodeGeneratedNote(_ r: Row, db: Database) throws -> GeneratedNote {

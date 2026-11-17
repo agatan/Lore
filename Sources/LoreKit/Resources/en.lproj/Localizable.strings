@@ -718,3 +718,4 @@
 "ライフログAIで選択中" = "Selected for Life Log AI";
 "APIキーとあわせて「AIプロバイダ」で選びます" = "Chosen in AI Providers, together with API keys";
 "AIプロバイダを開く" = "Open AI Providers";
+"読み込めないAIノートが%lld件あります。ノートを作り直すと置き換わります。" = "%lld AI notes couldn’t be read. Generating the notes again replaces them.";

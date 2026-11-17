@@ -376,6 +376,31 @@ struct LifeLogAITests {
         #expect(harness.fixture.spy.prompts.count == 1)
     }
 
+    @Test("A note that cannot be decoded is set aside, the day keeps its records, and generating again replaces it")
+    func unreadableNoteKeepsTheDay() async throws {
+        let harness = Harness(try await Fixture.make())
+        try await harness.service.generate(kind: .eventNotes, scope: harness.scope)
+        let database = harness.fixture.database
+        try await database.queue.write { db in
+            try db.execute(sql: """
+                UPDATE generated_notes SET content = '[{"items":[],"kind":"action_items"}]'
+                """)
+        }
+
+        let day = try await database.lifeLog.day(harness.fixture.event.startsAt)
+        #expect(day.utterances.map(\.id).contains("u1"))
+        #expect(day.memos.map(\.id) == ["m1"])
+        #expect(day.calendarEvents.map(\.id) == ["event-1"])
+        #expect(day.generatedNotes.isEmpty)
+        #expect(day.unreadableNotes.map(\.scopeKey) == [harness.scope.key])
+        #expect(UnreadableGeneratedNotesError(notes: day.unreadableNotes).errorDescription?.contains("1") == true)
+
+        try await harness.service.generate(kind: .eventNotes, scope: harness.scope)
+        let regenerated = try await database.lifeLog.day(harness.fixture.event.startsAt)
+        #expect(regenerated.unreadableNotes.isEmpty)
+        #expect(regenerated.generatedNotes.count == 1)
+    }
+
     @Test("Saving the next occurrence of a repeating event leaves this occurrence's note unmarked")
     func nextOccurrenceDoesNotMarkNote() async throws {
         let harness = Harness(try await Fixture.make())

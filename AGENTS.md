@@ -19,6 +19,7 @@ Keep Lore's implementation, external specification, and internal design aligned 
 - Before changing external behavior, module boundaries, persistence models, deletion semantics, or data transmission, update the relevant Markdown and HTML documents first. Treat the updated design and specification as automatically approved and continue to implementation unless the user explicitly requests pair review or an approval pause.
 - For a change a Lore user can notice, add one fragment to `changelog.d/` as `changelog.d/README.md` describes. Do not edit `CHANGELOG.md` by hand; `python3 Scripts/changelog.py release <version>` writes it.
 - Do not commit, push, publish, open a pull request, install software, or change external systems unless explicitly requested.
+- Write commit messages and pull request and issue titles and bodies in English.
 - Ask before destructive or hard-to-recover actions whose exact target is not already explicit.
 
 ## Implementation constraints
@@ -29,6 +30,7 @@ Keep Lore's implementation, external specification, and internal design aligned 
 - Preserve these recovery contracts: save finalized dictation text before formatting; use raw text when formatting fails; leave the result on the clipboard when insertion fails; commit life-log audio before processing; resume pending chunks; back up an existing database before migration and daily; retain seven database backups; remove backups when the user chooses full data deletion.
 - Cloud processing is opt-in. Never send recorded audio, API keys, unrelated history, or frontmost-application metadata.
 - Add a GRDB migration only for a persisted schema change. Do not add migrations or fallback decoding for unreleased, unreachable states.
+- Localize every string a user can see in English, Japanese, and Simplified Chinese. This covers UI text, notices, and error messages, including errors thrown from `Domain/`, `Persistence/`, `Engines/`, `System/`, and `Automation/` that reach the screen or a Shortcuts result. Write the Japanese source text through `String(lore:)` or a SwiftUI literal, and add the key to all three `Sources/LoreKit/Resources/*.lproj/Localizable.strings`. Only log messages, LLM prompts, and DEBUG-only code may stay untranslated. `LocalizationCoverageTests` scans only `UI/` and `App/`, so passing it does not prove the rest is localized.
 
 ## Validation
 

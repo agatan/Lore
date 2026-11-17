@@ -369,6 +369,7 @@ The `initialize` result carries `instructions` for the AI client. They say that 
 - A formatting failure falls back to the raw transcript. An insertion failure leaves the result on the clipboard.
 - A failure of database initialization, saving, search, or backup is never treated as success. Lore reports the reason on screen, through MCP, or in the log.
 - An interrupted Life Log capture reconnects automatically only while recording is enabled, and stored chunks are not lost.
+- A stored AI note that cannot be read does not hide the rest of the day. The timeline still shows the events, utterances, dictations, memos, and the readable notes, the Life Log notice says how many notes could not be read, and the note's place offers "Generate Notes" (or a new digest), which replaces it.
 - If the Shortcuts stop action times out, its error says that the stored audio will be reprocessed at the next launch.
 
 ## 10. Acceptance criteria

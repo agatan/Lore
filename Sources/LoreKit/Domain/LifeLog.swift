@@ -174,16 +174,21 @@ public struct LifeLogDay: Sendable {
     public var generatedNotes: [GeneratedNote]
     /// The latest earlier occurrence with recorded speech, keyed by the occurrence it precedes.
     public var previousOccurrences: [EventOccurrence: PreviousEventOccurrence]
+    /// Stored notes of this day or of an earlier occurrence that could not be decoded. Notes are regenerable
+    /// output, so they are set aside here instead of hiding the records of the day.
+    public var unreadableNotes: [UnreadableGeneratedNote]
 
     public init(utterances: [LifeLogUtterance] = [], dictations: [LifeLogDictation] = [], memos: [LifeLogMemo] = [],
                 calendarEvents: [CalendarEventSnapshot] = [], generatedNotes: [GeneratedNote] = [],
-                previousOccurrences: [EventOccurrence: PreviousEventOccurrence] = [:]) {
+                previousOccurrences: [EventOccurrence: PreviousEventOccurrence] = [:],
+                unreadableNotes: [UnreadableGeneratedNote] = []) {
         self.utterances = utterances
         self.dictations = dictations
         self.memos = memos
         self.calendarEvents = calendarEvents
         self.generatedNotes = generatedNotes
         self.previousOccurrences = previousOccurrences
+        self.unreadableNotes = unreadableNotes
     }
 
     /// What the "Last time" row of an event shows, or nil when it shows nothing.
