@@ -60,6 +60,7 @@ final class LoreApplicationDelegate: NSObject, NSApplicationDelegate {
                 LoreLog.ui.error("起動時にAppEnvironmentを取得できませんでした")
                 return
             }
+            WindowActivityLog.start()
             let presenter = LoreWindowPresenter(env: environment)
             windowPresenter = presenter
             environment.onShowMainWindow = { [weak presenter] in presenter?.showMain() }
