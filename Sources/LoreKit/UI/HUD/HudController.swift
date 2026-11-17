@@ -6,11 +6,18 @@ import SwiftUI
 ///
 /// フォーカスを奪わないことが要件(FR-8.2)なので、非アクティブ化パネルを使い、
 /// キー入力は受け取らない。Esc は既存のイベントタップ側で拾う。
+///
+/// パネルは最も大きく伸びた形が収まる固定の大きさで作り、HUD はその中で下端・中央に寄せて描く。
+/// 内容に合わせて window の frame を変えると、SwiftUI の window 寸法の追従と位置合わせが
+/// layout の中で再入し、main thread のスタックを使い切って落ちたことがあるため。
 @MainActor
 final class HudController {
+    /// 本文 3 行と終了時の注記 2 行が伸びた board に、周囲の余白 16 pt を足しても収まる大きさ。
+    static let panelSize = NSSize(width: 472, height: 240)
+
     private let coordinator: DictationCoordinator
     private let settings: AppSettings
-    private var panel: NSPanel?
+    private(set) var panel: NSPanel?
     private var observationTask: Task<Void, Never>?
 
     init(coordinator: DictationCoordinator, settings: AppSettings) {
@@ -62,11 +69,13 @@ final class HudController {
                 context.duration = 0.16
                 panel.animator().alphaValue = 1
             }
+            WindowActivityLog.record("show", panel)
         }
     }
 
     private func hide() {
         guard let panel, panel.isVisible else { return }
+        WindowActivityLog.record("hide", panel)
         NSAnimationContext.runAnimationGroup { context in
             context.duration = 0.2
             panel.animator().alphaValue = 0
@@ -83,10 +92,10 @@ final class HudController {
                 self?.coordinator.cancel()
             }
         )
-        hosting.sizingOptions = [.preferredContentSize]
+        hosting.sizingOptions = []
 
         let panel = NSPanel(
-            contentRect: NSRect(x: 0, y: 0, width: 468, height: 120),
+            contentRect: NSRect(origin: .zero, size: Self.panelSize),
             styleMask: [.borderless, .nonactivatingPanel],
             backing: .buffered,
             defer: false
@@ -102,18 +111,9 @@ final class HudController {
         panel.collectionBehavior = [.canJoinAllSpaces, .stationary, .fullScreenAuxiliary, .ignoresCycle]
         panel.animationBehavior = .none
         panel.becomesKeyOnlyIfNeeded = true
-
-        NotificationCenter.default.addObserver(
-            forName: NSWindow.didResizeNotification,
-            object: panel,
-            queue: .main
-        ) { [weak self] _ in
-            MainActor.assumeIsolated {
-                guard let self, let panel = self.panel else { return }
-                self.reposition(panel)
-            }
-        }
-
+        panel.identifier = NSUserInterfaceItemIdentifier("lore.hud")
+        // contentViewControllerを設定するとcontentの大きさへ縮むため、設定後に固定の大きさへ戻す。
+        panel.setContentSize(Self.panelSize)
         return panel
     }
 
@@ -138,5 +138,7 @@ private struct HudLocalizedView: View {
     var body: some View {
         HudView(coordinator: coordinator, onCancel: onCancel)
             .environment(\.locale, settings.applicationLanguage.resolvedLocale())
+            // 固定の大きさのパネルの中で、capsuleの下端を画面の同じ高さに保ったまま上へ伸ばす。
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
     }
 }
