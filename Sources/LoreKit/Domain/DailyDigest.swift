@@ -5,6 +5,8 @@ import Foundation
 public struct DailyDigestInput: Sendable, Equatable {
     public var day: String
     public var sources: [GeneratedNoteSource]
+    /// The events whose titles were sent. Items are attributed to them after the answer is read.
+    public var events: [CalendarEventSnapshot] = []
     /// Utterance text outside excluded ranges, counted before event notes replace utterances.
     public var spokenCharacters: Int
 }
@@ -51,6 +53,7 @@ public enum DailyDigestPolicy {
         return DailyDigestInput(
             day: dayKey,
             sources: GeneratedNoteSource.labeled(eventSources + noteSources + memos.map(GeneratedNoteSource.init(memo:)) + rawUtterances),
+            events: events,
             spokenCharacters: utterances.reduce(0) { $0 + $1.text.count }
         )
     }
@@ -105,12 +108,14 @@ public enum DailyDigestPolicy {
         The Life Log records only the user's own microphone. In an online meeting it does not contain what the other participants said. Never claim that the digest covers what others said.
         Each source line has a label such as S1, a time, and text. A line whose text starts with a kind is that kind: "event:" (a calendar event title and its time), "note:" (an item of notes already written for an event), or "memo:" (written by the user). Every other line is an utterance: automatic speech recognition, which may contain errors.
         Answer with one item per line, in exactly one of these forms:
-        SUMMARY (S1, S4): one line about what the day was about
+        SUMMARY (S1, S4): one meeting or conversation: with whom, what was discussed, and how it ended
         COMMIT (S2): something the user said they would do
         ASK (S3) [person]: something the user asked another person to do or answer, with the person in brackets only when a source names them
         DECIDE (S5): a decision the user made or agreed to
         Rules:
-        - Write one to three SUMMARY lines first, then the other items.
+        - Write the SUMMARY lines first, one for each meeting or conversation worth noting, at most six, then the other items.
+        - Someone who reads only the digest must understand every line. Name the concrete subject (which matter, case, project, or document) instead of a bare action such as "contact them about the adjustment", and name the person when a source does. An event title is a source, so a title such as "1on1 with Sato" names Sato.
+        - Lore shows the title of the event each line comes from next to the line, so do not start a line with the event title.
         - Memos are always the user's own words. Utterances are speech recognition of this Mac's microphone: mostly the user's voice, but other voices in the room may appear, and no speaker is labeled.
         - Write an item only when the sources show it is the user's own commitment, request, or decision. Leave it out when you are unsure who said it.
         - Use only what the sources say. Do not invent commitments, requests, decisions, people, dates, or facts.
@@ -136,8 +141,28 @@ public enum DailyDigestPolicy {
         return (FormattingPrompt(system: instructions, user: user), sent, omitted)
     }
 
-    public static func parse(_ output: String, sent: [GeneratedNoteSource]) throws -> [GeneratedNoteSection] {
-        try GeneratedNoteResponse.parse(output, sent: sent, sections: sections)
+    public static func parse(_ output: String, input: DailyDigestInput, sent: [GeneratedNoteSource],
+                             calendar: Calendar = .current) throws -> [GeneratedNoteSection] {
+        let byTimelineID = Dictionary(sent.map { ($0.timelineID, $0) }, uniquingKeysWith: { first, _ in first })
+        let byOccurrence = Dictionary(input.events.map { (EventOccurrence($0, calendar: calendar).timelineItemID, $0) },
+                                      uniquingKeysWith: { first, _ in first })
+        func event(of timelineID: String) -> CalendarEventSnapshot? {
+            guard let source = byTimelineID[timelineID] else { return nil }
+            switch source.kind {
+            case .event, .note: return byOccurrence[timelineID]
+            case .utterance, .memo: return input.events.timedEventInProgress(at: source.at)
+            }
+        }
+        return try GeneratedNoteResponse.parse(output, sent: sent, sections: sections).map { section in
+            GeneratedNoteSection(kind: section.kind, items: section.items.map { item in
+                var item = item
+                var seen = Set<String>()
+                item.events = item.sources.compactMap(event(of:))
+                    .filter { seen.insert(EventOccurrence($0, calendar: calendar).timelineItemID).inserted }
+                    .map(\.title)
+                return item
+            })
+        }
     }
 }
 

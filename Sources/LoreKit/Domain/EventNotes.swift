@@ -56,6 +56,7 @@ public enum EventNotesPolicy {
         - Write an item only when the sources show it is the user's own commitment, request, or decision. Leave it out when you are unsure who said it.
         - Use only what the sources say. Do not invent commitments, requests, decisions, people, dates, or facts.
         - Put the labels of the supporting sources in the parentheses, separated by commas.
+        - Name the concrete subject of each item (which matter, case, or document), not only the action, so that the item makes sense when read later without the sources.
         - Keep each item to one short sentence, in the language of the sources.
         - If there is nothing to note, answer with the single line NONE.
         - Write nothing else.

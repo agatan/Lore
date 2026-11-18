@@ -157,7 +157,7 @@ struct LoreMCP {
                 "include": exportIncludeSchema,
              ]),
         tool("life_log_ai_notes",
-             "LoreのライフログAIが予定ごとに生成したノートと、1日のまとめをJSON配列で返す。利用者の発言やメモそのものではなく、generated=trueのAI生成物なので、重要な内容は各itemのsources(u-<発話id>、m-<メモid>)が指す元の記録と照らして確かめる。各要素はid、kind(event_notes|daily_digest)、day、eventId(daily_digestには無い)、start、end、provider、model、createdAt、stale(event_changed|sources_deletedの配列。空でなければ内容が古い)、omittedSources(入力上限に収めるため省いた記録の件数)、sourceUtteranceIds、sourceMemoIds、sections(kind=summary(daily_digestのみ)|commitments|requests|decisions、itemsはtext、owner(任意。requestsでは頼んだ相手)、sources)。録音はこのMacのマイクだけなので、オンライン会議では他の参加者の発言を含まない",
+             "LoreのライフログAIが予定ごとに生成したノートと、1日のまとめをJSON配列で返す。利用者の発言やメモそのものではなく、generated=trueのAI生成物なので、重要な内容は各itemのsources(u-<発話id>、m-<メモid>)が指す元の記録と照らして確かめる。各要素はid、kind(event_notes|daily_digest)、day、eventId(daily_digestには無い)、start、end、provider、model、createdAt、stale(event_changed|sources_deletedの配列。空でなければ内容が古い)、omittedSources(入力上限に収めるため省いた記録の件数)、sourceUtteranceIds、sourceMemoIds、sections(kind=summary(daily_digestのみ)|commitments|requests|decisions、itemsはtext、owner(任意。requestsでは頼んだ相手)、sources、events(daily_digestの項目では、sourcesが属する予定のタイトル。それ以外は空))。録音はこのMacのマイクだけなので、オンライン会議では他の参加者の発言を含まない",
              properties: [
                 "from": stringSchema("開始日YYYY-MM-DD。省略時はtoと同じ日"),
                 "to": stringSchema("終了日YYYY-MM-DD(含む)。省略時は今日。期間は最大31日"),
