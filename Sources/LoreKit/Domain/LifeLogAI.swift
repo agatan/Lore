@@ -135,13 +135,25 @@ public enum GeneratedNoteScope: Hashable, Sendable {
 public struct GeneratedNoteItem: Codable, Sendable, Hashable {
     public var text: String
     public var owner: String?
-    /// Timeline item ids (`u-<utterance id>`, `m-<memo id>`) the item was derived from. Never empty.
+    /// Timeline item ids (`u-<utterance id>`, `m-<memo id>`, or an event occurrence) the item was derived from. Never empty.
     public var sources: [String]
+    /// Titles of the events the sources fall in, decided from the sources when a daily digest is made.
+    /// Empty for event notes, which sit under their event, and for digests stored before this field.
+    public var events: [String]
 
-    public init(text: String, owner: String? = nil, sources: [String]) {
+    public init(text: String, owner: String? = nil, sources: [String], events: [String] = []) {
         self.text = text
         self.owner = owner
         self.sources = sources
+        self.events = events
+    }
+
+    public init(from decoder: any Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        text = try container.decode(String.self, forKey: .text)
+        owner = try container.decodeIfPresent(String.self, forKey: .owner)
+        sources = try container.decode([String].self, forKey: .sources)
+        events = try container.decodeIfPresent([String].self, forKey: .events) ?? []
     }
 }
 

@@ -337,6 +337,52 @@ struct DailyDigestTests {
         #expect(try await harness.digest(harness.today)?.staleReasons == [.sourcesDeleted])
     }
 
+    @Test("Each digest line carries the titles of the events its sources fall in, decided from the sources")
+    func itemEventsComeFromSources() throws {
+        let day = Calendar.current.startOfDay(for: Date())
+        let billing = CalendarEventSnapshot(id: "billing", title: "医事定例", startsAt: at(day, 10), endsAt: at(day, 11), calendarTitle: "Work")
+        let oneOnOne = CalendarEventSnapshot(id: "sato", title: "1on1 佐藤", startsAt: at(day, 13), endsAt: at(day, 13.5), calendarTitle: "Work")
+        let allDay = CalendarEventSnapshot(id: "trip", title: "出張", startsAt: day, endsAt: at(day, 24), calendarTitle: "Work", isAllDay: true)
+        let lifeLog = LifeLogDay(
+            utterances: [
+                LifeLogUtterance(id: "u-billing", startedAt: at(day, 10.5), endedAt: at(day, 10.6), text: "医事に調整の連絡をします", audioChunkID: nil),
+                LifeLogUtterance(id: "u-hall", startedAt: at(day, 15), endedAt: at(day, 15.1), text: "廊下での立ち話", audioChunkID: nil),
+            ],
+            memos: [LifeLogMemo(id: "m-sato", createdAt: at(day, 13.2), text: "事例を探してもらう")],
+            calendarEvents: [billing, oneOnOne, allDay]
+        )
+        let input = DailyDigestPolicy.input(dayKey: LifeLogDateKey.string(for: day), day: lifeLog,
+                                            listedEvents: [billing, oneOnOne, allDay], settings: LifeLogAISettings(), excludedEventIDs: [])
+        let sent = DailyDigestPolicy.prompt(for: input, characterBudget: 24_000).sent
+        func label(_ text: String) throws -> String { try #require(sent.first { $0.text == text }).label }
+        let output = """
+            SUMMARY (\(try label("医事定例")), \(try label("1on1 佐藤"))): 医事と佐藤さんとの打ち合わせ
+            COMMIT (\(try label("医事に調整の連絡をします"))): 医事に病棟移動の調整を連絡する
+            ASK (\(try label("事例を探してもらう")), \(try label("医事に調整の連絡をします"))) [佐藤]: 同様の事例を探す
+            DECIDE (\(try label("廊下での立ち話"))): 立ち話で決めたこと
+            """
+        let sections = try DailyDigestPolicy.parse(output, input: input, sent: sent)
+        func events(_ kind: GeneratedNoteSectionKind) -> [String] { sections.first { $0.kind == kind }?.items.first?.events ?? ["missing"] }
+        #expect(events(.summary) == ["医事定例", "1on1 佐藤"])
+        #expect(events(.commitments) == ["医事定例"])
+        #expect(events(.requests) == ["1on1 佐藤", "医事定例"])
+        // Outside any timed event: the all-day event is not where it was said.
+        #expect(events(.decisions) == [])
+    }
+
+    @Test("A stored digest keeps the event titles, and items stored without them read as having none")
+    func itemEventsPersist() async throws {
+        let harness = try await DigestHarness()
+        try await harness.seedDay(harness.today)
+        try await harness.service.generate(kind: .dailyDigest, scope: harness.scope(harness.today))
+        let digest = try #require(try await harness.digest(harness.today))
+        #expect(digest.items(.decisions).first?.events == ["Release planning"])
+        #expect(GeneratedNoteMarkdown.render(digest, title: "").contains("- [Release planning] Ship the beta on Friday"))
+
+        let old = try JSONDecoder().decode(GeneratedNoteItem.self, from: Data(#"{"text":"t","sources":["u-1"]}"#.utf8))
+        #expect(old.events == [])
+    }
+
     // MARK: Search, notification, morning sheet
 
     @Test("Search finds the digest and event notes, labels them as generated, opens them in place, and forgets deleted ones")

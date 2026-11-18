@@ -202,7 +202,7 @@ public final class LifeLogAIService {
             sourceUtteranceIDs: sent.filter { $0.kind == .utterance }.map(\.recordID),
             sourceMemoIDs: sent.filter { $0.kind == .memo }.map(\.recordID),
             omittedSourceCount: omitted,
-            sections: try DailyDigestPolicy.parse(output, sent: sent)
+            sections: try DailyDigestPolicy.parse(output, input: input, sent: sent)
         )
         try await database.lifeLog.save(generatedNote: note)
         await dependencies.noteSaved(note, nil, automatic)

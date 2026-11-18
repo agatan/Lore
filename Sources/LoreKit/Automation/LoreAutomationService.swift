@@ -152,6 +152,7 @@ public struct GeneratedNoteEntry: Codable, Sendable, Equatable {
         public var text: String
         public var owner: String?
         public var sources: [String]
+        public var events: [String]
     }
     public struct Section: Codable, Sendable, Equatable {
         public var kind: String
@@ -189,7 +190,7 @@ public struct GeneratedNoteEntry: Codable, Sendable, Equatable {
         sourceUtteranceIds = note.sourceUtteranceIDs
         sourceMemoIds = note.sourceMemoIDs
         sections = note.sections.map { section in
-            Section(kind: section.kind.rawValue, items: section.items.map { Item(text: $0.text, owner: $0.owner, sources: $0.sources) })
+            Section(kind: section.kind.rawValue, items: section.items.map { Item(text: $0.text, owner: $0.owner, sources: $0.sources, events: $0.events) })
         }
     }
 }

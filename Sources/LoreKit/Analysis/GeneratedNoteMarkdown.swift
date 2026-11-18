@@ -26,7 +26,8 @@ public enum GeneratedNoteMarkdown {
             lines += ["", "\(sub) \(sectionTitle(section.kind))"]
             for item in section.items {
                 let owner = item.owner.map { "（\($0)）" } ?? ""
-                lines.append("- \(item.text.replacingOccurrences(of: "\n", with: " "))\(owner)")
+                let events = item.events.map { "[\($0)] " }.joined()
+                lines.append("- \(events)\(item.text.replacingOccurrences(of: "\n", with: " "))\(owner)")
             }
         }
         lines.append("")

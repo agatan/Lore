@@ -281,7 +281,8 @@ struct GeneratedNoteView: View {
                 } label: {
                     HStack(alignment: .firstTextBaseline, spacing: 6) {
                         Text(verbatim: "•").foregroundStyle(.tertiary)
-                        (Text(verbatim: item.text) + (item.owner.map { Text(verbatim: "  ") + Text("相手: \($0)").foregroundStyle(.secondary) } ?? Text(verbatim: "")))
+                        (Text(verbatim: item.events.map { "\($0) · " }.joined()).foregroundStyle(.secondary)
+                            + Text(verbatim: item.text) + (item.owner.map { Text(verbatim: "  ") + Text("相手: \($0)").foregroundStyle(.secondary) } ?? Text(verbatim: "")))
                             .multilineTextAlignment(.leading)
                             .wrapsFully(!isCompact)
                     }
@@ -292,7 +293,7 @@ struct GeneratedNoteView: View {
                 .buttonStyle(.plain)
                 .allowsHitTesting(showsActions)
                 .help(Text("元の記録へ移動"))
-                .accessibilityLabel(Text(verbatim: item.text))
+                .accessibilityLabel(Text(verbatim: (item.events + [item.text]).joined(separator: ", ")))
                 .accessibilityIdentifier("\(accessibilityPrefix).item-\(section.kind.rawValue)-\(index)")
             }
         }

@@ -92,12 +92,12 @@ enum ScreenshotDemoData {
             sourceMemoIDs: ["demo-memo-1"],
             sections: [
                 GeneratedNoteSection(kind: .summary, items: [
-                    GeneratedNoteItem(text: digest[0], sources: ["u-demo-utterance-1", "m-demo-memo-1"]),
+                    GeneratedNoteItem(text: digest[0], sources: ["u-demo-utterance-1", "m-demo-memo-1"], events: [copy.events[0]]),
                     GeneratedNoteItem(text: digest[1], sources: ["u-demo-utterance-4"]),
                 ]),
                 GeneratedNoteSection(kind: .commitments, items: [GeneratedNoteItem(text: digest[2], sources: ["u-demo-utterance-4"])]),
                 GeneratedNoteSection(kind: .requests, items: [GeneratedNoteItem(text: digest[3], owner: copy.asked, sources: ["u-demo-utterance-2"])]),
-                GeneratedNoteSection(kind: .decisions, items: [GeneratedNoteItem(text: digest[4], sources: ["u-demo-utterance-5"])]),
+                GeneratedNoteSection(kind: .decisions, items: [GeneratedNoteItem(text: digest[4], sources: ["u-demo-utterance-5"], events: [copy.events[2]])]),
             ]
         ))
         if ProcessInfo.processInfo.arguments.contains("--lore-demo-morning-digest") {
