@@ -632,3 +632,30 @@ struct FormattingInstructionsResetTests {
         #expect(try await database.vocabulary.all().map(\.surface) == ["Lore"])
     }
 }
+
+@Test func storedTimestampsKeepTheirTextFormat() throws {
+    let date = Date(timeIntervalSince1970: 1_800_000_000.123)
+    let text = PersistenceCoding.encode(date: date)
+    #expect(text == "2027-01-15T08:00:00.123Z")
+    #expect(try PersistenceCoding.decodeDate(text) == date)
+    #expect(try PersistenceCoding.decodeDate("2027-01-15T17:00:00.123+09:00") == date)
+    #expect(throws: LoreKit.PersistenceError.self) { try PersistenceCoding.decodeDate("2027-01-15T08:00:00Z") }
+}
+
+@Test func calendarEventsOverlappingReadsOnlyTheWindow() async throws {
+    let database = try await LoreDatabase.inMemory()
+    let noon = Date(timeIntervalSince1970: 1_800_000_000)
+    let earlier = CalendarEventSnapshot(title: "Earlier", startsAt: noon.addingTimeInterval(-7_200),
+                                        endsAt: noon.addingTimeInterval(-3_600), calendarTitle: "Work", participationStatus: .accepted)
+    let current = CalendarEventSnapshot(title: "Current", startsAt: noon.addingTimeInterval(-600),
+                                        endsAt: noon.addingTimeInterval(600), calendarTitle: "Work", participationStatus: .accepted)
+    let declined = CalendarEventSnapshot(title: "Declined", startsAt: noon.addingTimeInterval(-600),
+                                         endsAt: noon.addingTimeInterval(600), calendarTitle: "Work", participationStatus: .declined)
+    try await database.lifeLog.save(calendarEvents: [earlier, current, declined])
+    let window = DateInterval(start: noon.addingTimeInterval(-120), end: noon.addingTimeInterval(121))
+
+    let all = try await database.lifeLog.calendarEvents(overlapping: window)
+    #expect(Set(all.map(\.title)) == ["Current", "Declined"])
+    let attending = try await database.lifeLog.calendarEvents(overlapping: window, participatingOnly: true)
+    #expect(attending.map(\.title) == ["Current"])
+}

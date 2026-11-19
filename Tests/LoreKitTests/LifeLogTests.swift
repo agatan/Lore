@@ -156,6 +156,36 @@ struct LifeLogTests {
         return buffer
     }
 
+    @Test("録音終了の通知は直前のchunk確定処理が終わってから届く")
+    @MainActor
+    func writerFinishWaitsForCommitHandling() async throws {
+        let root = FileManager.default.temporaryDirectory
+            .appending(path: "lore-audio-order-\(UUID().uuidString)", directoryHint: .isDirectory)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let capture = ContinuousAudioCapture(root: root)
+        let log = Mutex<[String]>([])
+        let (done, finish) = AsyncStream<Void>.makeStream()
+        capture.onCommitted = { _ in
+            log.withLock { $0.append("commit started") }
+            // The coordinator suspends here on its database write.
+            try? await Task.sleep(for: .milliseconds(100))
+            log.withLock { $0.append("commit handled") }
+        }
+        capture.onFinished = {
+            log.withLock { $0.append("finished") }
+            finish.finish()
+        }
+        let format = AudioFormats.lifeLogStorage
+        let writer = try #require(capture.makeWriter(inputFormat: format))
+        let startedAt = Date(timeIntervalSince1970: 1_800_000_000)
+        try writer.start(at: startedAt)
+        writer.append(try Self.audioBuffer(format: format, duration: 0.2))
+        writer.finish(at: startedAt.addingTimeInterval(0.2))
+        for await _ in done {}
+
+        #expect(log.withLock { $0 } == ["commit started", "commit handled", "finished"])
+    }
+
     @Test("終了待ちは記録開始要求の隙間も含み、停止後に解除される")
     @MainActor
     func terminationWorkTracksCaptureIntent() {

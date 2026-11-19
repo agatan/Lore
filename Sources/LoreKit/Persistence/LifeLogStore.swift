@@ -128,6 +128,18 @@ public struct LifeLogStore: Sendable {
         return " AND participation_status IN (\(shown.joined(separator: ", ")))"
     }()
 
+    /// The occurrences that overlap `interval`, read without the rest of the day.
+    public func calendarEvents(overlapping interval: DateInterval, participatingOnly: Bool = false) async throws -> [CalendarEventSnapshot] {
+        try await queue.read { db in
+            try Row.fetchAll(
+                db,
+                sql: "SELECT * FROM calendar_event_snapshots WHERE ends_at > ? AND starts_at < ?"
+                    + (participatingOnly ? Self.attendingOnlyClause : "") + " ORDER BY starts_at",
+                arguments: [date(interval.start), date(interval.end)]
+            ).map(decodeEvent)
+        }
+    }
+
     public func day(_ dateValue: Date, calendar: Calendar = .current, participatingOnly: Bool = false) async throws -> LifeLogDay {
         let interval = calendar.dateInterval(of: .day, for: dateValue)!
         return try await queue.read { db in

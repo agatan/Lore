@@ -64,6 +64,8 @@ public final class LifeLogCoordinator {
     private var captureRetryAttempt = 0
     private var captureRetryTask: Task<Void, Never>?
     private var dayRolloverTask: Task<Void, Never>?
+    private var timelineRefreshTask: Task<Void, Never>?
+    private var pendingTimelineRefreshDate: Date?
     private var followsCurrentDay = true
     private var isSuspendedForSleep = false
 
@@ -665,8 +667,7 @@ public final class LifeLogCoordinator {
                 chunk.processingState = .extracted
                 try await database.lifeLog.save(audioChunk: chunk)
             }
-            await reload()
-            await loadActivity(containing: chunk.captureStartedAt)
+            requestTimelineRefresh(for: chunk.captureStartedAt)
             await finishLiveSessionIfReady()
         } catch { fail(error) }
     }
@@ -679,7 +680,7 @@ public final class LifeLogCoordinator {
     private func flushLiveSegments() async {
         guard let database, let sessionStart = liveSessionStartedAt else { return }
         var remaining: [(text: String, start: TimeInterval, end: TimeInterval)] = []
-        var affectedDates: [String: Date] = [:]
+        var lastSavedAt: Date?
         for segment in pendingLiveSegments {
             let startedAt = sessionStart.addingTimeInterval(max(0, segment.start))
             let endedAt = sessionStart.addingTimeInterval(max(segment.start, segment.end))
@@ -690,8 +691,8 @@ public final class LifeLogCoordinator {
                 continue
             }
             do {
-                let capturedDay = try await database.lifeLog.day(startedAt, participatingOnly: participatingEventsOnly())
-                let event = capturedDay.calendarEvents.filter { $0.contains(startedAt, tolerance: 120) }
+                let event = try await calendarEvents(near: startedAt, database: database)
+                    .filter { $0.contains(startedAt, tolerance: 120) }
                     .min { $0.endsAt.timeIntervalSince($0.startsAt) < $1.endsAt.timeIntervalSince($1.startsAt) }
                 let utterance = LifeLogUtterance(
                     id: Self.transcriptionSegmentID(
@@ -707,12 +708,39 @@ public final class LifeLogCoordinator {
                 )
                 try await database.lifeLog.save(utterance: utterance)
                 hasLiveSegments = true
-                affectedDates[LifeLogDateKey.string(for: startedAt)] = startedAt
+                lastSavedAt = startedAt
             } catch { fail(error); remaining.append(segment) }
         }
         pendingLiveSegments = remaining
-        for date in affectedDates.values {
-            await refreshTimeline(for: date)
+        if let lastSavedAt { requestTimelineRefresh(for: lastSavedAt) }
+    }
+
+    /// The events of `date`'s day that could hold speech at `date`. Reading the whole day for each live
+    /// segment made recognition slower with every utterance already saved that day.
+    private func calendarEvents(near date: Date, database: LoreDatabase) async throws -> [CalendarEventSnapshot] {
+        guard let day = Calendar.current.dateInterval(of: .day, for: date) else { return [] }
+        // One second past the tolerance keeps an event that starts exactly 120 seconds later.
+        let start = max(day.start, date.addingTimeInterval(-120))
+        let end = min(day.end, date.addingTimeInterval(121))
+        guard start < end else { return [] }
+        return try await database.lifeLog.calendarEvents(
+            overlapping: DateInterval(start: start, end: end),
+            participatingOnly: participatingEventsOnly()
+        )
+    }
+
+    /// Live capture refreshes the timeline without waiting for it. The refresh reads the whole day and month,
+    /// so awaiting it held back the next burst longer the more was said that day. Requests made while a
+    /// refresh runs are merged into one more refresh.
+    private func requestTimelineRefresh(for date: Date) {
+        pendingTimelineRefreshDate = date
+        guard timelineRefreshTask == nil else { return }
+        timelineRefreshTask = Task { [weak self] in
+            while let self, let date = self.pendingTimelineRefreshDate {
+                self.pendingTimelineRefreshDate = nil
+                await self.refreshTimeline(for: date)
+            }
+            self?.timelineRefreshTask = nil
         }
     }
 

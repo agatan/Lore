@@ -50,13 +50,7 @@ public final class ContinuousAudioCapture {
         let inputFormat = input.outputFormat(forBus: 0)
         guard inputFormat.sampleRate > 0, inputFormat.channelCount > 0 else { throw Failure.noInputDevice }
         guard let resampler = Resampler(from: inputFormat, to: target) else { throw Failure.formatUnsupported }
-        guard let writer = DurableAudioChunkWriter(
-            root: root,
-            inputFormat: inputFormat,
-            committed: { [weak self] chunk in Task { @MainActor in await self?.onCommitted?(chunk) } },
-            finished: { [weak self] in Task { @MainActor in await self?.onFinished?() } },
-            failed: { [weak self] error in Task { @MainActor in self?.recordingFailed(error) } }
-        ) else { throw Failure.formatUnsupported }
+        guard let writer = makeWriter(inputFormat: inputFormat) else { throw Failure.formatUnsupported }
         try writer.start(at: Date())
 
         let (stream, continuation) = AsyncStream<AudioChunk>.makeStream(bufferingPolicy: .unbounded)
@@ -89,6 +83,34 @@ public final class ContinuousAudioCapture {
         }
         scheduleRotation()
         return stream
+    }
+
+    private enum WriterEvent: Sendable {
+        case committed(LifeLogAudioChunk), finished, failed(any Error)
+    }
+
+    /// Writer events reach the handlers one at a time in writer order. A commit handler suspends on its
+    /// database write, and the finish handler must not run until that chunk belongs to the session.
+    func makeWriter(inputFormat: AVAudioFormat) -> DurableAudioChunkWriter? {
+        let (events, sink) = AsyncStream<WriterEvent>.makeStream()
+        guard let writer = DurableAudioChunkWriter(
+            root: root,
+            inputFormat: inputFormat,
+            committed: { sink.yield(.committed($0)) },
+            finished: { sink.yield(.finished); sink.finish() },
+            failed: { sink.yield(.failed($0)) }
+        ) else { return nil }
+        Task { [weak self] in
+            for await event in events {
+                guard let self else { return }
+                switch event {
+                case .committed(let chunk): await self.onCommitted?(chunk)
+                case .finished: await self.onFinished?()
+                case .failed(let error): self.recordingFailed(error)
+                }
+            }
+        }
+        return writer
     }
 
     /// 現在までの音声を原子的に確定し、録音を止めずに次のchunkへ進む。
